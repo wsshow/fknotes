@@ -31,6 +31,203 @@ void main() {
     expect(NoteBlockCodec.visibleCharacterCount('• 条目\n---\n2. 下一项'), 5);
   });
 
+  test('rich document codec preserves inline styles and block indentation', () {
+    final encoded = NoteRichDocumentCodec.encode(const [
+      NoteBlockData(
+        NoteBlockType.paragraph,
+        '重要内容',
+        indent: 2,
+        styles: [
+          NoteTextStyleRange(
+            0,
+            2,
+            NoteTextAttributes(bold: true, underline: true, fontSize: 24),
+          ),
+        ],
+      ),
+    ]);
+
+    final decoded = NoteRichDocumentCodec.tryDecode(encoded)!;
+    expect(decoded.single.text, '重要内容');
+    expect(decoded.single.indent, 2);
+    expect(decoded.single.styles.single.start, 0);
+    expect(decoded.single.styles.single.end, 2);
+    expect(decoded.single.styles.single.attributes.bold, isTrue);
+    expect(decoded.single.styles.single.attributes.underline, isTrue);
+    expect(decoded.single.styles.single.attributes.fontSize, 24);
+    expect(NoteBlockCodec.encode(decoded), '重要内容');
+  });
+
+  testWidgets(
+    'selected text formatting emits rich data without changing plain text',
+    (tester) async {
+      final controller = TextEditingController(text: '重要内容');
+      final editorKey = GlobalKey<NoteBlockEditorState>();
+      String? richContent;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: NoteBlockEditor(
+              key: editorKey,
+              controller: controller,
+              hintText: '开始记录',
+              onRichContentChanged: (value) => richContent = value,
+            ),
+          ),
+        ),
+      );
+
+      final field = find.byType(TextField).first;
+      await tester.tap(field);
+      final fieldController = tester.widget<TextField>(field).controller!;
+      final start = fieldController.text.indexOf('重');
+      fieldController.selection = TextSelection(
+        baseOffset: start,
+        extentOffset: start + 2,
+      );
+      editorKey.currentState!.toggleBold();
+      editorKey.currentState!.toggleUnderline();
+      editorKey.currentState!.setFontSize(24);
+      editorKey.currentState!.changeIndent(1);
+      await tester.pump();
+
+      final block = NoteRichDocumentCodec.tryDecode(richContent)!.single;
+      expect(controller.text, '重要内容');
+      expect(block.indent, 1);
+      expect(block.styles.single.start, 0);
+      expect(block.styles.single.end, 2);
+      expect(block.styles.single.attributes.bold, isTrue);
+      expect(block.styles.single.attributes.underline, isTrue);
+      expect(block.styles.single.attributes.fontSize, 24);
+      expect(fieldController.selection.baseOffset, start);
+      expect(fieldController.selection.extentOffset, start + 2);
+      expect(fieldController.selection.isValid, isTrue);
+    },
+  );
+
+  testWidgets('collapsed formatting applies to text typed next', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    final editorKey = GlobalKey<NoteBlockEditorState>();
+    String? richContent;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            key: editorKey,
+            controller: controller,
+            hintText: '开始记录',
+            onRichContentChanged: (value) => richContent = value,
+          ),
+        ),
+      ),
+    );
+
+    final field = find.byType(TextField).first;
+    await tester.tap(field);
+    editorKey.currentState!.toggleBold();
+    editorKey.currentState!.toggleUnderline();
+    editorKey.currentState!.setFontSize(20);
+    await tester.enterText(field, '新文字');
+    await tester.pump();
+
+    final block = NoteRichDocumentCodec.tryDecode(richContent)!.single;
+    expect(controller.text, '新文字');
+    expect(block.styles.single.start, 0);
+    expect(block.styles.single.end, 3);
+    expect(block.styles.single.attributes.bold, isTrue);
+    expect(block.styles.single.attributes.underline, isTrue);
+    expect(block.styles.single.attributes.fontSize, 20);
+    expect(tester.widget<TextField>(field).focusNode?.hasFocus, isTrue);
+  });
+
+  testWidgets('undo and redo restore typed text', (tester) async {
+    final controller = TextEditingController();
+    final editorKey = GlobalKey<NoteBlockEditorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            key: editorKey,
+            controller: controller,
+            hintText: '开始记录',
+          ),
+        ),
+      ),
+    );
+
+    final field = find.byType(TextField).first;
+    await tester.tap(field);
+    await tester.enterText(field, '一段');
+    await tester.enterText(field, '一段连续输入');
+    await tester.pump();
+
+    expect(editorKey.currentState!.historyState.value.canUndo, isTrue);
+    editorKey.currentState!.undo();
+    await tester.pump();
+    expect(controller.text, isEmpty);
+    expect(editorKey.currentState!.historyState.value.canRedo, isTrue);
+
+    editorKey.currentState!.redo();
+    await tester.pump();
+    expect(controller.text, '一段连续输入');
+  });
+
+  testWidgets(
+    'document history includes formatting, indentation and block type',
+    (tester) async {
+      final controller = TextEditingController(text: '重要内容');
+      final editorKey = GlobalKey<NoteBlockEditorState>();
+      String? richContent;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: NoteBlockEditor(
+              key: editorKey,
+              controller: controller,
+              hintText: '开始记录',
+              onRichContentChanged: (value) => richContent = value,
+            ),
+          ),
+        ),
+      );
+
+      final field = find.byType(TextField).first;
+      await tester.tap(field);
+      final fieldController = tester.widget<TextField>(field).controller!;
+      final start = fieldController.text.indexOf('重');
+      fieldController.selection = TextSelection(
+        baseOffset: start,
+        extentOffset: start + 2,
+      );
+      editorKey.currentState!.toggleBold();
+      editorKey.currentState!.changeIndent(1);
+      editorKey.currentState!.toggleBlock(NoteBlockType.bullet);
+      await tester.pump();
+      expect(controller.text, '• 重要内容');
+
+      editorKey.currentState!.undo();
+      await tester.pump();
+      var block = NoteRichDocumentCodec.tryDecode(richContent)!.single;
+      expect(block.type, NoteBlockType.paragraph);
+      expect(block.indent, 1);
+      expect(block.styles.single.attributes.bold, isTrue);
+
+      editorKey.currentState!.undo();
+      await tester.pump();
+      block = NoteRichDocumentCodec.tryDecode(richContent)!.single;
+      expect(block.indent, 0);
+      expect(block.styles.single.attributes.bold, isTrue);
+
+      editorKey.currentState!.redo();
+      await tester.pump();
+      block = NoteRichDocumentCodec.tryDecode(richContent)!.single;
+      expect(block.indent, 1);
+      expect(editorKey.currentState!.historyState.value.canRedo, isTrue);
+    },
+  );
+
   test(
     'attachment references round trip without duplicating file metadata',
     () {

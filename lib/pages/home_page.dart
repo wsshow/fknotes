@@ -271,7 +271,7 @@ class _HomePageState extends State<HomePage> {
                   _CaptureAction(
                     Icons.image_rounded,
                     '图片',
-                    const Color(0xFF75665A),
+                    const Color(0xFF9B654E),
                     () {
                       _afterSheetClose(sheetContext, _pickImage);
                     },
@@ -303,7 +303,7 @@ class _HomePageState extends State<HomePage> {
                   _CaptureAction(
                     Icons.upload_file_rounded,
                     '文件',
-                    const Color(0xFF77665B),
+                    const Color(0xFF986047),
                     () {
                       _afterSheetClose(sheetContext, _pickDocument);
                     },

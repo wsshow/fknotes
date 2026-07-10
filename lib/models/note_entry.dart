@@ -120,6 +120,7 @@ class NoteEntry {
   final NoteType type;
   final String title;
   final String? content;
+  final String? richContent;
   final String? filePath;
   final String? fileName;
   final int? fileSize;
@@ -143,6 +144,7 @@ class NoteEntry {
     required this.type,
     this.title = '',
     this.content,
+    this.richContent,
     this.filePath,
     this.fileName,
     this.fileSize,
@@ -167,6 +169,7 @@ class NoteEntry {
     NoteType? type,
     String? title,
     String? content,
+    String? richContent,
     String? filePath,
     String? fileName,
     int? fileSize,
@@ -191,6 +194,7 @@ class NoteEntry {
       type: type ?? this.type,
       title: title ?? this.title,
       content: content ?? this.content,
+      richContent: richContent ?? this.richContent,
       filePath: filePath ?? this.filePath,
       fileName: fileName ?? this.fileName,
       fileSize: fileSize ?? this.fileSize,
@@ -284,6 +288,7 @@ class NoteEntry {
       'type': primaryType.dbValue,
       'title': title,
       'content': content,
+      'rich_content': richContent,
       'file_path': primary?.filePath,
       'file_name': primary?.fileName,
       'file_size': primary?.fileSize,
@@ -314,6 +319,7 @@ class NoteEntry {
       type: NoteType.fromDb(map['type'] as String? ?? 'text'),
       title: map['title'] as String? ?? '',
       content: map['content'] as String?,
+      richContent: map['rich_content'] as String?,
       filePath: map['file_path'] as String?,
       fileName: map['file_name'] as String?,
       fileSize: map['file_size'] as int?,

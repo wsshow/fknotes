@@ -36,6 +36,7 @@ class NoteEditorPage extends StatefulWidget {
 class _NoteEditorPageState extends State<NoteEditorPage> {
   late final TextEditingController _title;
   late final TextEditingController _content;
+  String? _richContent;
   late String _lastTitleText;
   late String _lastContentText;
   final _blockEditorKey = GlobalKey<NoteBlockEditorState>();
@@ -67,6 +68,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     };
     _title = TextEditingController(text: entry?.title ?? '');
     _content = TextEditingController(text: entry?.content ?? '');
+    _richContent = entry?.richContent;
     _lastTitleText = _title.text;
     _lastContentText = _content.text;
     _tags = [...?entry?.tags];
@@ -104,6 +106,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   void _onContentChanged() {
     if (_content.text == _lastContentText) return;
     _lastContentText = _content.text;
+    _markChanged();
+  }
+
+  void _onRichContentChanged(String value) {
+    if (_richContent == value) return;
+    _richContent = value;
     _markChanged();
   }
 
@@ -182,8 +190,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       return false;
     }
     final title = _title.text.trim();
-    final content = _content.text.trim();
-    if (title.isEmpty && content.isEmpty && _attachments.isEmpty) {
+    final content = _content.text;
+    if (title.isEmpty && content.trim().isEmpty && _attachments.isEmpty) {
       return true;
     }
     if (mounted) setState(() => _saving = true);
@@ -196,6 +204,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
           type: _attachments.isEmpty ? NoteType.text : _attachments.first.type,
           title: title,
           content: content,
+          richContent: _richContent,
           tags: _tags,
           isFavorite: _favorite,
           isPinned: _pinned,
@@ -209,6 +218,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
           type: _attachments.isEmpty ? NoteType.text : _attachments.first.type,
           title: title,
           content: content,
+          richContent: _richContent,
           tags: _tags,
           isFavorite: _favorite,
           isPinned: _pinned,
@@ -614,16 +624,20 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  Text(
-                    _saving
-                        ? '正在保存…'
-                        : _changed
-                        ? '本地草稿'
-                        : '已保存在本机',
-                    style: const TextStyle(
-                      fontSize: 10,
-                      color: AppColors.muted,
-                      fontWeight: FontWeight.w600,
+                  ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _content,
+                    builder: (context, value, child) => Text(
+                      '${_saving
+                          ? '正在保存…'
+                          : _changed
+                          ? '本地草稿'
+                          : '已保存在本机'} · '
+                      '${NoteBlockCodec.visibleCharacterCount(value.text)} 字',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: AppColors.muted,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
@@ -670,134 +684,142 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
           child: Column(
             children: [
               Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      TextField(
-                        controller: _title,
-                        contextMenuBuilder: buildEditorContextMenu,
-                        maxLines: null,
-                        textCapitalization: TextCapitalization.sentences,
-                        style: const TextStyle(
-                          fontFamily: 'serif',
-                          fontSize: 28,
-                          height: 1.22,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -.5,
-                        ),
-                        decoration: const InputDecoration(
-                          hintText: '标题',
-                          filled: false,
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          for (final tag in _tags)
-                            InputChip(
-                              label: Text('#$tag'),
-                              onDeleted: () {
-                                setState(() {
-                                  _tags.remove(tag);
-                                  _changed = true;
-                                });
-                                _scheduleAutosave();
-                              },
-                            ),
-                          ActionChip(
-                            avatar: const Icon(Icons.add_rounded, size: 17),
-                            label: Text(_tags.isEmpty ? '添加标签' : '标签'),
-                            onPressed: _editTags,
+                child: GestureDetector(
+                  key: const Key('note-editor-scroll-surface'),
+                  behavior: HitTestBehavior.translucent,
+                  onTap: () => _blockEditorKey.currentState?.focusAtEnd(),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TextField(
+                          controller: _title,
+                          contextMenuBuilder: buildEditorContextMenu,
+                          maxLines: null,
+                          textCapitalization: TextCapitalization.sentences,
+                          style: const TextStyle(
+                            fontFamily: 'serif',
+                            fontSize: 28,
+                            height: 1.22,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -.5,
                           ),
-                        ],
-                      ),
-                      if (hasAttachmentContent) ...[
-                        const SizedBox(height: 20),
-                        Row(
+                          decoration: const InputDecoration(
+                            hintText: '标题',
+                            filled: false,
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
                           children: [
-                            const Expanded(
-                              child: Text(
-                                '笔记内容',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: AppColors.muted,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                            for (final tag in _tags)
+                              InputChip(
+                                label: Text('#$tag'),
+                                onDeleted: () {
+                                  setState(() {
+                                    _tags.remove(tag);
+                                    _changed = true;
+                                  });
+                                  _scheduleAutosave();
+                                },
                               ),
-                            ),
-                            Text(
-                              '${_attachments.length + importJobs.length} 项附件',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.muted,
-                              ),
+                            ActionChip(
+                              avatar: const Icon(Icons.add_rounded, size: 17),
+                              label: Text(_tags.isEmpty ? '添加标签' : '标签'),
+                              onPressed: _editTags,
                             ),
                           ],
                         ),
-                        const SizedBox(height: 10),
-                        for (
-                          var index = 0;
-                          index < importJobs.length;
-                          index++
-                        ) ...[
-                          _AttachmentImportTile(
-                            job: importJobs[index],
-                            onCancel: () =>
-                                _removeAttachmentImport(importJobs[index]),
-                            onRetry: () =>
-                                _retryAttachmentImport(importJobs[index]),
-                            onRemove: () =>
-                                _removeAttachmentImport(importJobs[index]),
-                          ),
-                          if (index < importJobs.length - 1 ||
-                              _attachments.isNotEmpty)
-                            const SizedBox(height: 8),
-                        ],
-                        for (
-                          var index = 0;
-                          index < _attachments.length;
-                          index++
-                        ) ...[
-                          _AttachmentEditorTile(
-                            attachment: _attachments[index],
-                            onOpen: () => _openAttachment(_attachments[index]),
-                            onReference: () => _blockEditorKey.currentState
-                                ?.insertAttachmentReference(
-                                  _attachments[index].filePath,
+                        if (hasAttachmentContent) ...[
+                          const SizedBox(height: 20),
+                          Row(
+                            children: [
+                              const Expanded(
+                                child: Text(
+                                  '笔记内容',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.muted,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
-                            canMoveUp: index > 0,
-                            canMoveDown: index < _attachments.length - 1,
-                            onMoveUp: () => _moveAttachment(index, -1),
-                            onMoveDown: () => _moveAttachment(index, 1),
-                            onRemove: () => _removeAttachment(index),
+                              ),
+                              Text(
+                                '${_attachments.length + importJobs.length} 项附件',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.muted,
+                                ),
+                              ),
+                            ],
                           ),
-                          if (index < _attachments.length - 1)
-                            const SizedBox(height: 8),
+                          const SizedBox(height: 10),
+                          for (
+                            var index = 0;
+                            index < importJobs.length;
+                            index++
+                          ) ...[
+                            _AttachmentImportTile(
+                              job: importJobs[index],
+                              onCancel: () =>
+                                  _removeAttachmentImport(importJobs[index]),
+                              onRetry: () =>
+                                  _retryAttachmentImport(importJobs[index]),
+                              onRemove: () =>
+                                  _removeAttachmentImport(importJobs[index]),
+                            ),
+                            if (index < importJobs.length - 1 ||
+                                _attachments.isNotEmpty)
+                              const SizedBox(height: 8),
+                          ],
+                          for (
+                            var index = 0;
+                            index < _attachments.length;
+                            index++
+                          ) ...[
+                            _AttachmentEditorTile(
+                              attachment: _attachments[index],
+                              onOpen: () =>
+                                  _openAttachment(_attachments[index]),
+                              onReference: () => _blockEditorKey.currentState
+                                  ?.insertAttachmentReference(
+                                    _attachments[index].filePath,
+                                  ),
+                              canMoveUp: index > 0,
+                              canMoveDown: index < _attachments.length - 1,
+                              onMoveUp: () => _moveAttachment(index, -1),
+                              onMoveDown: () => _moveAttachment(index, 1),
+                              onRemove: () => _removeAttachment(index),
+                            ),
+                            if (index < _attachments.length - 1)
+                              const SizedBox(height: 8),
+                          ],
                         ],
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 18),
+                          child: Divider(),
+                        ),
+                        NoteBlockEditor(
+                          key: _blockEditorKey,
+                          controller: _content,
+                          initialRichContent: _richContent,
+                          onRichContentChanged: _onRichContentChanged,
+                          attachments: _attachments,
+                          onOpenAttachment: _openAttachment,
+                          minLines: hasAttachmentContent ? 10 : 16,
+                          hintText: hasAttachmentContent
+                              ? '添加说明、想法或摘要…'
+                              : '开始记录…',
+                        ),
                       ],
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 18),
-                        child: Divider(),
-                      ),
-                      NoteBlockEditor(
-                        key: _blockEditorKey,
-                        controller: _content,
-                        attachments: _attachments,
-                        onOpenAttachment: _openAttachment,
-                        minLines: hasAttachmentContent ? 10 : 16,
-                        hintText: hasAttachmentContent
-                            ? '添加说明、想法或摘要…'
-                            : '开始记录…',
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -807,23 +829,24 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                   border: Border(top: BorderSide(color: AppColors.line)),
                 ),
                 padding: const EdgeInsets.fromLTRB(12, 9, 12, 10),
-                child: Row(
-                  children: [
-                    IconButton.filled(
-                      tooltip: '添加图片、录音或文件',
-                      onPressed: _importing ? null : _showAddContentSheet,
-                      icon: _importing
-                          ? const SizedBox.square(
-                              dimension: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.add_rounded),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: TextFieldTapRegion(
+                child: TextFieldTapRegion(
+                  child: Row(
+                    children: [
+                      IconButton.filled(
+                        tooltip: '添加图片、录音或文件',
+                        onPressed: _importing ? null : _showAddContentSheet,
+                        icon: _importing
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.add_rounded),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: _ScrollableEditorToolbar(
                           child: _EditorToolbar(
                             editorKey: _blockEditorKey,
                             onReferenceAttachment:
@@ -831,20 +854,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 6),
-                    ValueListenableBuilder<TextEditingValue>(
-                      valueListenable: _content,
-                      builder: (_, value, child) => Text(
-                        '${NoteBlockCodec.visibleCharacterCount(value.text)} 字',
-                        style: const TextStyle(
-                          color: AppColors.muted,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -853,6 +864,94 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       ),
     );
   }
+}
+
+class _ScrollableEditorToolbar extends StatefulWidget {
+  final Widget child;
+
+  const _ScrollableEditorToolbar({required this.child});
+
+  @override
+  State<_ScrollableEditorToolbar> createState() =>
+      _ScrollableEditorToolbarState();
+}
+
+class _ScrollableEditorToolbarState extends State<_ScrollableEditorToolbar> {
+  final _controller = ScrollController();
+  bool _canScrollLeft = false;
+  bool _canScrollRight = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_refreshEdges);
+  }
+
+  void _refreshEdges() {
+    if (!_controller.hasClients) return;
+    final left = _controller.offset > 1;
+    final right = _controller.offset < _controller.position.maxScrollExtent - 1;
+    if (left != _canScrollLeft || right != _canScrollRight) {
+      setState(() {
+        _canScrollLeft = left;
+        _canScrollRight = right;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller
+      ..removeListener(_refreshEdges)
+      ..dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _refreshEdges();
+    });
+    return Stack(
+      children: [
+        SingleChildScrollView(
+          controller: _controller,
+          scrollDirection: Axis.horizontal,
+          child: widget.child,
+        ),
+        if (_canScrollLeft)
+          const Positioned.fill(
+            right: null,
+            child: _ToolbarEdgeFade(left: true),
+          ),
+        if (_canScrollRight)
+          const Positioned.fill(
+            left: null,
+            child: _ToolbarEdgeFade(left: false),
+          ),
+      ],
+    );
+  }
+}
+
+class _ToolbarEdgeFade extends StatelessWidget {
+  final bool left;
+
+  const _ToolbarEdgeFade({required this.left});
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+    child: Container(
+      width: 24,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: left ? Alignment.centerLeft : Alignment.centerRight,
+          end: left ? Alignment.centerRight : Alignment.centerLeft,
+          colors: const [AppColors.surface, Color(0x00FFFDFC)],
+        ),
+      ),
+    ),
+  );
 }
 
 class _EditorToolbar extends StatefulWidget {
@@ -870,16 +969,29 @@ class _EditorToolbar extends StatefulWidget {
 
 class _EditorToolbarState extends State<_EditorToolbar> {
   ValueNotifier<NoteBlockType>? _activeType;
+  ValueNotifier<NoteEditorFormatState>? _activeFormat;
+  ValueNotifier<NoteHistoryState>? _historyState;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final notifier = widget.editorKey.currentState?.activeType;
-      if (identical(notifier, _activeType)) return;
+      final editor = widget.editorKey.currentState;
+      final typeNotifier = editor?.activeType;
+      final formatNotifier = editor?.activeFormat;
+      final historyNotifier = editor?.historyState;
+      if (identical(typeNotifier, _activeType) &&
+          identical(formatNotifier, _activeFormat) &&
+          identical(historyNotifier, _historyState)) {
+        return;
+      }
       _activeType?.removeListener(_refresh);
-      _activeType = notifier?..addListener(_refresh);
+      _activeFormat?.removeListener(_refresh);
+      _historyState?.removeListener(_refresh);
+      _activeType = typeNotifier?..addListener(_refresh);
+      _activeFormat = formatNotifier?..addListener(_refresh);
+      _historyState = historyNotifier?..addListener(_refresh);
       _refresh();
     });
   }
@@ -891,15 +1003,63 @@ class _EditorToolbarState extends State<_EditorToolbar> {
   @override
   void dispose() {
     _activeType?.removeListener(_refresh);
+    _activeFormat?.removeListener(_refresh);
+    _historyState?.removeListener(_refresh);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final active = _activeType?.value ?? NoteBlockType.paragraph;
+    final format = _activeFormat?.value ?? const NoteEditorFormatState();
+    final history = _historyState?.value ?? const NoteHistoryState();
     final editor = widget.editorKey.currentState;
     return Row(
       children: [
+        _EditorToolButton(
+          tooltip: '撤销',
+          icon: Icons.undo_rounded,
+          selected: false,
+          onPressed: history.canUndo ? editor?.undo : null,
+        ),
+        _EditorToolButton(
+          tooltip: '重做',
+          icon: Icons.redo_rounded,
+          selected: false,
+          onPressed: history.canRedo ? editor?.redo : null,
+        ),
+        _EditorToolButton(
+          tooltip: '加粗',
+          icon: Icons.format_bold_rounded,
+          selected: format.bold,
+          onPressed: editor?.toggleBold,
+        ),
+        _EditorToolButton(
+          tooltip: '下划线',
+          icon: Icons.format_underlined_rounded,
+          selected: format.underline,
+          onPressed: editor?.toggleUnderline,
+        ),
+        _FontSizeMenuButton(
+          value: format.fontSize,
+          onSelected: editor?.setFontSize,
+        ),
+        _EditorToolButton(
+          tooltip: '减少缩进',
+          icon: Icons.format_indent_decrease_rounded,
+          selected: false,
+          onPressed: editor == null || format.indent == 0
+              ? null
+              : () => editor.changeIndent(-1),
+        ),
+        _EditorToolButton(
+          tooltip: '增加缩进',
+          icon: Icons.format_indent_increase_rounded,
+          selected: false,
+          onPressed: editor == null || format.indent == 3
+              ? null
+              : () => editor.changeIndent(1),
+        ),
         _EditorToolButton(
           tooltip: '待办事项',
           icon: Icons.check_box_outlined,
@@ -919,12 +1079,6 @@ class _EditorToolbarState extends State<_EditorToolbar> {
           onPressed: () => editor?.toggleBlock(NoteBlockType.ordered),
         ),
         _EditorToolButton(
-          tooltip: '引用附件',
-          icon: Icons.add_link_rounded,
-          selected: active == NoteBlockType.attachment,
-          onPressed: widget.onReferenceAttachment,
-        ),
-        _EditorToolButton(
           tooltip: '引用',
           icon: Icons.format_quote_rounded,
           selected: active == NoteBlockType.quote,
@@ -936,6 +1090,12 @@ class _EditorToolbarState extends State<_EditorToolbar> {
           selected: active == NoteBlockType.divider,
           onPressed: editor?.insertDivider ?? () {},
         ),
+        _EditorToolButton(
+          tooltip: '引用附件',
+          icon: Icons.add_link_rounded,
+          selected: active == NoteBlockType.attachment,
+          onPressed: widget.onReferenceAttachment,
+        ),
       ],
     );
   }
@@ -945,7 +1105,7 @@ class _EditorToolButton extends StatelessWidget {
   final String tooltip;
   final IconData icon;
   final bool selected;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   const _EditorToolButton({
     required this.tooltip,
@@ -964,6 +1124,80 @@ class _EditorToolButton extends StatelessWidget {
     ),
     icon: Icon(icon),
   );
+}
+
+class _FontSizeMenuButton extends StatelessWidget {
+  final double? value;
+  final ValueChanged<double>? onSelected;
+
+  const _FontSizeMenuButton({required this.value, required this.onSelected});
+
+  @override
+  Widget build(BuildContext context) {
+    const sizes = [14.0, 17.0, 20.0, 24.0, 28.0];
+    return PopupMenuButton<double>(
+      tooltip: '字号',
+      enabled: onSelected != null,
+      initialValue: value,
+      onSelected: onSelected,
+      position: PopupMenuPosition.over,
+      itemBuilder: (context) => [
+        for (final size in sizes)
+          PopupMenuItem(
+            value: size,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 28,
+                  child: Text(
+                    '${size.toInt()}',
+                    style: TextStyle(
+                      color: value == size ? AppColors.coral : AppColors.ink,
+                      fontWeight: value == size
+                          ? FontWeight.w700
+                          : FontWeight.w500,
+                    ),
+                  ),
+                ),
+                Text(
+                  size == 17 ? '正文' : '号字',
+                  style: const TextStyle(fontSize: 12, color: AppColors.muted),
+                ),
+                const Spacer(),
+                if (value == size)
+                  const Icon(
+                    Icons.check_rounded,
+                    size: 18,
+                    color: AppColors.coral,
+                  ),
+              ],
+            ),
+          ),
+      ],
+      child: SizedBox(
+        width: 48,
+        height: 48,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              value?.toInt().toString() ?? '—',
+              style: const TextStyle(
+                color: AppColors.muted,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const Icon(
+              Icons.arrow_drop_down_rounded,
+              size: 16,
+              color: AppColors.muted,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _AddContentAction extends StatelessWidget {

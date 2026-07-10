@@ -7,6 +7,7 @@ import 'package:fknotes/pages/note_editor_page.dart';
 import 'package:fknotes/providers/note_provider.dart';
 import 'package:fknotes/services/file_storage_service.dart';
 import 'package:fknotes/services/video_import_service.dart';
+import 'package:fknotes/widgets/note_block_editor.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -42,6 +43,60 @@ void main() {
     expect(find.text('拍照'), findsOneWidget);
     expect(find.text('拍照 OCR'), findsNothing);
     expect(find.text('图片'), findsWidgets);
+  });
+
+  testWidgets('tapping below the body editor focuses the final text block', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => NoteProvider(),
+        child: const MaterialApp(home: NoteEditorPage()),
+      ),
+    );
+
+    final surface = find.byKey(const Key('note-editor-scroll-surface'));
+    final editor = find.byType(NoteBlockEditor);
+    final surfaceRect = tester.getRect(surface);
+    final editorRect = tester.getRect(editor);
+    final blankPoint = Offset(surfaceRect.center.dx, surfaceRect.bottom - 8);
+    expect(blankPoint.dy, greaterThan(editorRect.bottom));
+
+    await tester.tapAt(blankPoint);
+    await tester.pump();
+
+    final bodyField = find.descendant(
+      of: editor,
+      matching: find.byType(TextField),
+    );
+    expect(tester.widget<TextField>(bodyField).focusNode?.hasFocus, isTrue);
+  });
+
+  testWidgets('single-line toolbar exposes formatting and history actions', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => NoteProvider(),
+        child: const MaterialApp(home: NoteEditorPage()),
+      ),
+    );
+
+    expect(find.textContaining('已保存在本机 · 0 字'), findsOneWidget);
+    expect(find.byTooltip('撤销'), findsOneWidget);
+    expect(find.byTooltip('重做'), findsOneWidget);
+    expect(find.byTooltip('加粗'), findsOneWidget);
+    expect(find.byTooltip('下划线'), findsOneWidget);
+    expect(find.byTooltip('字号'), findsOneWidget);
+    expect(find.byTooltip('增加缩进'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('字号'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('14'), findsOneWidget);
+    expect(find.text('28'), findsOneWidget);
   });
 
   testWidgets('editor image imports do not present OCR as a capture mode', (

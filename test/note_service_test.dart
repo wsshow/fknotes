@@ -92,4 +92,31 @@ void main() {
       ]);
     },
   );
+
+  test(
+    'rich content persists while search continues to use plain text',
+    () async {
+      final now = DateTime(2026, 7, 10, 15);
+      const richContent =
+          '{"version":1,"blocks":[{"type":"paragraph","text":"重要内容","styles":[{"start":0,"end":2,"bold":true}]}]}';
+      final id = await notes.insertEntry(
+        NoteEntry(
+          type: NoteType.text,
+          title: '富文本测试',
+          content: '重要内容',
+          richContent: richContent,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+
+      final restored = await notes.getEntry(id);
+      expect(restored?.content, '重要内容');
+      expect(restored?.richContent, richContent);
+      expect(
+        (await notes.searchLike('重要')).map((entry) => entry.id),
+        contains(id),
+      );
+    },
+  );
 }

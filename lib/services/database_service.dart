@@ -15,7 +15,7 @@ class DatabaseService {
     final path = p.join(FileStorageService.instance.baseDir, 'fknotes.db');
     return openDatabase(
       path,
-      version: 2,
+      version: 3,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -29,6 +29,7 @@ class DatabaseService {
         type TEXT NOT NULL DEFAULT 'text',
         title TEXT NOT NULL DEFAULT '',
         content TEXT,
+        rich_content TEXT,
         file_path TEXT,
         file_name TEXT,
         file_size INTEGER,
@@ -66,6 +67,9 @@ class DatabaseService {
         WHERE file_path IS NOT NULL AND file_path != ''
       ''');
       await _createIndexes(db);
+    }
+    if (oldVersion < 3) {
+      await db.execute('ALTER TABLE entries ADD COLUMN rich_content TEXT');
     }
   }
 

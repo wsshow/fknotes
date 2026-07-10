@@ -28,6 +28,9 @@ void main() {
       id: 7,
       type: NoteType.document,
       title: 'Research',
+      content: '重要内容',
+      richContent:
+          '{"version":1,"blocks":[{"type":"paragraph","text":"重要内容"}]}',
       tags: const ['work', 'offline'],
       isFavorite: true,
       isPinned: true,
@@ -37,6 +40,7 @@ void main() {
 
     final restored = NoteEntry.fromMap(entry.toMap());
     expect(restored.tags, ['work', 'offline']);
+    expect(restored.richContent, entry.richContent);
     expect(restored.isFavorite, isTrue);
     expect(restored.isPinned, isTrue);
     expect(restored.isDeleted, isFalse);
