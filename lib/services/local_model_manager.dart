@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../models/local_model.dart';
+import 'realtime_dictation_service.dart';
 import 'speech_model_service.dart';
 import 'speech_transcription_service.dart';
+import 'streaming_speech_model_service.dart';
 
 enum ModelTransferStatus {
   downloading,
@@ -77,7 +79,7 @@ class LocalModelManager extends ChangeNotifier {
   static final LocalModelManager instance = LocalModelManager._();
 
   static const senseVoiceId = SpeechModelService.modelId;
-  static const streamingChineseId = 'streaming-zipformer-zh-14m-2023-02-23';
+  static const streamingChineseId = StreamingSpeechModelService.modelId;
   static const mlKitChineseOcrId = 'mlkit-text-recognition-chinese';
   static const imageUnderstandingId = 'image-understanding-local';
 
@@ -102,16 +104,16 @@ class LocalModelManager extends ChangeNotifier {
       id: streamingChineseId,
       name: 'Streaming Zipformer 中文',
       summary: '边说边出字的实时语音输入',
-      description: '面向笔记编辑器实时听写，模型接入与输入交互正在准备中。',
+      description: '面向笔记编辑器实时听写，语音在设备端边录边识别，不需要上传音频。',
       category: LocalModelCategory.speech,
-      availability: LocalModelAvailability.planned,
+      availability: LocalModelAvailability.downloadable,
       task: LocalModelTask.liveDictation,
-      downloadSizeBytes: 14 * 1024 * 1024,
+      downloadSizeBytes: StreamingSpeechModelService.downloadSizeBytes,
       languages: ['普通话'],
       engine: 'sherpa-onnx',
-      version: '计划接入',
-      source: 'sherpa-onnx streaming models',
-      license: '待接入时核对',
+      version: '2023-02-23 INT8',
+      source: 'ModelScope · sherpa-onnx-asr-models',
+      license: 'Apache-2.0',
     ),
     LocalModelDefinition(
       id: mlKitChineseOcrId,
@@ -143,6 +145,7 @@ class LocalModelManager extends ChangeNotifier {
   ];
 
   final _speechModels = SpeechModelService.instance;
+  final _streamingModels = StreamingSpeechModelService.instance;
   final Map<String, LocalModelInstallation> _installations = {};
   final Map<String, ModelTransferState> _transfers = {};
   bool _initialized = false;
@@ -165,12 +168,25 @@ class LocalModelManager extends ChangeNotifier {
 
   Future<void> initialize({bool force = false}) async {
     if (_initialized && !force) return;
-    final speech = await _speechModels.inspect();
-    final partial = await _speechModels.partialDownloadBytes();
+    final results = await Future.wait<Object>([
+      _speechModels.inspect(),
+      _speechModels.partialDownloadBytes(),
+      _streamingModels.inspect(),
+      _streamingModels.partialDownloadBytes(),
+    ]);
+    final speech = results[0] as SpeechModelInfo;
+    final partial = results[1] as int;
+    final streaming = results[2] as StreamingSpeechModelInfo;
+    final streamingPartial = results[3] as int;
     _installations[senseVoiceId] = LocalModelInstallation(
       installed: speech.installed,
       installedSizeBytes: speech.sizeBytes,
       partialSizeBytes: partial,
+    );
+    _installations[streamingChineseId] = LocalModelInstallation(
+      installed: streaming.installed,
+      installedSizeBytes: streaming.sizeBytes,
+      partialSizeBytes: streamingPartial,
     );
     _installations[mlKitChineseOcrId] = const LocalModelInstallation(
       installed: true,
@@ -182,8 +198,7 @@ class LocalModelManager extends ChangeNotifier {
   Future<void> download(String modelId) async {
     final definition = _definition(modelId);
     if (definition.availability != LocalModelAvailability.downloadable) return;
-    final existing = _transfers[modelId];
-    if (existing?.isRunning == true) return;
+    if (_transfers.values.any((transfer) => transfer.isRunning)) return;
     final partial = installationOf(modelId).partialSizeBytes;
     final transfer = ModelTransferState(
       modelId: modelId,
@@ -194,13 +209,24 @@ class LocalModelManager extends ChangeNotifier {
     _transfers[modelId] = transfer;
     notifyListeners();
     try {
-      await _speechModels.downloadFromModelScope(
-        shouldCancel: () => transfer.cancelRequested,
-        onProgress: (progress) {
-          transfer.updateProgress(progress);
-          notifyListeners();
-        },
-      );
+      void progress(SpeechModelImportProgress value) {
+        transfer.updateProgress(value);
+        notifyListeners();
+      }
+
+      if (modelId == senseVoiceId) {
+        await _speechModels.downloadFromModelScope(
+          shouldCancel: () => transfer.cancelRequested,
+          onProgress: progress,
+        );
+      } else if (modelId == streamingChineseId) {
+        await _streamingModels.downloadFromModelScope(
+          shouldCancel: () => transfer.cancelRequested,
+          onProgress: progress,
+        );
+      } else {
+        return;
+      }
       transfer.status = ModelTransferStatus.completed;
       await initialize(force: true);
     } on SpeechModelDownloadCanceled {
@@ -216,9 +242,8 @@ class LocalModelManager extends ChangeNotifier {
   }
 
   Future<void> import(String modelId) async {
-    if (modelId != senseVoiceId) return;
-    final existing = _transfers[modelId];
-    if (existing?.isRunning == true) return;
+    if (modelId != senseVoiceId && modelId != streamingChineseId) return;
+    if (_transfers.values.any((transfer) => transfer.isRunning)) return;
     final transfer = ModelTransferState(
       modelId: modelId,
       status: ModelTransferStatus.importing,
@@ -226,12 +251,17 @@ class LocalModelManager extends ChangeNotifier {
     _transfers[modelId] = transfer;
     notifyListeners();
     try {
-      final imported = await _speechModels.pickAndImport(
-        onProgress: (progress) {
-          transfer.updateProgress(progress);
-          notifyListeners();
-        },
-      );
+      void progress(SpeechModelImportProgress value) {
+        transfer.updateProgress(value);
+        notifyListeners();
+      }
+
+      final Object? imported;
+      if (modelId == senseVoiceId) {
+        imported = await _speechModels.pickAndImport(onProgress: progress);
+      } else {
+        imported = await _streamingModels.pickAndImport(onProgress: progress);
+      }
       if (imported == null) {
         _transfers.remove(modelId);
       } else {
@@ -253,11 +283,21 @@ class LocalModelManager extends ChangeNotifier {
   }
 
   Future<void> remove(String modelId) async {
-    if (modelId != senseVoiceId) return;
-    if (SpeechTranscriptionService.instance.jobs.any((job) => job.isRunning)) {
-      throw StateError('请先等待正在进行的转写结束');
+    if (modelId == senseVoiceId) {
+      if (SpeechTranscriptionService.instance.jobs.any(
+        (job) => job.isRunning,
+      )) {
+        throw StateError('请先等待正在进行的转写结束');
+      }
+      await _speechModels.remove();
+    } else if (modelId == streamingChineseId) {
+      if (RealtimeDictationService.instance.isActive) {
+        throw StateError('请先结束正在进行的实时听写');
+      }
+      await _streamingModels.remove();
+    } else {
+      return;
     }
-    await _speechModels.remove();
     _transfers.remove(modelId);
     await initialize(force: true);
   }

@@ -91,6 +91,17 @@ void main() {
     expect(find.byTooltip('下划线'), findsOneWidget);
     expect(find.byTooltip('字号'), findsOneWidget);
     expect(find.byTooltip('增加缩进'), findsOneWidget);
+    expect(find.byTooltip('实时语音输入'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('实时语音输入'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('需要实时语音模型'), findsOneWidget);
+    expect(find.textContaining('70.6 MB'), findsOneWidget);
+    expect(find.text('管理模型'), findsOneWidget);
+
+    await tester.tap(find.text('稍后再说'));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('字号'));
     await tester.pumpAndSettle();

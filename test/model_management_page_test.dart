@@ -58,8 +58,13 @@ void main() {
     expect(find.text('语音模型'), findsOneWidget);
     expect(find.text('SenseVoice Small INT8'), findsOneWidget);
     expect(find.text('继续下载'), findsOneWidget);
+
+    await tester.drag(find.byType(ListView), const Offset(0, -700));
+    await tester.pumpAndSettle();
+
     expect(find.text('Streaming Zipformer 中文'), findsOneWidget);
-    expect(find.text('即将支持'), findsWidgets);
+    expect(find.text('70.6 MB'), findsOneWidget);
+    expect(find.text('下载'), findsWidgets);
 
     await tester.drag(find.byType(ListView), const Offset(0, -1000));
     await tester.pumpAndSettle();

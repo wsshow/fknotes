@@ -9,12 +9,16 @@ import '../app.dart';
 import '../models/note_entry.dart';
 import '../providers/note_provider.dart';
 import '../services/file_storage_service.dart';
+import '../services/local_model_manager.dart';
+import '../services/realtime_dictation_service.dart';
+import '../services/streaming_speech_model_service.dart';
 import '../services/video_import_service.dart';
 import '../widgets/editor_context_menu.dart';
 import '../widgets/app_popup_menu.dart';
 import '../widgets/note_block_editor.dart';
 import '../widgets/note_card.dart';
 import 'media_detail_page.dart';
+import 'model_management_page.dart';
 import 'record_audio_page.dart';
 
 class NoteEditorPage extends StatefulWidget {
@@ -33,7 +37,8 @@ class NoteEditorPage extends StatefulWidget {
   State<NoteEditorPage> createState() => _NoteEditorPageState();
 }
 
-class _NoteEditorPageState extends State<NoteEditorPage> {
+class _NoteEditorPageState extends State<NoteEditorPage>
+    with WidgetsBindingObserver {
   late final TextEditingController _title;
   late final TextEditingController _content;
   String? _richContent;
@@ -46,6 +51,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   late List<NoteAttachment> _attachments;
   final List<NoteAttachment> _removedAttachments = [];
   final _storage = FileStorageService.instance;
+  final _dictation = RealtimeDictationService.instance;
   late final Set<String> _importJobIds;
   NoteProvider? _provider;
   NoteEntry? _entry;
@@ -54,12 +60,16 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   bool _saving = false;
   bool _saveAgain = false;
   bool _importing = false;
+  bool _dictationAnchored = false;
+  bool _recoveringDictationFailure = false;
+  bool _dictationOperationPending = false;
 
   bool get _isEditing => _entry != null;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     final entry = widget.existingEntry;
     _entry = entry;
     _importJobIds = {
@@ -77,6 +87,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     _attachments = [...?entry?.allAttachments];
     _title.addListener(_onTitleChanged);
     _content.addListener(_onContentChanged);
+    _dictation.addListener(_handleDictationChanged);
   }
 
   @override
@@ -132,10 +143,152 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   @override
   void dispose() {
     _autosave?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _provider?.removeListener(_handleProviderChanged);
+    _dictation.removeListener(_handleDictationChanged);
+    if (_dictationAnchored) {
+      _blockEditorKey.currentState?.finishDictation(keepText: false);
+    }
+    if (_dictation.isActive) unawaited(_dictation.cancel());
     _title.dispose();
     _content.dispose();
     super.dispose();
+  }
+
+  void _handleDictationChanged() {
+    if (!mounted) return;
+    if (_dictation.status == RealtimeDictationStatus.failed &&
+        _dictationAnchored &&
+        !_dictationOperationPending &&
+        !_recoveringDictationFailure) {
+      _recoveringDictationFailure = true;
+      unawaited(_recoverFromDictationFailure());
+      return;
+    }
+    if (_dictationAnchored) {
+      _blockEditorKey.currentState?.updateDictation(_dictation.text);
+    }
+    setState(() {});
+  }
+
+  Future<void> _recoverFromDictationFailure() async {
+    final message = _dictation.errorMessage ?? '实时听写没有完成';
+    _blockEditorKey.currentState?.finishDictation(keepText: false);
+    _dictationAnchored = false;
+    await _dictation.cancel();
+    _recoveringDictationFailure = false;
+    if (!mounted) return;
+    setState(() {});
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused &&
+        _dictation.status == RealtimeDictationStatus.listening) {
+      unawaited(_cancelDictation());
+    }
+  }
+
+  Future<void> _toggleDictation() async {
+    if (_dictation.status == RealtimeDictationStatus.listening) {
+      await _stopDictation();
+      return;
+    }
+    if (_dictation.isActive) return;
+    final installed = await StreamingSpeechModelService.instance.inspect();
+    if (!installed.installed) {
+      if (!mounted) return;
+      final openModels = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('需要实时语音模型'),
+          content: const Text(
+            '首次使用需下载约 70.6 MB 的 Streaming Zipformer 中文模型。'
+            '下载完成后，听写全程断网可用。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('稍后再说'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('管理模型'),
+            ),
+          ],
+        ),
+      );
+      if (openModels == true && mounted) {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const ModelManagementPage(
+              focusModelId: LocalModelManager.streamingChineseId,
+            ),
+          ),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+    final anchored = _blockEditorKey.currentState?.beginDictation() ?? false;
+    if (!anchored) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请先将光标放在文字区域')));
+      return;
+    }
+    _dictationAnchored = true;
+    FocusManager.instance.primaryFocus?.unfocus();
+    await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+    _dictationOperationPending = true;
+    try {
+      await _dictation.start();
+      HapticFeedback.mediumImpact();
+    } catch (_) {
+      _blockEditorKey.currentState?.finishDictation(keepText: false);
+      _dictationAnchored = false;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_dictation.errorMessage ?? '无法开始实时听写')),
+        );
+      }
+    } finally {
+      _dictationOperationPending = false;
+    }
+  }
+
+  Future<void> _stopDictation() async {
+    _dictationOperationPending = true;
+    try {
+      final result = await _dictation.stop();
+      _blockEditorKey.currentState?.updateDictation(result);
+      _blockEditorKey.currentState?.finishDictation(
+        keepText: result.trim().isNotEmpty,
+      );
+      _dictationAnchored = false;
+      HapticFeedback.mediumImpact();
+    } catch (_) {
+      _blockEditorKey.currentState?.finishDictation(keepText: false);
+      _dictationAnchored = false;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_dictation.errorMessage ?? '实时听写没有完成')),
+        );
+      }
+    } finally {
+      _dictationOperationPending = false;
+    }
+  }
+
+  Future<void> _cancelDictation() async {
+    await _dictation.cancel();
+    _blockEditorKey.currentState?.finishDictation(keepText: false);
+    _dictationAnchored = false;
+    HapticFeedback.selectionClick();
   }
 
   void _handleProviderChanged() {
@@ -806,17 +959,20 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                           padding: EdgeInsets.symmetric(vertical: 18),
                           child: Divider(),
                         ),
-                        NoteBlockEditor(
-                          key: _blockEditorKey,
-                          controller: _content,
-                          initialRichContent: _richContent,
-                          onRichContentChanged: _onRichContentChanged,
-                          attachments: _attachments,
-                          onOpenAttachment: _openAttachment,
-                          minLines: hasAttachmentContent ? 10 : 16,
-                          hintText: hasAttachmentContent
-                              ? '添加说明、想法或摘要…'
-                              : '开始记录…',
+                        IgnorePointer(
+                          ignoring: _dictation.isActive,
+                          child: NoteBlockEditor(
+                            key: _blockEditorKey,
+                            controller: _content,
+                            initialRichContent: _richContent,
+                            onRichContentChanged: _onRichContentChanged,
+                            attachments: _attachments,
+                            onOpenAttachment: _openAttachment,
+                            minLines: hasAttachmentContent ? 10 : 16,
+                            hintText: hasAttachmentContent
+                                ? '添加说明、想法或摘要…'
+                                : '开始记录…',
+                          ),
                         ),
                       ],
                     ),
@@ -830,29 +986,52 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                 ),
                 padding: const EdgeInsets.fromLTRB(12, 9, 12, 10),
                 child: TextFieldTapRegion(
-                  child: Row(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      IconButton.filled(
-                        tooltip: '添加图片、录音或文件',
-                        onPressed: _importing ? null : _showAddContentSheet,
-                        icon: _importing
-                            ? const SizedBox.square(
-                                dimension: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.add_rounded),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: _ScrollableEditorToolbar(
-                          child: _EditorToolbar(
-                            editorKey: _blockEditorKey,
-                            onReferenceAttachment:
-                                _showAttachmentReferenceSheet,
+                      if (_dictation.isActive ||
+                          _dictation.status == RealtimeDictationStatus.failed)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: _LiveDictationBar(
+                            service: _dictation,
+                            onCancel: _cancelDictation,
+                            onFinish:
+                                _dictation.status ==
+                                    RealtimeDictationStatus.listening
+                                ? _stopDictation
+                                : null,
                           ),
                         ),
+                      Row(
+                        children: [
+                          IconButton.filled(
+                            tooltip: '添加图片、录音或文件',
+                            onPressed: _importing || _dictation.isActive
+                                ? null
+                                : _showAddContentSheet,
+                            icon: _importing
+                                ? const SizedBox.square(
+                                    dimension: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.add_rounded),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: _ScrollableEditorToolbar(
+                              child: _EditorToolbar(
+                                editorKey: _blockEditorKey,
+                                onReferenceAttachment:
+                                    _showAttachmentReferenceSheet,
+                                onDictation: _toggleDictation,
+                                dictationStatus: _dictation.status,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -957,10 +1136,14 @@ class _ToolbarEdgeFade extends StatelessWidget {
 class _EditorToolbar extends StatefulWidget {
   final GlobalKey<NoteBlockEditorState> editorKey;
   final VoidCallback onReferenceAttachment;
+  final VoidCallback onDictation;
+  final RealtimeDictationStatus dictationStatus;
 
   const _EditorToolbar({
     required this.editorKey,
     required this.onReferenceAttachment,
+    required this.onDictation,
+    required this.dictationStatus,
   });
 
   @override
@@ -1014,8 +1197,19 @@ class _EditorToolbarState extends State<_EditorToolbar> {
     final format = _activeFormat?.value ?? const NoteEditorFormatState();
     final history = _historyState?.value ?? const NoteHistoryState();
     final editor = widget.editorKey.currentState;
+    final dictating =
+        widget.dictationStatus == RealtimeDictationStatus.listening;
+    final dictationBusy =
+        widget.dictationStatus == RealtimeDictationStatus.preparing ||
+        widget.dictationStatus == RealtimeDictationStatus.stopping;
     return Row(
       children: [
+        _EditorToolButton(
+          tooltip: dictating ? '停止实时听写' : '实时语音输入',
+          icon: dictating ? Icons.stop_circle_rounded : Icons.mic_none_rounded,
+          selected: dictating,
+          onPressed: dictationBusy ? null : widget.onDictation,
+        ),
         _EditorToolButton(
           tooltip: '撤销',
           icon: Icons.undo_rounded,
@@ -1099,6 +1293,111 @@ class _EditorToolbarState extends State<_EditorToolbar> {
       ],
     );
   }
+}
+
+class _LiveDictationBar extends StatelessWidget {
+  final RealtimeDictationService service;
+  final VoidCallback onCancel;
+  final VoidCallback? onFinish;
+
+  const _LiveDictationBar({
+    required this.service,
+    required this.onCancel,
+    required this.onFinish,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final seconds = service.elapsed.inSeconds;
+    final time =
+        '${(seconds ~/ 60).toString().padLeft(2, '0')}:'
+        '${(seconds % 60).toString().padLeft(2, '0')}';
+    final label = switch (service.status) {
+      RealtimeDictationStatus.preparing => '正在加载本地模型…',
+      RealtimeDictationStatus.stopping => '正在整理最后一句…',
+      RealtimeDictationStatus.failed => service.errorMessage ?? '实时听写失败',
+      _ => service.partialText.isEmpty ? '正在聆听…' : service.partialText,
+    };
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 9, 8, 9),
+      decoration: BoxDecoration(
+        color: AppColors.softGreen,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          _InputLevel(level: service.inputLevel),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  service.status == RealtimeDictationStatus.listening
+                      ? '实时听写  $time'
+                      : '本地语音输入',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.coral,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12, color: AppColors.muted),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: '取消听写',
+            onPressed: onCancel,
+            icon: const Icon(Icons.close_rounded, size: 20),
+          ),
+          if (onFinish != null)
+            FilledButton(
+              onPressed: onFinish,
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                minimumSize: const Size(0, 38),
+              ),
+              child: const Text('完成'),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InputLevel extends StatelessWidget {
+  final double level;
+  const _InputLevel({required this.level});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 26,
+    height: 28,
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        for (var index = 0; index < 4; index++)
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 100),
+            width: 3,
+            height: 6 + 20 * (level * (1 + index * .18)).clamp(0.0, 1.0),
+            decoration: BoxDecoration(
+              color: AppColors.coral,
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+      ],
+    ),
+  );
 }
 
 class _EditorToolButton extends StatelessWidget {

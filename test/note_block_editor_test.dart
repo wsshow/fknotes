@@ -514,4 +514,61 @@ void main() {
 
     expect(controller.text, '粘贴内容');
   });
+
+  testWidgets('live dictation replaces partial text as one undoable change', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '原有内容');
+    final editorKey = GlobalKey<NoteBlockEditorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            key: editorKey,
+            controller: controller,
+            hintText: '开始记录',
+          ),
+        ),
+      ),
+    );
+
+    expect(editorKey.currentState!.beginDictation(), isTrue);
+    editorKey.currentState!.updateDictation('你好');
+    await tester.pump();
+    expect(controller.text, '原有内容你好');
+
+    editorKey.currentState!.updateDictation('你好世界');
+    editorKey.currentState!.finishDictation(keepText: true);
+    await tester.pump();
+    expect(controller.text, '原有内容你好世界');
+
+    editorKey.currentState!.undo();
+    await tester.pump();
+    expect(controller.text, '原有内容');
+  });
+
+  testWidgets('canceling live dictation restores the previous document', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '不要丢失');
+    final editorKey = GlobalKey<NoteBlockEditorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            key: editorKey,
+            controller: controller,
+            hintText: '开始记录',
+          ),
+        ),
+      ),
+    );
+
+    expect(editorKey.currentState!.beginDictation(), isTrue);
+    editorKey.currentState!.updateDictation('临时识别');
+    editorKey.currentState!.finishDictation(keepText: false);
+    await tester.pump();
+
+    expect(controller.text, '不要丢失');
+  });
 }

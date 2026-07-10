@@ -356,6 +356,11 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
   Timer? _historyGroupTimer;
   bool _historyGroupOpen = false;
   bool _restoringHistory = false;
+  bool _dictating = false;
+  _EditorSnapshot? _dictationSnapshot;
+  _EditableBlock? _dictationBlock;
+  int _dictationStart = 0;
+  int _dictationLength = 0;
   int _activeIndex = 0;
   bool _syncing = false;
 
@@ -447,7 +452,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
 
   void _recordHistory(String richDocument) {
     final next = _createSnapshot(richDocument);
-    if (_restoringHistory) {
+    if (_restoringHistory || _dictating) {
       _currentSnapshot = next;
       return;
     }
@@ -503,6 +508,85 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     final target = _redoStack.removeLast();
     _undoStack.add(_currentSnapshot);
     _restoreSnapshot(target);
+  }
+
+  /// Anchors a live-dictation range at the current caret. Subsequent partial
+  /// hypotheses replace only this range, so nearby note text never flickers or
+  /// gets duplicated as the recognizer revises its result.
+  bool beginDictation() {
+    if (_dictating || _blocks.isEmpty) return false;
+    var block = _activeEditableBlock;
+    if (block == null) {
+      final index = _blocks.lastIndexWhere(
+        (item) =>
+            item.type != NoteBlockType.divider &&
+            item.type != NoteBlockType.attachment,
+      );
+      if (index < 0) return false;
+      _activeIndex = index;
+      block = _blocks[index];
+    }
+    _closeHistoryGroup();
+    _dictationSnapshot = _currentSnapshot;
+    _dictationBlock = block;
+    final text = block.controller.visibleTextValue;
+    final selection = block.controller.visibleSelectionValue;
+    final start = selection.isValid
+        ? selection.start.clamp(0, text.length)
+        : text.length;
+    final end = selection.isValid
+        ? selection.end.clamp(start, text.length)
+        : start;
+    _dictationStart = start;
+    _dictationLength = 0;
+    _dictating = true;
+    block.controller.typingAttributes = block.controller.attributesForSelection(
+      TextSelection.collapsed(offset: start),
+    );
+    if (end > start) {
+      block.controller.value = TextEditingValue(
+        text: text.replaceRange(start, end, ''),
+        selection: TextSelection.collapsed(offset: start),
+      );
+    }
+    _activeIndex = _blocks.indexOf(block);
+    activeType.value = block.type;
+    return true;
+  }
+
+  void updateDictation(String value) {
+    if (!_dictating) return;
+    final block = _dictationBlock;
+    if (block == null || !_blocks.contains(block)) return;
+    final text = block.controller.visibleTextValue;
+    final start = _dictationStart.clamp(0, text.length);
+    final end = (start + _dictationLength).clamp(start, text.length);
+    block.controller.value = TextEditingValue(
+      text: text.replaceRange(start, end, value),
+      selection: TextSelection.collapsed(offset: start + value.length),
+    );
+    _dictationLength = value.length;
+  }
+
+  void finishDictation({required bool keepText}) {
+    if (!_dictating) return;
+    final before = _dictationSnapshot;
+    _dictating = false;
+    _dictationSnapshot = null;
+    _dictationBlock = null;
+    _dictationLength = 0;
+    if (!keepText && before != null) {
+      _restoreSnapshot(before);
+      return;
+    }
+    if (before != null &&
+        before.richDocument != _currentSnapshot.richDocument) {
+      _undoStack.add(before);
+      if (_undoStack.length > 100) _undoStack.removeAt(0);
+      _redoStack.clear();
+      _notifyHistoryChanged();
+    }
+    _closeHistoryGroup();
   }
 
   void _restoreSnapshot(_EditorSnapshot snapshot) {
@@ -929,7 +1013,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     TextSelection? selection,
   }) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+      if (!mounted || !_blocks.contains(block)) return;
       block.focusNode.requestFocus();
       if (selection?.isValid == true) {
         block.controller.visibleSelectionValue = selection!;
