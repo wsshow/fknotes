@@ -1,18 +1,12 @@
-import 'dart:io';
-
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:mime/mime.dart';
-import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import '../app.dart';
 import '../models/note_entry.dart';
 import '../providers/note_provider.dart';
-import '../services/file_storage_service.dart';
 import '../services/backup_service.dart';
+import '../services/file_storage_service.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/app_popup_menu.dart';
 import '../widgets/brand_mark.dart';
@@ -30,8 +24,6 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final _picker = ImagePicker();
-  final _storage = FileStorageService.instance;
   int _tab = 0;
   bool _fabExpanded = true;
 
@@ -175,7 +167,6 @@ class _HomePageState extends State<HomePage> {
       context,
       MaterialPageRoute(builder: (_) => NoteEditorPage(existingEntry: entry)),
     );
-    if (mounted) await context.read<NoteProvider>().loadEntries();
   }
 
   Future<void> _editEntry(NoteEntry entry) async {
@@ -349,134 +340,46 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _pickImage() async {
-    final images = await _picker.pickMultiImage(imageQuality: 92);
-    if (images.isNotEmpty) await _processImages(images);
+    await _startAttachmentImport(NoteType.image);
   }
 
   Future<void> _takePhoto() async {
-    final image = await _picker.pickImage(
-      source: ImageSource.camera,
-      imageQuality: 92,
-    );
-    if (image != null) {
-      await _processImages([image]);
-    }
+    await _startAttachmentImport(NoteType.image, camera: true);
   }
 
-  Future<void> _pickVideo() async {
-    final file = await _picker.pickVideo(source: ImageSource.gallery);
-    if (file != null) {
-      await _importSingleFile(
-        File(file.path),
-        file.name,
-        NoteType.video,
-        'video',
-        'video/mp4',
-      );
-    }
-  }
+  Future<void> _pickVideo() => _startAttachmentImport(NoteType.video);
 
-  Future<void> _pickAudio() async {
-    const group = XTypeGroup(label: 'Audio', mimeTypes: ['audio/*']);
-    final file = await openFile(acceptedTypeGroups: [group]);
-    if (file != null) {
-      await _importSingleFile(
-        File(file.path),
-        file.name,
-        NoteType.audio,
-        'audio',
-        'audio/mpeg',
-      );
-    }
-  }
+  Future<void> _pickAudio() => _startAttachmentImport(NoteType.audio);
 
-  Future<void> _pickDocument() async {
-    const group = XTypeGroup(
-      label: 'Documents',
-      extensions: [
-        'pdf',
-        'txt',
-        'md',
-        'doc',
-        'docx',
-        'xls',
-        'xlsx',
-        'ppt',
-        'pptx',
-        'zip',
-      ],
-    );
-    final file = await openFile(acceptedTypeGroups: [group]);
-    if (file != null) {
-      await _importSingleFile(
-        File(file.path),
-        file.name,
-        NoteType.document,
-        'documents',
-        'application/octet-stream',
-      );
-    }
-  }
+  Future<void> _pickDocument() => _startAttachmentImport(NoteType.document);
 
-  Future<void> _processImages(List<XFile> images) async {
-    _busy('正在保存 ${images.length} 张图片…');
-    final attachments = <NoteAttachment>[];
+  Future<void> _startAttachmentImport(
+    NoteType type, {
+    bool camera = false,
+  }) async {
     try {
-      for (var index = 0; index < images.length; index++) {
-        final image = images[index];
-        final storedPath = await _storage.copyFile(File(image.path), 'images');
-        final thumb = await _storage.generateThumbnail(storedPath);
-        attachments.add(
-          NoteAttachment(
-            type: NoteType.image,
-            filePath: storedPath,
-            fileName: image.name,
-            fileSize: await _storage.getFileSize(storedPath),
-            mimeType: lookupMimeType(image.path) ?? 'image/jpeg',
-            thumbnailPath: thumb.isEmpty ? null : thumb,
-            sortOrder: index,
-            createdAt: DateTime.now(),
+      final provider = context.read<NoteProvider>();
+      final jobs = await provider.startAttachmentImport(type, camera: camera);
+      if (jobs.isEmpty || !mounted || jobs.first.noteId == null) return;
+      final entry = provider.getEntryById(jobs.first.noteId!);
+      if (entry == null) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => NoteEditorPage(
+            existingEntry: entry,
+            initialImportJobIds: jobs.map((job) => job.id).toList(),
           ),
-        );
-      }
-      await _createNoteWithAttachments(
-        _titleFromName(images.first.name),
-        attachments,
+        ),
       );
-      _done('${images.length} 张图片已保存');
     } catch (error) {
-      for (final attachment in attachments) {
-        await _storage.deleteFile(attachment.filePath);
-        await _storage.deleteFile(attachment.thumbnailPath);
-      }
-      _done('处理失败：$error');
-    }
-  }
-
-  Future<void> _importSingleFile(
-    File file,
-    String name,
-    NoteType type,
-    String folder,
-    String fallbackMime,
-  ) async {
-    _busy('正在导入${type.label}…');
-    String? storedPath;
-    try {
-      storedPath = await _storage.copyFile(file, folder);
-      final attachment = NoteAttachment(
-        type: type,
-        filePath: storedPath,
-        fileName: name,
-        fileSize: await _storage.getFileSize(storedPath),
-        mimeType: lookupMimeType(file.path) ?? fallbackMime,
-        createdAt: DateTime.now(),
-      );
-      await _createNoteWithAttachments(_titleFromName(name), [attachment]);
-      _done('${type.label}已添加到笔记');
-    } catch (error) {
-      if (storedPath != null) await _storage.deleteFile(storedPath);
-      _done('导入失败：$error');
+      if (!mounted) return;
+      final message = error is PlatformException
+          ? error.message ?? '${type.label}导入失败'
+          : error.toString();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
@@ -504,21 +407,6 @@ class _HomePageState extends State<HomePage> {
         MaterialPageRoute(builder: (_) => NoteEditorPage(existingEntry: entry)),
       );
     }
-  }
-
-  String _titleFromName(String name) {
-    final title = p.basenameWithoutExtension(name).trim();
-    return title.isEmpty ? '未命名' : title;
-  }
-
-  void _busy(String text) => ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(text), duration: const Duration(seconds: 30)),
-  );
-  void _done(String text) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(text)));
   }
 }
 

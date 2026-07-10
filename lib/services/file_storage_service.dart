@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:isolate';
+
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
@@ -32,6 +34,15 @@ class FileStorageService {
     for (final dir in dirs) {
       await Directory(dir).create(recursive: true);
     }
+    for (final folder in ['images', 'audio', 'video', 'documents']) {
+      await for (final entity in Directory(
+        p.join(_baseDir, folder),
+      ).list(followLinks: false)) {
+        if (entity is File && entity.path.endsWith('.part')) {
+          await entity.delete();
+        }
+      }
+    }
   }
 
   /// Get absolute path from relative file path
@@ -50,30 +61,73 @@ class FileStorageService {
     return relativePath;
   }
 
-  /// Generate thumbnail for an image, return relative thumbnail path
-  Future<String> generateThumbnail(String imagePath) async {
-    final absPath = absolutePath(imagePath);
-    final file = File(absPath);
-
-    if (!await file.exists()) return '';
-
+  /// Move an app-owned temporary file into managed storage. This is normally
+  /// an atomic rename and falls back to copy-and-delete across file systems.
+  Future<String> moveTemporaryFile(File sourceFile, String subDir) async {
+    final ext = p.extension(sourceFile.path);
+    final filename = '${_uuid.v4()}$ext';
+    final relativePath = '$subDir/$filename';
+    final destination = File(absolutePath(relativePath));
     try {
-      final bytes = await file.readAsBytes();
-      final decoded = img.decodeImage(bytes);
-      if (decoded == null) return '';
-
-      final thumb = img.copyResize(decoded, width: 300);
-      final thumbBytes = img.encodeJpg(thumb);
-
-      final thumbFilename = '${_uuid.v4()}_thumb.jpg';
-      final thumbRelativePath = 'thumbnails/$thumbFilename';
-      final thumbPath = absolutePath(thumbRelativePath);
-
-      await File(thumbPath).writeAsBytes(thumbBytes);
-      return thumbRelativePath;
-    } catch (e) {
-      return '';
+      await sourceFile.rename(destination.path);
+    } on FileSystemException {
+      await sourceFile.copy(destination.path);
+      await sourceFile.delete();
     }
+    return relativePath;
+  }
+
+  /// Copy a file while reporting byte-level progress. Used as a non-Android
+  /// fallback where the native content URI importer is unavailable.
+  Future<String> copyFileWithProgress(
+    File sourceFile,
+    String subDir, {
+    required void Function(int copiedBytes, int totalBytes) onProgress,
+    bool Function()? shouldCancel,
+  }) async {
+    final ext = p.extension(sourceFile.path);
+    final filename = '${_uuid.v4()}$ext';
+    final relativePath = '$subDir/$filename';
+    final destination = File(absolutePath(relativePath));
+    final totalBytes = await sourceFile.length();
+    final input = await sourceFile.open();
+    final output = await destination.open(mode: FileMode.write);
+    var copiedBytes = 0;
+    try {
+      onProgress(0, totalBytes);
+      while (true) {
+        if (shouldCancel?.call() == true) {
+          throw const FileSystemException('附件导入已取消');
+        }
+        final chunk = await input.read(256 * 1024);
+        if (chunk.isEmpty) break;
+        await output.writeFrom(chunk);
+        copiedBytes += chunk.length;
+        onProgress(copiedBytes, totalBytes);
+      }
+      await output.flush();
+      return relativePath;
+    } catch (_) {
+      if (await destination.exists()) await destination.delete();
+      rethrow;
+    } finally {
+      await input.close();
+      await output.close();
+    }
+  }
+
+  /// Keep image decoding and JPEG encoding away from the UI isolate on
+  /// platforms that do not provide the native sampled thumbnail path.
+  Future<String> generateThumbnailInBackground(String imagePath) async {
+    final sourcePath = absolutePath(imagePath);
+    if (!await File(sourcePath).exists()) return '';
+    final thumbFilename = '${_uuid.v4()}_thumb.jpg';
+    final relativePath = 'thumbnails/$thumbFilename';
+    final outputPath = absolutePath(relativePath);
+    final generated = await Isolate.run(
+      () => _generateThumbnailFile(sourcePath, outputPath),
+    );
+    return generated ? relativePath : '';
   }
 
   /// Delete a stored file by relative path
@@ -117,5 +171,19 @@ class FileStorageService {
       }
     }
     return total;
+  }
+}
+
+bool _generateThumbnailFile(String sourcePath, String outputPath) {
+  try {
+    final decoded = img.decodeImage(File(sourcePath).readAsBytesSync());
+    if (decoded == null) return false;
+    final thumbnail = decoded.width >= decoded.height
+        ? img.copyResize(decoded, width: 300)
+        : img.copyResize(decoded, height: 300);
+    File(outputPath).writeAsBytesSync(img.encodeJpg(thumbnail, quality: 86));
+    return true;
+  } catch (_) {
+    return false;
   }
 }

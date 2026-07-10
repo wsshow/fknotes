@@ -1,17 +1,15 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:mime/mime.dart';
 import 'package:provider/provider.dart';
 
 import '../app.dart';
 import '../models/note_entry.dart';
 import '../providers/note_provider.dart';
 import '../services/file_storage_service.dart';
+import '../services/video_import_service.dart';
 import '../widgets/editor_context_menu.dart';
 import '../widgets/app_popup_menu.dart';
 import '../widgets/note_block_editor.dart';
@@ -21,8 +19,15 @@ import 'record_audio_page.dart';
 
 class NoteEditorPage extends StatefulWidget {
   final NoteEntry? existingEntry;
+  final List<String> initialImportJobIds;
+  final List<String> initialVideoJobIds;
 
-  const NoteEditorPage({super.key, this.existingEntry});
+  const NoteEditorPage({
+    super.key,
+    this.existingEntry,
+    this.initialImportJobIds = const [],
+    this.initialVideoJobIds = const [],
+  });
 
   @override
   State<NoteEditorPage> createState() => _NoteEditorPageState();
@@ -39,8 +44,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   late bool _pinned;
   late List<NoteAttachment> _attachments;
   final List<NoteAttachment> _removedAttachments = [];
-  final _picker = ImagePicker();
   final _storage = FileStorageService.instance;
+  late final Set<String> _importJobIds;
+  NoteProvider? _provider;
   NoteEntry? _entry;
   Timer? _autosave;
   bool _changed = false;
@@ -55,6 +61,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     super.initState();
     final entry = widget.existingEntry;
     _entry = entry;
+    _importJobIds = {
+      ...widget.initialImportJobIds,
+      ...widget.initialVideoJobIds,
+    };
     _title = TextEditingController(text: entry?.title ?? '');
     _content = TextEditingController(text: entry?.content ?? '');
     _lastTitleText = _title.text;
@@ -65,6 +75,24 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     _attachments = [...?entry?.allAttachments];
     _title.addListener(_onTitleChanged);
     _content.addListener(_onContentChanged);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final provider = context.read<NoteProvider>();
+    if (identical(_provider, provider)) return;
+    _provider?.removeListener(_handleProviderChanged);
+    _provider = provider..addListener(_handleProviderChanged);
+    final noteId = _entry?.id;
+    if (noteId != null) {
+      _importJobIds.addAll(
+        provider.attachmentImportsForNote(noteId).map((job) => job.id),
+      );
+    }
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _handleProviderChanged(),
+    );
   }
 
   void _onTitleChanged() {
@@ -96,9 +124,56 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   @override
   void dispose() {
     _autosave?.cancel();
+    _provider?.removeListener(_handleProviderChanged);
     _title.dispose();
     _content.dispose();
     super.dispose();
+  }
+
+  void _handleProviderChanged() {
+    if (!mounted) return;
+    final provider = _provider;
+    if (provider == null) return;
+    final noteId = _entry?.id;
+    if (noteId != null) {
+      _importJobIds.addAll(
+        provider.attachmentImportsForNote(noteId).map((job) => job.id),
+      );
+    }
+    final jobsToDismiss = <String>[];
+    var changed = _importJobIds.isNotEmpty;
+    for (final jobId in _importJobIds.toList()) {
+      final job = provider.attachmentImportJob(jobId);
+      if (job == null || job.status == AttachmentImportStatus.canceled) {
+        _importJobIds.remove(jobId);
+        jobsToDismiss.add(jobId);
+        changed = true;
+        continue;
+      }
+      if (!job.committed || job.filePath == null || job.noteId == null) {
+        continue;
+      }
+      final refreshed = provider.getEntryById(job.noteId!);
+      final imported = refreshed?.allAttachments
+          .where((item) => item.filePath == job.filePath)
+          .firstOrNull;
+      if (imported != null &&
+          !_attachments.any((item) => item.filePath == imported.filePath)) {
+        _attachments.add(imported);
+        _entry = (_entry ?? refreshed)!.copyWith(attachments: _attachments);
+      }
+      _importJobIds.remove(jobId);
+      jobsToDismiss.add(jobId);
+      changed = true;
+    }
+    if (changed) setState(() {});
+    if (jobsToDismiss.isNotEmpty) {
+      scheduleMicrotask(() {
+        for (final jobId in jobsToDismiss) {
+          provider.acknowledgeAttachmentImport(jobId);
+        }
+      });
+    }
   }
 
   Future<bool> _persist() async {
@@ -322,51 +397,62 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     Future<void>.delayed(const Duration(milliseconds: 220), task);
   }
 
-  Future<void> _pickImages() async {
-    final images = await _picker.pickMultiImage(imageQuality: 92);
-    if (images.isEmpty) return;
-    await _importFiles(images, NoteType.image);
-  }
+  Future<void> _pickImages() => _pickAttachment(NoteType.image);
 
-  Future<void> _takePhoto() async {
-    final image = await _picker.pickImage(
-      source: ImageSource.camera,
-      imageQuality: 92,
-    );
-    if (image != null) {
-      await _importFiles([image], NoteType.image);
+  Future<void> _takePhoto() => _pickAttachment(NoteType.image, camera: true);
+
+  Future<void> _pickVideo() => _pickAttachment(NoteType.video);
+
+  Future<void> _pickAudio() => _pickAttachment(NoteType.audio);
+
+  Future<void> _pickDocument() => _pickAttachment(NoteType.document);
+
+  Future<void> _pickAttachment(NoteType type, {bool camera = false}) async {
+    if (_importing) return;
+    setState(() => _importing = true);
+    try {
+      final provider = context.read<NoteProvider>();
+      final jobs = await provider.startAttachmentImport(
+        type,
+        noteId: _entry?.id,
+        camera: camera,
+      );
+      if (jobs.isEmpty || !mounted) return;
+      final draft = jobs.first.noteId == null
+          ? null
+          : provider.getEntryById(jobs.first.noteId!);
+      setState(() {
+        _importJobIds.addAll(jobs.map((job) => job.id));
+        if (_entry == null && draft != null) {
+          _entry = draft;
+          if (_title.text.trim().isEmpty) {
+            _lastTitleText = draft.title;
+            _title.text = draft.title;
+          }
+        }
+      });
+    } catch (error) {
+      if (!mounted) return;
+      final message = error is PlatformException
+          ? error.message ?? '${type.label}导入失败'
+          : error.toString();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } finally {
+      if (mounted) setState(() => _importing = false);
     }
   }
 
-  Future<void> _pickVideo() async {
-    final video = await _picker.pickVideo(source: ImageSource.gallery);
-    if (video != null) await _importFiles([video], NoteType.video);
+  Future<void> _removeAttachmentImport(AttachmentImportJob job) async {
+    final provider = context.read<NoteProvider>();
+    await provider.removeAttachmentImport(job.id);
+    if (mounted) setState(() => _importJobIds.remove(job.id));
   }
 
-  Future<void> _pickAudio() async {
-    const group = XTypeGroup(label: 'Audio', mimeTypes: ['audio/*']);
-    final file = await openFile(acceptedTypeGroups: [group]);
-    if (file != null) await _importFiles([file], NoteType.audio);
-  }
-
-  Future<void> _pickDocument() async {
-    const group = XTypeGroup(
-      label: 'Files',
-      extensions: [
-        'pdf',
-        'txt',
-        'md',
-        'doc',
-        'docx',
-        'xls',
-        'xlsx',
-        'ppt',
-        'pptx',
-        'zip',
-      ],
-    );
-    final file = await openFile(acceptedTypeGroups: [group]);
-    if (file != null) await _importFiles([file], NoteType.document);
+  Future<void> _retryAttachmentImport(AttachmentImportJob job) async {
+    await _removeAttachmentImport(job);
+    if (mounted) await _pickAttachment(job.type);
   }
 
   Future<void> _recordAudio() async {
@@ -377,58 +463,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       ),
     );
     if (attachment != null) _addAttachments([attachment]);
-  }
-
-  Future<void> _importFiles(List<XFile> files, NoteType type) async {
-    if (_importing) return;
-    setState(() => _importing = true);
-    final imported = <NoteAttachment>[];
-    try {
-      for (final selected in files) {
-        final source = File(selected.path);
-        final folder = switch (type) {
-          NoteType.image => 'images',
-          NoteType.audio => 'audio',
-          NoteType.video => 'video',
-          NoteType.document => 'documents',
-          NoteType.text => 'documents',
-        };
-        final storedPath = await _storage.copyFile(source, folder);
-        String? thumbnailPath;
-        if (type == NoteType.image) {
-          final thumbnail = await _storage.generateThumbnail(storedPath);
-          thumbnailPath = thumbnail.isEmpty ? null : thumbnail;
-        }
-        imported.add(
-          NoteAttachment(
-            type: type,
-            filePath: storedPath,
-            fileName: selected.name,
-            fileSize: await _storage.getFileSize(storedPath),
-            mimeType:
-                lookupMimeType(selected.path) ??
-                (type == NoteType.document
-                    ? 'application/octet-stream'
-                    : '${type.name}/*'),
-            thumbnailPath: thumbnailPath,
-            createdAt: DateTime.now(),
-          ),
-        );
-      }
-      _addAttachments(imported);
-    } catch (error) {
-      for (final attachment in imported) {
-        await _storage.deleteFile(attachment.filePath);
-        await _storage.deleteFile(attachment.thumbnailPath);
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('添加失败：$error')));
-      }
-    } finally {
-      if (mounted) setState(() => _importing = false);
-    }
   }
 
   void _addAttachments(List<NoteAttachment> items) {
@@ -533,7 +567,18 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
   @override
   Widget build(BuildContext context) {
-    final type = _attachments.isEmpty ? NoteType.text : _attachments.first.type;
+    final provider = context.read<NoteProvider>();
+    final importJobs = _importJobIds
+        .map(provider.attachmentImportJob)
+        .whereType<AttachmentImportJob>()
+        .toList(growable: false);
+    final hasAttachmentContent =
+        _attachments.isNotEmpty || importJobs.isNotEmpty;
+    final type = _attachments.isNotEmpty
+        ? _attachments.first.type
+        : importJobs.isNotEmpty
+        ? importJobs.first.type
+        : NoteType.text;
     final typeColor = NoteCard.colorForType(type);
     return PopScope(
       canPop: false,
@@ -674,7 +719,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                           ),
                         ],
                       ),
-                      if (_attachments.isNotEmpty) ...[
+                      if (hasAttachmentContent) ...[
                         const SizedBox(height: 20),
                         Row(
                           children: [
@@ -689,7 +734,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                               ),
                             ),
                             Text(
-                              '${_attachments.length} 项附件',
+                              '${_attachments.length + importJobs.length} 项附件',
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: AppColors.muted,
@@ -698,6 +743,24 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                           ],
                         ),
                         const SizedBox(height: 10),
+                        for (
+                          var index = 0;
+                          index < importJobs.length;
+                          index++
+                        ) ...[
+                          _AttachmentImportTile(
+                            job: importJobs[index],
+                            onCancel: () =>
+                                _removeAttachmentImport(importJobs[index]),
+                            onRetry: () =>
+                                _retryAttachmentImport(importJobs[index]),
+                            onRemove: () =>
+                                _removeAttachmentImport(importJobs[index]),
+                          ),
+                          if (index < importJobs.length - 1 ||
+                              _attachments.isNotEmpty)
+                            const SizedBox(height: 8),
+                        ],
                         for (
                           var index = 0;
                           index < _attachments.length;
@@ -729,8 +792,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                         controller: _content,
                         attachments: _attachments,
                         onOpenAttachment: _openAttachment,
-                        minLines: _attachments.isEmpty ? 16 : 10,
-                        hintText: _attachments.isNotEmpty
+                        minLines: hasAttachmentContent ? 10 : 16,
+                        hintText: hasAttachmentContent
                             ? '添加说明、想法或摘要…'
                             : '开始记录…',
                       ),
@@ -934,6 +997,126 @@ class _AddContentAction extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _AttachmentImportTile extends StatelessWidget {
+  final AttachmentImportJob job;
+  final VoidCallback onCancel;
+  final VoidCallback onRetry;
+  final VoidCallback onRemove;
+
+  const _AttachmentImportTile({
+    required this.job,
+    required this.onCancel,
+    required this.onRetry,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = job.progress;
+    final color = NoteCard.colorForType(job.type);
+    final statusText = switch (job.status) {
+      AttachmentImportStatus.importing =>
+        job.type == NoteType.image && progress == 1
+            ? '正在生成缩略图…'
+            : progress == null
+            ? '正在导入 · ${_formatBytes(job.copiedBytes)}'
+            : '正在导入 ${(progress * 100).round()}% · '
+                  '${_formatBytes(job.copiedBytes)} / ${_formatBytes(job.totalBytes)}',
+      AttachmentImportStatus.completed => '导入完成，正在保存到笔记…',
+      AttachmentImportStatus.failed =>
+        job.errorMessage?.trim().isNotEmpty == true
+            ? '导入失败 · ${job.errorMessage}'
+            : '导入失败，请重试',
+      AttachmentImportStatus.canceled => '导入已取消',
+    };
+    return Material(
+      color: color.withValues(alpha: .07),
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(11, 10, 8, 10),
+        child: Row(
+          children: [
+            Container(
+              width: 54,
+              height: 54,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: .1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(NoteCard.iconForType(job.type), color: color),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    job.fileName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    statusText,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: job.status == AttachmentImportStatus.failed
+                          ? color
+                          : AppColors.muted,
+                    ),
+                  ),
+                  if (job.status == AttachmentImportStatus.importing ||
+                      job.status == AttachmentImportStatus.completed) ...[
+                    const SizedBox(height: 7),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: job.status == AttachmentImportStatus.completed
+                            ? 1
+                            : progress,
+                        minHeight: 4,
+                        backgroundColor: AppColors.line,
+                        color: color,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (job.status == AttachmentImportStatus.importing)
+              IconButton(
+                tooltip: '取消导入',
+                onPressed: onCancel,
+                icon: const Icon(Icons.close_rounded),
+              )
+            else if (job.status == AttachmentImportStatus.failed) ...[
+              IconButton(
+                tooltip: '重新选择${job.type.label}',
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh_rounded),
+              ),
+              IconButton(
+                tooltip: '移除',
+                onPressed: onRemove,
+                icon: const Icon(Icons.close_rounded),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _formatBytes(int bytes) => bytes < 1024
+      ? '$bytes B'
+      : bytes < 1048576
+      ? '${(bytes / 1024).toStringAsFixed(1)} KB'
+      : '${(bytes / 1048576).toStringAsFixed(1)} MB';
 }
 
 class _AttachmentEditorTile extends StatelessWidget {

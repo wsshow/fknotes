@@ -49,7 +49,7 @@ class OcrService {
           : OcrResult.recognized(text);
     } catch (error, stackTrace) {
       debugPrint('OCR recognition failed: $error\n$stackTrace');
-      return OcrResult.failed(error.toString());
+      return OcrResult.failed('文字识别暂时不可用，请稍后重试');
     }
   }
 

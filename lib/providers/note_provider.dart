@@ -1,18 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 
 import '../models/note_entry.dart';
 import '../services/file_storage_service.dart';
 import '../services/note_service.dart';
+import '../services/video_import_service.dart';
 
 class NoteProvider extends ChangeNotifier {
   final NoteService _notes = NoteService.instance;
   final FileStorageService _storage = FileStorageService.instance;
+  final AttachmentImportService _attachmentImports =
+      AttachmentImportService.instance;
+  final Set<String> _finalizingImportJobs = {};
+  final Set<int> _importDrafts = {};
+  Future<void> _importFinalization = Future.value();
 
   List<NoteEntry> _entries = [];
   NoteType? _typeFilter;
   NoteScope _scope = NoteScope.active;
   NoteSort _sort = NoteSort.updated;
   bool _isLoading = false;
+
+  NoteProvider() {
+    _attachmentImports.addListener(_onAttachmentImportsChanged);
+  }
 
   List<NoteEntry> get allEntries => List.unmodifiable(_entries);
   List<NoteEntry> get activeEntries => _entries
@@ -63,11 +74,24 @@ class NoteProvider extends ChangeNotifier {
   int countForType(NoteType type) =>
       activeEntries.where((entry) => entry.containsType(type)).length;
 
+  AttachmentImportJob? attachmentImportJob(String id) =>
+      _attachmentImports.jobById(id);
+
+  List<AttachmentImportJob> attachmentImportsForNote(int noteId) =>
+      _attachmentImports.jobsForNote(noteId);
+
+  AttachmentImportJob? videoImportJob(String id) => attachmentImportJob(id);
+
+  List<AttachmentImportJob> videoImportsForNote(int noteId) =>
+      attachmentImportsForNote(
+        noteId,
+      ).where((job) => job.type == NoteType.video).toList(growable: false);
+
   Future<void> loadEntries() async {
     _isLoading = true;
     notifyListeners();
     try {
-      _entries = await _notes.getAllEntries();
+      _entries = [...await _notes.getAllEntries()];
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -99,13 +123,199 @@ class NoteProvider extends ChangeNotifier {
 
   Future<int> addEntry(NoteEntry entry) async {
     final id = await _notes.insertEntry(entry);
-    await loadEntries();
+    _replaceEntry(_withPersistedIdentity(entry, id), appendIfMissing: true);
+    notifyListeners();
     return id;
   }
 
   Future<void> updateEntry(NoteEntry entry) async {
-    await _notes.updateEntry(entry);
-    await loadEntries();
+    var entryToSave = entry;
+    if (entry.id != null) {
+      final protectedPaths = _attachmentImports.jobs
+          .where(
+            (job) =>
+                job.noteId == entry.id &&
+                job.status == AttachmentImportStatus.completed &&
+                job.filePath != null,
+          )
+          .map((job) => job.filePath!)
+          .toSet();
+      final current = getEntryById(entry.id!);
+      if (current != null && protectedPaths.isNotEmpty) {
+        final incomingPaths = entry.allAttachments
+            .map((item) => item.filePath)
+            .toSet();
+        entryToSave = entry.copyWith(
+          attachments: [
+            ...entry.allAttachments,
+            for (final attachment in current.allAttachments)
+              if (protectedPaths.contains(attachment.filePath) &&
+                  !incomingPaths.contains(attachment.filePath))
+                attachment,
+          ],
+        );
+      }
+    }
+    await _notes.updateEntry(entryToSave);
+    if (entryToSave.id != null) {
+      _replaceEntry(_withPersistedIdentity(entryToSave, entryToSave.id!));
+      notifyListeners();
+    }
+  }
+
+  Future<List<AttachmentImportJob>> startAttachmentImport(
+    NoteType type, {
+    int? noteId,
+    bool camera = false,
+  }) async {
+    final started = await _attachmentImports.pickAndImport(
+      type,
+      camera: camera,
+    );
+    if (started.isEmpty) return const [];
+    final now = DateTime.now();
+    final firstTitle = p
+        .basenameWithoutExtension(started.first.fileName)
+        .trim();
+    final targetNoteId =
+        noteId ??
+        await addEntry(
+          NoteEntry(
+            type: type,
+            title: firstTitle.isEmpty ? '${type.label}笔记' : firstTitle,
+            createdAt: now,
+            updatedAt: now,
+            attachments: const [],
+          ),
+        );
+    if (noteId == null) _importDrafts.add(targetNoteId);
+    for (final job in started) {
+      _attachmentImports.assignToNote(job.id, targetNoteId);
+    }
+    _scheduleCompletedImportJobs();
+    return started
+        .map((job) => _attachmentImports.jobById(job.id)!)
+        .toList(growable: false);
+  }
+
+  Future<AttachmentImportJob?> startVideoImport({int? noteId}) async {
+    final jobs = await startAttachmentImport(NoteType.video, noteId: noteId);
+    return jobs.firstOrNull;
+  }
+
+  Future<void> cancelAttachmentImport(String jobId) =>
+      _attachmentImports.cancel(jobId);
+
+  void acknowledgeAttachmentImport(String jobId) =>
+      _attachmentImports.dismiss(jobId);
+
+  Future<void> removeAttachmentImport(String jobId) async {
+    final job = _attachmentImports.jobById(jobId);
+    if (job == null) return;
+    if (job.status == AttachmentImportStatus.importing) {
+      await _attachmentImports.cancel(jobId);
+    }
+    if (!job.committed && job.filePath != null) {
+      await _storage.deleteFile(job.filePath);
+      await _storage.deleteFile(job.thumbnailPath);
+    }
+    _attachmentImports.dismiss(jobId);
+    final noteId = job.noteId;
+    if (noteId != null &&
+        _importDrafts.contains(noteId) &&
+        _attachmentImports.jobsForNote(noteId).isEmpty) {
+      final draft = getEntryById(noteId);
+      if (draft != null &&
+          draft.allAttachments.isEmpty &&
+          (draft.content?.trim().isEmpty ?? true)) {
+        await _notes.deleteEntry(noteId);
+        _entries.removeWhere((entry) => entry.id == noteId);
+        _importDrafts.remove(noteId);
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> cancelVideoImport(String jobId) => cancelAttachmentImport(jobId);
+
+  void acknowledgeVideoImport(String jobId) =>
+      acknowledgeAttachmentImport(jobId);
+
+  Future<void> removeVideoImport(String jobId) => removeAttachmentImport(jobId);
+
+  void _onAttachmentImportsChanged() {
+    notifyListeners();
+    _scheduleCompletedImportJobs();
+  }
+
+  void _scheduleCompletedImportJobs() {
+    for (final job in _attachmentImports.jobs) {
+      if (job.status == AttachmentImportStatus.completed &&
+          !job.committed &&
+          job.noteId != null &&
+          _finalizingImportJobs.add(job.id)) {
+        _importFinalization = _importFinalization.then(
+          (_) => _finalizeAttachmentImport(job),
+        );
+      }
+    }
+  }
+
+  Future<void> _finalizeAttachmentImport(AttachmentImportJob job) async {
+    try {
+      final noteId = job.noteId;
+      final filePath = job.filePath;
+      if (noteId == null || filePath == null) return;
+      var entry = getEntryById(noteId);
+      entry ??= await _notes.getEntry(noteId);
+      if (entry == null) return;
+      if (entry.allAttachments.any((item) => item.filePath == filePath)) {
+        _attachmentImports.markCommitted(job.id);
+        return;
+      }
+      final attachment = NoteAttachment(
+        noteId: noteId,
+        type: job.type,
+        filePath: filePath,
+        fileName: job.fileName,
+        fileSize: job.fileSize ?? job.copiedBytes,
+        mimeType: job.mimeType,
+        thumbnailPath: job.thumbnailPath,
+        sortOrder: entry.allAttachments.length,
+        createdAt: DateTime.now(),
+      );
+      final persisted = await _notes.insertAttachment(noteId, attachment);
+      _importDrafts.remove(noteId);
+      final updated = entry.copyWith(
+        type: entry.allAttachments.isEmpty ? job.type : entry.type,
+        attachments: [...entry.allAttachments, persisted],
+        updatedAt: DateTime.now(),
+      );
+      _replaceEntry(_withPersistedIdentity(updated, noteId));
+      _attachmentImports.markCommitted(job.id);
+      notifyListeners();
+    } catch (error) {
+      _attachmentImports.markFailed(job.id, '保存到笔记失败：$error');
+    } finally {
+      _finalizingImportJobs.remove(job.id);
+    }
+  }
+
+  NoteEntry _withPersistedIdentity(NoteEntry entry, int id) => entry.copyWith(
+    id: id,
+    attachments: [
+      for (final attachment in entry.allAttachments)
+        attachment.copyWith(noteId: id),
+    ],
+  );
+
+  void _replaceEntry(NoteEntry entry, {bool appendIfMissing = false}) {
+    final index = _entries.indexWhere((item) => item.id == entry.id);
+    if (index >= 0) {
+      _entries[index] = entry;
+    } else if (appendIfMissing) {
+      _entries.add(entry);
+    }
   }
 
   Future<void> toggleFavorite(NoteEntry entry) => updateEntry(
@@ -163,5 +373,11 @@ class NoteProvider extends ChangeNotifier {
       await _storage.deleteFile(attachment.filePath);
       await _storage.deleteFile(attachment.thumbnailPath);
     }
+  }
+
+  @override
+  void dispose() {
+    _attachmentImports.removeListener(_onAttachmentImportsChanged);
+    super.dispose();
   }
 }

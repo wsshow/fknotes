@@ -6,3 +6,10 @@
 -dontwarn com.google.mlkit.vision.text.japanese.JapaneseTextRecognizerOptions
 -dontwarn com.google.mlkit.vision.text.korean.KoreanTextRecognizerOptions$Builder
 -dontwarn com.google.mlkit.vision.text.korean.KoreanTextRecognizerOptions
+
+# Firebase component discovery instantiates ML Kit registrars by reflection
+# from AndroidManifest metadata. R8 cannot see that constructor call and may
+# remove the public no-argument constructors in optimized release builds.
+-keep class * implements com.google.firebase.components.ComponentRegistrar {
+    public <init>();
+}

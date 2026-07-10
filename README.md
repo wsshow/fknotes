@@ -17,6 +17,7 @@
 - 图片详情内按需执行本地中文 OCR，识别结果可复制和重新识别
 - 标题、正文、OCR、文件名和标签的统一检索
 - 音频、视频应用内预览，其他文档可交由本地应用打开
+- Android 图片、音频、视频和文档均从系统内容 URI 后台流式写入应用目录，附件卡片显示实时进度且不阻断文字编辑
 - 标签、收藏、置顶、归档、回收站和多维排序
 - 块式正文编辑、附件引用与自动保存
 - SQLite 数据库、原始附件和缩略图的统一管理
@@ -28,7 +29,7 @@
 - Provider：应用状态管理
 - SQLite（sqflite）：本地结构化数据
 - Google ML Kit：设备端中文文字识别
-- image_picker / file_selector：相机、图库与文件导入
+- Android 原生内容 URI 导入通道，以及 image_picker / file_selector 跨平台回退
 - just_audio / video_player / record：音视频播放与录音
 
 ## 项目结构

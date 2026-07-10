@@ -175,7 +175,7 @@ class _RecordAudioPageState extends State<RecordAudioPage> {
     String? storedPath;
     try {
       final file = File(path);
-      storedPath = await _storage.copyFile(file, 'audio');
+      storedPath = await _storage.moveTemporaryFile(file, 'audio');
       final now = DateTime.now();
       final attachment = NoteAttachment(
         type: NoteType.audio,
@@ -203,7 +203,9 @@ class _RecordAudioPageState extends State<RecordAudioPage> {
       if (await file.exists()) await file.delete();
       if (mounted) Navigator.pop(context);
     } catch (error) {
-      if (storedPath != null) await _storage.deleteFile(storedPath);
+      if (storedPath != null) {
+        _temporaryPath = _storage.absolutePath(storedPath);
+      }
       if (mounted) {
         setState(() => _stage = _RecorderStage.review);
         ScaffoldMessenger.of(

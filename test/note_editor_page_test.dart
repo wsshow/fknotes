@@ -6,6 +6,7 @@ import 'package:fknotes/pages/media_detail_page.dart';
 import 'package:fknotes/pages/note_editor_page.dart';
 import 'package:fknotes/providers/note_provider.dart';
 import 'package:fknotes/services/file_storage_service.dart';
+import 'package:fknotes/services/video_import_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -101,6 +102,99 @@ void main() {
     expect(find.widgetWithText(FilledButton, '识别文字'), findsOneWidget);
     expect(find.text('重新识别'), findsNothing);
   });
+
+  testWidgets('video import card reports progress without blocking editing', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final now = DateTime(2026, 7, 10);
+    final entry = NoteEntry(
+      id: 42,
+      type: NoteType.video,
+      title: '现场记录',
+      createdAt: now,
+      updatedAt: now,
+      attachments: const [],
+    );
+    const jobId = 'video-import-test';
+    VideoImportService.instance.addJobForTesting(
+      const VideoImportJob(
+        id: jobId,
+        fileName: '现场视频.mp4',
+        mimeType: 'video/mp4',
+        totalBytes: 14 * 1024 * 1024,
+        copiedBytes: 7 * 1024 * 1024,
+        noteId: 42,
+      ),
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => NoteProvider(),
+        child: MaterialApp(home: NoteEditorPage(existingEntry: entry)),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('现场视频.mp4'), findsOneWidget);
+    expect(find.textContaining('正在导入 50%'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+
+    final bodyField = find.byType(TextField).at(1);
+    await tester.tap(bodyField);
+    await tester.enterText(bodyField, '导入视频时仍然可以继续记录');
+    expect(
+      tester.widget<TextField>(bodyField).controller?.text,
+      contains('导入视频时仍然可以继续记录'),
+    );
+    expect(find.textContaining('正在导入 50%'), findsOneWidget);
+
+    VideoImportService.instance.dismiss(jobId);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+    'image import card appears before thumbnail processing completes',
+    (tester) async {
+      _usePhoneViewport(tester);
+      final now = DateTime(2026, 7, 10);
+      final entry = NoteEntry(
+        id: 43,
+        type: NoteType.image,
+        title: '现场照片',
+        createdAt: now,
+        updatedAt: now,
+        attachments: const [],
+      );
+      const jobId = 'image-import-test';
+      AttachmentImportService.instance.addJobForTesting(
+        const AttachmentImportJob(
+          id: jobId,
+          type: NoteType.image,
+          fileName: '现场照片.jpg',
+          mimeType: 'image/jpeg',
+          totalBytes: 800 * 1024,
+          copiedBytes: 800 * 1024,
+          noteId: 43,
+        ),
+      );
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider(
+          create: (_) => NoteProvider(),
+          child: MaterialApp(home: NoteEditorPage(existingEntry: entry)),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('现场照片.jpg'), findsOneWidget);
+      expect(find.text('正在生成缩略图…'), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+
+      AttachmentImportService.instance.dismiss(jobId);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   testWidgets('quote formatting keeps the keyboard, focus and caret', (
     tester,

@@ -44,9 +44,60 @@ class NoteService {
         whereArgs: [entry.id],
       );
       if (entry.id != null) {
-        await _replaceAttachments(txn, entry.id!, entry.allAttachments);
+        await _syncAttachments(txn, entry.id!, entry.allAttachments);
       }
       return count;
+    });
+  }
+
+  /// Append one completed background import without rewriting every existing
+  /// attachment row for the note.
+  Future<NoteAttachment> insertAttachment(
+    int noteId,
+    NoteAttachment attachment,
+  ) async {
+    final db = await _db;
+    return db.transaction((txn) async {
+      final count =
+          Sqflite.firstIntValue(
+            await txn.rawQuery(
+              'SELECT COUNT(*) FROM attachments WHERE note_id = ?',
+              [noteId],
+            ),
+          ) ??
+          0;
+      final maxOrder = Sqflite.firstIntValue(
+        await txn.rawQuery(
+          'SELECT MAX(sort_order) FROM attachments WHERE note_id = ?',
+          [noteId],
+        ),
+      );
+      final persisted = attachment.copyWith(
+        noteId: noteId,
+        sortOrder: maxOrder == null ? 0 : maxOrder + 1,
+      );
+      final map = persisted.toMap(parentId: noteId)..remove('id');
+      final id = await txn.insert('attachments', map);
+      final entryUpdates = <String, Object?>{
+        'updated_at': attachment.createdAt.toIso8601String(),
+        if (count == 0) ...{
+          'type': attachment.type.dbValue,
+          'file_path': attachment.filePath,
+          'file_name': attachment.fileName,
+          'file_size': attachment.fileSize,
+          'mime_type': attachment.mimeType,
+          'thumbnail_path': attachment.thumbnailPath,
+          'duration_ms': attachment.durationMs,
+          'ocr_text': attachment.ocrText,
+        },
+      };
+      await txn.update(
+        'entries',
+        entryUpdates,
+        where: 'id = ?',
+        whereArgs: [noteId],
+      );
+      return persisted.copyWith(id: id);
     });
   }
 
@@ -82,7 +133,7 @@ class NoteService {
     DatabaseExecutor db,
     List<Map<String, Object?>> maps,
   ) async {
-    if (maps.isEmpty) return const [];
+    if (maps.isEmpty) return <NoteEntry>[];
     final ids = maps.map((map) => map['id'] as int).toList();
     final placeholders = List.filled(ids.length, '?').join(',');
     final attachmentMaps = await db.rawQuery(
@@ -116,6 +167,45 @@ class NoteService {
               .toMap(parentId: noteId)
             ..remove('id');
       await db.insert('attachments', map);
+    }
+  }
+
+  Future<void> _syncAttachments(
+    DatabaseExecutor db,
+    int noteId,
+    List<NoteAttachment> attachments,
+  ) async {
+    final existingMaps = await db.query(
+      'attachments',
+      where: 'note_id = ?',
+      whereArgs: [noteId],
+    );
+    final existingByPath = {
+      for (final map in existingMaps) map['file_path'] as String: map,
+    };
+    final incomingPaths = attachments.map((item) => item.filePath).toSet();
+    for (final map in existingMaps) {
+      if (!incomingPaths.contains(map['file_path'])) {
+        await db.delete('attachments', where: 'id = ?', whereArgs: [map['id']]);
+      }
+    }
+    for (var index = 0; index < attachments.length; index++) {
+      final attachment = attachments[index].copyWith(
+        noteId: noteId,
+        sortOrder: index,
+      );
+      final map = attachment.toMap(parentId: noteId)..remove('id');
+      final existing = existingByPath[attachment.filePath];
+      if (existing == null) {
+        await db.insert('attachments', map);
+      } else {
+        await db.update(
+          'attachments',
+          map,
+          where: 'id = ?',
+          whereArgs: [existing['id']],
+        );
+      }
     }
   }
 }
