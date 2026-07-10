@@ -106,7 +106,7 @@ flutter run
 | `make check` | 依次格式化、分析并测试 |
 | `make run DEVICE=<id>` | 在指定设备上运行 |
 | `make package` | 生成 Android 通用 Release APK |
-| `make apk-split` | 按 ABI 生成 Android APK |
+| `make apk-split` | 按 ABI 生成带应用名和版本号的 Android APK |
 | `make aab` | 生成 Google Play 使用的 AAB |
 | `make clean` | 清理构建缓存和 `dist/` |
 
@@ -159,6 +159,12 @@ make package
 
 ```text
 dist/fknotes-<版本号>+<构建号>-release.apk
+```
+
+如需按 CPU 架构分别打包，执行 `make apk-split`，产物命名为：
+
+```text
+dist/fknotes-<版本号>+<构建号>-<ABI>-release.apk
 ```
 
 连接真实设备后可以覆盖安装：

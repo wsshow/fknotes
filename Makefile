@@ -16,7 +16,9 @@ DIST_DIR ?= dist
 PUB_VERSION := $(shell sed -n 's/^version: //p' pubspec.yaml | head -n 1)
 PUB_BUILD_NAME := $(word 1,$(subst +, ,$(PUB_VERSION)))
 PUB_BUILD_NUMBER := $(word 2,$(subst +, ,$(PUB_VERSION)))
-ARTIFACT_VERSION := $(if $(BUILD_NAME),$(BUILD_NAME),$(PUB_BUILD_NAME))$(if $(BUILD_NUMBER),+$(BUILD_NUMBER),$(if $(BUILD_NAME),+$(PUB_BUILD_NUMBER),))
+ARTIFACT_BUILD_NAME := $(if $(BUILD_NAME),$(BUILD_NAME),$(PUB_BUILD_NAME))
+ARTIFACT_BUILD_NUMBER := $(if $(BUILD_NUMBER),$(BUILD_NUMBER),$(PUB_BUILD_NUMBER))
+ARTIFACT_VERSION := $(ARTIFACT_BUILD_NAME)$(if $(ARTIFACT_BUILD_NUMBER),+$(ARTIFACT_BUILD_NUMBER))
 BUILD_ARGS := $(if $(BUILD_NAME),--build-name=$(BUILD_NAME)) $(if $(BUILD_NUMBER),--build-number=$(BUILD_NUMBER))
 DEVICE_ARG := $(if $(DEVICE),-d $(DEVICE))
 
@@ -75,18 +77,25 @@ package: apk ## 打包默认 Android 发布 APK
 apk: get ## 打包 Android 发布 APK，产物放入 dist/
 	$(FLUTTER) build apk --release $(BUILD_ARGS)
 	@mkdir -p $(DIST_DIR)
+	@rm -f $(DIST_DIR)/fknotes-release.apk
 	@cp build/app/outputs/flutter-apk/app-release.apk $(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-release.apk
 	@echo "已生成：$(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-release.apk"
 
 apk-split: get ## 按 ABI 打包 Android 发布 APK，产物放入 dist/
 	$(FLUTTER) build apk --release --split-per-abi $(BUILD_ARGS)
 	@mkdir -p $(DIST_DIR)
-	@cp build/app/outputs/flutter-apk/app-*-release.apk $(DIST_DIR)/
-	@echo "已生成：$(DIST_DIR)/app-*-release.apk"
+	@rm -f $(DIST_DIR)/app-*-release.apk $(DIST_DIR)/fknotes-release.apk
+	@cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk $(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-armeabi-v7a-release.apk
+	@cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk $(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-arm64-v8a-release.apk
+	@cp build/app/outputs/flutter-apk/app-x86_64-release.apk $(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-x86_64-release.apk
+	@echo "已生成：$(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-armeabi-v7a-release.apk"
+	@echo "已生成：$(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-arm64-v8a-release.apk"
+	@echo "已生成：$(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-x86_64-release.apk"
 
 aab: get ## 打包 Android 发布 AAB，产物放入 dist/
 	$(FLUTTER) build appbundle --release $(BUILD_ARGS)
 	@mkdir -p $(DIST_DIR)
+	@rm -f $(DIST_DIR)/fknotes-release.aab
 	@cp build/app/outputs/bundle/release/app-release.aab $(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-release.aab
 	@echo "已生成：$(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-release.aab"
 
