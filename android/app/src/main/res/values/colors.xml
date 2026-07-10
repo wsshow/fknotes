@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="fknotes_ink">#B9573D</color>
+    <color name="fknotes_canvas">#FAF7F2</color>
+    <color name="fknotes_paper">#FFF9F3</color>
+</resources>

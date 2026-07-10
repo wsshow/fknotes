@@ -1,0 +1,102 @@
+# Miscellaneous
+*.class
+*.log
+*.log.*
+*.pid
+*.hprof
+hs_err_pid*
+*.pyc
+*.swp
+*.swo
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+.fleet/
+.vscode/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+pubspec_overrides.yaml
+
+# Local build outputs and distributable binaries
+/dist/
+*.apk
+*.aab
+*.ipa
+
+# Unreferenced local render; the canonical source lives in assets/brand/.
+/macos/Runner/Assets.xcassets/AppIcon.appiconset/fknotes_icon.svg.png
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+**/key.properties
+**/*.jks
+**/*.keystore
+**/*.p12
+**/*.pfx
+**/*.mobileprovision
+
+# Local note data and exported backups must never enter source control
+fknotes.db
+fknotes.db-*
+notes-manifest.json
+*.fknotes
+*.fknotes.zip
+
+# Android generated state
+/android/.gradle/
+/android/.kotlin/
+/android/build/
+/android/local.properties
+/android/captures/
+
+# Apple generated state
+**/Pods/
+**/.symlinks/
+**/DerivedData/
+**/xcuserdata/
+*.xcuserstate
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release

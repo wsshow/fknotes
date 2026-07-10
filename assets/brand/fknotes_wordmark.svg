@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="192" viewBox="0 0 640 192">
+  <rect width="640" height="192" fill="#FAF7F2"/>
+  <g transform="translate(12 0) scale(1.92)">
+    <path d="M22 47 V27 Q22 20 29 20 H59 L78 39 V47"
+          fill="none" stroke="#B9573D" stroke-width="4.2"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M59 21 V32 Q59 39 66 39 H77"
+          fill="none" stroke="#B9573D" stroke-width="4.2"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M55 66 C66 76 78 73 82 61 C82 49 65 44 51 61 C39 77 22 79 18 64 C18 51 37 44 51 61"
+          fill="none" stroke="#B9573D" stroke-width="4.2"
+          stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="216" y="91" fill="#28231F" font-family="Songti SC, STSong, serif" font-size="62" font-weight="700">非空笔记</text>
+  <text x="218" y="138" fill="#7B726B" font-family="PingFang SC, Noto Sans CJK SC, sans-serif" font-size="26" font-weight="500" letter-spacing="2">完全本地 · 私密可靠</text>
+</svg>

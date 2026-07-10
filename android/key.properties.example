@@ -1,0 +1,6 @@
+# Copy this file to key.properties and replace every placeholder locally.
+# Never commit key.properties or the release keystore.
+storePassword=REPLACE_WITH_STORE_PASSWORD
+keyPassword=REPLACE_WITH_KEY_PASSWORD
+keyAlias=fknotes
+storeFile=fknotes-release.jks

@@ -1,0 +1,207 @@
+# 非空笔记（FK Notes）
+
+一个完全本地、隐私优先的多媒体笔记应用。无需账号，笔记、附件与识别结果默认保存在用户自己的设备上。
+
+> 当前处于内部测试阶段，主要验证 Android 版本。仓库保留了 iOS、macOS、Windows、Linux 和 Web 工程，其中非移动端的相机、录音与 OCR 能力仍需进一步适配和验证。
+
+## 产品原则
+
+- **本地优先**：核心数据存储在应用私有目录，不依赖远程服务。
+- **隐私优先**：Android 正式清单不申请网络权限；中文 OCR 在设备上完成。
+- **操作可控**：拍照和选择图片只负责添加图片，OCR 由用户在图片详情中主动触发。
+- **数据可迁移**：支持完整备份与恢复，用户可以自行保管备份文件。
+
+## 核心能力
+
+- 文字、图片、音频、视频和文档的统一管理
+- 图片详情内按需执行本地中文 OCR，识别结果可复制和重新识别
+- 标题、正文、OCR、文件名和标签的统一检索
+- 音频、视频应用内预览，其他文档可交由本地应用打开
+- 标签、收藏、置顶、归档、回收站和多维排序
+- 块式正文编辑、附件引用与自动保存
+- SQLite 数据库、原始附件和缩略图的统一管理
+- `.fknotes.zip` 完整备份、安全校验与恢复
+
+## 技术栈
+
+- Flutter / Dart
+- Provider：应用状态管理
+- SQLite（sqflite）：本地结构化数据
+- Google ML Kit：设备端中文文字识别
+- image_picker / file_selector：相机、图库与文件导入
+- just_audio / video_player / record：音视频播放与录音
+
+## 项目结构
+
+```text
+lib/
+├── models/       数据模型
+├── pages/        主页、编辑器、搜索和媒体详情
+├── providers/    应用状态
+├── services/     数据库、文件、OCR 和备份服务
+└── widgets/      通用界面组件
+
+assets/brand/     品牌图标源文件
+test/             单元测试与组件测试
+android/          Android 工程与发布签名配置
+ios/              iOS 工程
+```
+
+## 开发环境
+
+建议准备：
+
+- Flutter stable（项目要求 Dart `>=3.12.2 <4.0.0`）
+- Android Studio、Android SDK 36 和 JDK 17
+- macOS + Xcode（仅构建 iOS/macOS 时需要）
+- GNU Make 或兼容的 `make` 命令
+
+检查本机环境：
+
+```bash
+make doctor
+```
+
+## 本地运行
+
+获取依赖并完成质量检查：
+
+```bash
+make get
+make check
+```
+
+查看可用设备并运行：
+
+```bash
+make devices
+make run DEVICE=<设备 ID>
+```
+
+Android 设备或模拟器也可以直接运行：
+
+```bash
+make run-android DEVICE=<设备 ID>
+```
+
+不使用 Makefile 时，对应的 Flutter 命令为：
+
+```bash
+flutter pub get
+flutter analyze
+flutter test
+flutter run
+```
+
+## 常用 Make 命令
+
+| 命令 | 用途 |
+| --- | --- |
+| `make help` | 显示全部命令和可选参数 |
+| `make get` | 获取 Flutter 依赖 |
+| `make format` | 格式化 `lib/` 与 `test/` |
+| `make analyze` | 执行静态分析 |
+| `make test` | 运行全部测试 |
+| `make check` | 依次格式化、分析并测试 |
+| `make run DEVICE=<id>` | 在指定设备上运行 |
+| `make package` | 生成 Android 通用 Release APK |
+| `make apk-split` | 按 ABI 生成 Android APK |
+| `make aab` | 生成 Google Play 使用的 AAB |
+| `make clean` | 清理构建缓存和 `dist/` |
+
+## Android 正式包
+
+### 1. 配置发布签名
+
+首次发布前，将示例配置复制为本机配置：
+
+```bash
+cp android/key.properties.example android/key.properties
+```
+
+准备发布密钥 `android/app/fknotes-release.jks`，并填写 `android/key.properties`：
+
+```properties
+storePassword=<密钥库密码>
+keyPassword=<密钥密码>
+keyAlias=fknotes
+storeFile=fknotes-release.jks
+```
+
+`key.properties` 和密钥文件已经由 `.gitignore` 排除，不应提交或公开。请将发布密钥安全备份；后续版本必须使用同一密钥，才能覆盖安装并保留用户数据。
+
+### 2. 设置版本
+
+正式版本建议修改 `pubspec.yaml`：
+
+```yaml
+version: 1.0.1+2
+```
+
+- `1.0.1` 是用户看到的版本号。
+- `2` 是内部构建号，每次向用户分发或上传商店时都必须递增。
+
+也可以在构建时临时覆盖：
+
+```bash
+make apk BUILD_NAME=1.0.1 BUILD_NUMBER=2
+```
+
+### 3. 生成内测 APK
+
+```bash
+make check
+make package
+```
+
+产物位于：
+
+```text
+dist/fknotes-<版本号>+<构建号>-release.apk
+```
+
+连接真实设备后可以覆盖安装：
+
+```bash
+adb install -r dist/fknotes-1.0.1+2-release.apk
+```
+
+如果设备上安装的是 Debug 版本或其他密钥签名的版本，第一次安装正式包前需要先卸载旧版本；卸载会清除该版本的本地数据。
+
+### 4. 生成商店包
+
+Google Play 内部测试或正式发布使用 AAB：
+
+```bash
+make aab BUILD_NAME=1.0.1 BUILD_NUMBER=2
+```
+
+产物位于 `dist/`。AAB 不能直接安装到手机，需要上传到 Google Play Console。
+
+## iOS 构建
+
+先在 Xcode 中为 Runner 配置 Apple Developer Team 和签名，再执行：
+
+```bash
+make ios BUILD_NAME=1.0.1 BUILD_NUMBER=2
+```
+
+生成的 IPA 位于 Flutter 默认的 `build/ios/ipa/` 目录，可通过 TestFlight 分发测试。iOS 发布前仍需在真实设备上完整验证相机、相册、录音、文件选择和 OCR 权限流程。
+
+## 数据与隐私
+
+- 笔记数据库、附件和缩略图保存在系统分配的应用私有支持目录。
+- 拍照和选择图片不会自动进行 OCR；只有用户主动点击“识别文字”时才会执行。
+- Android 仅申请相机和录音权限，并显式移除依赖可能引入的网络权限。
+- iOS 仅在使用相机、相册和麦克风时请求相应系统权限。
+- 备份文件包含笔记数据库和附件，应像个人文档一样妥善保管。
+- 恢复备份前会校验文件结构和路径，恢复失败时会尝试回滚原数据。
+
+## 提交前检查
+
+```bash
+make check
+git status --short
+```
+
+本地签名、构建产物、数据库、备份文件和开发工具缓存均应保持在 Git 忽略范围内。
