@@ -15,7 +15,7 @@ class DatabaseService {
     final path = p.join(FileStorageService.instance.baseDir, 'fknotes.db');
     return openDatabase(
       path,
-      version: 3,
+      version: 4,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -71,6 +71,25 @@ class DatabaseService {
     if (oldVersion < 3) {
       await db.execute('ALTER TABLE entries ADD COLUMN rich_content TEXT');
     }
+    if (oldVersion < 4) {
+      await _createAttachmentsTable(db);
+      final columns = (await db.rawQuery(
+        'PRAGMA table_info(attachments)',
+      )).map((column) => column['name'] as String).toSet();
+      if (!columns.contains('transcript')) {
+        await db.execute('ALTER TABLE attachments ADD COLUMN transcript TEXT');
+      }
+      if (!columns.contains('transcription_model')) {
+        await db.execute(
+          'ALTER TABLE attachments ADD COLUMN transcription_model TEXT',
+        );
+      }
+      if (!columns.contains('transcribed_at')) {
+        await db.execute(
+          'ALTER TABLE attachments ADD COLUMN transcribed_at TEXT',
+        );
+      }
+    }
   }
 
   Future<void> _createAttachmentsTable(Database db) => db.execute('''
@@ -85,6 +104,9 @@ class DatabaseService {
       thumbnail_path TEXT,
       duration_ms INTEGER,
       ocr_text TEXT,
+      transcript TEXT,
+      transcription_model TEXT,
+      transcribed_at TEXT,
       sort_order INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       FOREIGN KEY(note_id) REFERENCES entries(id) ON DELETE CASCADE

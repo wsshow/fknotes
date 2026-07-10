@@ -77,6 +77,7 @@ void main() {
           fileSize: 240,
           mimeType: 'audio/mp4',
           durationMs: 3000,
+          transcript: '这里是录音转写',
           createdAt: now,
         ),
       ],
@@ -91,6 +92,7 @@ void main() {
     expect(entry.attachmentCountFor(NoteType.image), 2);
     expect(entry.totalAttachmentSize, 490);
     expect(entry.aggregateOcr, '路牌文字');
+    expect(entry.aggregateTranscripts, '这里是录音转写');
     expect(entry.attachmentSummary, '混合 · 3 项');
     expect(entry.toPortableMap()['attachments'], hasLength(3));
   });

@@ -2,8 +2,8 @@
     xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <!-- Optional SDK manifests must not expand this local-only app's network access. -->
-    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+    <!-- Used only when the user explicitly downloads an optional offline model. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
 
     <application

@@ -158,6 +158,46 @@ void main() {
     expect(find.text('重新识别'), findsNothing);
   });
 
+  testWidgets('audio detail offers optional local transcription', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final now = DateTime(2026, 7, 10);
+    final attachment = NoteAttachment(
+      type: NoteType.audio,
+      filePath: 'audio/voice.m4a',
+      fileName: 'voice.m4a',
+      fileSize: 1024,
+      mimeType: 'audio/mp4',
+      createdAt: now,
+    );
+    final entry = NoteEntry(
+      id: 99,
+      type: NoteType.audio,
+      title: '语音想法',
+      attachments: [attachment],
+      createdAt: now,
+      updatedAt: now,
+    );
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => NoteProvider(),
+        child: MaterialApp(
+          home: MediaDetailPage(entry: entry, attachment: attachment),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.widgetWithText(Tab, '转写文字'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('需要离线识别模型'), findsOneWidget);
+    expect(find.text('在线下载约 228 MB'), findsOneWidget);
+    expect(find.text('已有模型？从文件导入'), findsOneWidget);
+    expect(find.textContaining('音频不会离开设备'), findsOneWidget);
+  });
+
   testWidgets('video import card reports progress without blocking editing', (
     tester,
   ) async {

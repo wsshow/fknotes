@@ -188,7 +188,7 @@ class _SearchPageState extends State<SearchPage> {
           ),
           const SizedBox(height: 8),
           const Text(
-            '标题、正文、标签、文件名和 OCR 文字均会被检索。',
+            '标题、正文、标签、文件名、OCR 和语音转写均会被检索。',
             style: TextStyle(color: AppColors.muted, height: 1.5),
           ),
           const SizedBox(height: 24),
@@ -204,6 +204,13 @@ class _SearchPageState extends State<SearchPage> {
             title: '标签与说明',
             subtitle: '附件笔记和文字笔记统一命中',
             color: AppColors.softLavender,
+          ),
+          const SizedBox(height: 12),
+          const _SearchCapability(
+            icon: Icons.graphic_eq_rounded,
+            title: '语音转写',
+            subtitle: '找到录音里说过的内容',
+            color: AppColors.softAmber,
           ),
         ],
       );

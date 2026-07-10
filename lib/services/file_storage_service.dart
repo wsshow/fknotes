@@ -29,6 +29,8 @@ class FileStorageService {
       p.join(_baseDir, 'documents'),
       p.join(_baseDir, 'thumbnails'),
       p.join(_baseDir, 'exports'),
+      p.join(_baseDir, 'models', 'asr'),
+      p.join(_baseDir, 'transcription_temp'),
     ];
 
     for (final dir in dirs) {
@@ -40,6 +42,16 @@ class FileStorageService {
       ).list(followLinks: false)) {
         if (entity is File && entity.path.endsWith('.part')) {
           await entity.delete();
+        }
+      }
+    }
+    final transcriptionTemp = Directory(p.join(_baseDir, 'transcription_temp'));
+    await for (final entity in transcriptionTemp.list(followLinks: false)) {
+      if (entity is File) {
+        try {
+          await entity.delete();
+        } on FileSystemException {
+          // A previous process may still be releasing the temporary decoder.
         }
       }
     }

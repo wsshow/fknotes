@@ -13,6 +13,8 @@ import '../providers/note_provider.dart';
 import '../services/file_storage_service.dart';
 import '../services/note_service.dart';
 import '../services/ocr_service.dart';
+import '../services/speech_model_service.dart';
+import '../services/speech_transcription_service.dart';
 import '../widgets/empty_state.dart';
 import 'note_editor_page.dart';
 
@@ -33,6 +35,21 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
   Duration _audioPosition = Duration.zero;
   Duration _audioDuration = Duration.zero;
   bool _recognizing = false;
+  final _speech = SpeechTranscriptionService.instance;
+  final _speechModels = SpeechModelService.instance;
+  SpeechModelInfo? _speechModel;
+  double? _modelImportProgress;
+  bool _importingModel = false;
+  bool _cancelModelDownload = false;
+  String _modelOperationLabel = '正在准备模型';
+  int _modelTransferredBytes = 0;
+  int _modelTotalBytes = 0;
+  double _modelBytesPerSecond = 0;
+  DateTime? _modelSpeedSampleAt;
+  int _modelSpeedSampleBytes = 0;
+  bool _modelVerifying = false;
+  bool _downloadingModelOnline = false;
+  String? _handledTranscriptionKey;
 
   NoteEntry get entry => _entry;
   NoteAttachment? get attachment {
@@ -55,7 +72,32 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
   void initState() {
     super.initState();
     _entry = widget.entry;
+    _speech.addListener(_speechChanged);
     _initMedia();
+    _loadSpeechModel();
+  }
+
+  Future<void> _loadSpeechModel() async {
+    final info = await _speechModels.inspect();
+    if (mounted) setState(() => _speechModel = info);
+  }
+
+  void _speechChanged() {
+    if (!mounted) return;
+    final job = _speech.jobFor(attachment?.filePath ?? '');
+    setState(() {});
+    if (job?.status == TranscriptionStatus.completed &&
+        _handledTranscriptionKey != job!.key) {
+      _handledTranscriptionKey = job.key;
+      _refreshEntry();
+    }
+  }
+
+  Future<void> _refreshEntry() async {
+    final id = entry.id;
+    if (id == null) return;
+    final refreshed = await NoteService.instance.getEntry(id);
+    if (refreshed != null && mounted) setState(() => _entry = refreshed);
   }
 
   Future<void> _initMedia() async {
@@ -151,19 +193,295 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
     }
   }
 
+  Future<void> _importSpeechModel() async {
+    if (_importingModel) return;
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('导入离线识别模型'),
+        content: const Text(
+          '请从解压后的 SenseVoice Small INT8 模型目录中，同时选择 ONNX 模型和 tokens.txt。\n\n'
+          '模型约 228 MB，只保存在本机，不会进入笔记备份。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('选择文件'),
+          ),
+        ],
+      ),
+    );
+    if (proceed != true || !mounted) return;
+    setState(() {
+      _importingModel = true;
+      _modelImportProgress = 0;
+      _modelOperationLabel = '正在导入离线模型';
+      _downloadingModelOnline = false;
+      _resetModelTransferStats();
+    });
+    try {
+      final info = await _speechModels.pickAndImport(
+        onProgress: (progress) {
+          if (mounted) _updateModelTransfer(progress);
+        },
+      );
+      if (info != null && mounted) {
+        setState(() => _speechModel = info);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('离线语音识别模型已导入')));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('模型导入失败：$error')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _importingModel = false;
+          _modelImportProgress = null;
+        });
+      }
+    }
+  }
+
+  Future<void> _downloadSpeechModel() async {
+    if (_importingModel) return;
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('下载离线识别模型？'),
+        content: const Text(
+          '将从 ModelScope 魔搭社区下载约 228 MB，建议使用 Wi-Fi。\n\n'
+          '下载是应用唯一需要联网的功能；笔记和音频不会上传。中断后可继续下载。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('开始下载'),
+          ),
+        ],
+      ),
+    );
+    if (proceed != true || !mounted) return;
+    setState(() {
+      _importingModel = true;
+      _cancelModelDownload = false;
+      _modelImportProgress = 0;
+      _modelOperationLabel = '正在从 ModelScope 下载';
+      _downloadingModelOnline = true;
+      _resetModelTransferStats();
+    });
+    try {
+      final info = await _speechModels.downloadFromModelScope(
+        shouldCancel: () => _cancelModelDownload,
+        onProgress: (progress) {
+          if (mounted) _updateModelTransfer(progress);
+        },
+      );
+      if (mounted) {
+        setState(() => _speechModel = info);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('离线语音识别模型下载完成')));
+      }
+    } on SpeechModelDownloadCanceled {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('已暂停下载，下次会从断点继续')));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('模型下载失败：$error')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _importingModel = false;
+          _modelImportProgress = null;
+        });
+      }
+    }
+  }
+
+  void _resetModelTransferStats() {
+    _modelTransferredBytes = 0;
+    _modelTotalBytes = 0;
+    _modelBytesPerSecond = 0;
+    _modelSpeedSampleAt = null;
+    _modelSpeedSampleBytes = 0;
+    _modelVerifying = false;
+  }
+
+  void _updateModelTransfer(SpeechModelImportProgress progress) {
+    final now = DateTime.now();
+    final previousAt = _modelSpeedSampleAt;
+    if (!progress.verifying && previousAt != null) {
+      final elapsed = now.difference(previousAt).inMilliseconds;
+      final transferred = progress.copiedBytes - _modelSpeedSampleBytes;
+      if (elapsed >= 350 && transferred >= 0) {
+        final instant = transferred * 1000 / elapsed;
+        _modelBytesPerSecond = _modelBytesPerSecond == 0
+            ? instant
+            : _modelBytesPerSecond * .65 + instant * .35;
+        _modelSpeedSampleAt = now;
+        _modelSpeedSampleBytes = progress.copiedBytes;
+      }
+    } else if (previousAt == null) {
+      _modelSpeedSampleAt = now;
+      _modelSpeedSampleBytes = progress.copiedBytes;
+    }
+    setState(() {
+      _modelImportProgress = progress.fraction;
+      _modelTransferredBytes = progress.copiedBytes;
+      _modelTotalBytes = progress.totalBytes;
+      _modelVerifying = progress.verifying;
+      if (progress.verifying) _modelOperationLabel = '正在校验模型完整性';
+    });
+  }
+
+  String _modelTransferDescription() {
+    final transferred = _formatSize(_modelTransferredBytes);
+    final total = _formatSize(_modelTotalBytes);
+    final verb = _downloadingModelOnline ? '已下载' : '已导入';
+    if (_modelVerifying) return '$verb $transferred · 正在进行 SHA-256 校验';
+    final speed = _modelBytesPerSecond <= 0
+        ? '正在测速…'
+        : '${_formatSize(_modelBytesPerSecond.round())}/s';
+    return '$verb $transferred / $total · $speed';
+  }
+
+  Future<void> _removeSpeechModel() async {
+    if (_speech.jobs.any((job) => job.isRunning)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请先等待正在进行的转写结束')));
+      return;
+    }
+    final remove = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('移除离线模型？'),
+        content: const Text('将释放约 228 MB 空间。已经保存的转写文字不会被删除。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('移除模型'),
+          ),
+        ],
+      ),
+    );
+    if (remove != true) return;
+    await _speechModels.remove();
+    if (mounted) {
+      setState(() => _speechModel = const SpeechModelInfo(installed: false));
+    }
+  }
+
+  Future<void> _startTranscription() async {
+    final item = attachment;
+    final noteId = entry.id;
+    if (item == null || noteId == null) return;
+    if (_speechModel?.installed != true) {
+      await _importSpeechModel();
+      if (_speechModel?.installed != true) return;
+    }
+    await _audio?.pause();
+    await _speech.start(noteId: noteId, attachment: item);
+  }
+
+  Future<void> _copyTranscript() async {
+    final text = attachment?.transcript?.trim() ?? '';
+    if (text.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: text));
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('转写文字已复制')));
+    }
+  }
+
+  Future<void> _editTranscript() async {
+    final item = attachment;
+    if (item == null) return;
+    final controller = TextEditingController(text: item.transcript ?? '');
+    final value = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('编辑转写文字'),
+        content: SizedBox(
+          width: 520,
+          child: TextField(
+            controller: controller,
+            autofocus: true,
+            minLines: 8,
+            maxLines: 16,
+            decoration: const InputDecoration(hintText: '转写文字'),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value == null || value.isEmpty || !mounted) return;
+    final activePath = item.filePath;
+    final updated = entry.copyWith(
+      attachments: [
+        for (final attachment in entry.allAttachments)
+          attachment.filePath == activePath
+              ? attachment.copyWith(
+                  transcript: value,
+                  transcribedAt: DateTime.now(),
+                )
+              : attachment,
+      ],
+      updatedAt: DateTime.now(),
+    );
+    await context.read<NoteProvider>().updateEntry(updated);
+    if (mounted) setState(() => _entry = updated);
+  }
+
   @override
   void dispose() {
     _video?.removeListener(_mediaChanged);
     _video?.dispose();
     _audio?.dispose();
+    _speech.removeListener(_speechChanged);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final hasOcr = attachment?.type == NoteType.image;
+    final hasTranscription = attachment?.type == NoteType.audio;
     return DefaultTabController(
-      length: hasOcr ? 3 : 2,
+      length: hasOcr || hasTranscription ? 3 : 2,
       child: Scaffold(
         backgroundColor: AppColors.canvas,
         appBar: AppBar(
@@ -218,6 +536,7 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
             tabs: [
               const Tab(text: '预览'),
               if (hasOcr) const Tab(text: '识别文字'),
+              if (hasTranscription) const Tab(text: '转写文字'),
               const Tab(text: '信息'),
             ],
           ),
@@ -233,6 +552,7 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
               audioDuration: _audioDuration,
             ),
             if (hasOcr) _buildOcrTab(),
+            if (hasTranscription) _buildTranscriptionTab(),
             _buildInfoTab(),
           ],
         ),
@@ -297,6 +617,157 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
       ],
     );
   }
+
+  Widget _buildTranscriptionTab() {
+    final text = attachment?.transcript?.trim() ?? '';
+    final job = _speech.jobFor(attachment?.filePath ?? '');
+    final modelInstalled = _speechModel?.installed == true;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '录音转写',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+              ),
+            ),
+            if (text.isNotEmpty) ...[
+              IconButton.filledTonal(
+                tooltip: '编辑文字',
+                onPressed: _editTranscript,
+                icon: const Icon(Icons.edit_outlined),
+              ),
+              const SizedBox(width: 6),
+              IconButton.filledTonal(
+                tooltip: '复制全部',
+                onPressed: _copyTranscript,
+                icon: const Icon(Icons.copy_all_rounded),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 8),
+        const Row(
+          children: [
+            Icon(Icons.lock_outline_rounded, size: 15, color: AppColors.moss),
+            SizedBox(width: 5),
+            Text(
+              '完全在本机处理，音频不会离开设备',
+              style: TextStyle(color: AppColors.muted, fontSize: 12),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        if (_importingModel)
+          _TranscriptionProgressCard(
+            title: _modelOperationLabel,
+            subtitle: _modelTransferDescription(),
+            progress: _modelImportProgress ?? 0,
+            onCancel: _modelOperationLabel.contains('下载')
+                ? () => setState(() => _cancelModelDownload = true)
+                : null,
+          )
+        else if (!modelInstalled)
+          EmptyState(
+            icon: Icons.memory_rounded,
+            message: '需要离线识别模型',
+            description: '模型独立保存在本机，不增加笔记备份大小',
+            actionLabel: '在线下载约 228 MB',
+            onAction: _downloadSpeechModel,
+          )
+        else if (job?.isRunning == true)
+          _TranscriptionProgressCard(
+            title: _statusText(job!.status),
+            subtitle: job.partialText.isEmpty
+                ? '可以离开此页面继续使用笔记'
+                : job.partialText,
+            progress: job.progress,
+            onCancel: () => _speech.cancel(job.filePath),
+          )
+        else if (job?.status == TranscriptionStatus.failed)
+          EmptyState(
+            icon: Icons.error_outline_rounded,
+            message: '转写没有完成',
+            description: job?.errorMessage ?? '请稍后重试',
+            actionLabel: '重新转写',
+            onAction: _startTranscription,
+          )
+        else if (job?.status == TranscriptionStatus.canceled && text.isEmpty)
+          EmptyState(
+            icon: Icons.pause_circle_outline_rounded,
+            message: '已取消转写',
+            description: '录音文件没有受到影响',
+            actionLabel: '重新转写',
+            onAction: _startTranscription,
+          )
+        else if (text.isEmpty)
+          EmptyState(
+            icon: Icons.text_snippet_outlined,
+            message: '暂无转写文字',
+            description: '需要时再启动本地识别，不会自动处理录音',
+            actionLabel: '本地转写',
+            onAction: _startTranscription,
+          )
+        else ...[
+          SelectableText(
+            text,
+            style: const TextStyle(
+              fontSize: 17,
+              height: 1.72,
+              color: AppColors.ink,
+            ),
+          ),
+          const SizedBox(height: 22),
+          OutlinedButton.icon(
+            onPressed: _startTranscription,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('重新转写'),
+          ),
+        ],
+        if (modelInstalled && job?.isRunning != true) ...[
+          const SizedBox(height: 22),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Flexible(
+                child: TextButton.icon(
+                  onPressed: _importSpeechModel,
+                  icon: const Icon(Icons.swap_horiz_rounded),
+                  label: Text('更换模型 · ${_formatSize(_speechModel!.sizeBytes)}'),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: _removeSpeechModel,
+                icon: const Icon(Icons.delete_outline_rounded),
+                label: const Text('移除'),
+              ),
+            ],
+          ),
+        ] else if (!modelInstalled && !_importingModel) ...[
+          const SizedBox(height: 8),
+          Center(
+            child: TextButton.icon(
+              onPressed: _importSpeechModel,
+              icon: const Icon(Icons.folder_open_rounded),
+              label: const Text('已有模型？从文件导入'),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  String _statusText(TranscriptionStatus status) => switch (status) {
+    TranscriptionStatus.preparing => '正在准备本地转写',
+    TranscriptionStatus.decoding => '正在读取音频',
+    TranscriptionStatus.recognizing => '正在本地识别',
+    TranscriptionStatus.saving => '正在保存转写文字',
+    _ => '正在处理',
+  };
 
   Widget _buildInfoTab() {
     return ListView(
@@ -578,6 +1049,74 @@ class _DocumentPreview extends StatelessWidget {
           ],
         ),
       ),
+    ),
+  );
+}
+
+class _TranscriptionProgressCard extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final double progress;
+  final VoidCallback? onCancel;
+  const _TranscriptionProgressCard({
+    required this.title,
+    required this.subtitle,
+    required this.progress,
+    this.onCancel,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(18),
+    decoration: BoxDecoration(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: AppColors.line),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            Text(
+              '${(progress * 100).round()}%',
+              style: const TextStyle(
+                color: AppColors.moss,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 13),
+        LinearProgressIndicator(
+          value: progress <= 0 ? null : progress.clamp(0, 1),
+          minHeight: 7,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        const SizedBox(height: 13),
+        Text(
+          subtitle,
+          maxLines: 6,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: AppColors.muted, height: 1.5),
+        ),
+        if (onCancel != null) ...[
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(onPressed: onCancel, child: const Text('取消')),
+          ),
+        ],
+      ],
     ),
   );
 }

@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 import '../models/note_entry.dart';
 import '../services/file_storage_service.dart';
 import '../services/note_service.dart';
+import '../services/speech_transcription_service.dart';
 import '../services/video_import_service.dart';
 
 class NoteProvider extends ChangeNotifier {
@@ -11,8 +12,11 @@ class NoteProvider extends ChangeNotifier {
   final FileStorageService _storage = FileStorageService.instance;
   final AttachmentImportService _attachmentImports =
       AttachmentImportService.instance;
+  final SpeechTranscriptionService _transcriptions =
+      SpeechTranscriptionService.instance;
   final Set<String> _finalizingImportJobs = {};
   final Set<int> _importDrafts = {};
+  final Set<String> _handledTranscriptions = {};
   Future<void> _importFinalization = Future.value();
 
   List<NoteEntry> _entries = [];
@@ -23,6 +27,24 @@ class NoteProvider extends ChangeNotifier {
 
   NoteProvider() {
     _attachmentImports.addListener(_onAttachmentImportsChanged);
+    _transcriptions.addListener(_onTranscriptionsChanged);
+  }
+
+  void _onTranscriptionsChanged() {
+    for (final job in _transcriptions.jobs) {
+      if (job.status != TranscriptionStatus.completed ||
+          !_handledTranscriptions.add(job.key)) {
+        continue;
+      }
+      _refreshTranscribedEntry(job.noteId);
+    }
+  }
+
+  Future<void> _refreshTranscribedEntry(int noteId) async {
+    final entry = await _notes.getEntry(noteId);
+    if (entry == null) return;
+    _replaceEntry(entry, appendIfMissing: true);
+    notifyListeners();
   }
 
   List<NoteEntry> get allEntries => List.unmodifiable(_entries);
@@ -378,6 +400,7 @@ class NoteProvider extends ChangeNotifier {
   @override
   void dispose() {
     _attachmentImports.removeListener(_onAttachmentImportsChanged);
+    _transcriptions.removeListener(_onTranscriptionsChanged);
     super.dispose();
   }
 }

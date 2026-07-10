@@ -49,6 +49,8 @@ dependencies:
   file_selector: ^1.1.0
   archive: ^4.0.9
   share_plus: ^13.2.0
+  sherpa_onnx: ^1.13.4
+  crypto: ^3.0.7
 
 dev_dependencies:
   flutter_test:

@@ -119,4 +119,46 @@ void main() {
       );
     },
   );
+
+  test('audio transcript persists and participates in search', () async {
+    final now = DateTime(2026, 7, 10, 16);
+    final id = await notes.insertEntry(
+      NoteEntry(
+        type: NoteType.audio,
+        title: '会议录音',
+        createdAt: now,
+        updatedAt: now,
+        attachments: [
+          NoteAttachment(
+            type: NoteType.audio,
+            filePath: 'audio/meeting.m4a',
+            fileName: 'meeting.m4a',
+            fileSize: 1024,
+            mimeType: 'audio/mp4',
+            createdAt: now,
+          ),
+        ],
+      ),
+    );
+
+    final transcribedAt = now.add(const Duration(minutes: 2));
+    await notes.updateAttachmentTranscript(
+      noteId: id,
+      filePath: 'audio/meeting.m4a',
+      transcript: '下一步需要完成离线搜索',
+      model: 'sensevoice-test',
+      transcribedAt: transcribedAt,
+    );
+
+    final restored = await notes.getEntry(id);
+    final attachment = restored!.allAttachments.single;
+    expect(attachment.transcript, '下一步需要完成离线搜索');
+    expect(attachment.transcriptionModel, 'sensevoice-test');
+    expect(attachment.transcribedAt, transcribedAt);
+    expect(restored.previewText, '下一步需要完成离线搜索');
+    expect(
+      (await notes.searchLike('离线搜索')).map((entry) => entry.id),
+      contains(id),
+    );
+  });
 }

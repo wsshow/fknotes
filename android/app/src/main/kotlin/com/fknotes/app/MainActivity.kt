@@ -8,6 +8,10 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Rect
+import android.media.AudioFormat
+import android.media.MediaCodec
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -21,6 +25,8 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.io.RandomAccessFile
+import java.nio.ByteOrder
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -31,6 +37,7 @@ import kotlin.math.roundToInt
 class MainActivity : FlutterActivity() {
     private companion object {
         const val IMPORT_CHANNEL = "fknotes/attachment_import"
+        const val AUDIO_DECODE_CHANNEL = "fknotes/audio_decode"
         const val PICK_REQUEST = 7301
         const val COPY_BUFFER_SIZE = 256 * 1024
         const val PROGRESS_INTERVAL_MS = 80L
@@ -42,6 +49,7 @@ class MainActivity : FlutterActivity() {
     private val importExecutor = Executors.newFixedThreadPool(2)
     private val mainHandler = Handler(Looper.getMainLooper())
     private lateinit var importChannel: MethodChannel
+    private lateinit var audioDecodeChannel: MethodChannel
     private var pendingResult: MethodChannel.Result? = null
     private var pendingRequest: ImportRequest? = null
     private val importTasks = ConcurrentHashMap<String, ImportTask>()
@@ -85,6 +93,152 @@ class MainActivity : FlutterActivity() {
                 }
                 else -> result.notImplemented()
             }
+        }
+        audioDecodeChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            AUDIO_DECODE_CHANNEL,
+        )
+        audioDecodeChannel.setMethodCallHandler { call, result ->
+            if (call.method != "decodeToWav") {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+            val sourcePath = call.argument<String>("sourcePath")
+            val outputPath = call.argument<String>("outputPath")
+            if (sourcePath == null || outputPath == null) {
+                result.error("invalid_audio", "音频解码参数无效", null)
+                return@setMethodCallHandler
+            }
+            preparationExecutor.execute {
+                try {
+                    decodeAudioToWav(File(sourcePath), File(outputPath))
+                    mainHandler.post { result.success(outputPath) }
+                } catch (error: Exception) {
+                    File(outputPath).delete()
+                    mainHandler.post {
+                        result.error(
+                            "audio_decode_failed",
+                            error.message ?: "无法解码音频",
+                            null,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun decodeAudioToWav(source: File, destination: File) {
+        require(source.exists()) { "音频文件不存在" }
+        destination.parentFile?.mkdirs()
+        val extractor = MediaExtractor()
+        var decoder: MediaCodec? = null
+        var writer: Pcm16WavWriter? = null
+        try {
+            extractor.setDataSource(source.path)
+            var trackIndex = -1
+            var inputFormat: MediaFormat? = null
+            for (index in 0 until extractor.trackCount) {
+                val candidate = extractor.getTrackFormat(index)
+                val mime = candidate.getString(MediaFormat.KEY_MIME).orEmpty()
+                if (mime.startsWith("audio/")) {
+                    trackIndex = index
+                    inputFormat = candidate
+                    break
+                }
+            }
+            require(trackIndex >= 0 && inputFormat != null) { "文件中没有可识别的音轨" }
+            extractor.selectTrack(trackIndex)
+            val format = requireNotNull(inputFormat)
+            val mime = requireNotNull(format.getString(MediaFormat.KEY_MIME))
+            if (android.os.Build.VERSION.SDK_INT >= 24) {
+                format.setInteger(MediaFormat.KEY_PCM_ENCODING, AudioFormat.ENCODING_PCM_16BIT)
+            }
+            decoder = MediaCodec.createDecoderByType(mime)
+            decoder.configure(format, null, null, 0)
+            decoder.start()
+
+            var sampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+            var channelCount = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+            writer = Pcm16WavWriter(destination, 16_000)
+            val info = MediaCodec.BufferInfo()
+            var inputEnded = false
+            var outputEnded = false
+            var resampleAccumulator = 0L
+            while (!outputEnded) {
+                if (!inputEnded) {
+                    val inputIndex = decoder.dequeueInputBuffer(10_000)
+                    if (inputIndex >= 0) {
+                        val input = requireNotNull(decoder.getInputBuffer(inputIndex))
+                        val size = extractor.readSampleData(input, 0)
+                        if (size < 0) {
+                            decoder.queueInputBuffer(
+                                inputIndex,
+                                0,
+                                0,
+                                0,
+                                MediaCodec.BUFFER_FLAG_END_OF_STREAM,
+                            )
+                            inputEnded = true
+                        } else {
+                            decoder.queueInputBuffer(
+                                inputIndex,
+                                0,
+                                size,
+                                extractor.sampleTime,
+                                0,
+                            )
+                            extractor.advance()
+                        }
+                    }
+                }
+
+                when (val outputIndex = decoder.dequeueOutputBuffer(info, 10_000)) {
+                    MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                        val outputFormat = decoder.outputFormat
+                        sampleRate = outputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                        channelCount = outputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+                        if (android.os.Build.VERSION.SDK_INT >= 24 &&
+                            outputFormat.containsKey(MediaFormat.KEY_PCM_ENCODING) &&
+                            outputFormat.getInteger(MediaFormat.KEY_PCM_ENCODING) != AudioFormat.ENCODING_PCM_16BIT
+                        ) {
+                            error("设备输出了不支持的 PCM 音频格式")
+                        }
+                    }
+                    MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
+                    else -> if (outputIndex >= 0) {
+                        if (info.size > 0) {
+                            val output = requireNotNull(decoder.getOutputBuffer(outputIndex))
+                            output.order(ByteOrder.LITTLE_ENDIAN)
+                            output.position(info.offset)
+                            output.limit(info.offset + info.size)
+                            val frameCount = (info.size / 2) / channelCount
+                            repeat(frameCount) {
+                                var mixed = 0
+                                repeat(channelCount) { mixed += output.short.toInt() }
+                                val mono = (mixed / channelCount).coerceIn(-32768, 32767).toShort()
+                                resampleAccumulator += 16_000L
+                                while (resampleAccumulator >= sampleRate) {
+                                    writer.write(mono)
+                                    resampleAccumulator -= sampleRate.toLong()
+                                }
+                            }
+                        }
+                        outputEnded = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
+                        decoder.releaseOutputBuffer(outputIndex, false)
+                    }
+                }
+            }
+            writer.finish()
+            writer = null
+        } finally {
+            writer?.close()
+            try {
+                decoder?.stop()
+            } catch (_: Exception) {
+                // Decoder may fail before start; release is still required.
+            }
+            decoder?.release()
+            extractor.release()
         }
     }
 
@@ -504,4 +658,80 @@ class MainActivity : FlutterActivity() {
     )
 
     private class ImportCanceledException : Exception()
+}
+
+private class Pcm16WavWriter(
+    file: File,
+    private val sampleRate: Int,
+) {
+    private val output = RandomAccessFile(file, "rw")
+    private val buffer = ByteArray(16 * 1024)
+    private var buffered = 0
+    private var sampleCount = 0L
+
+    init {
+        output.setLength(0)
+        output.write(ByteArray(44))
+    }
+
+    fun write(sample: Short) {
+        if (buffered + 2 > buffer.size) flushBuffer()
+        val value = sample.toInt()
+        buffer[buffered++] = (value and 0xff).toByte()
+        buffer[buffered++] = (value ushr 8 and 0xff).toByte()
+        sampleCount++
+    }
+
+    fun finish() {
+        flushBuffer()
+        val dataSize = sampleCount * 2
+        output.seek(0)
+        output.write(wavHeader(dataSize))
+        output.fd.sync()
+        output.close()
+    }
+
+    fun close() {
+        try {
+            output.close()
+        } catch (_: Exception) {
+            // Already closed by finish().
+        }
+    }
+
+    private fun flushBuffer() {
+        if (buffered == 0) return
+        output.write(buffer, 0, buffered)
+        buffered = 0
+    }
+
+    private fun wavHeader(dataSize: Long): ByteArray {
+        val header = ByteArray(44)
+        fun ascii(offset: Int, value: String) {
+            value.toByteArray(Charsets.US_ASCII).copyInto(header, offset)
+        }
+        fun little16(offset: Int, value: Int) {
+            header[offset] = (value and 0xff).toByte()
+            header[offset + 1] = (value ushr 8 and 0xff).toByte()
+        }
+        fun little32(offset: Int, value: Long) {
+            repeat(4) { index ->
+                header[offset + index] = (value ushr (8 * index) and 0xff).toByte()
+            }
+        }
+        ascii(0, "RIFF")
+        little32(4, 36 + dataSize)
+        ascii(8, "WAVE")
+        ascii(12, "fmt ")
+        little32(16, 16)
+        little16(20, 1)
+        little16(22, 1)
+        little32(24, sampleRate.toLong())
+        little32(28, (sampleRate * 2).toLong())
+        little16(32, 2)
+        little16(34, 16)
+        ascii(36, "data")
+        little32(40, dataSize)
+        return header
+    }
 }

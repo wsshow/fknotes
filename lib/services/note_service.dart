@@ -106,6 +106,36 @@ class NoteService {
     return db.delete('entries', where: 'id = ?', whereArgs: [id]);
   }
 
+  Future<NoteEntry?> updateAttachmentTranscript({
+    required int noteId,
+    required String filePath,
+    required String transcript,
+    required String model,
+    required DateTime transcribedAt,
+  }) async {
+    final db = await _db;
+    await db.transaction((txn) async {
+      final updated = await txn.update(
+        'attachments',
+        {
+          'transcript': transcript,
+          'transcription_model': model,
+          'transcribed_at': transcribedAt.toIso8601String(),
+        },
+        where: 'note_id = ? AND file_path = ?',
+        whereArgs: [noteId, filePath],
+      );
+      if (updated == 0) throw StateError('找不到需要转写的音频附件');
+      await txn.update(
+        'entries',
+        {'updated_at': transcribedAt.toIso8601String()},
+        where: 'id = ?',
+        whereArgs: [noteId],
+      );
+    });
+    return getEntry(noteId);
+  }
+
   Future<List<NoteEntry>> search(String query) => searchLike(query);
 
   Future<List<NoteEntry>> searchLike(String query) async {
@@ -120,11 +150,11 @@ class NoteService {
       WHERE e.is_deleted = 0 AND (
         e.title LIKE ? OR e.content LIKE ? OR e.ocr_text LIKE ? OR
         e.file_name LIKE ? OR e.tags LIKE ? OR a.ocr_text LIKE ? OR
-        a.file_name LIKE ?
+        a.transcript LIKE ? OR a.file_name LIKE ?
       )
       ORDER BY e.is_pinned DESC, e.updated_at DESC
       ''',
-      [like, like, like, like, like, like, like],
+      [like, like, like, like, like, like, like, like],
     );
     return _hydrate(db, maps);
   }

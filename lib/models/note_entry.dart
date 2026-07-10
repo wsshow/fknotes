@@ -36,6 +36,9 @@ class NoteAttachment {
   final String? thumbnailPath;
   final int? durationMs;
   final String? ocrText;
+  final String? transcript;
+  final String? transcriptionModel;
+  final DateTime? transcribedAt;
   final int sortOrder;
   final DateTime createdAt;
 
@@ -50,6 +53,9 @@ class NoteAttachment {
     this.thumbnailPath,
     this.durationMs,
     this.ocrText,
+    this.transcript,
+    this.transcriptionModel,
+    this.transcribedAt,
     this.sortOrder = 0,
     required this.createdAt,
   });
@@ -65,6 +71,9 @@ class NoteAttachment {
     String? thumbnailPath,
     int? durationMs,
     String? ocrText,
+    String? transcript,
+    String? transcriptionModel,
+    DateTime? transcribedAt,
     int? sortOrder,
     DateTime? createdAt,
   }) => NoteAttachment(
@@ -78,6 +87,9 @@ class NoteAttachment {
     thumbnailPath: thumbnailPath ?? this.thumbnailPath,
     durationMs: durationMs ?? this.durationMs,
     ocrText: ocrText ?? this.ocrText,
+    transcript: transcript ?? this.transcript,
+    transcriptionModel: transcriptionModel ?? this.transcriptionModel,
+    transcribedAt: transcribedAt ?? this.transcribedAt,
     sortOrder: sortOrder ?? this.sortOrder,
     createdAt: createdAt ?? this.createdAt,
   );
@@ -93,6 +105,9 @@ class NoteAttachment {
     'thumbnail_path': thumbnailPath,
     'duration_ms': durationMs,
     'ocr_text': ocrText,
+    'transcript': transcript,
+    'transcription_model': transcriptionModel,
+    'transcribed_at': transcribedAt?.toIso8601String(),
     'sort_order': sortOrder,
     'created_at': createdAt.toIso8601String(),
   };
@@ -108,6 +123,11 @@ class NoteAttachment {
     thumbnailPath: map['thumbnail_path'] as String?,
     durationMs: map['duration_ms'] as int?,
     ocrText: map['ocr_text'] as String?,
+    transcript: map['transcript'] as String?,
+    transcriptionModel: map['transcription_model'] as String?,
+    transcribedAt: map['transcribed_at'] == null
+        ? null
+        : DateTime.tryParse(map['transcribed_at'] as String),
     sortOrder: map['sort_order'] as int? ?? 0,
     createdAt:
         DateTime.tryParse(map['created_at'] as String? ?? '') ??
@@ -278,6 +298,11 @@ class NoteEntry {
       .where((text) => text.isNotEmpty)
       .join('\n');
 
+  String get aggregateTranscripts => allAttachments
+      .map((attachment) => attachment.transcript?.trim() ?? '')
+      .where((text) => text.isNotEmpty)
+      .join('\n');
+
   int get totalAttachmentSize =>
       allAttachments.fold(0, (sum, item) => sum + item.fileSize);
 
@@ -345,6 +370,7 @@ class NoteEntry {
   String get previewText {
     if (readableContent.isNotEmpty) return readableContent;
     if (aggregateOcr.isNotEmpty) return aggregateOcr;
+    if (aggregateTranscripts.isNotEmpty) return aggregateTranscripts;
     if (ocrText?.trim().isNotEmpty ?? false) return ocrText!;
     return '';
   }

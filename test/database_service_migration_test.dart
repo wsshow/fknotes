@@ -45,6 +45,13 @@ void main() {
       final rows = await db.query('entries');
       expect(rows.single['content'], '旧笔记正文');
       expect(rows.single['rich_content'], isNull);
+      final attachmentColumns = await db.rawQuery(
+        'PRAGMA table_info(attachments)',
+      );
+      expect(
+        attachmentColumns.map((column) => column['name']),
+        containsAll(['transcript', 'transcription_model', 'transcribed_at']),
+      );
     },
   );
 }
