@@ -67,6 +67,7 @@ class SpeechModelService {
       'sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17';
 
   final _storage = FileStorageService.instance;
+  bool _operationBusy = false;
 
   String get _root => p.join(_storage.baseDir, 'models', 'asr');
   String get _activeDir => p.join(_root, 'sensevoice');
@@ -90,6 +91,20 @@ class SpeechModelService {
     );
   }
 
+  Future<int> partialDownloadBytes() async {
+    final staging = p.join(_root, '.sensevoice-download');
+    var total = 0;
+    for (final name in [
+      '$modelFileName.part',
+      '$tokensFileName.part',
+      'MODEL_LICENSE.txt.part',
+    ]) {
+      final partial = File(p.join(staging, name));
+      if (await partial.exists()) total += await partial.length();
+    }
+    return total;
+  }
+
   Future<SpeechModelInfo?> pickAndImport({
     void Function(SpeechModelImportProgress progress)? onProgress,
   }) async {
@@ -104,6 +119,11 @@ class SpeechModelService {
   }
 
   Future<SpeechModelInfo> importFiles(
+    List<XFile> files, {
+    void Function(SpeechModelImportProgress progress)? onProgress,
+  }) => _runExclusive(() => _importFiles(files, onProgress: onProgress));
+
+  Future<SpeechModelInfo> _importFiles(
     List<XFile> files, {
     void Function(SpeechModelImportProgress progress)? onProgress,
   }) async {
@@ -160,6 +180,16 @@ class SpeechModelService {
   Future<SpeechModelInfo> downloadFromModelScope({
     void Function(SpeechModelImportProgress progress)? onProgress,
     bool Function()? shouldCancel,
+  }) => _runExclusive(
+    () => _downloadFromModelScope(
+      onProgress: onProgress,
+      shouldCancel: shouldCancel,
+    ),
+  );
+
+  Future<SpeechModelInfo> _downloadFromModelScope({
+    void Function(SpeechModelImportProgress progress)? onProgress,
+    bool Function()? shouldCancel,
   }) async {
     final staging = Directory(p.join(_root, '.sensevoice-download'));
     await staging.create(recursive: true);
@@ -177,19 +207,19 @@ class SpeechModelService {
         shouldCancel: shouldCancel,
       );
       await _downloadFile(
-        Uri.parse('$_remoteRoot/LICENSE'),
-        licensePart,
-        expectedSize: _licenseSizeBytes,
-        completedBefore: _modelSizeBytes + _tokensSizeBytes,
+        Uri.parse('$_remoteRoot/$tokensFileName'),
+        tokensPart,
+        expectedSize: _tokensSizeBytes,
+        completedBefore: _modelSizeBytes,
         totalSize: downloadSizeBytes,
         onProgress: onProgress,
         shouldCancel: shouldCancel,
       );
       await _downloadFile(
-        Uri.parse('$_remoteRoot/$tokensFileName'),
-        tokensPart,
-        expectedSize: _tokensSizeBytes,
-        completedBefore: _modelSizeBytes,
+        Uri.parse('$_remoteRoot/LICENSE'),
+        licensePart,
+        expectedSize: _licenseSizeBytes,
+        completedBefore: _modelSizeBytes + _tokensSizeBytes,
         totalSize: downloadSizeBytes,
         onProgress: onProgress,
         shouldCancel: shouldCancel,
@@ -400,10 +430,21 @@ class SpeechModelService {
   }
 
   Future<void> remove() async {
+    if (_operationBusy) throw StateError('已有模型下载或导入任务正在进行');
     final active = Directory(_activeDir);
     if (await active.exists()) await active.delete(recursive: true);
     final partial = Directory(p.join(_root, '.sensevoice-download'));
     if (await partial.exists()) await partial.delete(recursive: true);
+  }
+
+  Future<T> _runExclusive<T>(Future<T> Function() operation) async {
+    if (_operationBusy) throw StateError('已有模型下载或导入任务正在进行');
+    _operationBusy = true;
+    try {
+      return await operation();
+    } finally {
+      _operationBusy = false;
+    }
   }
 }
 

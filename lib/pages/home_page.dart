@@ -13,6 +13,7 @@ import '../widgets/brand_mark.dart';
 import '../widgets/note_card.dart';
 import '../widgets/navigation_icons.dart';
 import 'note_editor_page.dart';
+import 'model_management_page.dart';
 import 'record_audio_page.dart';
 import 'search_page.dart';
 
@@ -1187,6 +1188,21 @@ class _DataTabState extends State<_DataTab> {
                 title: '应用私有存储',
                 subtitle: '数据库、附件和缩略图均安全保存在本机',
                 showChevron: false,
+              ),
+              const Divider(height: 1),
+              _SettingRow(
+                icon: Icons.memory_rounded,
+                title: '本地模型',
+                subtitle: '下载、导入和移除设备端识别模型',
+                onTap: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ModelManagementPage(),
+                    ),
+                  );
+                  await _refreshSize();
+                },
               ),
             ],
           ),

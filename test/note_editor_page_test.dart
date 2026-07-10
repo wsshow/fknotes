@@ -194,7 +194,8 @@ void main() {
 
     expect(find.text('需要离线识别模型'), findsOneWidget);
     expect(find.text('在线下载约 228 MB'), findsOneWidget);
-    expect(find.text('已有模型？从文件导入'), findsOneWidget);
+    expect(find.text('从文件导入'), findsOneWidget);
+    expect(find.text('查看全部模型'), findsOneWidget);
     expect(find.textContaining('音频不会离开设备'), findsOneWidget);
   });
 

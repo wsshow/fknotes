@@ -17,6 +17,7 @@ import '../services/speech_model_service.dart';
 import '../services/speech_transcription_service.dart';
 import '../widgets/empty_state.dart';
 import 'note_editor_page.dart';
+import 'model_management_page.dart';
 
 class MediaDetailPage extends StatefulWidget {
   final NoteEntry entry;
@@ -407,6 +408,17 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
     await _speech.start(noteId: noteId, attachment: item);
   }
 
+  Future<void> _openModelManager() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            const ModelManagementPage(focusModelId: SpeechModelService.modelId),
+      ),
+    );
+    if (mounted) await _loadSpeechModel();
+  }
+
   Future<void> _copyTranscript() async {
     final text = attachment?.transcript?.trim() ?? '';
     if (text.isEmpty) return;
@@ -735,9 +747,9 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
             children: [
               Flexible(
                 child: TextButton.icon(
-                  onPressed: _importSpeechModel,
-                  icon: const Icon(Icons.swap_horiz_rounded),
-                  label: Text('更换模型 · ${_formatSize(_speechModel!.sizeBytes)}'),
+                  onPressed: _openModelManager,
+                  icon: const Icon(Icons.memory_rounded),
+                  label: Text('管理模型 · ${_formatSize(_speechModel!.sizeBytes)}'),
                 ),
               ),
               TextButton.icon(
@@ -750,10 +762,20 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
         ] else if (!modelInstalled && !_importingModel) ...[
           const SizedBox(height: 8),
           Center(
-            child: TextButton.icon(
-              onPressed: _importSpeechModel,
-              icon: const Icon(Icons.folder_open_rounded),
-              label: const Text('已有模型？从文件导入'),
+            child: Wrap(
+              alignment: WrapAlignment.center,
+              children: [
+                TextButton.icon(
+                  onPressed: _importSpeechModel,
+                  icon: const Icon(Icons.folder_open_rounded),
+                  label: const Text('从文件导入'),
+                ),
+                TextButton.icon(
+                  onPressed: _openModelManager,
+                  icon: const Icon(Icons.memory_rounded),
+                  label: const Text('查看全部模型'),
+                ),
+              ],
             ),
           ),
         ],
