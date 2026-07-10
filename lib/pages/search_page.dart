@@ -81,6 +81,11 @@ class _SearchPageState extends State<SearchPage> {
     if (_query.isNotEmpty) await _search(_query);
   }
 
+  void _cancelSearch() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    Navigator.maybePop(context);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -90,41 +95,52 @@ class _SearchPageState extends State<SearchPage> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 20, 8),
+              padding: const EdgeInsets.fromLTRB(20, 12, 8, 8),
               child: Row(
                 children: [
-                  IconButton(
-                    tooltip: '返回',
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.arrow_back_rounded),
-                  ),
-                  const SizedBox(width: 6),
                   Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      focusNode: _focusNode,
-                      autofocus: true,
-                      textInputAction: TextInputAction.search,
-                      style: const TextStyle(
-                        fontFamily: 'serif',
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      decoration: InputDecoration(
-                        hintText: '搜索你的本地知识库',
-                        prefixIcon: const Icon(Icons.search_rounded),
-                        suffixIcon: _query.isEmpty
-                            ? null
-                            : IconButton(
-                                tooltip: '清空',
-                                onPressed: _controller.clear,
-                                icon: const Icon(Icons.close_rounded),
-                              ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          vertical: 14,
+                    child: SizedBox(
+                      height: 56,
+                      child: TextField(
+                        controller: _controller,
+                        focusNode: _focusNode,
+                        autofocus: true,
+                        textInputAction: TextInputAction.search,
+                        style: const TextStyle(
+                          fontFamily: 'serif',
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: '搜索你的本地知识库',
+                          prefixIcon: const Icon(Icons.search_rounded),
+                          suffixIcon: _query.isEmpty
+                              ? null
+                              : IconButton(
+                                  tooltip: '清空',
+                                  onPressed: _controller.clear,
+                                  icon: const Icon(Icons.close_rounded),
+                                ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 14,
+                          ),
                         ),
                       ),
                     ),
+                  ),
+                  const SizedBox(width: 4),
+                  TextButton(
+                    onPressed: _cancelSearch,
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.ink,
+                      minimumSize: const Size(64, 56),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      textStyle: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    child: const Text('取消'),
                   ),
                 ],
               ),

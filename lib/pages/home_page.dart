@@ -692,6 +692,10 @@ class _SectionHeader extends StatelessWidget {
       if (action != null)
         TextButton(
           onPressed: onTap,
+          style: TextButton.styleFrom(
+            minimumSize: const Size(0, 44),
+            padding: const EdgeInsets.only(left: 12),
+          ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1088,7 +1092,6 @@ class _DataTabState extends State<_DataTab> {
 
   @override
   Widget build(BuildContext context) {
-    final storage = FileStorageService.instance;
     return SafeArea(
       bottom: false,
       child: ListView(
@@ -1181,9 +1184,9 @@ class _DataTabState extends State<_DataTab> {
             children: [
               _SettingRow(
                 icon: Icons.folder_rounded,
-                title: '本机统一目录',
-                subtitle: '数据库、附件和缩略图集中保存',
-                onTap: () => _showStoragePath(storage.baseDir),
+                title: '应用私有存储',
+                subtitle: '数据库、附件和缩略图均安全保存在本机',
+                showChevron: false,
               ),
             ],
           ),
@@ -1271,48 +1274,6 @@ class _DataTabState extends State<_DataTab> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Future<void> _showStoragePath(String path) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(22, 4, 22, 26),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '本机存储位置',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                '这是系统分配给非空笔记的私有目录。日常备份请使用“导出完整备份”。',
-                style: TextStyle(color: AppColors.muted, height: 1.5),
-              ),
-              const SizedBox(height: 16),
-              SelectableText(
-                path,
-                style: const TextStyle(fontSize: 12, color: AppColors.muted),
-              ),
-              const SizedBox(height: 18),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  await Clipboard.setData(ClipboardData(text: path));
-                  if (context.mounted) Navigator.pop(context);
-                },
-                icon: const Icon(Icons.copy_rounded),
-                label: const Text('复制路径'),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -1449,11 +1410,13 @@ class _SettingRow extends StatelessWidget {
   final String title;
   final String subtitle;
   final VoidCallback? onTap;
+  final bool showChevron;
   const _SettingRow({
     required this.icon,
     required this.title,
     required this.subtitle,
     this.onTap,
+    this.showChevron = true,
   });
   @override
   Widget build(BuildContext context) => InkWell(
@@ -1491,7 +1454,8 @@ class _SettingRow extends StatelessWidget {
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: AppColors.muted),
+          if (showChevron)
+            const Icon(Icons.chevron_right_rounded, color: AppColors.muted),
         ],
       ),
     ),
