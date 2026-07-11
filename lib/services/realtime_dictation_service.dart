@@ -13,6 +13,7 @@ import 'package:record/record.dart';
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 
 import 'realtime_dictation_preferences_service.dart';
+import 'speech_denoiser_model_service.dart';
 import 'speech_transcription_service.dart';
 import 'streaming_speech_model_service.dart';
 
@@ -36,6 +37,7 @@ class RealtimeDictationService extends ChangeNotifier {
 
   final _models = StreamingSpeechModelService.instance;
   final _preferences = RealtimeDictationPreferencesService.instance;
+  final _denoiserModels = SpeechDenoiserModelService.instance;
   final _transcription = SpeechTranscriptionService.instance;
   AudioRecorder? _recorder;
   StreamSubscription<Uint8List>? _audioSubscription;
@@ -82,10 +84,12 @@ class RealtimeDictationService extends ChangeNotifier {
   double _debugHotwordsScore = 0;
   int _debugWorkerChunks = 0;
   int _debugWorkerSamples = 0;
+  int _debugAsrInputSamples = 0;
   int _debugDecodeCalls = 0;
   double _debugWorkerRmsDb = -160;
   double _debugWorkerPeakDb = -160;
   String _debugTwoPassStatus = '未请求';
+  String _debugNoiseSuppressionStatus = '未请求';
   RandomAccessFile? _refinementWaveOutput;
   String? _refinementWavePath;
   Future<void> _refinementWrites = Future<void>.value();
@@ -167,10 +171,12 @@ class RealtimeDictationService extends ChangeNotifier {
           '${_debugPcmTruncated ? '（已截断至 5 分钟）' : ''}',
       'Worker 音频块: $_debugWorkerChunks',
       'Worker 音频采样: $_debugWorkerSamples',
+      'ASR 输入采样: $_debugAsrInputSamples',
       'Worker 最近 RMS: ${_debugWorkerRmsDb.toStringAsFixed(1)} dBFS',
       'Worker 最近峰值: ${_debugWorkerPeakDb.toStringAsFixed(1)} dBFS',
       '原生 decode 调用: $_debugDecodeCalls',
       '自动恢复重放: ${_recoveryRequested ? "已触发" : "未触发"}',
+      '实时降噪: $_debugNoiseSuppressionStatus',
       '结束后精修: $_debugTwoPassStatus',
       '已提交文本: ${committedText.isEmpty ? '-' : committedText}',
       '临时文本: ${partialText.isEmpty ? '-' : partialText}',
@@ -218,10 +224,12 @@ class RealtimeDictationService extends ChangeNotifier {
       _debugHotwordsScore = 0;
       _debugWorkerChunks = 0;
       _debugWorkerSamples = 0;
+      _debugAsrInputSamples = 0;
       _debugDecodeCalls = 0;
       _debugWorkerRmsDb = -160;
       _debugWorkerPeakDb = -160;
       _debugTwoPassStatus = '未请求';
+      _debugNoiseSuppressionStatus = '未请求';
       _debugEvent('开始准备实时听写');
     }
     _recoveryPcm = BytesBuilder(copy: true);
@@ -249,6 +257,19 @@ class RealtimeDictationService extends ChangeNotifier {
                   'score=${preferences.hotwordsScore.toStringAsFixed(1)}'
             : '热词配置: 未启用',
       );
+      var denoiserModelPath = '';
+      if (preferences.noiseSuppressionEnabled) {
+        final denoiser = await _denoiserModels.inspect(verifyIntegrity: true);
+        if (!denoiser.installed) {
+          throw StateError(denoiser.problem ?? '请先下载实时降噪模型');
+        }
+        denoiserModelPath = denoiser.modelPath;
+        _debugNoiseSuppressionStatus = '已启用';
+        _debugEvent('实时降噪: DPDFNet Baseline 完整性检查通过');
+      } else {
+        _debugNoiseSuppressionStatus = '已关闭';
+        _debugEvent('实时降噪: 已关闭');
+      }
       if (preferences.twoPassEnabled &&
           await _transcription.realtimeRefinementAvailable()) {
         try {
@@ -269,7 +290,7 @@ class RealtimeDictationService extends ChangeNotifier {
       }
       if (!permission.isGranted) throw StateError('需要麦克风权限才能实时听写');
       _debugEvent('麦克风权限: granted');
-      await _startWorker(model, preferences);
+      await _startWorker(model, preferences, denoiserModelPath);
       final recorder = AudioRecorder();
       _recorder = recorder;
       final supported = await recorder.isEncoderSupported(
@@ -400,6 +421,7 @@ class RealtimeDictationService extends ChangeNotifier {
   Future<void> _startWorker(
     StreamingSpeechModelInfo model,
     RealtimeDictationPreferences preferences,
+    String denoiserModelPath,
   ) async {
     _messages = ReceivePort();
     _errors = ReceivePort();
@@ -432,6 +454,7 @@ class RealtimeDictationService extends ChangeNotifier {
             ? _preferences.hotwordsFilePath
             : '',
         'hotwordsScore': preferences.hotwordsScore,
+        'denoiserModelPath': denoiserModelPath,
       },
       onError: _errors!.sendPort,
       onExit: _exits!.sendPort,
@@ -446,6 +469,10 @@ class RealtimeDictationService extends ChangeNotifier {
         _debugNativeRuntime = message['runtime'] as String? ?? '-';
         _debugNativeAbi = message['abi'] as String? ?? '-';
         _debugCpuFingerprint = message['cpu'] as String? ?? '-';
+        if (message['denoiserEnabled'] == true) {
+          _debugNoiseSuppressionStatus =
+              '已启用 · frameShift=${message['denoiserFrameShift']} samples';
+        }
         _debugEvent(
           '识别工作线程已就绪: runtime=$_debugNativeRuntime, '
           'abi=$_debugNativeAbi, cpu=$_debugCpuFingerprint',
@@ -480,6 +507,8 @@ class RealtimeDictationService extends ChangeNotifier {
       case 'telemetry':
         _debugWorkerChunks = message['chunks'] as int? ?? _debugWorkerChunks;
         _debugWorkerSamples = message['samples'] as int? ?? _debugWorkerSamples;
+        _debugAsrInputSamples =
+            message['asrInputSamples'] as int? ?? _debugAsrInputSamples;
         _debugDecodeCalls = message['decodeCalls'] as int? ?? _debugDecodeCalls;
         _debugWorkerRmsDb =
             (message['rmsDb'] as num?)?.toDouble() ?? _debugWorkerRmsDb;
@@ -488,6 +517,7 @@ class RealtimeDictationService extends ChangeNotifier {
         _debugEvent(
           'Worker PCM: chunks=$_debugWorkerChunks, '
           'samples=$_debugWorkerSamples, '
+          'asrInputSamples=$_debugAsrInputSamples, '
           'rms=${_debugWorkerRmsDb.toStringAsFixed(1)} dBFS, '
           'peak=${_debugWorkerPeakDb.toStringAsFixed(1)} dBFS, '
           'decodeCalls=$_debugDecodeCalls',
@@ -870,6 +900,7 @@ void _realtimeRecognitionWorker(Map<String, Object> args) {
   final commands = ReceivePort();
   sherpa.OnlineRecognizer? recognizer;
   sherpa.OnlineStream? stream;
+  sherpa.OnlineSpeechDenoiser? denoiser;
   var committed = '';
   var lastPartial = '';
   var lastSentCommitted = '';
@@ -879,10 +910,13 @@ void _realtimeRecognitionWorker(Map<String, Object> args) {
   var pcmDecoder = _Pcm16StreamDecoder();
   var workerChunks = 0;
   var workerSamples = 0;
+  var asrInputSamples = 0;
   var decodeCalls = 0;
   var telemetrySamples = 0;
   var telemetrySquares = 0.0;
   var telemetryPeak = 0.0;
+  var denoiserFrameShift = 0;
+  var denoiserPending = Float32List(0);
 
   void sendUpdate(String partial) {
     if (committed == lastSentCommitted && partial == lastSentPartial) return;
@@ -910,6 +944,7 @@ void _realtimeRecognitionWorker(Map<String, Object> args) {
       'type': 'telemetry',
       'chunks': workerChunks,
       'samples': workerSamples,
+      'asrInputSamples': asrInputSamples,
       'decodeCalls': decodeCalls,
       'rmsDb': _amplitudeDb(rms),
       'peakDb': _amplitudeDb(telemetryPeak),
@@ -919,17 +954,9 @@ void _realtimeRecognitionWorker(Map<String, Object> args) {
     telemetryPeak = 0;
   }
 
-  void processSamples(Float32List samples, {required bool liveInput}) {
+  void decodeSamples(Float32List samples) {
     if (samples.isEmpty) return;
-    if (liveInput) {
-      workerChunks++;
-      workerSamples += samples.length;
-      telemetrySamples += samples.length;
-      for (final sample in samples) {
-        telemetrySquares += sample * sample;
-        telemetryPeak = math.max(telemetryPeak, sample.abs());
-      }
-    }
+    asrInputSamples += samples.length;
     streamSamples += samples.length;
     stream!.acceptWaveform(samples: samples, sampleRate: 16000);
     while (recognizer!.isReady(stream!)) {
@@ -977,11 +1004,80 @@ void _realtimeRecognitionWorker(Map<String, Object> args) {
       if (!isEndpoint) emptyEndpointReported = false;
       sendUpdate(result);
     }
+  }
+
+  Float32List denoiseSamples(Float32List samples) {
+    final activeDenoiser = denoiser;
+    if (activeDenoiser == null || samples.isEmpty) return samples;
+    final combined = Float32List(denoiserPending.length + samples.length)
+      ..setAll(0, denoiserPending)
+      ..setAll(denoiserPending.length, samples);
+    final completeLength =
+        combined.length - combined.length.remainder(denoiserFrameShift);
+    denoiserPending = completeLength == combined.length
+        ? Float32List(0)
+        : Float32List.fromList(combined.sublist(completeLength));
+    if (completeLength == 0) return Float32List(0);
+    final output = <double>[];
+    for (
+      var offset = 0;
+      offset < completeLength;
+      offset += denoiserFrameShift
+    ) {
+      final enhanced = activeDenoiser.run(
+        samples: Float32List.sublistView(
+          combined,
+          offset,
+          offset + denoiserFrameShift,
+        ),
+        sampleRate: 16000,
+      );
+      if (enhanced.sampleRate != 0 && enhanced.sampleRate != 16000) {
+        throw StateError('实时降噪输出采样率异常: ${enhanced.sampleRate}');
+      }
+      output.addAll(enhanced.samples);
+    }
+    return Float32List.fromList(output);
+  }
+
+  void processSamples(Float32List samples, {required bool liveInput}) {
+    if (samples.isEmpty) return;
+    if (liveInput) {
+      workerChunks++;
+      workerSamples += samples.length;
+      telemetrySamples += samples.length;
+      for (final sample in samples) {
+        telemetrySquares += sample * sample;
+        telemetryPeak = math.max(telemetryPeak, sample.abs());
+      }
+    }
+    decodeSamples(denoiseSamples(samples));
     if (liveInput && telemetrySamples >= 16000) sendTelemetry();
   }
 
   try {
     sherpa.initBindings();
+    final denoiserModelPath = args['denoiserModelPath'] as String? ?? '';
+    if (denoiserModelPath.isNotEmpty) {
+      denoiser = sherpa.OnlineSpeechDenoiser(
+        sherpa.OnlineSpeechDenoiserConfig(
+          model: sherpa.OfflineSpeechDenoiserModelConfig(
+            dpdfnet: sherpa.OfflineSpeechDenoiserDpdfNetModelConfig(
+              model: denoiserModelPath,
+            ),
+            numThreads: 1,
+            debug: false,
+          ),
+        ),
+      );
+      if (denoiser.sampleRate != 16000) {
+        throw StateError('实时降噪模型采样率必须为 16000 Hz');
+      }
+      denoiserFrameShift = denoiser.frameShiftInSamples;
+      if (denoiserFrameShift <= 0) {
+        throw StateError('实时降噪模型没有提供有效帧步长');
+      }
+    }
     recognizer = sherpa.OnlineRecognizer(
       sherpa.OnlineRecognizerConfig(
         model: sherpa.OnlineModelConfig(
@@ -1023,6 +1119,8 @@ void _realtimeRecognitionWorker(Map<String, Object> args) {
           '${sherpa.getGitDate()})',
       'abi': ffi.Abi.current().toString(),
       'cpu': _androidCpuFingerprint(),
+      'denoiserEnabled': denoiser != null,
+      'denoiserFrameShift': denoiserFrameShift,
     });
     commands.listen((dynamic raw) {
       if (raw is! Map) return;
@@ -1044,6 +1142,8 @@ void _realtimeRecognitionWorker(Map<String, Object> args) {
           streamSamples = 0;
           emptyEndpointReported = false;
           pcmDecoder = _Pcm16StreamDecoder();
+          denoiser?.reset();
+          denoiserPending = Float32List(0);
           committed = '';
           lastPartial = '';
           lastSentCommitted = '';
@@ -1066,6 +1166,18 @@ void _realtimeRecognitionWorker(Map<String, Object> args) {
         }
         if (raw['type'] == 'stop') {
           sendTelemetry();
+          final activeDenoiser = denoiser;
+          if (activeDenoiser != null) {
+            if (denoiserPending.isNotEmpty) {
+              final enhanced = activeDenoiser.run(
+                samples: denoiserPending,
+                sampleRate: 16000,
+              );
+              decodeSamples(enhanced.samples);
+              denoiserPending = Float32List(0);
+            }
+            decodeSamples(activeDenoiser.flush().samples);
+          }
           stream!.inputFinished();
           while (recognizer!.isReady(stream!)) {
             recognizer!.decode(stream!);
@@ -1077,6 +1189,8 @@ void _realtimeRecognitionWorker(Map<String, Object> args) {
           stream = null;
           recognizer?.free();
           recognizer = null;
+          denoiser?.free();
+          denoiser = null;
         }
       } catch (error) {
         sendPort.send({'type': 'error', 'message': error.toString()});
@@ -1087,6 +1201,7 @@ void _realtimeRecognitionWorker(Map<String, Object> args) {
     commands.close();
     stream?.free();
     recognizer?.free();
+    denoiser?.free();
   }
 }
 

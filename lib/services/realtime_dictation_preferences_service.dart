@@ -11,11 +11,13 @@ class RealtimeDictationPreferences {
   final List<String> hotwords;
   final double hotwordsScore;
   final bool twoPassEnabled;
+  final bool noiseSuppressionEnabled;
 
   const RealtimeDictationPreferences({
     this.hotwords = const [],
     this.hotwordsScore = defaultHotwordsScore,
     this.twoPassEnabled = true,
+    this.noiseSuppressionEnabled = false,
   });
 
   bool get hotwordsEnabled => hotwords.isNotEmpty;
@@ -61,6 +63,8 @@ class RealtimeDictationPreferencesService {
         hotwords: hotwords,
         hotwordsScore: score,
         twoPassEnabled: decoded['twoPassEnabled'] as bool? ?? true,
+        noiseSuppressionEnabled:
+            decoded['noiseSuppressionEnabled'] as bool? ?? false,
       );
       await _writeRuntimeHotwords(preferences.hotwords);
       return preferences;
@@ -75,6 +79,7 @@ class RealtimeDictationPreferencesService {
     required String hotwordsText,
     required double hotwordsScore,
     required bool twoPassEnabled,
+    required bool noiseSuppressionEnabled,
   }) async {
     if (hotwordsScore < minHotwordsScore || hotwordsScore > maxHotwordsScore) {
       throw const FormatException('热词增强强度必须在 1.0 到 5.0 之间');
@@ -84,6 +89,7 @@ class RealtimeDictationPreferencesService {
       hotwords: hotwords,
       hotwordsScore: hotwordsScore,
       twoPassEnabled: twoPassEnabled,
+      noiseSuppressionEnabled: noiseSuppressionEnabled,
     );
     await Directory(_settingsDir).create(recursive: true);
     await _writeRuntimeHotwords(hotwords);
@@ -93,6 +99,7 @@ class RealtimeDictationPreferencesService {
         'hotwords': hotwords,
         'hotwordsScore': hotwordsScore,
         'twoPassEnabled': twoPassEnabled,
+        'noiseSuppressionEnabled': noiseSuppressionEnabled,
       }),
     );
     return preferences;

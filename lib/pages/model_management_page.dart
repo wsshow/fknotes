@@ -106,6 +106,14 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
               enabled: _preferences.twoPassEnabled,
               onChanged: _setTwoPassEnabled,
             ),
+            const SizedBox(height: 12),
+            _NoiseSuppressionCard(
+              enabled: _preferences.noiseSuppressionEnabled,
+              modelInstalled: _manager
+                  .installationOf(LocalModelManager.speechDenoiserId)
+                  .installed,
+              onChanged: _setNoiseSuppressionEnabled,
+            ),
             const SizedBox(height: 26),
             _sectionTitle('语音模型'),
             const SizedBox(height: 12),
@@ -206,6 +214,7 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
     if (confirmed != true) return;
     try {
       await _manager.remove(model.id);
+      await _loadDictationPreferences();
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -264,11 +273,34 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
         hotwordsText: _preferences.hotwords.join('\n'),
         hotwordsScore: _preferences.hotwordsScore,
         twoPassEnabled: enabled,
+        noiseSuppressionEnabled: _preferences.noiseSuppressionEnabled,
       );
       if (!mounted) return;
       setState(() => _preferences = saved);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(enabled ? '已开启听写结束精修' : '已关闭听写结束精修')),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('设置保存失败，请检查设备存储空间')));
+      }
+    }
+  }
+
+  Future<void> _setNoiseSuppressionEnabled(bool enabled) async {
+    try {
+      final saved = await _dictationPreferences.save(
+        hotwordsText: _preferences.hotwords.join('\n'),
+        hotwordsScore: _preferences.hotwordsScore,
+        twoPassEnabled: _preferences.twoPassEnabled,
+        noiseSuppressionEnabled: enabled,
+      );
+      if (!mounted) return;
+      setState(() => _preferences = saved);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(enabled ? '已开启实时听写降噪' : '已关闭实时听写降噪')),
       );
     } catch (_) {
       if (mounted) {
@@ -351,6 +383,7 @@ class _HotwordsDialogState extends State<_HotwordsDialog> {
         hotwordsText: _controller.text,
         hotwordsScore: _score,
         twoPassEnabled: widget.initial.twoPassEnabled,
+        noiseSuppressionEnabled: widget.initial.noiseSuppressionEnabled,
       );
       if (mounted) Navigator.pop(context, saved);
     } on FormatException catch (error) {
@@ -493,6 +526,66 @@ class _TwoPassCard extends StatelessWidget {
           key: const Key('live-dictation-two-pass-switch'),
           value: enabled,
           onChanged: onChanged,
+        ),
+      ],
+    ),
+  );
+}
+
+class _NoiseSuppressionCard extends StatelessWidget {
+  final bool enabled;
+  final bool modelInstalled;
+  final ValueChanged<bool> onChanged;
+
+  const _NoiseSuppressionCard({
+    required this.enabled,
+    required this.modelInstalled,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+    decoration: BoxDecoration(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: AppColors.line),
+    ),
+    child: Row(
+      children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: AppColors.softGreen,
+            borderRadius: BorderRadius.circular(13),
+          ),
+          child: const Icon(
+            Icons.noise_control_off_rounded,
+            color: AppColors.moss,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '实时降噪',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                modelInstalled ? '先抑制环境噪声，再送入流式识别' : '请先安装下方的 DPDFNet 实时降噪模型',
+                style: const TextStyle(color: AppColors.muted),
+              ),
+            ],
+          ),
+        ),
+        Switch(
+          key: const Key('live-dictation-noise-suppression-switch'),
+          value: modelInstalled && enabled,
+          onChanged: modelInstalled ? onChanged : null,
         ),
       ],
     ),
@@ -645,6 +738,7 @@ class _ModelCard extends StatelessWidget {
       LocalModelTask.audioTranscription => Icons.graphic_eq_rounded,
       LocalModelTask.liveDictation => Icons.mic_rounded,
       LocalModelTask.voiceActivityDetection => Icons.multiline_chart_rounded,
+      LocalModelTask.speechEnhancement => Icons.noise_control_off_rounded,
       LocalModelTask.textToSpeech => Icons.record_voice_over_rounded,
       LocalModelTask.textRecognition => Icons.document_scanner_rounded,
       LocalModelTask.imageUnderstanding => Icons.image_search_rounded,

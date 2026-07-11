@@ -5,8 +5,10 @@ import 'package:flutter/foundation.dart';
 import '../models/local_model.dart';
 import 'kokoro_tts_model_service.dart';
 import 'note_read_aloud_service.dart';
+import 'realtime_dictation_preferences_service.dart';
 import 'realtime_dictation_service.dart';
 import 'speech_model_service.dart';
+import 'speech_denoiser_model_service.dart';
 import 'speech_transcription_service.dart';
 import 'streaming_speech_model_service.dart';
 import 'voice_activity_model_service.dart';
@@ -86,6 +88,7 @@ class LocalModelManager extends ChangeNotifier {
   static const streamingBilingualId =
       StreamingSpeechModelService.bilingualModelId;
   static const voiceActivityId = VoiceActivityModelService.modelId;
+  static const speechDenoiserId = SpeechDenoiserModelService.modelId;
   static const kokoroTtsId = KokoroTtsModelService.modelId;
   static const mlKitChineseOcrId = 'mlkit-text-recognition-chinese';
   static const imageUnderstandingId = 'image-understanding-local';
@@ -154,6 +157,23 @@ class LocalModelManager extends ChangeNotifier {
       recommended: true,
     ),
     LocalModelDefinition(
+      id: speechDenoiserId,
+      name: 'DPDFNet 实时降噪',
+      summary: '降低环境噪声后再进行实时听写',
+      description:
+          '面向 16 kHz 单声道语音的因果流式降噪模型，采用最低资源的 Baseline 版本，适合移动端 ASR 前处理。',
+      category: LocalModelCategory.speech,
+      availability: LocalModelAvailability.downloadable,
+      task: LocalModelTask.speechEnhancement,
+      downloadSizeBytes: SpeechDenoiserModelService.downloadSizeBytes,
+      languages: ['与语言无关'],
+      engine: 'sherpa-onnx · DPDFNet',
+      version: 'Baseline · 16 kHz',
+      source: 'k2-fsa 官方模型',
+      license: 'Apache-2.0',
+      recommended: true,
+    ),
+    LocalModelDefinition(
       id: kokoroTtsId,
       name: 'Kokoro 中英双语 INT8',
       summary: '离线朗读中文与英文笔记',
@@ -201,7 +221,9 @@ class LocalModelManager extends ChangeNotifier {
   final _speechModels = SpeechModelService.instance;
   final _streamingModels = StreamingSpeechModelService.instance;
   final _voiceActivityModels = VoiceActivityModelService.instance;
+  final _speechDenoiserModels = SpeechDenoiserModelService.instance;
   final _kokoroTtsModels = KokoroTtsModelService.instance;
+  final _dictationPreferences = RealtimeDictationPreferencesService.instance;
   final Map<String, LocalModelInstallation> _installations = {};
   final Map<String, ModelTransferState> _transfers = {};
   bool _initialized = false;
@@ -237,6 +259,8 @@ class LocalModelManager extends ChangeNotifier {
       _streamingModels.selectedModelId(),
       _voiceActivityModels.inspect(),
       _voiceActivityModels.partialDownloadBytes(),
+      _speechDenoiserModels.inspect(),
+      _speechDenoiserModels.partialDownloadBytes(),
       _kokoroTtsModels.inspect(),
       _kokoroTtsModels.partialDownloadBytes(),
     ]);
@@ -249,8 +273,10 @@ class LocalModelManager extends ChangeNotifier {
     _selectedLiveDictationModelId = results[6] as String;
     final voiceActivity = results[7] as VoiceActivityModelInfo;
     final voiceActivityPartial = results[8] as int;
-    final kokoroTts = results[9] as KokoroTtsModelInfo;
-    final kokoroTtsPartial = results[10] as int;
+    final speechDenoiser = results[9] as SpeechDenoiserModelInfo;
+    final speechDenoiserPartial = results[10] as int;
+    final kokoroTts = results[11] as KokoroTtsModelInfo;
+    final kokoroTtsPartial = results[12] as int;
     _installations[senseVoiceId] = LocalModelInstallation(
       installed: speech.installed,
       installedSizeBytes: speech.sizeBytes,
@@ -270,6 +296,11 @@ class LocalModelManager extends ChangeNotifier {
       installed: voiceActivity.installed,
       installedSizeBytes: voiceActivity.sizeBytes,
       partialSizeBytes: voiceActivityPartial,
+    );
+    _installations[speechDenoiserId] = LocalModelInstallation(
+      installed: speechDenoiser.installed,
+      installedSizeBytes: speechDenoiser.sizeBytes,
+      partialSizeBytes: speechDenoiserPartial,
     );
     _installations[kokoroTtsId] = LocalModelInstallation(
       installed: kokoroTts.installed,
@@ -312,6 +343,11 @@ class LocalModelManager extends ChangeNotifier {
           shouldCancel: () => transfer.cancelRequested,
           onProgress: progress,
         );
+      } else if (modelId == speechDenoiserId) {
+        await _speechDenoiserModels.download(
+          shouldCancel: () => transfer.cancelRequested,
+          onProgress: progress,
+        );
       } else if (modelId == kokoroTtsId) {
         await _kokoroTtsModels.download(
           shouldCancel: () => transfer.cancelRequested,
@@ -348,6 +384,7 @@ class LocalModelManager extends ChangeNotifier {
   Future<void> import(String modelId) async {
     if (modelId != senseVoiceId &&
         modelId != voiceActivityId &&
+        modelId != speechDenoiserId &&
         modelId != kokoroTtsId &&
         !StreamingSpeechModelService.supportedModelIds.contains(modelId)) {
       return;
@@ -370,6 +407,10 @@ class LocalModelManager extends ChangeNotifier {
         imported = await _speechModels.pickAndImport(onProgress: progress);
       } else if (modelId == voiceActivityId) {
         imported = await _voiceActivityModels.pickAndImport(
+          onProgress: progress,
+        );
+      } else if (modelId == speechDenoiserId) {
+        imported = await _speechDenoiserModels.pickAndImport(
           onProgress: progress,
         );
       } else if (modelId == kokoroTtsId) {
@@ -424,6 +465,20 @@ class LocalModelManager extends ChangeNotifier {
         throw StateError('请先结束正在进行的实时听写');
       }
       await _voiceActivityModels.remove();
+    } else if (modelId == speechDenoiserId) {
+      if (RealtimeDictationService.instance.isActive) {
+        throw StateError('请先结束正在进行的实时听写');
+      }
+      await _speechDenoiserModels.remove();
+      final preferences = await _dictationPreferences.load();
+      if (preferences.noiseSuppressionEnabled) {
+        await _dictationPreferences.save(
+          hotwordsText: preferences.hotwords.join('\n'),
+          hotwordsScore: preferences.hotwordsScore,
+          twoPassEnabled: preferences.twoPassEnabled,
+          noiseSuppressionEnabled: false,
+        );
+      }
     } else if (modelId == kokoroTtsId) {
       if (NoteReadAloudService.instance.isActive) {
         throw StateError('请先停止正在进行的笔记朗读');

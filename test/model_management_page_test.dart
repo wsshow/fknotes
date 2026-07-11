@@ -5,6 +5,7 @@ import 'package:fknotes/services/file_storage_service.dart';
 import 'package:fknotes/services/local_model_manager.dart';
 import 'package:fknotes/services/kokoro_tts_model_service.dart';
 import 'package:fknotes/services/speech_model_service.dart';
+import 'package:fknotes/services/speech_denoiser_model_service.dart';
 import 'package:fknotes/services/voice_activity_model_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -47,6 +48,18 @@ void main() {
     );
     await vadPartial.parent.create(recursive: true);
     await vadPartial.writeAsBytes(List<int>.filled(123, 4));
+    final denoiserPartial = File(
+      p.join(
+        storageDirectory.path,
+        'models',
+        'audio',
+        SpeechDenoiserModelService.modelId,
+        '.download',
+        '${SpeechDenoiserModelService.modelFileName}.part',
+      ),
+    );
+    await denoiserPartial.parent.create(recursive: true);
+    await denoiserPartial.writeAsBytes(List<int>.filled(456, 6));
     final ttsPartial = File(
       p.join(
         storageDirectory.path,
@@ -73,6 +86,10 @@ void main() {
       123,
     );
     expect(await KokoroTtsModelService.instance.partialDownloadBytes(), 321);
+    expect(
+      await SpeechDenoiserModelService.instance.partialDownloadBytes(),
+      456,
+    );
   });
 
   testWidgets('model manager groups available, built-in and planned models', (
@@ -92,6 +109,12 @@ void main() {
     expect(find.text('实时听写设置'), findsOneWidget);
     expect(find.text('热词增强'), findsOneWidget);
     expect(find.text('结束后精修'), findsOneWidget);
+    expect(find.text('实时降噪'), findsOneWidget);
+    final noiseSuppressionSwitch = tester.widget<Switch>(
+      find.byKey(const Key('live-dictation-noise-suppression-switch')),
+    );
+    expect(noiseSuppressionSwitch.value, isFalse);
+    expect(noiseSuppressionSwitch.onChanged, isNull);
     expect(
       tester
           .widget<Switch>(
@@ -163,6 +186,16 @@ void main() {
 
     expect(find.text('Silero VAD INT8'), findsOneWidget);
     expect(find.text('207.9 KB'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('DPDFNet 实时降噪'),
+      350,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('DPDFNet 实时降噪'), findsOneWidget);
+    expect(find.text('8.4 MB'), findsOneWidget);
 
     await tester.scrollUntilVisible(
       find.text('Kokoro 中英双语 INT8'),
