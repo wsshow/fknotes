@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../app.dart';
 import '../models/note_entry.dart';
@@ -63,6 +65,12 @@ class _NoteEditorPageState extends State<NoteEditorPage>
   bool _dictationAnchored = false;
   bool _recoveringDictationFailure = false;
   bool _dictationOperationPending = false;
+  bool _showDictationDiagnostics = false;
+  bool _dictationDiagnosticsCollapsed = false;
+  double _dictationDiagnosticsTop = 72;
+  double _dictationDiagnosticsLeft = 12;
+  double _dictationDiagnosticsWidth = 400;
+  double _dictationDiagnosticsHeight = 380;
 
   bool get _isEditing => _entry != null;
 
@@ -206,7 +214,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
         builder: (context) => AlertDialog(
           title: const Text('需要实时语音模型'),
           content: const Text(
-            '首次使用需下载约 70.6 MB 的 Streaming Zipformer 中文模型。'
+            '首次使用需下载约 159.6 MB 的 Streaming Zipformer 中文模型。'
             '下载完成后，听写全程断网可用。',
           ),
           actions: [
@@ -730,6 +738,15 @@ class _NoteEditorPageState extends State<NoteEditorPage>
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.sizeOf(context);
+    final diagnosticsWidth = _dictationDiagnosticsWidth.clamp(
+      280.0,
+      screenSize.width - 24,
+    );
+    final diagnosticsHeight = _dictationDiagnosticsHeight.clamp(
+      220.0,
+      screenSize.height - _dictationDiagnosticsTop - 12,
+    );
     final provider = context.read<NoteProvider>();
     final importJobs = _importJobIds
         .map(provider.attachmentImportJob)
@@ -832,213 +849,289 @@ class _NoteEditorPageState extends State<NoteEditorPage>
             const SizedBox(width: 8),
           ],
         ),
-        body: SafeArea(
-          top: false,
-          child: Column(
-            children: [
-              Expanded(
-                child: GestureDetector(
-                  key: const Key('note-editor-scroll-surface'),
-                  behavior: HitTestBehavior.translucent,
-                  onTap: () => _blockEditorKey.currentState?.focusAtEnd(),
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        TextField(
-                          controller: _title,
-                          contextMenuBuilder: buildEditorContextMenu,
-                          maxLines: null,
-                          textCapitalization: TextCapitalization.sentences,
-                          style: const TextStyle(
-                            fontFamily: 'serif',
-                            fontSize: 28,
-                            height: 1.22,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -.5,
-                          ),
-                          decoration: const InputDecoration(
-                            hintText: '标题',
-                            filled: false,
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            for (final tag in _tags)
-                              InputChip(
-                                label: Text('#$tag'),
-                                onDeleted: () {
-                                  setState(() {
-                                    _tags.remove(tag);
-                                    _changed = true;
-                                  });
-                                  _scheduleAutosave();
-                                },
-                              ),
-                            ActionChip(
-                              avatar: const Icon(Icons.add_rounded, size: 17),
-                              label: Text(_tags.isEmpty ? '添加标签' : '标签'),
-                              onPressed: _editTags,
-                            ),
-                          ],
-                        ),
-                        if (hasAttachmentContent) ...[
-                          const SizedBox(height: 20),
-                          Row(
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        key: const Key('note-editor-scroll-surface'),
+                        behavior: HitTestBehavior.translucent,
+                        onTap: () => _blockEditorKey.currentState?.focusAtEnd(),
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Expanded(
-                                child: Text(
-                                  '笔记内容',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: AppColors.muted,
-                                    fontWeight: FontWeight.w700,
-                                  ),
+                              TextField(
+                                controller: _title,
+                                contextMenuBuilder: buildEditorContextMenu,
+                                maxLines: null,
+                                textCapitalization:
+                                    TextCapitalization.sentences,
+                                style: const TextStyle(
+                                  fontFamily: 'serif',
+                                  fontSize: 28,
+                                  height: 1.22,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -.5,
+                                ),
+                                decoration: const InputDecoration(
+                                  hintText: '标题',
+                                  filled: false,
+                                  border: InputBorder.none,
+                                  enabledBorder: InputBorder.none,
+                                  focusedBorder: InputBorder.none,
+                                  contentPadding: EdgeInsets.zero,
                                 ),
                               ),
-                              Text(
-                                '${_attachments.length + importJobs.length} 项附件',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.muted,
+                              const SizedBox(height: 12),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  for (final tag in _tags)
+                                    InputChip(
+                                      label: Text('#$tag'),
+                                      onDeleted: () {
+                                        setState(() {
+                                          _tags.remove(tag);
+                                          _changed = true;
+                                        });
+                                        _scheduleAutosave();
+                                      },
+                                    ),
+                                  ActionChip(
+                                    avatar: const Icon(
+                                      Icons.add_rounded,
+                                      size: 17,
+                                    ),
+                                    label: Text(_tags.isEmpty ? '添加标签' : '标签'),
+                                    onPressed: _editTags,
+                                  ),
+                                ],
+                              ),
+                              if (hasAttachmentContent) ...[
+                                const SizedBox(height: 20),
+                                Row(
+                                  children: [
+                                    const Expanded(
+                                      child: Text(
+                                        '笔记内容',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: AppColors.muted,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                    Text(
+                                      '${_attachments.length + importJobs.length} 项附件',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: AppColors.muted,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                for (
+                                  var index = 0;
+                                  index < importJobs.length;
+                                  index++
+                                ) ...[
+                                  _AttachmentImportTile(
+                                    job: importJobs[index],
+                                    onCancel: () => _removeAttachmentImport(
+                                      importJobs[index],
+                                    ),
+                                    onRetry: () => _retryAttachmentImport(
+                                      importJobs[index],
+                                    ),
+                                    onRemove: () => _removeAttachmentImport(
+                                      importJobs[index],
+                                    ),
+                                  ),
+                                  if (index < importJobs.length - 1 ||
+                                      _attachments.isNotEmpty)
+                                    const SizedBox(height: 8),
+                                ],
+                                for (
+                                  var index = 0;
+                                  index < _attachments.length;
+                                  index++
+                                ) ...[
+                                  _AttachmentEditorTile(
+                                    attachment: _attachments[index],
+                                    onOpen: () =>
+                                        _openAttachment(_attachments[index]),
+                                    onReference: () => _blockEditorKey
+                                        .currentState
+                                        ?.insertAttachmentReference(
+                                          _attachments[index].filePath,
+                                        ),
+                                    canMoveUp: index > 0,
+                                    canMoveDown:
+                                        index < _attachments.length - 1,
+                                    onMoveUp: () => _moveAttachment(index, -1),
+                                    onMoveDown: () => _moveAttachment(index, 1),
+                                    onRemove: () => _removeAttachment(index),
+                                  ),
+                                  if (index < _attachments.length - 1)
+                                    const SizedBox(height: 8),
+                                ],
+                              ],
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 18),
+                                child: Divider(),
+                              ),
+                              IgnorePointer(
+                                ignoring: _dictation.isActive,
+                                child: NoteBlockEditor(
+                                  key: _blockEditorKey,
+                                  controller: _content,
+                                  initialRichContent: _richContent,
+                                  onRichContentChanged: _onRichContentChanged,
+                                  attachments: _attachments,
+                                  onOpenAttachment: _openAttachment,
+                                  minLines: hasAttachmentContent ? 10 : 16,
+                                  hintText: hasAttachmentContent
+                                      ? '添加说明、想法或摘要…'
+                                      : '开始记录…',
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 10),
-                          for (
-                            var index = 0;
-                            index < importJobs.length;
-                            index++
-                          ) ...[
-                            _AttachmentImportTile(
-                              job: importJobs[index],
-                              onCancel: () =>
-                                  _removeAttachmentImport(importJobs[index]),
-                              onRetry: () =>
-                                  _retryAttachmentImport(importJobs[index]),
-                              onRemove: () =>
-                                  _removeAttachmentImport(importJobs[index]),
-                            ),
-                            if (index < importJobs.length - 1 ||
-                                _attachments.isNotEmpty)
-                              const SizedBox(height: 8),
-                          ],
-                          for (
-                            var index = 0;
-                            index < _attachments.length;
-                            index++
-                          ) ...[
-                            _AttachmentEditorTile(
-                              attachment: _attachments[index],
-                              onOpen: () =>
-                                  _openAttachment(_attachments[index]),
-                              onReference: () => _blockEditorKey.currentState
-                                  ?.insertAttachmentReference(
-                                    _attachments[index].filePath,
-                                  ),
-                              canMoveUp: index > 0,
-                              canMoveDown: index < _attachments.length - 1,
-                              onMoveUp: () => _moveAttachment(index, -1),
-                              onMoveDown: () => _moveAttachment(index, 1),
-                              onRemove: () => _removeAttachment(index),
-                            ),
-                            if (index < _attachments.length - 1)
-                              const SizedBox(height: 8),
-                          ],
-                        ],
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 18),
-                          child: Divider(),
                         ),
-                        IgnorePointer(
-                          ignoring: _dictation.isActive,
-                          child: NoteBlockEditor(
-                            key: _blockEditorKey,
-                            controller: _content,
-                            initialRichContent: _richContent,
-                            onRichContentChanged: _onRichContentChanged,
-                            attachments: _attachments,
-                            onOpenAttachment: _openAttachment,
-                            minLines: hasAttachmentContent ? 10 : 16,
-                            hintText: hasAttachmentContent
-                                ? '添加说明、想法或摘要…'
-                                : '开始记录…',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              Container(
-                decoration: const BoxDecoration(
-                  color: AppColors.surface,
-                  border: Border(top: BorderSide(color: AppColors.line)),
-                ),
-                padding: const EdgeInsets.fromLTRB(12, 9, 12, 10),
-                child: TextFieldTapRegion(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_dictation.isActive ||
-                          _dictation.status == RealtimeDictationStatus.failed)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: _LiveDictationBar(
-                            service: _dictation,
-                            onCancel: _cancelDictation,
-                            onFinish:
-                                _dictation.status ==
-                                    RealtimeDictationStatus.listening
-                                ? _stopDictation
-                                : null,
-                          ),
-                        ),
-                      Row(
-                        children: [
-                          IconButton.filled(
-                            tooltip: '添加图片、录音或文件',
-                            onPressed: _importing || _dictation.isActive
-                                ? null
-                                : _showAddContentSheet,
-                            icon: _importing
-                                ? const SizedBox.square(
-                                    dimension: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.add_rounded),
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: _ScrollableEditorToolbar(
-                              child: _EditorToolbar(
-                                editorKey: _blockEditorKey,
-                                onReferenceAttachment:
-                                    _showAttachmentReferenceSheet,
-                                onDictation: _toggleDictation,
-                                dictationStatus: _dictation.status,
-                              ),
-                            ),
-                          ),
-                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                    Container(
+                      decoration: const BoxDecoration(
+                        color: AppColors.surface,
+                        border: Border(top: BorderSide(color: AppColors.line)),
+                      ),
+                      padding: const EdgeInsets.fromLTRB(12, 9, 12, 10),
+                      child: TextFieldTapRegion(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_dictation.isActive ||
+                                _dictation.status ==
+                                    RealtimeDictationStatus.failed)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: _LiveDictationBar(
+                                  service: _dictation,
+                                  onCancel: _cancelDictation,
+                                  onShowDiagnostics: kDebugMode
+                                      ? () => setState(
+                                          () =>
+                                              _showDictationDiagnostics = true,
+                                        )
+                                      : null,
+                                  onFinish:
+                                      _dictation.status ==
+                                          RealtimeDictationStatus.listening
+                                      ? _stopDictation
+                                      : null,
+                                ),
+                              ),
+                            Row(
+                              children: [
+                                IconButton.filled(
+                                  tooltip: '添加图片、录音或文件',
+                                  onPressed: _importing || _dictation.isActive
+                                      ? null
+                                      : _showAddContentSheet,
+                                  icon: _importing
+                                      ? const SizedBox.square(
+                                          dimension: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Icon(Icons.add_rounded),
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: _ScrollableEditorToolbar(
+                                    child: _EditorToolbar(
+                                      editorKey: _blockEditorKey,
+                                      onReferenceAttachment:
+                                          _showAttachmentReferenceSheet,
+                                      onDictation: _toggleDictation,
+                                      dictationStatus: _dictation.status,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+            if (kDebugMode && _showDictationDiagnostics)
+              Positioned(
+                top: _dictationDiagnosticsTop,
+                left: _dictationDiagnosticsLeft,
+                width: diagnosticsWidth,
+                child: _DictationDiagnosticsOverlay(
+                  service: _dictation,
+                  collapsed: _dictationDiagnosticsCollapsed,
+                  height: diagnosticsHeight,
+                  onMove: (delta) {
+                    setState(() {
+                      final panelHeight = _dictationDiagnosticsCollapsed
+                          ? 72.0
+                          : diagnosticsHeight;
+                      final maxLeft = screenSize.width - diagnosticsWidth - 12;
+                      final maxTop = screenSize.height - panelHeight - 12;
+                      _dictationDiagnosticsLeft =
+                          (_dictationDiagnosticsLeft + delta.dx).clamp(
+                            12.0,
+                            maxLeft < 12 ? 12.0 : maxLeft,
+                          );
+                      _dictationDiagnosticsTop =
+                          (_dictationDiagnosticsTop + delta.dy).clamp(
+                            12.0,
+                            maxTop < 12 ? 12.0 : maxTop,
+                          );
+                    });
+                  },
+                  onResize: (delta) {
+                    setState(() {
+                      final maxWidth =
+                          screenSize.width - _dictationDiagnosticsLeft - 12;
+                      final maxHeight =
+                          screenSize.height - _dictationDiagnosticsTop - 12;
+                      _dictationDiagnosticsWidth =
+                          (_dictationDiagnosticsWidth + delta.dx).clamp(
+                            280.0,
+                            maxWidth < 280 ? 280.0 : maxWidth,
+                          );
+                      _dictationDiagnosticsHeight =
+                          (_dictationDiagnosticsHeight + delta.dy).clamp(
+                            220.0,
+                            maxHeight < 220 ? 220.0 : maxHeight,
+                          );
+                    });
+                  },
+                  onToggleCollapsed: () => setState(() {
+                    _dictationDiagnosticsCollapsed =
+                        !_dictationDiagnosticsCollapsed;
+                  }),
+                  onClose: () =>
+                      setState(() => _showDictationDiagnostics = false),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -1299,11 +1392,13 @@ class _LiveDictationBar extends StatelessWidget {
   final RealtimeDictationService service;
   final VoidCallback onCancel;
   final VoidCallback? onFinish;
+  final VoidCallback? onShowDiagnostics;
 
   const _LiveDictationBar({
     required this.service,
     required this.onCancel,
     required this.onFinish,
+    required this.onShowDiagnostics,
   });
 
   @override
@@ -1353,6 +1448,12 @@ class _LiveDictationBar extends StatelessWidget {
               ],
             ),
           ),
+          if (onShowDiagnostics != null)
+            IconButton(
+              tooltip: '实时听写诊断',
+              onPressed: onShowDiagnostics,
+              icon: const Icon(Icons.bug_report_outlined, size: 20),
+            ),
           IconButton(
             tooltip: '取消听写',
             onPressed: onCancel,
@@ -1371,6 +1472,229 @@ class _LiveDictationBar extends StatelessWidget {
       ),
     );
   }
+}
+
+class _DictationDiagnosticsOverlay extends StatefulWidget {
+  final RealtimeDictationService service;
+  final bool collapsed;
+  final double height;
+  final ValueChanged<Offset> onMove;
+  final ValueChanged<Offset> onResize;
+  final VoidCallback onToggleCollapsed;
+  final VoidCallback onClose;
+
+  const _DictationDiagnosticsOverlay({
+    required this.service,
+    required this.collapsed,
+    required this.height,
+    required this.onMove,
+    required this.onResize,
+    required this.onToggleCollapsed,
+    required this.onClose,
+  });
+
+  @override
+  State<_DictationDiagnosticsOverlay> createState() =>
+      _DictationDiagnosticsOverlayState();
+}
+
+class _DictationDiagnosticsOverlayState
+    extends State<_DictationDiagnosticsOverlay> {
+  final _scrollController = ScrollController();
+
+  RealtimeDictationService get service => widget.service;
+  bool get collapsed => widget.collapsed;
+  double get height => widget.height;
+  ValueChanged<Offset> get onMove => widget.onMove;
+  ValueChanged<Offset> get onResize => widget.onResize;
+  VoidCallback get onToggleCollapsed => widget.onToggleCollapsed;
+  VoidCallback get onClose => widget.onClose;
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _followLatestIfNeeded() {
+    final shouldFollow =
+        !_scrollController.hasClients ||
+        _scrollController.position.extentAfter < 32;
+    if (!shouldFollow) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => Material(
+    key: const Key('dictation-debug-overlay'),
+    color: const Color(0xEE181818),
+    elevation: 12,
+    shadowColor: Colors.black54,
+    borderRadius: BorderRadius.circular(14),
+    clipBehavior: Clip.antiAlias,
+    child: AnimatedBuilder(
+      animation: service,
+      builder: (context, _) {
+        if (!collapsed) _followLatestIfNeeded();
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onPanUpdate: (details) => onMove(details.delta),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 5, 4, 5),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.drag_indicator_rounded,
+                      size: 18,
+                      color: Colors.white54,
+                    ),
+                    const SizedBox(width: 6),
+                    const Expanded(
+                      child: Text(
+                        '实时听写诊断 · Debug only',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: collapsed ? '展开' : '折叠',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: onToggleCollapsed,
+                      icon: Icon(
+                        collapsed
+                            ? Icons.expand_more_rounded
+                            : Icons.expand_less_rounded,
+                        size: 19,
+                        color: Colors.white70,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: '关闭诊断窗口',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: onClose,
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        size: 18,
+                        color: Colors.white70,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (!collapsed) ...[
+              const Divider(height: 1, color: Colors.white12),
+              SizedBox(
+                height: (height - 116).clamp(100.0, 520.0),
+                child: Scrollbar(
+                  controller: _scrollController,
+                  thumbVisibility: true,
+                  child: SingleChildScrollView(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.fromLTRB(12, 12, 18, 12),
+                    child: SelectableText(
+                      service.debugReport,
+                      style: const TextStyle(
+                        color: Color(0xFFD8F8D2),
+                        fontFamily: 'monospace',
+                        fontSize: 10.5,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const Divider(height: 1, color: Colors.white12),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 4, 8, 6),
+                child: Row(
+                  children: [
+                    TextButton.icon(
+                      onPressed: service.clearDebugDiagnostics,
+                      icon: const Icon(Icons.delete_sweep_outlined, size: 17),
+                      label: const Text('清空'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white70,
+                      ),
+                    ),
+                    TextButton.icon(
+                      key: const Key('export-dictation-debug-audio'),
+                      onPressed: service.debugAudioAvailable
+                          ? () async {
+                              final file = await service
+                                  .createDebugAudioExport();
+                              if (file == null) return;
+                              await SharePlus.instance.share(
+                                ShareParams(
+                                  files: [
+                                    XFile(
+                                      file.path,
+                                      mimeType: 'audio/wav',
+                                      name: file.uri.pathSegments.last,
+                                    ),
+                                  ],
+                                  title: 'FKNotes 实时听写诊断录音',
+                                  subject: '模型实际收到的 PCM16 音频',
+                                ),
+                              );
+                            }
+                          : null,
+                      icon: const Icon(Icons.audio_file_outlined, size: 17),
+                      label: const Text('导出录音'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white70,
+                      ),
+                    ),
+                    const Spacer(),
+                    FilledButton.icon(
+                      key: const Key('copy-dictation-debug-report'),
+                      onPressed: () async {
+                        await Clipboard.setData(
+                          ClipboardData(text: service.debugReport),
+                        );
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('诊断信息已复制')),
+                        );
+                      },
+                      icon: const Icon(Icons.copy_all_rounded, size: 17),
+                      label: const Text('复制全部'),
+                    ),
+                    const SizedBox(width: 4),
+                    MouseRegion(
+                      cursor: SystemMouseCursors.resizeDownRight,
+                      child: GestureDetector(
+                        key: const Key('resize-dictation-debug-overlay'),
+                        behavior: HitTestBehavior.opaque,
+                        onPanUpdate: (details) => onResize(details.delta),
+                        child: const Padding(
+                          padding: EdgeInsets.all(8),
+                          child: Icon(
+                            Icons.open_in_full_rounded,
+                            size: 17,
+                            color: Colors.white54,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        );
+      },
+    ),
+  );
 }
 
 class _InputLevel extends StatelessWidget {

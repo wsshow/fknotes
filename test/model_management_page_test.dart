@@ -63,7 +63,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Streaming Zipformer 中文'), findsOneWidget);
-    expect(find.text('70.6 MB'), findsOneWidget);
+    expect(find.text('159.6 MB'), findsOneWidget);
     expect(find.text('下载'), findsWidgets);
 
     await tester.drag(find.byType(ListView), const Offset(0, -1000));

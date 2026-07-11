@@ -97,7 +97,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('需要实时语音模型'), findsOneWidget);
-    expect(find.textContaining('70.6 MB'), findsOneWidget);
+    expect(find.textContaining('159.6 MB'), findsOneWidget);
     expect(find.text('管理模型'), findsOneWidget);
 
     await tester.tap(find.text('稍后再说'));

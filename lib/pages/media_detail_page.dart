@@ -350,7 +350,7 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
       _modelTransferredBytes = progress.copiedBytes;
       _modelTotalBytes = progress.totalBytes;
       _modelVerifying = progress.verifying;
-      if (progress.verifying) _modelOperationLabel = '正在校验模型完整性';
+      if (progress.verifying) _modelOperationLabel = '正在完成安装';
     });
   }
 
@@ -358,7 +358,7 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
     final transferred = _formatSize(_modelTransferredBytes);
     final total = _formatSize(_modelTotalBytes);
     final verb = _downloadingModelOnline ? '已下载' : '已导入';
-    if (_modelVerifying) return '$verb $transferred · 正在进行 SHA-256 校验';
+    if (_modelVerifying) return '$verb $transferred · 正在完成安装';
     final speed = _modelBytesPerSecond <= 0
         ? '正在测速…'
         : '${_formatSize(_modelBytesPerSecond.round())}/s';

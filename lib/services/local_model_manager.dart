@@ -111,8 +111,8 @@ class LocalModelManager extends ChangeNotifier {
       downloadSizeBytes: StreamingSpeechModelService.downloadSizeBytes,
       languages: ['普通话'],
       engine: 'sherpa-onnx',
-      version: '2023-02-23 INT8',
-      source: 'ModelScope · sherpa-onnx-asr-models',
+      version: '2025-06-30 INT8',
+      source: 'Hugging Face 官方仓库 · hf-mirror 国内镜像',
       license: 'Apache-2.0',
     ),
     LocalModelDefinition(
@@ -220,7 +220,7 @@ class LocalModelManager extends ChangeNotifier {
           onProgress: progress,
         );
       } else if (modelId == streamingChineseId) {
-        await _streamingModels.downloadFromModelScope(
+        await _streamingModels.downloadFromHuggingFaceMirror(
           shouldCancel: () => transfer.cancelRequested,
           onProgress: progress,
         );

@@ -1,8 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:isolate';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
@@ -10,6 +14,11 @@ import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 import 'streaming_speech_model_service.dart';
 
 enum RealtimeDictationStatus { idle, preparing, listening, stopping, failed }
+
+const _initialSilenceEndpointSeconds = 15.0;
+const _recognizedSpeechEndpointSeconds = 1.2;
+const _maximumUtteranceSeconds = 20.0;
+const _emptyStreamRecycleSeconds = 30.0;
 
 /// Owns one device-local streaming dictation session.
 ///
@@ -34,6 +43,28 @@ class RealtimeDictationService extends ChangeNotifier {
   Completer<void>? _readyCompleter;
   Completer<String>? _resultCompleter;
   Timer? _timer;
+  int _debugSamples = 0;
+  int _debugNonZeroSamples = 0;
+  double _debugSquares = 0;
+  double _debugPeak = 0;
+  double _debugSampleSum = 0;
+  int _debugClippedSamples = 0;
+  int _debugZeroCrossings = 0;
+  int _debugTotalChunks = 0;
+  int _debugTotalBytes = 0;
+  int _debugTotalSamples = 0;
+  double _debugLastRmsDb = -160;
+  double _debugLastPeakDb = -160;
+  double _debugLastNonZeroPercent = 0;
+  double _debugLastDcOffsetPercent = 0;
+  double _debugLastClippedPercent = 0;
+  double _debugLastZeroCrossingPercent = 0;
+  DateTime? _debugStartedAt;
+  final List<String> _debugEvents = [];
+  BytesBuilder _debugPcm = BytesBuilder(copy: false);
+  bool _debugPcmTruncated = false;
+
+  static const _debugPcmLimitBytes = 16000 * 2 * 300;
 
   RealtimeDictationStatus status = RealtimeDictationStatus.idle;
   String committedText = '';
@@ -49,7 +80,70 @@ class RealtimeDictationService extends ChangeNotifier {
     _ => false,
   };
 
+  bool get debugAudioAvailable => kDebugMode && _debugPcm.length > 0;
+
   String get text => '$committedText$partialText';
+
+  String get debugReport {
+    if (!kDebugMode) return '';
+    final now = DateTime.now();
+    final sessionSeconds = _debugStartedAt == null
+        ? 0.0
+        : now.difference(_debugStartedAt!).inMilliseconds / 1000;
+    return [
+      'FKNotes 实时听写诊断',
+      '生成时间: ${_debugTimestamp(now)}',
+      '平台: ${defaultTargetPlatform.name}',
+      '构建模式: debug',
+      '状态: ${status.name}',
+      '会话时长: ${sessionSeconds.toStringAsFixed(1)} s',
+      '界面计时: ${(elapsed.inMilliseconds / 1000).toStringAsFixed(1)} s',
+      '错误: ${errorMessage ?? '-'}',
+      '',
+      '[模型]',
+      'ID: ${StreamingSpeechModelService.modelId}',
+      '类型: zipformer2',
+      '线程数: 2',
+      '端点规则: 15.0 / 1.2 / 20 s',
+      '空流回收: 30 s（仅无任何 token 时）',
+      '',
+      '[录音配置]',
+      '编码: PCM16 little-endian',
+      '采样率: 16000 Hz',
+      '声道: mono',
+      'Android 音源: VOICE_RECOGNITION',
+      '分块: 3200 bytes / 100 ms',
+      '自动蓝牙路由: false',
+      '软件增益: false',
+      '',
+      '[实时统计]',
+      '音频块: $_debugTotalChunks',
+      '音频字节: $_debugTotalBytes',
+      '音频采样: $_debugTotalSamples',
+      '收到音频时长: ${(_debugTotalSamples / 16000).toStringAsFixed(2)} s',
+      '最近 RMS: ${_debugLastRmsDb.toStringAsFixed(1)} dBFS',
+      '最近峰值: ${_debugLastPeakDb.toStringAsFixed(1)} dBFS',
+      '最近非零采样: ${_debugLastNonZeroPercent.toStringAsFixed(1)}%',
+      '最近直流偏置: ${_debugLastDcOffsetPercent.toStringAsFixed(3)}%',
+      '最近削波采样: ${_debugLastClippedPercent.toStringAsFixed(3)}%',
+      '最近过零率: ${_debugLastZeroCrossingPercent.toStringAsFixed(1)}%',
+      '当前音量值: ${inputLevel.toStringAsFixed(3)}',
+      '诊断录音: ${(_debugPcm.length / 32000).toStringAsFixed(2)} s'
+          '${_debugPcmTruncated ? '（已截断至 5 分钟）' : ''}',
+      '已提交文本: ${committedText.isEmpty ? '-' : committedText}',
+      '临时文本: ${partialText.isEmpty ? '-' : partialText}',
+      '',
+      '[事件时间线]',
+      if (_debugEvents.isEmpty) '- 暂无事件' else ..._debugEvents,
+    ].join('\n');
+  }
+
+  void clearDebugDiagnostics() {
+    if (!kDebugMode) return;
+    _debugEvents.clear();
+    _debugEvent('诊断时间线已清空');
+    notifyListeners();
+  }
 
   Future<void> start() async {
     if (isActive) return;
@@ -59,15 +153,34 @@ class RealtimeDictationService extends ChangeNotifier {
     errorMessage = null;
     elapsed = Duration.zero;
     inputLevel = 0;
+    if (kDebugMode) {
+      _debugStartedAt = DateTime.now();
+      _debugEvents.clear();
+      _debugTotalChunks = 0;
+      _debugTotalBytes = 0;
+      _debugTotalSamples = 0;
+      _debugLastRmsDb = -160;
+      _debugLastPeakDb = -160;
+      _debugLastNonZeroPercent = 0;
+      _debugLastDcOffsetPercent = 0;
+      _debugLastClippedPercent = 0;
+      _debugLastZeroCrossingPercent = 0;
+      _debugPcm = BytesBuilder(copy: false);
+      _debugPcmTruncated = false;
+      _debugEvent('开始准备实时听写');
+    }
+    _resetDebugAudioWindow();
     notifyListeners();
     try {
       final model = await _models.inspect();
+      _debugEvent('模型检查: installed=${model.installed}');
       if (!model.installed) throw StateError('请先下载实时语音输入模型');
       var permission = await Permission.microphone.status;
       if (!permission.isGranted) {
         permission = await Permission.microphone.request();
       }
       if (!permission.isGranted) throw StateError('需要麦克风权限才能实时听写');
+      _debugEvent('麦克风权限: granted');
       await _startWorker(model);
       final recorder = AudioRecorder();
       _recorder = recorder;
@@ -75,14 +188,24 @@ class RealtimeDictationService extends ChangeNotifier {
         AudioEncoder.pcm16bits,
       );
       if (!supported) throw UnsupportedError('当前设备不支持 PCM 实时录音');
+      _debugEvent('PCM16 编码支持: true');
       final audio = await recorder.startStream(
         const RecordConfig(
           encoder: AudioEncoder.pcm16bits,
           sampleRate: 16000,
           numChannels: 1,
-          autoGain: true,
-          echoCancel: true,
-          noiseSuppress: true,
+          // Select the physical microphone explicitly. Keep Bluetooth routing
+          // disabled until the editor offers an input device picker, otherwise
+          // a connected headset can silently replace the phone microphone.
+          androidConfig: AndroidRecordConfig(
+            manageBluetooth: false,
+            // Android defines this source specifically for speech recognition.
+            // It lets the device select its ASR-tuned microphone path without
+            // adding any FKNotes-side software gain.
+            audioSource: AndroidAudioSource.voiceRecognition,
+          ),
+          // 100 ms of mono PCM16 at 16 kHz. Fixed, frame-aligned chunks keep
+          // streaming latency predictable across Android vendors.
           streamBufferSize: 3200,
         ),
       );
@@ -91,12 +214,14 @@ class RealtimeDictationService extends ChangeNotifier {
         onError: (Object error) => _fail(error),
       );
       status = RealtimeDictationStatus.listening;
+      _debugEvent('录音流已启动，进入 listening');
       _timer = Timer.periodic(const Duration(seconds: 1), (_) {
         elapsed += const Duration(seconds: 1);
         notifyListeners();
       });
       notifyListeners();
     } catch (error) {
+      _debugEvent('启动失败: $error');
       await _cleanup(killWorker: true);
       status = RealtimeDictationStatus.failed;
       errorMessage = _friendlyError(error);
@@ -108,6 +233,7 @@ class RealtimeDictationService extends ChangeNotifier {
   Future<String> stop() async {
     if (!isActive) return text;
     status = RealtimeDictationStatus.stopping;
+    _debugEvent('用户请求完成，进入 stopping');
     _timer?.cancel();
     notifyListeners();
     try {
@@ -120,8 +246,10 @@ class RealtimeDictationService extends ChangeNotifier {
       committedText = result.trim();
       partialText = '';
       status = RealtimeDictationStatus.idle;
+      _debugEvent('识别完成: ${committedText.isEmpty ? "无文本" : committedText}');
       return committedText;
     } catch (error) {
+      _debugEvent('停止失败: $error');
       status = RealtimeDictationStatus.failed;
       errorMessage = _friendlyError(error);
       rethrow;
@@ -135,6 +263,7 @@ class RealtimeDictationService extends ChangeNotifier {
     if (!isActive && status != RealtimeDictationStatus.failed) return;
     _timer?.cancel();
     try {
+      _debugEvent('用户取消实时听写');
       await _recorder?.cancel();
     } finally {
       committedText = '';
@@ -161,6 +290,7 @@ class RealtimeDictationService extends ChangeNotifier {
     _messageSubscription = _messages!.listen(_handleWorkerMessage);
     _errorSubscription = _errors!.listen((dynamic error) => _fail(error));
     _exitSubscription = _exits!.listen((_) {
+      _debugEvent('识别工作线程退出');
       if (isActive && !(_resultCompleter?.isCompleted ?? true)) {
         _fail(StateError('实时语音识别进程意外结束'));
       }
@@ -184,6 +314,7 @@ class RealtimeDictationService extends ChangeNotifier {
     if (message is! Map) return;
     switch (message['type']) {
       case 'ready':
+        _debugEvent('识别工作线程已就绪');
         _commandPort = message['commandPort'] as SendPort?;
         if (!(_readyCompleter?.isCompleted ?? true)) {
           _readyCompleter!.complete();
@@ -192,23 +323,73 @@ class RealtimeDictationService extends ChangeNotifier {
       case 'update':
         committedText = message['committed'] as String? ?? committedText;
         partialText = message['partial'] as String? ?? partialText;
+        _debugEvent('文本更新: committed="$committedText", partial="$partialText"');
         notifyListeners();
         return;
       case 'done':
         final result = message['text'] as String? ?? text;
+        _debugEvent('工作线程完成: "$result"');
         if (!(_resultCompleter?.isCompleted ?? true)) {
           _resultCompleter!.complete(result);
         }
         return;
       case 'error':
+        _debugEvent('工作线程错误: ${message['message']}');
         _fail(StateError(message['message'] as String? ?? '实时语音识别失败'));
+        return;
+      case 'debug':
+        _debugEvent(
+          '解码事件: ${message['event']}, text="${message['text'] ?? ''}"',
+        );
         return;
     }
   }
 
   void _sendAudio(Uint8List bytes) {
     if (status != RealtimeDictationStatus.listening || bytes.isEmpty) return;
-    inputLevel = _pcmLevel(bytes);
+    final stats = _pcmStats(bytes);
+    inputLevel = stats.level;
+    if (kDebugMode) {
+      final remaining = _debugPcmLimitBytes - _debugPcm.length;
+      if (remaining > 0) {
+        _debugPcm.add(
+          remaining >= bytes.length ? bytes : bytes.sublist(0, remaining),
+        );
+      }
+      if (remaining < bytes.length) _debugPcmTruncated = true;
+      _debugTotalChunks++;
+      _debugTotalBytes += bytes.length;
+      _debugTotalSamples += stats.samples;
+      _debugSamples += stats.samples;
+      _debugNonZeroSamples += stats.nonZeroSamples;
+      _debugSquares += stats.squares;
+      _debugPeak = math.max(_debugPeak, stats.peak);
+      _debugSampleSum += stats.sampleSum;
+      _debugClippedSamples += stats.clippedSamples;
+      _debugZeroCrossings += stats.zeroCrossings;
+      if (_debugSamples >= 16000) {
+        final rms = math.sqrt(_debugSquares / _debugSamples);
+        final nonZeroRatio = _debugNonZeroSamples / _debugSamples;
+        _debugLastRmsDb = _amplitudeDb(rms);
+        _debugLastPeakDb = _amplitudeDb(_debugPeak);
+        _debugLastNonZeroPercent = nonZeroRatio * 100;
+        _debugLastDcOffsetPercent =
+            (_debugSampleSum / _debugSamples).abs() * 100;
+        _debugLastClippedPercent = _debugClippedSamples / _debugSamples * 100;
+        _debugLastZeroCrossingPercent =
+            _debugZeroCrossings / _debugSamples * 100;
+        _debugEvent(
+          'PCM: samples=$_debugSamples, '
+          'rms=${_debugLastRmsDb.toStringAsFixed(1)} dBFS, '
+          'peak=${_debugLastPeakDb.toStringAsFixed(1)} dBFS, '
+          'nonZero=${_debugLastNonZeroPercent.toStringAsFixed(1)}%, '
+          'dc=${_debugLastDcOffsetPercent.toStringAsFixed(3)}%, '
+          'clip=${_debugLastClippedPercent.toStringAsFixed(3)}%, '
+          'zcr=${_debugLastZeroCrossingPercent.toStringAsFixed(1)}%',
+        );
+        _resetDebugAudioWindow();
+      }
+    }
     _commandPort?.send({
       'type': 'audio',
       'data': TransferableTypedData.fromList([bytes]),
@@ -217,6 +398,7 @@ class RealtimeDictationService extends ChangeNotifier {
   }
 
   void _fail(Object error) {
+    _debugEvent('会话失败: $error');
     if (!(_readyCompleter?.isCompleted ?? true)) {
       _readyCompleter!.completeError(error);
     }
@@ -253,24 +435,151 @@ class RealtimeDictationService extends ChangeNotifier {
     _recorder = null;
   }
 
-  double _pcmLevel(Uint8List bytes) {
+  _PcmStats _pcmStats(Uint8List bytes) {
     final evenLength = bytes.length - bytes.length.remainder(2);
-    if (evenLength < 2) return 0;
+    if (evenLength < 2) return const _PcmStats.empty();
     final data = ByteData.sublistView(bytes, 0, evenLength);
     var squares = 0.0;
+    var peak = 0.0;
+    var nonZeroSamples = 0;
+    var sampleSum = 0.0;
+    var clippedSamples = 0;
+    var zeroCrossings = 0;
+    double? previous;
     final samples = evenLength ~/ 2;
     for (var offset = 0; offset < evenLength; offset += 2) {
       final value = data.getInt16(offset, Endian.little) / 32768.0;
       squares += value * value;
+      sampleSum += value;
+      peak = math.max(peak, value.abs());
+      if (value != 0) nonZeroSamples++;
+      if (value.abs() >= 0.999) clippedSamples++;
+      if (previous != null &&
+          ((previous < 0 && value >= 0) || (previous >= 0 && value < 0))) {
+        zeroCrossings++;
+      }
+      previous = value;
     }
     final rms = math.sqrt(squares / samples);
-    return (rms * 5).clamp(0.0, 1.0);
+    return _PcmStats(
+      samples: samples,
+      nonZeroSamples: nonZeroSamples,
+      squares: squares,
+      peak: peak,
+      sampleSum: sampleSum,
+      clippedSamples: clippedSamples,
+      zeroCrossings: zeroCrossings,
+      level: (rms * 5).clamp(0.0, 1.0),
+    );
+  }
+
+  void _resetDebugAudioWindow() {
+    _debugSamples = 0;
+    _debugNonZeroSamples = 0;
+    _debugSquares = 0;
+    _debugPeak = 0;
+    _debugSampleSum = 0;
+    _debugClippedSamples = 0;
+    _debugZeroCrossings = 0;
+  }
+
+  Future<File?> createDebugAudioExport() async {
+    if (!debugAudioAvailable) return null;
+    final now = DateTime.now();
+    final stamp = now.toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
+    final directory = Directory(
+      p.join((await getTemporaryDirectory()).path, 'fknotes_asr_diagnostics'),
+    );
+    await directory.create(recursive: true);
+    final file = File(p.join(directory.path, 'fknotes-asr-debug-$stamp.wav'));
+    await file.writeAsBytes(_pcm16Wave(_debugPcm.toBytes()), flush: true);
+    _debugEvent('已导出模型输入录音: ${file.path}');
+    notifyListeners();
+    return file;
+  }
+
+  void _debugEvent(String message) {
+    if (!kDebugMode) return;
+    final line = '${_debugTimestamp(DateTime.now())}  $message';
+    _debugEvents.add(line);
+    if (_debugEvents.length > 300) _debugEvents.removeAt(0);
+    debugPrint('FKNOTES_ASR $line');
   }
 
   String _friendlyError(Object error) => error.toString().replaceFirst(
     RegExp(r'^(Bad state: |StateError: |Exception: |Unsupported operation: )'),
     '',
   );
+}
+
+class _PcmStats {
+  final int samples;
+  final int nonZeroSamples;
+  final double squares;
+  final double peak;
+  final double sampleSum;
+  final int clippedSamples;
+  final int zeroCrossings;
+  final double level;
+
+  const _PcmStats({
+    required this.samples,
+    required this.nonZeroSamples,
+    required this.squares,
+    required this.peak,
+    required this.sampleSum,
+    required this.clippedSamples,
+    required this.zeroCrossings,
+    required this.level,
+  });
+
+  const _PcmStats.empty()
+    : samples = 0,
+      nonZeroSamples = 0,
+      squares = 0,
+      peak = 0,
+      sampleSum = 0,
+      clippedSamples = 0,
+      zeroCrossings = 0,
+      level = 0;
+}
+
+Uint8List _pcm16Wave(Uint8List pcm) {
+  final output = Uint8List(44 + pcm.length);
+  final data = ByteData.sublistView(output);
+  void ascii(int offset, String value) {
+    for (var index = 0; index < value.length; index++) {
+      output[offset + index] = value.codeUnitAt(index);
+    }
+  }
+
+  ascii(0, 'RIFF');
+  data.setUint32(4, 36 + pcm.length, Endian.little);
+  ascii(8, 'WAVE');
+  ascii(12, 'fmt ');
+  data.setUint32(16, 16, Endian.little);
+  data.setUint16(20, 1, Endian.little);
+  data.setUint16(22, 1, Endian.little);
+  data.setUint32(24, 16000, Endian.little);
+  data.setUint32(28, 32000, Endian.little);
+  data.setUint16(32, 2, Endian.little);
+  data.setUint16(34, 16, Endian.little);
+  ascii(36, 'data');
+  data.setUint32(40, pcm.length, Endian.little);
+  output.setRange(44, output.length, pcm);
+  return output;
+}
+
+double _amplitudeDb(double amplitude) {
+  if (amplitude <= 0) return -160;
+  return 20 * math.log(amplitude) / math.ln10;
+}
+
+String _debugTimestamp(DateTime value) {
+  String two(int number) => number.toString().padLeft(2, '0');
+  String three(int number) => number.toString().padLeft(3, '0');
+  return '${two(value.hour)}:${two(value.minute)}:${two(value.second)}.'
+      '${three(value.millisecond)}';
 }
 
 @pragma('vm:entry-point')
@@ -281,10 +590,17 @@ void _realtimeRecognitionWorker(Map<String, Object> args) {
   sherpa.OnlineStream? stream;
   var committed = '';
   var lastPartial = '';
+  var lastSentCommitted = '';
+  var lastSentPartial = '';
+  var emptyEndpointReported = false;
+  var streamSamples = 0;
+  final pcmDecoder = _Pcm16StreamDecoder();
 
   void sendUpdate(String partial) {
-    if (partial == lastPartial && partial.isNotEmpty) return;
+    if (committed == lastSentCommitted && partial == lastSentPartial) return;
     lastPartial = partial;
+    lastSentCommitted = committed;
+    lastSentPartial = partial;
     sendPort.send({
       'type': 'update',
       'committed': committed,
@@ -312,12 +628,18 @@ void _realtimeRecognitionWorker(Map<String, Object> args) {
           tokens: args['tokensPath'] as String,
           numThreads: 2,
           debug: false,
-          modelType: 'zipformer',
+          // Match this model's official sherpa-onnx configuration exactly:
+          // model type is inferred from ONNX metadata and tokens are CJK chars.
+          modelType: '',
+          modelingUnit: 'cjkchar',
         ),
         enableEndpoint: true,
-        rule1MinTrailingSilence: 2.0,
-        rule2MinTrailingSilence: 0.9,
-        rule3MinUtteranceLength: 20,
+        // Treat leading silence, recognized-speech pauses, and long
+        // utterances as separate concerns. This mirrors mature continuous
+        // dictation systems instead of using one silence timeout for all.
+        rule1MinTrailingSilence: _initialSilenceEndpointSeconds,
+        rule2MinTrailingSilence: _recognizedSpeechEndpointSeconds,
+        rule3MinUtteranceLength: _maximumUtteranceSeconds,
       ),
     );
     stream = recognizer.createStream();
@@ -327,17 +649,73 @@ void _realtimeRecognitionWorker(Map<String, Object> args) {
       try {
         if (raw['type'] == 'audio') {
           final payload = raw['data'] as TransferableTypedData;
-          final samples = _pcm16ToFloat(payload.materialize().asUint8List());
+          final samples = pcmDecoder.add(payload.materialize().asUint8List());
+          if (samples.isEmpty) return;
+          streamSamples += samples.length;
           stream!.acceptWaveform(samples: samples, sampleRate: 16000);
           while (recognizer!.isReady(stream!)) {
             recognizer!.decode(stream!);
           }
           final result = recognizer!.getResult(stream!).text.trim();
-          if (recognizer!.isEndpoint(stream!)) {
+          if (kDebugMode && result != lastPartial) {
+            sendPort.send({
+              'type': 'debug',
+              'event': 'partial',
+              'text': result,
+            });
+          }
+          final isEndpoint = recognizer!.isEndpoint(stream!);
+          if (isEndpoint && result.isNotEmpty) {
+            if (kDebugMode) {
+              sendPort.send({
+                'type': 'debug',
+                'event': 'endpoint',
+                'text': result,
+              });
+            }
             finishSegment(result);
-            recognizer!.reset(stream!);
+            // Start every utterance with a fresh decoder stream. Reusing the
+            // same native stream via reset() can leave the transducer in an
+            // endpoint state on some Android runtimes: audio keeps arriving,
+            // but later utterances no longer produce hypotheses.
+            stream!.free();
+            stream = recognizer!.createStream();
+            streamSamples = 0;
+            emptyEndpointReported = false;
             sendUpdate('');
+          } else if (isEndpoint &&
+              result.isEmpty &&
+              streamSamples >= 16000 * _emptyStreamRecycleSeconds) {
+            // Continuous dictation should not stop just because the user has
+            // not spoken. Recycle only a stream that has produced no token for
+            // a deliberately conservative interval; the session and model
+            // stay alive, while stale feature history is released.
+            if (kDebugMode) {
+              sendPort.send({
+                'type': 'debug',
+                'event': 'empty_stream_recycled',
+                'text': '',
+              });
+            }
+            stream!.free();
+            stream = recognizer!.createStream();
+            streamSamples = 0;
+            emptyEndpointReported = false;
           } else {
+            // Rule 1 can report an endpoint after trailing silence even when
+            // the transducer has not emitted a token yet. Resetting here used
+            // to discard all acoustic context every few seconds, so longer-
+            // latency models could never produce their first hypothesis.
+            // Keep decoding the same stream until there is actual text.
+            if (isEndpoint && !emptyEndpointReported && kDebugMode) {
+              sendPort.send({
+                'type': 'debug',
+                'event': 'empty_endpoint_ignored',
+                'text': '',
+              });
+              emptyEndpointReported = true;
+            }
+            if (!isEndpoint) emptyEndpointReported = false;
             sendUpdate(result);
           }
           return;
@@ -367,14 +745,41 @@ void _realtimeRecognitionWorker(Map<String, Object> args) {
   }
 }
 
-Float32List _pcm16ToFloat(Uint8List bytes) {
-  final evenLength = bytes.length - bytes.length.remainder(2);
-  final data = ByteData.sublistView(bytes, 0, evenLength);
-  final samples = Float32List(evenLength ~/ 2);
-  for (var index = 0; index < samples.length; index++) {
-    samples[index] = data.getInt16(index * 2, Endian.little) / 32768.0;
+class _Pcm16StreamDecoder {
+  int? _pendingLowByte;
+
+  Float32List add(Uint8List bytes) {
+    if (bytes.isEmpty) return Float32List(0);
+    final hasPendingByte = _pendingLowByte != null;
+    final byteCount = bytes.length + (hasPendingByte ? 1 : 0);
+    final sampleCount = byteCount ~/ 2;
+    final samples = Float32List(sampleCount);
+    var inputIndex = 0;
+    var outputIndex = 0;
+
+    if (hasPendingByte && bytes.isNotEmpty) {
+      samples[outputIndex++] = _pcm16Sample(_pendingLowByte!, bytes[0]);
+      _pendingLowByte = null;
+      inputIndex = 1;
+    }
+    while (inputIndex + 1 < bytes.length) {
+      samples[outputIndex++] = _pcm16Sample(
+        bytes[inputIndex],
+        bytes[inputIndex + 1],
+      );
+      inputIndex += 2;
+    }
+    if (inputIndex < bytes.length) {
+      _pendingLowByte = bytes[inputIndex];
+    }
+    return samples;
   }
-  return samples;
+}
+
+double _pcm16Sample(int lowByte, int highByte) {
+  final unsigned = lowByte | (highByte << 8);
+  final signed = unsigned >= 0x8000 ? unsigned - 0x10000 : unsigned;
+  return signed / 32768.0;
 }
 
 String _joinDictationSegments(String current, String segment) {

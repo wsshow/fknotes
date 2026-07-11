@@ -45,7 +45,7 @@ dependencies:
   image: ^4.5.3
   uuid: ^4.5.1
   mime: ^2.0.0
-  record: ^7.1.0
+  record: ^7.1.1
   file_selector: ^1.1.0
   archive: ^4.0.9
   share_plus: ^13.2.0

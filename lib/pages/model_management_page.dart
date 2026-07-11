@@ -21,7 +21,10 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
   void initState() {
     super.initState();
     _manager.addListener(_changed);
-    unawaited(_manager.initialize());
+    // Model files may have been replaced by an app upgrade or removed outside
+    // this page. Always validate the on-disk runtime instead of showing a
+    // possibly stale singleton snapshot.
+    unawaited(_manager.initialize(force: true));
   }
 
   void _changed() {
@@ -473,7 +476,7 @@ class _ModelCard extends StatelessWidget {
 
   String _transferDescription(ModelTransferState state) {
     if (state.status == ModelTransferStatus.verifying) {
-      return '已下载 ${_formatBytes(state.transferredBytes)} · 正在校验完整性';
+      return '已下载 ${_formatBytes(state.transferredBytes)} · 正在完成安装';
     }
     final verb = state.status == ModelTransferStatus.importing ? '已导入' : '已下载';
     final speed = state.bytesPerSecond <= 0
