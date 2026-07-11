@@ -11,6 +11,7 @@ import '../models/note_entry.dart';
 import 'file_storage_service.dart';
 import 'note_service.dart';
 import 'speech_model_service.dart';
+import 'voice_activity_model_service.dart';
 
 enum TranscriptionStatus {
   preparing,
@@ -63,6 +64,7 @@ class SpeechTranscriptionService extends ChangeNotifier {
   static const _audioChannel = MethodChannel('fknotes/audio_decode');
   final _storage = FileStorageService.instance;
   final _models = SpeechModelService.instance;
+  final _voiceActivityModels = VoiceActivityModelService.instance;
   final _notes = NoteService.instance;
   final Map<String, TranscriptionJob> _jobs = {};
 
@@ -93,6 +95,9 @@ class SpeechTranscriptionService extends ChangeNotifier {
     try {
       final model = await _models.inspect();
       if (!model.installed) throw StateError('请先导入离线语音识别模型');
+      final voiceActivity = await _voiceActivityModels.inspect(
+        verifyIntegrity: true,
+      );
       final source = _storage.absolutePath(job.filePath);
       if (!await File(source).exists()) throw StateError('音频文件不存在');
       _update(job, status: TranscriptionStatus.decoding, progress: .04);
@@ -104,6 +109,7 @@ class SpeechTranscriptionService extends ChangeNotifier {
         wavePath: temporaryWave,
         modelPath: model.modelPath,
         tokensPath: model.tokensPath,
+        vadModelPath: voiceActivity.installed ? voiceActivity.modelPath : '',
       );
       if (job.status == TranscriptionStatus.canceled) return;
       final normalized = text.trim();
@@ -160,6 +166,7 @@ class SpeechTranscriptionService extends ChangeNotifier {
     required String wavePath,
     required String modelPath,
     required String tokensPath,
+    required String vadModelPath,
   }) async {
     final messages = ReceivePort();
     final errors = ReceivePort();
@@ -208,6 +215,7 @@ class SpeechTranscriptionService extends ChangeNotifier {
         'wavePath': wavePath,
         'modelPath': modelPath,
         'tokensPath': tokensPath,
+        'vadModelPath': vadModelPath,
       },
       onError: errors.sendPort,
       onExit: exits.sendPort,
@@ -279,10 +287,13 @@ class _TranscriptionCanceled implements Exception {
 void _transcriptionWorker(Map<String, Object> args) {
   final sendPort = args['sendPort'] as SendPort;
   sherpa.OfflineRecognizer? recognizer;
+  sherpa.VoiceActivityDetector? vad;
+  _Pcm16WaveReader? wave;
   try {
     sherpa.initBindings();
-    final wave = _Pcm16WaveReader.open(args['wavePath'] as String);
-    recognizer = sherpa.OfflineRecognizer(
+    final activeWave = _Pcm16WaveReader.open(args['wavePath'] as String);
+    wave = activeWave;
+    final activeRecognizer = sherpa.OfflineRecognizer(
       sherpa.OfflineRecognizerConfig(
         model: sherpa.OfflineModelConfig(
           senseVoice: sherpa.OfflineSenseVoiceModelConfig(
@@ -296,33 +307,96 @@ void _transcriptionWorker(Map<String, Object> args) {
         ),
       ),
     );
-    const chunkSeconds = 25;
+    recognizer = activeRecognizer;
     final pieces = <String>[];
-    var completedFrames = 0;
-    while (true) {
-      final samples = wave.readSamples(wave.sampleRate * chunkSeconds);
-      if (samples.isEmpty) break;
-      final stream = recognizer.createStream();
+
+    void recognize(Float32List samples) {
+      if (samples.isEmpty) return;
+      final stream = activeRecognizer.createStream();
       try {
-        stream.acceptWaveform(samples: samples, sampleRate: wave.sampleRate);
-        recognizer.decode(stream);
-        final text = recognizer.getResult(stream).text.trim();
+        stream.acceptWaveform(
+          samples: samples,
+          sampleRate: activeWave.sampleRate,
+        );
+        activeRecognizer.decode(stream);
+        final text = activeRecognizer.getResult(stream).text.trim();
         if (text.isNotEmpty) pieces.add(text);
       } finally {
         stream.free();
       }
-      completedFrames += samples.length;
+    }
+
+    void report(int completedFrames) {
       sendPort.send({
         'type': 'progress',
-        'progress': completedFrames / wave.totalFrames,
+        'progress': completedFrames / activeWave.totalFrames,
         'text': pieces.join('\n'),
       });
     }
-    wave.close();
+
+    final vadModelPath = args['vadModelPath'] as String? ?? '';
+    if (vadModelPath.isNotEmpty && activeWave.sampleRate == 16000) {
+      final activeVad = sherpa.VoiceActivityDetector(
+        config: sherpa.VadModelConfig(
+          sileroVad: sherpa.SileroVadModelConfig(
+            model: vadModelPath,
+            // Mobile microphone recordings can be much quieter than studio
+            // test audio. 0.5 missed a clearly intelligible phrase in the
+            // exported FKNotes diagnostic WAV; 0.3 retained every utterance
+            // while still removing the long silent gaps.
+            threshold: 0.3,
+            minSilenceDuration: 0.5,
+            minSpeechDuration: 0.25,
+            windowSize: 512,
+            maxSpeechDuration: 25,
+          ),
+          sampleRate: 16000,
+          numThreads: 1,
+          debug: false,
+        ),
+        bufferSizeInSeconds: 60,
+      );
+      vad = activeVad;
+      var completedFrames = 0;
+
+      void recognizeQueuedSegments() {
+        while (!activeVad.isEmpty()) {
+          final segment = activeVad.front();
+          activeVad.pop();
+          recognize(segment.samples);
+        }
+      }
+
+      while (true) {
+        final samples = activeWave.readSamples(activeWave.sampleRate);
+        if (samples.isEmpty) break;
+        activeVad.acceptWaveform(samples);
+        completedFrames += samples.length;
+        recognizeQueuedSegments();
+        report(completedFrames);
+      }
+      activeVad.flush();
+      recognizeQueuedSegments();
+      report(activeWave.totalFrames);
+    } else {
+      const chunkSeconds = 25;
+      var completedFrames = 0;
+      while (true) {
+        final samples = activeWave.readSamples(
+          activeWave.sampleRate * chunkSeconds,
+        );
+        if (samples.isEmpty) break;
+        recognize(samples);
+        completedFrames += samples.length;
+        report(completedFrames);
+      }
+    }
     sendPort.send({'type': 'result', 'text': pieces.join('\n')});
   } catch (error) {
     sendPort.send({'type': 'error', 'message': error.toString()});
   } finally {
+    wave?.close();
+    vad?.free();
     recognizer?.free();
   }
 }

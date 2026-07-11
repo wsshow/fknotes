@@ -4,6 +4,7 @@ import 'package:fknotes/pages/model_management_page.dart';
 import 'package:fknotes/services/file_storage_service.dart';
 import 'package:fknotes/services/local_model_manager.dart';
 import 'package:fknotes/services/speech_model_service.dart';
+import 'package:fknotes/services/voice_activity_model_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -33,6 +34,18 @@ void main() {
     await File(
       p.join(partial.parent.path, 'MODEL_LICENSE.txt.part'),
     ).writeAsBytes(List<int>.filled(71, 3));
+    final vadPartial = File(
+      p.join(
+        storageDirectory.path,
+        'models',
+        'audio',
+        'silero-vad-int8-16khz',
+        '.download',
+        '${VoiceActivityModelService.modelFileName}.part',
+      ),
+    );
+    await vadPartial.parent.create(recursive: true);
+    await vadPartial.writeAsBytes(List<int>.filled(123, 4));
     await LocalModelManager.instance.initialize(force: true);
   });
 
@@ -42,6 +55,10 @@ void main() {
 
   test('partial size includes every resumable model file', () async {
     expect(await SpeechModelService.instance.partialDownloadBytes(), 2631);
+    expect(
+      await VoiceActivityModelService.instance.partialDownloadBytes(),
+      123,
+    );
   });
 
   testWidgets('model manager groups available, built-in and planned models', (
@@ -76,6 +93,16 @@ void main() {
 
     expect(find.text('Streaming Zipformer 中英双语'), findsOneWidget);
     expect(find.text('189.1 MB'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('Silero VAD INT8'),
+      350,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Silero VAD INT8'), findsOneWidget);
+    expect(find.text('207.9 KB'), findsOneWidget);
 
     await tester.drag(find.byType(ListView), const Offset(0, -1000));
     await tester.pumpAndSettle();

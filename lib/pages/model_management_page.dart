@@ -331,6 +331,7 @@ class _ModelCard extends StatelessWidget {
     final icon = switch (definition.task) {
       LocalModelTask.audioTranscription => Icons.graphic_eq_rounded,
       LocalModelTask.liveDictation => Icons.mic_rounded,
+      LocalModelTask.voiceActivityDetection => Icons.multiline_chart_rounded,
       LocalModelTask.textRecognition => Icons.document_scanner_rounded,
       LocalModelTask.imageUnderstanding => Icons.image_search_rounded,
     };

@@ -5,6 +5,7 @@ enum LocalModelAvailability { downloadable, builtIn, planned }
 enum LocalModelTask {
   audioTranscription,
   liveDictation,
+  voiceActivityDetection,
   textRecognition,
   imageUnderstanding,
 }

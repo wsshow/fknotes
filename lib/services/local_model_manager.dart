@@ -7,6 +7,7 @@ import 'realtime_dictation_service.dart';
 import 'speech_model_service.dart';
 import 'speech_transcription_service.dart';
 import 'streaming_speech_model_service.dart';
+import 'voice_activity_model_service.dart';
 
 enum ModelTransferStatus {
   downloading,
@@ -82,6 +83,7 @@ class LocalModelManager extends ChangeNotifier {
   static const streamingChineseId = StreamingSpeechModelService.modelId;
   static const streamingBilingualId =
       StreamingSpeechModelService.bilingualModelId;
+  static const voiceActivityId = VoiceActivityModelService.modelId;
   static const mlKitChineseOcrId = 'mlkit-text-recognition-chinese';
   static const imageUnderstandingId = 'image-understanding-local';
 
@@ -133,6 +135,22 @@ class LocalModelManager extends ChangeNotifier {
       license: 'Apache-2.0',
     ),
     LocalModelDefinition(
+      id: voiceActivityId,
+      name: 'Silero VAD INT8',
+      summary: '检测人声并跳过长录音中的静音',
+      description: '作为音频转写基础组件，在设备端定位有效语音片段，减少静音带来的耗时和误识别。',
+      category: LocalModelCategory.speech,
+      availability: LocalModelAvailability.downloadable,
+      task: LocalModelTask.voiceActivityDetection,
+      downloadSizeBytes: VoiceActivityModelService.downloadSizeBytes,
+      languages: ['与语言无关'],
+      engine: 'sherpa-onnx · Silero VAD',
+      version: 'INT8 · 16 kHz',
+      source: 'k2-fsa 官方模型',
+      license: 'MIT',
+      recommended: true,
+    ),
+    LocalModelDefinition(
       id: mlKitChineseOcrId,
       name: 'ML Kit 中文文字识别',
       summary: '图片中的中文与拉丁文字 OCR',
@@ -163,6 +181,7 @@ class LocalModelManager extends ChangeNotifier {
 
   final _speechModels = SpeechModelService.instance;
   final _streamingModels = StreamingSpeechModelService.instance;
+  final _voiceActivityModels = VoiceActivityModelService.instance;
   final Map<String, LocalModelInstallation> _installations = {};
   final Map<String, ModelTransferState> _transfers = {};
   bool _initialized = false;
@@ -196,6 +215,8 @@ class LocalModelManager extends ChangeNotifier {
       _streamingModels.inspect(modelId: streamingBilingualId),
       _streamingModels.partialDownloadBytes(streamingBilingualId),
       _streamingModels.selectedModelId(),
+      _voiceActivityModels.inspect(),
+      _voiceActivityModels.partialDownloadBytes(),
     ]);
     final speech = results[0] as SpeechModelInfo;
     final partial = results[1] as int;
@@ -204,6 +225,8 @@ class LocalModelManager extends ChangeNotifier {
     final bilingual = results[4] as StreamingSpeechModelInfo;
     final bilingualPartial = results[5] as int;
     _selectedLiveDictationModelId = results[6] as String;
+    final voiceActivity = results[7] as VoiceActivityModelInfo;
+    final voiceActivityPartial = results[8] as int;
     _installations[senseVoiceId] = LocalModelInstallation(
       installed: speech.installed,
       installedSizeBytes: speech.sizeBytes,
@@ -218,6 +241,11 @@ class LocalModelManager extends ChangeNotifier {
       installed: bilingual.installed,
       installedSizeBytes: bilingual.sizeBytes,
       partialSizeBytes: bilingualPartial,
+    );
+    _installations[voiceActivityId] = LocalModelInstallation(
+      installed: voiceActivity.installed,
+      installedSizeBytes: voiceActivity.sizeBytes,
+      partialSizeBytes: voiceActivityPartial,
     );
     _installations[mlKitChineseOcrId] = const LocalModelInstallation(
       installed: true,
@@ -247,6 +275,11 @@ class LocalModelManager extends ChangeNotifier {
 
       if (modelId == senseVoiceId) {
         await _speechModels.downloadFromModelScope(
+          shouldCancel: () => transfer.cancelRequested,
+          onProgress: progress,
+        );
+      } else if (modelId == voiceActivityId) {
+        await _voiceActivityModels.download(
           shouldCancel: () => transfer.cancelRequested,
           onProgress: progress,
         );
@@ -280,6 +313,7 @@ class LocalModelManager extends ChangeNotifier {
 
   Future<void> import(String modelId) async {
     if (modelId != senseVoiceId &&
+        modelId != voiceActivityId &&
         !StreamingSpeechModelService.supportedModelIds.contains(modelId)) {
       return;
     }
@@ -299,6 +333,10 @@ class LocalModelManager extends ChangeNotifier {
       final Object? imported;
       if (modelId == senseVoiceId) {
         imported = await _speechModels.pickAndImport(onProgress: progress);
+      } else if (modelId == voiceActivityId) {
+        imported = await _voiceActivityModels.pickAndImport(
+          onProgress: progress,
+        );
       } else {
         imported = await _streamingModels.pickAndImport(
           modelId,
@@ -336,6 +374,13 @@ class LocalModelManager extends ChangeNotifier {
         throw StateError('请先等待正在进行的转写结束');
       }
       await _speechModels.remove();
+    } else if (modelId == voiceActivityId) {
+      if (SpeechTranscriptionService.instance.jobs.any(
+        (job) => job.isRunning,
+      )) {
+        throw StateError('请先等待正在进行的转写结束');
+      }
+      await _voiceActivityModels.remove();
     } else if (StreamingSpeechModelService.supportedModelIds.contains(
       modelId,
     )) {
