@@ -12,6 +12,8 @@ import '../models/note_entry.dart';
 import '../providers/note_provider.dart';
 import '../services/file_storage_service.dart';
 import '../services/local_model_manager.dart';
+import '../services/kokoro_tts_model_service.dart';
+import '../services/note_read_aloud_service.dart';
 import '../services/realtime_dictation_service.dart';
 import '../services/streaming_speech_model_service.dart';
 import '../services/video_import_service.dart';
@@ -54,6 +56,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
   final List<NoteAttachment> _removedAttachments = [];
   final _storage = FileStorageService.instance;
   final _dictation = RealtimeDictationService.instance;
+  final _readAloud = NoteReadAloudService.instance;
   late final Set<String> _importJobIds;
   NoteProvider? _provider;
   NoteEntry? _entry;
@@ -97,6 +100,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     _title.addListener(_onTitleChanged);
     _content.addListener(_onContentChanged);
     _dictation.addListener(_handleDictationChanged);
+    _readAloud.addListener(_handleReadAloudChanged);
   }
 
   @override
@@ -162,6 +166,10 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     WidgetsBinding.instance.removeObserver(this);
     _provider?.removeListener(_handleProviderChanged);
     _dictation.removeListener(_handleDictationChanged);
+    _readAloud.removeListener(_handleReadAloudChanged);
+    if (_readAloud.status != ReadAloudStatus.idle) {
+      unawaited(_readAloud.stop());
+    }
     if (_dictation.isActive) unawaited(_dictation.cancel());
     _title.dispose();
     _content.dispose();
@@ -182,6 +190,65 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       _insertCommittedDictation(_dictation.committedText);
     }
     setState(() {});
+  }
+
+  void _handleReadAloudChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _toggleReadAloud() async {
+    if (_readAloud.isActive || _readAloud.status == ReadAloudStatus.failed) {
+      await _readAloud.stop();
+      return;
+    }
+    final model = await KokoroTtsModelService.instance.inspect();
+    if (!model.installed) {
+      if (!mounted) return;
+      final openModels = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('需要离线朗读模型'),
+          content: const Text(
+            'Kokoro 中英双语 INT8 首次使用需下载约 140.2 MB。'
+            '下载后，笔记朗读全程断网可用。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('稍后再说'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('管理模型'),
+            ),
+          ],
+        ),
+      );
+      if (openModels == true && mounted) {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const ModelManagementPage(
+              focusModelId: KokoroTtsModelService.modelId,
+            ),
+          ),
+        );
+      }
+      return;
+    }
+    final text = [
+      _title.text.trim(),
+      _content.text.trim(),
+    ].where((part) => part.isNotEmpty).join('。');
+    try {
+      await _readAloud.speak(text);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_readAloud.errorMessage ?? '无法朗读这篇笔记')),
+        );
+      }
+    }
   }
 
   void _insertCommittedDictation(String committed) {
@@ -854,35 +921,46 @@ class _NoteEditorPageState extends State<NoteEditorPage>
           ),
           actions: [
             IconButton(
-              tooltip: _favorite ? '取消收藏' : '收藏',
-              onPressed: () {
-                HapticFeedback.selectionClick();
-                setState(() {
-                  _favorite = !_favorite;
-                  _changed = true;
-                });
-                _scheduleAutosave();
-              },
-              icon: Icon(
-                _favorite ? Icons.star_rounded : Icons.star_outline_rounded,
-                color: _favorite ? const Color(0xFFE3A82B) : null,
-              ),
+              key: const Key('note-read-aloud'),
+              tooltip: _readAloud.isActive ? '停止朗读' : '朗读笔记',
+              onPressed: _toggleReadAloud,
+              icon: _readAloud.status == ReadAloudStatus.generating
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      _readAloud.isActive
+                          ? Icons.stop_circle_outlined
+                          : Icons.volume_up_outlined,
+                    ),
             ),
-            IconButton(
-              tooltip: _pinned ? '取消置顶' : '置顶',
-              onPressed: () {
+            PopupMenuButton<String>(
+              tooltip: '更多笔记操作',
+              onSelected: (value) {
                 HapticFeedback.selectionClick();
                 setState(() {
-                  _pinned = !_pinned;
+                  if (value == 'favorite') _favorite = !_favorite;
+                  if (value == 'pin') _pinned = !_pinned;
                   _changed = true;
                 });
                 _scheduleAutosave();
               },
-              icon: Icon(
-                Icons.vertical_align_top_rounded,
-                size: 24,
-                color: _pinned ? AppColors.moss : null,
-              ),
+              itemBuilder: (_) => [
+                AppPopupMenuItem.action(
+                  value: 'favorite',
+                  icon: _favorite
+                      ? Icons.star_rounded
+                      : Icons.star_outline_rounded,
+                  label: _favorite ? '取消收藏' : '收藏',
+                ),
+                AppPopupMenuItem.action(
+                  value: 'pin',
+                  icon: Icons.vertical_align_top_rounded,
+                  label: _pinned ? '取消置顶' : '置顶',
+                ),
+              ],
             ),
             const SizedBox(width: 8),
           ],

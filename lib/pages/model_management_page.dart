@@ -166,7 +166,8 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
         title: Text(installation.partialSizeBytes > 0 ? '继续下载模型？' : '下载模型？'),
         content: Text(
           '${model.name}\n还需下载约 ${_formatBytes(remaining)}，建议使用 Wi-Fi。\n\n'
-          '下载中可离开此页面；中断后会保留进度。',
+          '下载中可离开此页面；中断后会保留进度。'
+          '${model.task == LocalModelTask.textToSpeech ? '\n\n解压安装时请预留约 600 MB 可用空间。' : ''}',
         ),
         actions: [
           TextButton(
@@ -644,6 +645,7 @@ class _ModelCard extends StatelessWidget {
       LocalModelTask.audioTranscription => Icons.graphic_eq_rounded,
       LocalModelTask.liveDictation => Icons.mic_rounded,
       LocalModelTask.voiceActivityDetection => Icons.multiline_chart_rounded,
+      LocalModelTask.textToSpeech => Icons.record_voice_over_rounded,
       LocalModelTask.textRecognition => Icons.document_scanner_rounded,
       LocalModelTask.imageUnderstanding => Icons.image_search_rounded,
     };

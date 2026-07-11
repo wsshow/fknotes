@@ -92,6 +92,20 @@ void main() {
     expect(find.byTooltip('字号'), findsOneWidget);
     expect(find.byTooltip('增加缩进'), findsOneWidget);
     expect(find.byTooltip('实时语音输入'), findsOneWidget);
+    expect(find.byTooltip('朗读笔记'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('朗读笔记'));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 20)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('需要离线朗读模型'), findsOneWidget);
+    expect(find.textContaining('140.2 MB'), findsOneWidget);
+    expect(find.text('管理模型'), findsOneWidget);
+
+    await tester.tap(find.text('稍后再说'));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('实时语音输入'));
     await tester.pumpAndSettle();

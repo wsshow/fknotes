@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../models/local_model.dart';
+import 'kokoro_tts_model_service.dart';
+import 'note_read_aloud_service.dart';
 import 'realtime_dictation_service.dart';
 import 'speech_model_service.dart';
 import 'speech_transcription_service.dart';
@@ -84,6 +86,7 @@ class LocalModelManager extends ChangeNotifier {
   static const streamingBilingualId =
       StreamingSpeechModelService.bilingualModelId;
   static const voiceActivityId = VoiceActivityModelService.modelId;
+  static const kokoroTtsId = KokoroTtsModelService.modelId;
   static const mlKitChineseOcrId = 'mlkit-text-recognition-chinese';
   static const imageUnderstandingId = 'image-understanding-local';
 
@@ -151,6 +154,22 @@ class LocalModelManager extends ChangeNotifier {
       recommended: true,
     ),
     LocalModelDefinition(
+      id: kokoroTtsId,
+      name: 'Kokoro 中英双语 INT8',
+      summary: '离线朗读中文与英文笔记',
+      description: '支持中英文混合文本、103 个音色和 24 kHz 音频；当前默认使用中文女声音色。',
+      category: LocalModelCategory.speech,
+      availability: LocalModelAvailability.downloadable,
+      task: LocalModelTask.textToSpeech,
+      downloadSizeBytes: KokoroTtsModelService.downloadSizeBytes,
+      languages: ['中文', '英语'],
+      engine: 'sherpa-onnx · Kokoro',
+      version: 'v1.1 INT8',
+      source: 'k2-fsa 官方模型',
+      license: 'Apache-2.0',
+      recommended: true,
+    ),
+    LocalModelDefinition(
       id: mlKitChineseOcrId,
       name: 'ML Kit 中文文字识别',
       summary: '图片中的中文与拉丁文字 OCR',
@@ -182,6 +201,7 @@ class LocalModelManager extends ChangeNotifier {
   final _speechModels = SpeechModelService.instance;
   final _streamingModels = StreamingSpeechModelService.instance;
   final _voiceActivityModels = VoiceActivityModelService.instance;
+  final _kokoroTtsModels = KokoroTtsModelService.instance;
   final Map<String, LocalModelInstallation> _installations = {};
   final Map<String, ModelTransferState> _transfers = {};
   bool _initialized = false;
@@ -217,6 +237,8 @@ class LocalModelManager extends ChangeNotifier {
       _streamingModels.selectedModelId(),
       _voiceActivityModels.inspect(),
       _voiceActivityModels.partialDownloadBytes(),
+      _kokoroTtsModels.inspect(),
+      _kokoroTtsModels.partialDownloadBytes(),
     ]);
     final speech = results[0] as SpeechModelInfo;
     final partial = results[1] as int;
@@ -227,6 +249,8 @@ class LocalModelManager extends ChangeNotifier {
     _selectedLiveDictationModelId = results[6] as String;
     final voiceActivity = results[7] as VoiceActivityModelInfo;
     final voiceActivityPartial = results[8] as int;
+    final kokoroTts = results[9] as KokoroTtsModelInfo;
+    final kokoroTtsPartial = results[10] as int;
     _installations[senseVoiceId] = LocalModelInstallation(
       installed: speech.installed,
       installedSizeBytes: speech.sizeBytes,
@@ -246,6 +270,11 @@ class LocalModelManager extends ChangeNotifier {
       installed: voiceActivity.installed,
       installedSizeBytes: voiceActivity.sizeBytes,
       partialSizeBytes: voiceActivityPartial,
+    );
+    _installations[kokoroTtsId] = LocalModelInstallation(
+      installed: kokoroTts.installed,
+      installedSizeBytes: kokoroTts.sizeBytes,
+      partialSizeBytes: kokoroTtsPartial,
     );
     _installations[mlKitChineseOcrId] = const LocalModelInstallation(
       installed: true,
@@ -283,6 +312,11 @@ class LocalModelManager extends ChangeNotifier {
           shouldCancel: () => transfer.cancelRequested,
           onProgress: progress,
         );
+      } else if (modelId == kokoroTtsId) {
+        await _kokoroTtsModels.download(
+          shouldCancel: () => transfer.cancelRequested,
+          onProgress: progress,
+        );
       } else if (StreamingSpeechModelService.supportedModelIds.contains(
         modelId,
       )) {
@@ -314,6 +348,7 @@ class LocalModelManager extends ChangeNotifier {
   Future<void> import(String modelId) async {
     if (modelId != senseVoiceId &&
         modelId != voiceActivityId &&
+        modelId != kokoroTtsId &&
         !StreamingSpeechModelService.supportedModelIds.contains(modelId)) {
       return;
     }
@@ -337,6 +372,8 @@ class LocalModelManager extends ChangeNotifier {
         imported = await _voiceActivityModels.pickAndImport(
           onProgress: progress,
         );
+      } else if (modelId == kokoroTtsId) {
+        imported = await _kokoroTtsModels.pickAndImport(onProgress: progress);
       } else {
         imported = await _streamingModels.pickAndImport(
           modelId,
@@ -387,6 +424,11 @@ class LocalModelManager extends ChangeNotifier {
         throw StateError('请先结束正在进行的实时听写');
       }
       await _voiceActivityModels.remove();
+    } else if (modelId == kokoroTtsId) {
+      if (NoteReadAloudService.instance.isActive) {
+        throw StateError('请先停止正在进行的笔记朗读');
+      }
+      await _kokoroTtsModels.remove();
     } else if (StreamingSpeechModelService.supportedModelIds.contains(
       modelId,
     )) {

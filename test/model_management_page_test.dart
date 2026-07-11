@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:fknotes/pages/model_management_page.dart';
 import 'package:fknotes/services/file_storage_service.dart';
 import 'package:fknotes/services/local_model_manager.dart';
+import 'package:fknotes/services/kokoro_tts_model_service.dart';
 import 'package:fknotes/services/speech_model_service.dart';
 import 'package:fknotes/services/voice_activity_model_service.dart';
 import 'package:flutter/material.dart';
@@ -46,6 +47,18 @@ void main() {
     );
     await vadPartial.parent.create(recursive: true);
     await vadPartial.writeAsBytes(List<int>.filled(123, 4));
+    final ttsPartial = File(
+      p.join(
+        storageDirectory.path,
+        'models',
+        'tts',
+        KokoroTtsModelService.modelId,
+        '.download',
+        '${KokoroTtsModelService.archiveFileName}.part',
+      ),
+    );
+    await ttsPartial.parent.create(recursive: true);
+    await ttsPartial.writeAsBytes(List<int>.filled(321, 5));
     await LocalModelManager.instance.initialize(force: true);
   });
 
@@ -59,6 +72,7 @@ void main() {
       await VoiceActivityModelService.instance.partialDownloadBytes(),
       123,
     );
+    expect(await KokoroTtsModelService.instance.partialDownloadBytes(), 321);
   });
 
   testWidgets('model manager groups available, built-in and planned models', (
@@ -149,6 +163,16 @@ void main() {
 
     expect(find.text('Silero VAD INT8'), findsOneWidget);
     expect(find.text('207.9 KB'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('Kokoro 中英双语 INT8'),
+      350,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Kokoro 中英双语 INT8'), findsOneWidget);
+    expect(find.text('140.2 MB'), findsOneWidget);
 
     await tester.drag(find.byType(ListView), const Offset(0, -1000));
     await tester.pumpAndSettle();
