@@ -567,6 +567,33 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     return true;
   }
 
+  /// Replaces the contiguous dictation immediately before the current caret.
+  ///
+  /// The final offline pass can revise the whole streaming hypothesis. This
+  /// guarded replacement succeeds only when the expected streaming text is
+  /// still untouched, so a user's caret move or manual edit remains authoritative.
+  bool replaceDictationTextBeforeCaret({
+    required String previous,
+    required String replacement,
+  }) {
+    if (previous == replacement) return true;
+    if (previous.isEmpty) return insertDictationTextAtCaret(replacement);
+    if (!prepareDictationInsertion()) return false;
+    final block = _activeEditableBlock!;
+    final text = block.controller.visibleTextValue;
+    final selection = block.controller.visibleSelectionValue;
+    final caret = selection.isValid
+        ? selection.extentOffset.clamp(0, text.length)
+        : text.length;
+    final start = caret - previous.length;
+    if (start < 0 || text.substring(start, caret) != previous) return false;
+    block.controller.value = TextEditingValue(
+      text: text.replaceRange(start, caret, replacement),
+      selection: TextSelection.collapsed(offset: start + replacement.length),
+    );
+    return true;
+  }
+
   /// Anchors a live-dictation range at the current caret. Subsequent partial
   /// hypotheses replace only this range, so nearby note text never flickers or
   /// gets duplicated as the recognizer revises its result.

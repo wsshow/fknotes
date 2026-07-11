@@ -601,6 +601,56 @@ void main() {
     },
   );
 
+  testWidgets(
+    'final offline pass replaces only untouched streaming dictation',
+    (tester) async {
+      final controller = TextEditingController(text: '已有：');
+      final editorKey = GlobalKey<NoteBlockEditorState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: NoteBlockEditor(
+              key: editorKey,
+              controller: controller,
+              hintText: '开始记录',
+            ),
+          ),
+        ),
+      );
+
+      final field = find.byType(TextField).first;
+      await tester.tap(field);
+      await tester.pump();
+      final blockController = tester.widget<TextField>(field).controller!;
+      blockController.selection = TextSelection.collapsed(
+        offset: blockController.text.length,
+      );
+      expect(
+        editorKey.currentState!.insertDictationTextAtCaret('一二三这是语音测试'),
+        isTrue,
+      );
+      expect(
+        editorKey.currentState!.replaceDictationTextBeforeCaret(
+          previous: '一二三这是语音测试',
+          replacement: '123，这是语音测试。',
+        ),
+        isTrue,
+      );
+      await tester.pump();
+      expect(controller.text, '已有：123，这是语音测试。');
+
+      blockController.selection = const TextSelection.collapsed(offset: 2);
+      expect(
+        editorKey.currentState!.replaceDictationTextBeforeCaret(
+          previous: '123，这是语音测试。',
+          replacement: '不能覆盖用户编辑',
+        ),
+        isFalse,
+      );
+      expect(controller.text, '已有：123，这是语音测试。');
+    },
+  );
+
   testWidgets('canceling live dictation restores the previous document', (
     tester,
   ) async {

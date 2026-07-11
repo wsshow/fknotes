@@ -91,8 +91,8 @@ class LocalModelManager extends ChangeNotifier {
     LocalModelDefinition(
       id: senseVoiceId,
       name: 'SenseVoice Small INT8',
-      summary: '录音与音频文件转写',
-      description: '适合普通话、粤语和中英混合录音，支持标点与数字规范化。',
+      summary: '音频转写与实时听写结束精修',
+      description: '适合普通话、粤语和中英混合录音；也可在实时听写结束后补充标点并规范数字。',
       category: LocalModelCategory.speech,
       availability: LocalModelAvailability.downloadable,
       task: LocalModelTask.audioTranscription,
@@ -373,12 +373,18 @@ class LocalModelManager extends ChangeNotifier {
       )) {
         throw StateError('请先等待正在进行的转写结束');
       }
+      if (RealtimeDictationService.instance.isActive) {
+        throw StateError('请先结束正在进行的实时听写');
+      }
       await _speechModels.remove();
     } else if (modelId == voiceActivityId) {
       if (SpeechTranscriptionService.instance.jobs.any(
         (job) => job.isRunning,
       )) {
         throw StateError('请先等待正在进行的转写结束');
+      }
+      if (RealtimeDictationService.instance.isActive) {
+        throw StateError('请先结束正在进行的实时听写');
       }
       await _voiceActivityModels.remove();
     } else if (StreamingSpeechModelService.supportedModelIds.contains(

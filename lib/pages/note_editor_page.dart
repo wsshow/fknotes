@@ -299,7 +299,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     _dictationOperationPending = true;
     try {
       final result = await _dictation.stop();
-      _insertCommittedDictation(result);
+      _finalizeCommittedDictation(result);
       _dictationAnchored = false;
       _dictationInsertedText = '';
       HapticFeedback.mediumImpact();
@@ -314,6 +314,20 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     } finally {
       _dictationOperationPending = false;
     }
+  }
+
+  void _finalizeCommittedDictation(String result) {
+    if (result.startsWith(_dictationInsertedText)) {
+      _insertCommittedDictation(result);
+      return;
+    }
+    final replaced =
+        _blockEditorKey.currentState?.replaceDictationTextBeforeCaret(
+          previous: _dictationInsertedText,
+          replacement: result,
+        ) ??
+        false;
+    if (replaced) _dictationInsertedText = result;
   }
 
   Future<void> _cancelDictation() async {

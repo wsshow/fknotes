@@ -101,6 +101,11 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
             _sectionTitle('实时听写设置'),
             const SizedBox(height: 12),
             _HotwordsCard(preferences: _preferences, onTap: _editHotwords),
+            const SizedBox(height: 12),
+            _TwoPassCard(
+              enabled: _preferences.twoPassEnabled,
+              onChanged: _setTwoPassEnabled,
+            ),
             const SizedBox(height: 26),
             _sectionTitle('语音模型'),
             const SizedBox(height: 12),
@@ -252,6 +257,27 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
     );
   }
 
+  Future<void> _setTwoPassEnabled(bool enabled) async {
+    try {
+      final saved = await _dictationPreferences.save(
+        hotwordsText: _preferences.hotwords.join('\n'),
+        hotwordsScore: _preferences.hotwordsScore,
+        twoPassEnabled: enabled,
+      );
+      if (!mounted) return;
+      setState(() => _preferences = saved);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(enabled ? '已开启听写结束精修' : '已关闭听写结束精修')),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('设置保存失败，请检查设备存储空间')));
+      }
+    }
+  }
+
   void _showDetails(LocalModelDefinition model) {
     showModalBottomSheet<void>(
       context: context,
@@ -323,6 +349,7 @@ class _HotwordsDialogState extends State<_HotwordsDialog> {
       final saved = await widget.service.save(
         hotwordsText: _controller.text,
         hotwordsScore: _score,
+        twoPassEnabled: widget.initial.twoPassEnabled,
       );
       if (mounted) Navigator.pop(context, saved);
     } on FormatException catch (error) {
@@ -416,6 +443,58 @@ class _HotwordsDialogState extends State<_HotwordsDialog> {
         child: Text(_saving ? '保存中…' : '保存'),
       ),
     ],
+  );
+}
+
+class _TwoPassCard extends StatelessWidget {
+  final bool enabled;
+  final ValueChanged<bool> onChanged;
+
+  const _TwoPassCard({required this.enabled, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+    decoration: BoxDecoration(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: AppColors.line),
+    ),
+    child: Row(
+      children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: AppColors.softGreen,
+            borderRadius: BorderRadius.circular(13),
+          ),
+          child: const Icon(Icons.auto_fix_high_rounded, color: AppColors.moss),
+        ),
+        const SizedBox(width: 12),
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '结束后精修',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              ),
+              SizedBox(height: 4),
+              Text(
+                '若已安装 SenseVoice，完成时补充标点并规范数字',
+                style: TextStyle(color: AppColors.muted),
+              ),
+            ],
+          ),
+        ),
+        Switch(
+          key: const Key('live-dictation-two-pass-switch'),
+          value: enabled,
+          onChanged: onChanged,
+        ),
+      ],
+    ),
   );
 }
 

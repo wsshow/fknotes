@@ -42,6 +42,7 @@ void main() {
     final saved = await service.save(
       hotwordsText: 'FKNotes\n非空笔记\nFKNotes',
       hotwordsScore: 2.5,
+      twoPassEnabled: false,
     );
     expect(saved.hotwords, ['FKNotes', '非空笔记']);
     expect(saved.hotwordsScore, 2.5);
@@ -49,6 +50,7 @@ void main() {
     final loaded = await service.load();
     expect(loaded.hotwords, saved.hotwords);
     expect(loaded.hotwordsScore, 2.5);
+    expect(loaded.twoPassEnabled, isFalse);
     expect(
       await File(service.hotwordsFilePath).readAsString(),
       'FKNotes\n非空笔记\n',
@@ -66,8 +68,13 @@ void main() {
             )
             as Map<String, dynamic>;
     expect(settings['hotwords'], ['FKNotes', '非空笔记']);
+    expect(settings['twoPassEnabled'], isFalse);
 
-    await service.save(hotwordsText: '', hotwordsScore: 2.0);
+    await service.save(
+      hotwordsText: '',
+      hotwordsScore: 2.0,
+      twoPassEnabled: true,
+    );
     expect(await File(service.hotwordsFilePath).exists(), isFalse);
   });
 }

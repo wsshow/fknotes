@@ -77,6 +77,15 @@ void main() {
     expect(find.text('继续下载'), findsOneWidget);
     expect(find.text('实时听写设置'), findsOneWidget);
     expect(find.text('热词增强'), findsOneWidget);
+    expect(find.text('结束后精修'), findsOneWidget);
+    expect(
+      tester
+          .widget<Switch>(
+            find.byKey(const Key('live-dictation-two-pass-switch')),
+          )
+          .value,
+      isTrue,
+    );
 
     await tester.tap(find.byKey(const Key('live-dictation-hotwords-card')));
     await tester.pumpAndSettle();
@@ -104,6 +113,14 @@ void main() {
     expect(find.text('实时听写热词'), findsNothing);
     expect(find.text('已保存 2 个热词'), findsOneWidget);
     expect(find.text('2 个热词 · 强度 2.0'), findsOneWidget);
+    expect(
+      tester
+          .widget<Switch>(
+            find.byKey(const Key('live-dictation-two-pass-switch')),
+          )
+          .value,
+      isTrue,
+    );
 
     await tester.drag(find.byType(ListView), const Offset(0, -700));
     await tester.pumpAndSettle();

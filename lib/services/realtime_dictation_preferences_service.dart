@@ -10,10 +10,12 @@ class RealtimeDictationPreferences {
 
   final List<String> hotwords;
   final double hotwordsScore;
+  final bool twoPassEnabled;
 
   const RealtimeDictationPreferences({
     this.hotwords = const [],
     this.hotwordsScore = defaultHotwordsScore,
+    this.twoPassEnabled = true,
   });
 
   bool get hotwordsEnabled => hotwords.isNotEmpty;
@@ -58,6 +60,7 @@ class RealtimeDictationPreferencesService {
       final preferences = RealtimeDictationPreferences(
         hotwords: hotwords,
         hotwordsScore: score,
+        twoPassEnabled: decoded['twoPassEnabled'] as bool? ?? true,
       );
       await _writeRuntimeHotwords(preferences.hotwords);
       return preferences;
@@ -71,6 +74,7 @@ class RealtimeDictationPreferencesService {
   Future<RealtimeDictationPreferences> save({
     required String hotwordsText,
     required double hotwordsScore,
+    required bool twoPassEnabled,
   }) async {
     if (hotwordsScore < minHotwordsScore || hotwordsScore > maxHotwordsScore) {
       throw const FormatException('热词增强强度必须在 1.0 到 5.0 之间');
@@ -79,14 +83,17 @@ class RealtimeDictationPreferencesService {
     final preferences = RealtimeDictationPreferences(
       hotwords: hotwords,
       hotwordsScore: hotwordsScore,
+      twoPassEnabled: twoPassEnabled,
     );
     await Directory(_settingsDir).create(recursive: true);
     await _writeRuntimeHotwords(hotwords);
     await _atomicWrite(
       File(_preferencesPath),
-      const JsonEncoder.withIndent(
-        '  ',
-      ).convert({'hotwords': hotwords, 'hotwordsScore': hotwordsScore}),
+      const JsonEncoder.withIndent('  ').convert({
+        'hotwords': hotwords,
+        'hotwordsScore': hotwordsScore,
+        'twoPassEnabled': twoPassEnabled,
+      }),
     );
     return preferences;
   }

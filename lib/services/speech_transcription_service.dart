@@ -71,6 +71,9 @@ class SpeechTranscriptionService extends ChangeNotifier {
   List<TranscriptionJob> get jobs => List.unmodifiable(_jobs.values);
   TranscriptionJob? jobFor(String filePath) => _jobs[filePath];
 
+  Future<bool> realtimeRefinementAvailable() async =>
+      (await _models.inspect()).installed;
+
   Future<void> start({
     required int noteId,
     required NoteAttachment attachment,
@@ -141,6 +144,30 @@ class SpeechTranscriptionService extends ChangeNotifier {
     }
   }
 
+  /// Runs the optional final pass for live dictation without creating a note
+  /// transcription job. A missing SenseVoice model simply disables the pass.
+  Future<String?> refineRealtimeWave(
+    String wavePath, {
+    @visibleForTesting String nativeLibDir = '',
+  }) async {
+    if (!await File(wavePath).exists()) return null;
+    final model = await _models.inspect();
+    if (!model.installed) return null;
+    final voiceActivity = await _voiceActivityModels.inspect(
+      verifyIntegrity: true,
+    );
+    final text = await _recognizeInWorker(
+      null,
+      wavePath: wavePath,
+      modelPath: model.modelPath,
+      tokensPath: model.tokensPath,
+      vadModelPath: voiceActivity.installed ? voiceActivity.modelPath : '',
+      nativeLibDir: nativeLibDir,
+    );
+    final normalized = text.trim();
+    return normalized.isEmpty ? null : normalized;
+  }
+
   Future<String> _prepareWave(String source, TranscriptionJob job) async {
     if (p.extension(source).toLowerCase() == '.wav') return source;
     if (!Platform.isAndroid) {
@@ -162,11 +189,12 @@ class SpeechTranscriptionService extends ChangeNotifier {
   }
 
   Future<String> _recognizeInWorker(
-    TranscriptionJob job, {
+    TranscriptionJob? job, {
     required String wavePath,
     required String modelPath,
     required String tokensPath,
     required String vadModelPath,
+    String nativeLibDir = '',
   }) async {
     final messages = ReceivePort();
     final errors = ReceivePort();
@@ -175,6 +203,7 @@ class SpeechTranscriptionService extends ChangeNotifier {
     StreamSubscription<dynamic>? messageSubscription;
     StreamSubscription<dynamic>? errorSubscription;
     StreamSubscription<dynamic>? exitSubscription;
+    Isolate? worker;
 
     void completeError(Object error) {
       if (!completer.isCompleted) completer.completeError(error);
@@ -185,8 +214,10 @@ class SpeechTranscriptionService extends ChangeNotifier {
       switch (message['type']) {
         case 'progress':
           final fraction = (message['progress'] as num?)?.toDouble() ?? 0;
-          job.partialText = message['text'] as String? ?? job.partialText;
-          _update(job, progress: .12 + fraction * .82);
+          if (job != null) {
+            job.partialText = message['text'] as String? ?? job.partialText;
+            _update(job, progress: .12 + fraction * .82);
+          }
           return;
         case 'result':
           if (!completer.isCompleted) {
@@ -203,12 +234,12 @@ class SpeechTranscriptionService extends ChangeNotifier {
     });
     exitSubscription = exits.listen((_) {
       if (!completer.isCompleted &&
-          job.status != TranscriptionStatus.canceled) {
+          job?.status != TranscriptionStatus.canceled) {
         completeError(StateError('语音识别进程意外结束'));
       }
     });
 
-    job.worker = await Isolate.spawn<Map<String, Object>>(
+    worker = await Isolate.spawn<Map<String, Object>>(
       _transcriptionWorker,
       {
         'sendPort': messages.sendPort,
@@ -216,16 +247,20 @@ class SpeechTranscriptionService extends ChangeNotifier {
         'modelPath': modelPath,
         'tokensPath': tokensPath,
         'vadModelPath': vadModelPath,
+        'nativeLibDir': nativeLibDir,
       },
       onError: errors.sendPort,
       onExit: exits.sendPort,
     );
-    job.cancelWorker = () {
-      job.worker?.kill(priority: Isolate.immediate);
-      if (!completer.isCompleted) {
-        completer.completeError(const _TranscriptionCanceled());
-      }
-    };
+    if (job != null) {
+      job.worker = worker;
+      job.cancelWorker = () {
+        worker?.kill(priority: Isolate.immediate);
+        if (!completer.isCompleted) {
+          completer.completeError(const _TranscriptionCanceled());
+        }
+      };
+    }
     try {
       return await completer.future;
     } finally {
@@ -235,7 +270,7 @@ class SpeechTranscriptionService extends ChangeNotifier {
       messages.close();
       errors.close();
       exits.close();
-      job.worker?.kill(priority: Isolate.immediate);
+      worker.kill(priority: Isolate.immediate);
     }
   }
 
@@ -290,7 +325,8 @@ void _transcriptionWorker(Map<String, Object> args) {
   sherpa.VoiceActivityDetector? vad;
   _Pcm16WaveReader? wave;
   try {
-    sherpa.initBindings();
+    final nativeLibDir = args['nativeLibDir'] as String? ?? '';
+    sherpa.initBindings(nativeLibDir.isEmpty ? null : nativeLibDir);
     final activeWave = _Pcm16WaveReader.open(args['wavePath'] as String);
     wave = activeWave;
     final activeRecognizer = sherpa.OfflineRecognizer(

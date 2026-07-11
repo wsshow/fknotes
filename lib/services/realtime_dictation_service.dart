@@ -13,6 +13,7 @@ import 'package:record/record.dart';
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 
 import 'realtime_dictation_preferences_service.dart';
+import 'speech_transcription_service.dart';
 import 'streaming_speech_model_service.dart';
 
 enum RealtimeDictationStatus { idle, preparing, listening, stopping, failed }
@@ -35,6 +36,7 @@ class RealtimeDictationService extends ChangeNotifier {
 
   final _models = StreamingSpeechModelService.instance;
   final _preferences = RealtimeDictationPreferencesService.instance;
+  final _transcription = SpeechTranscriptionService.instance;
   AudioRecorder? _recorder;
   StreamSubscription<Uint8List>? _audioSubscription;
   StreamSubscription<dynamic>? _messageSubscription;
@@ -83,6 +85,12 @@ class RealtimeDictationService extends ChangeNotifier {
   int _debugDecodeCalls = 0;
   double _debugWorkerRmsDb = -160;
   double _debugWorkerPeakDb = -160;
+  String _debugTwoPassStatus = '未请求';
+  RandomAccessFile? _refinementWaveOutput;
+  String? _refinementWavePath;
+  Future<void> _refinementWrites = Future<void>.value();
+  int _refinementPcmBytes = 0;
+  Object? _refinementWriteError;
 
   static const _debugPcmLimitBytes = 16000 * 2 * 300;
 
@@ -163,6 +171,7 @@ class RealtimeDictationService extends ChangeNotifier {
       'Worker 最近峰值: ${_debugWorkerPeakDb.toStringAsFixed(1)} dBFS',
       '原生 decode 调用: $_debugDecodeCalls',
       '自动恢复重放: ${_recoveryRequested ? "已触发" : "未触发"}',
+      '结束后精修: $_debugTwoPassStatus',
       '已提交文本: ${committedText.isEmpty ? '-' : committedText}',
       '临时文本: ${partialText.isEmpty ? '-' : partialText}',
       '',
@@ -212,6 +221,7 @@ class RealtimeDictationService extends ChangeNotifier {
       _debugDecodeCalls = 0;
       _debugWorkerRmsDb = -160;
       _debugWorkerPeakDb = -160;
+      _debugTwoPassStatus = '未请求';
       _debugEvent('开始准备实时听写');
     }
     _recoveryPcm = BytesBuilder(copy: true);
@@ -239,6 +249,20 @@ class RealtimeDictationService extends ChangeNotifier {
                   'score=${preferences.hotwordsScore.toStringAsFixed(1)}'
             : '热词配置: 未启用',
       );
+      if (preferences.twoPassEnabled &&
+          await _transcription.realtimeRefinementAvailable()) {
+        try {
+          await _prepareRefinementCapture();
+          _debugTwoPassStatus = '等待录音完成';
+          _debugEvent('结束后精修: 已启用，SenseVoice 可用');
+        } catch (error) {
+          _debugTwoPassStatus = '录音初始化失败，已跳过';
+          _debugEvent('结束后精修初始化失败: $error');
+        }
+      } else {
+        _debugTwoPassStatus = preferences.twoPassEnabled ? '模型未安装' : '已关闭';
+        _debugEvent('结束后精修: $_debugTwoPassStatus');
+      }
       var permission = await Permission.microphone.status;
       if (!permission.isGranted) {
         permission = await Permission.microphone.request();
@@ -306,10 +330,34 @@ class RealtimeDictationService extends ChangeNotifier {
       await _audioSubscription?.cancel();
       _audioSubscription = null;
       _commandPort?.send(const {'type': 'stop'});
-      final result = await (_resultCompleter?.future ?? Future.value(text))
-          .timeout(const Duration(seconds: 12));
-      committedText = result.trim();
+      final streamingResult =
+          await (_resultCompleter?.future ?? Future.value(text)).timeout(
+            const Duration(seconds: 12),
+          );
+      committedText = streamingResult.trim();
       partialText = '';
+      final refinementWave = await _finalizeRefinementCapture();
+      if (refinementWave != null) {
+        _debugTwoPassStatus = '正在精修';
+        _debugEvent('开始 SenseVoice 结束后精修');
+        notifyListeners();
+        try {
+          final refined = await _transcription.refineRealtimeWave(
+            refinementWave,
+          );
+          if (refined != null) {
+            committedText = refined;
+            _debugTwoPassStatus = '已完成';
+            _debugEvent('结束后精修完成: "$refined"');
+          } else {
+            _debugTwoPassStatus = '无有效文本，保留流式结果';
+            _debugEvent('结束后精修未产生文本，保留流式结果');
+          }
+        } catch (error) {
+          _debugTwoPassStatus = '失败，已保留流式结果';
+          _debugEvent('结束后精修失败，保留流式结果: $error');
+        }
+      }
       if (committedText.isEmpty &&
           _amplitudeDb(_sessionMaxRms) >= _audibleSpeechRmsDb) {
         throw StateError(
@@ -450,6 +498,7 @@ class RealtimeDictationService extends ChangeNotifier {
 
   void _sendAudio(Uint8List bytes) {
     if (status != RealtimeDictationStatus.listening || bytes.isEmpty) return;
+    _queueRefinementAudio(bytes);
     final stats = _pcmStats(bytes);
     inputLevel = stats.level;
     _sessionMaxRms = math.max(
@@ -512,6 +561,95 @@ class RealtimeDictationService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> _prepareRefinementCapture() async {
+    await _discardRefinementCapture();
+    final directory = Directory(
+      p.join((await getTemporaryDirectory()).path, 'fknotes_asr_refinement'),
+    );
+    await directory.create(recursive: true);
+    final path = p.join(
+      directory.path,
+      'live-${DateTime.now().microsecondsSinceEpoch}.wav',
+    );
+    final output = await File(path).open(mode: FileMode.write);
+    await output.writeFrom(_pcm16WaveHeader(0));
+    _refinementWaveOutput = output;
+    _refinementWavePath = path;
+    _refinementWrites = Future<void>.value();
+    _refinementPcmBytes = 0;
+    _refinementWriteError = null;
+  }
+
+  void _queueRefinementAudio(Uint8List bytes) {
+    final output = _refinementWaveOutput;
+    if (output == null || _refinementWriteError != null) return;
+    final ownedBytes = Uint8List.fromList(bytes);
+    _refinementWrites = _refinementWrites
+        .then((_) async {
+          await output.writeFrom(ownedBytes);
+          _refinementPcmBytes += ownedBytes.length;
+        })
+        .catchError((Object error) {
+          _refinementWriteError = error;
+        });
+  }
+
+  Future<String?> _finalizeRefinementCapture() async {
+    final output = _refinementWaveOutput;
+    final path = _refinementWavePath;
+    if (output == null || path == null) return null;
+    try {
+      await _refinementWrites;
+      final error = _refinementWriteError;
+      if (error != null) throw FileSystemException('无法保存精修录音', path);
+      await output.setPosition(0);
+      await output.writeFrom(_pcm16WaveHeader(_refinementPcmBytes));
+      await output.flush();
+      await output.close();
+      _refinementWaveOutput = null;
+      return _refinementPcmBytes == 0 ? null : path;
+    } catch (error) {
+      _debugTwoPassStatus = '录音保存失败，已跳过';
+      _debugEvent('结束后精修录音失败: $error');
+      try {
+        await output.close();
+      } catch (_) {
+        // The original capture failure may already have closed the handle.
+      }
+      _refinementWaveOutput = null;
+      return null;
+    }
+  }
+
+  Future<void> _discardRefinementCapture() async {
+    try {
+      await _refinementWrites;
+    } catch (_) {
+      // The streaming result remains usable when temporary capture fails.
+    }
+    try {
+      await _refinementWaveOutput?.close();
+    } catch (_) {
+      // Cleanup is best-effort after recorder or worker failures.
+    }
+    _refinementWaveOutput = null;
+    final path = _refinementWavePath;
+    if (path != null) {
+      final file = File(path);
+      if (await file.exists()) {
+        try {
+          await file.delete();
+        } on FileSystemException {
+          // A concurrent platform cleanup may already have removed the file.
+        }
+      }
+    }
+    _refinementWavePath = null;
+    _refinementWrites = Future<void>.value();
+    _refinementPcmBytes = 0;
+    _refinementWriteError = null;
+  }
+
   void _recoverStalledRecognizerIfNeeded() {
     if (_recoveryRequested ||
         status != RealtimeDictationStatus.listening ||
@@ -570,6 +708,7 @@ class RealtimeDictationService extends ChangeNotifier {
     await _recorder?.dispose();
     _recorder = null;
     _recoveryPcm = BytesBuilder(copy: true);
+    await _discardRefinementCapture();
   }
 
   _PcmStats _pcmStats(Uint8List bytes) {
@@ -682,7 +821,14 @@ class _PcmStats {
 }
 
 Uint8List _pcm16Wave(Uint8List pcm) {
-  final output = Uint8List(44 + pcm.length);
+  final output = Uint8List(44 + pcm.length)
+    ..setRange(0, 44, _pcm16WaveHeader(pcm.length))
+    ..setRange(44, 44 + pcm.length, pcm);
+  return output;
+}
+
+Uint8List _pcm16WaveHeader(int pcmBytes) {
+  final output = Uint8List(44);
   final data = ByteData.sublistView(output);
   void ascii(int offset, String value) {
     for (var index = 0; index < value.length; index++) {
@@ -691,7 +837,7 @@ Uint8List _pcm16Wave(Uint8List pcm) {
   }
 
   ascii(0, 'RIFF');
-  data.setUint32(4, 36 + pcm.length, Endian.little);
+  data.setUint32(4, 36 + pcmBytes, Endian.little);
   ascii(8, 'WAVE');
   ascii(12, 'fmt ');
   data.setUint32(16, 16, Endian.little);
@@ -702,8 +848,7 @@ Uint8List _pcm16Wave(Uint8List pcm) {
   data.setUint16(32, 2, Endian.little);
   data.setUint16(34, 16, Endian.little);
   ascii(36, 'data');
-  data.setUint32(40, pcm.length, Endian.little);
-  output.setRange(44, output.length, pcm);
+  data.setUint32(40, pcmBytes, Endian.little);
   return output;
 }
 
