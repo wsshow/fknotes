@@ -127,7 +127,7 @@ class LocalModelManager extends ChangeNotifier {
       id: senseVoiceId,
       name: 'SenseVoice Small INT8',
       summary: '音频转写与实时听写结束精修',
-      description: '适合普通话、粤语和中英混合录音；也可在实时听写结束后补充标点并规范数字。',
+      description: '适合普通话、粤语和中英混合录音；也可作为实时听写的可选第二遍识别模型。',
       category: LocalModelCategory.speech,
       availability: LocalModelAvailability.downloadable,
       task: LocalModelTask.audioTranscription,

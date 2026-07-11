@@ -16,7 +16,7 @@ class RealtimeDictationPreferences {
   const RealtimeDictationPreferences({
     this.hotwords = const [],
     this.hotwordsScore = defaultHotwordsScore,
-    this.twoPassEnabled = true,
+    this.twoPassEnabled = false,
     this.noiseSuppressionEnabled = false,
   });
 
@@ -62,7 +62,7 @@ class RealtimeDictationPreferencesService {
       final preferences = RealtimeDictationPreferences(
         hotwords: hotwords,
         hotwordsScore: score,
-        twoPassEnabled: decoded['twoPassEnabled'] as bool? ?? true,
+        twoPassEnabled: decoded['twoPassEnabled'] as bool? ?? false,
         noiseSuppressionEnabled:
             decoded['noiseSuppressionEnabled'] as bool? ?? false,
       );

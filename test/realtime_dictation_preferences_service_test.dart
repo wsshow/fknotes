@@ -38,6 +38,12 @@ void main() {
     );
   });
 
+  test('keeps unstable second-pass recognition disabled by default', () async {
+    final preferences = await service.load();
+
+    expect(preferences.twoPassEnabled, isFalse);
+  });
+
   test('persists JSON and sherpa runtime text consistently', () async {
     final saved = await service.save(
       hotwordsText: 'FKNotes\n非空笔记\nFKNotes',

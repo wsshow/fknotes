@@ -13,6 +13,7 @@ import 'package:record/record.dart';
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 
 import 'realtime_dictation_preferences_service.dart';
+import 'realtime_dictation_text_policy.dart';
 import 'speech_denoiser_model_service.dart';
 import 'speech_transcription_service.dart';
 import 'streaming_speech_model_service.dart';
@@ -367,9 +368,24 @@ class RealtimeDictationService extends ChangeNotifier {
             refinementWave,
           );
           if (refined != null) {
-            committedText = refined;
-            _debugTwoPassStatus = '已完成';
-            _debugEvent('结束后精修完成: "$refined"');
+            final decision = chooseRealtimeRefinement(
+              streamingText: streamingResult,
+              refinedText: refined,
+            );
+            committedText = decision.text;
+            if (decision.accepted) {
+              _debugTwoPassStatus = '已采用 · ${decision.reason}';
+              _debugEvent(
+                '结束后精修已采用: reason=${decision.reason}, '
+                'streaming="$streamingResult", refined="$refined"',
+              );
+            } else {
+              _debugTwoPassStatus = '已拒绝，保留流式结果';
+              _debugEvent(
+                '结束后精修已拒绝: reason=${decision.reason}, '
+                'streaming="$streamingResult", refined="$refined"',
+              );
+            }
           } else {
             _debugTwoPassStatus = '无有效文本，保留流式结果';
             _debugEvent('结束后精修未产生文本，保留流式结果');
@@ -500,8 +516,15 @@ class RealtimeDictationService extends ChangeNotifier {
         _fail(StateError(message['message'] as String? ?? '实时语音识别失败'));
         return;
       case 'debug':
+        final details = [
+          if (message['reason'] != null) 'reason=${message['reason']}',
+          if (message['droppedPrefixLength'] != null)
+            'dropped=${message['droppedPrefixLength']}',
+          if (message['merged'] != null) 'merged="${message['merged']}"',
+        ].join(', ');
         _debugEvent(
-          '解码事件: ${message['event']}, text="${message['text'] ?? ''}"',
+          '解码事件: ${message['event']}, text="${message['text'] ?? ''}"'
+          '${details.isEmpty ? '' : ', $details'}',
         );
         return;
       case 'telemetry':
@@ -933,7 +956,18 @@ void _realtimeRecognitionWorker(Map<String, Object> args) {
   void finishSegment(String value) {
     final segment = value.trim();
     if (segment.isEmpty) return;
-    committed = _joinDictationSegments(committed, segment);
+    final merge = mergeDictationSegment(committed, segment);
+    committed = merge.text;
+    if (kDebugMode && (merge.droppedPrefixLength > 0 || !merge.changed)) {
+      sendPort.send({
+        'type': 'debug',
+        'event': 'segment_merge',
+        'text': segment,
+        'reason': merge.reason,
+        'droppedPrefixLength': merge.droppedPrefixLength,
+        'merged': committed,
+      });
+    }
     lastPartial = '';
   }
 
@@ -1268,12 +1302,4 @@ double _pcm16Sample(int lowByte, int highByte) {
   final unsigned = lowByte | (highByte << 8);
   final signed = unsigned >= 0x8000 ? unsigned - 0x10000 : unsigned;
   return signed / 32768.0;
-}
-
-String _joinDictationSegments(String current, String segment) {
-  if (current.isEmpty) return segment;
-  if (RegExp(r'[。！？!?；;，,\n]$').hasMatch(current)) {
-    return '$current$segment';
-  }
-  return '$current。$segment';
 }

@@ -148,7 +148,7 @@ void main() {
             find.byKey(const Key('live-dictation-two-pass-switch')),
           )
           .value,
-      isTrue,
+      isFalse,
     );
 
     await tester.tap(find.byKey(const Key('live-dictation-hotwords-card')));
@@ -183,7 +183,7 @@ void main() {
             find.byKey(const Key('live-dictation-two-pass-switch')),
           )
           .value,
-      isTrue,
+      isFalse,
     );
 
     await tester.drag(find.byType(ListView), const Offset(0, -700));

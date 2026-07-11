@@ -516,7 +516,7 @@ class _TwoPassCard extends StatelessWidget {
               ),
               SizedBox(height: 4),
               Text(
-                '若已安装 SenseVoice，完成时补充标点并规范数字',
+                '使用 SenseVoice 二次识别，仅在质量检查通过时替换（默认关闭）',
                 style: TextStyle(color: AppColors.muted),
               ),
             ],
