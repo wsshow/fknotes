@@ -7,6 +7,7 @@ import 'package:fknotes/services/app_lock_preferences_service.dart';
 import 'package:fknotes/services/device_authentication_service.dart';
 import 'package:fknotes/widgets/app_lock_gate.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
@@ -112,6 +113,57 @@ void main() {
     expect(find.text('私密笔记内容'), findsOneWidget);
   });
 
+  testWidgets('lock now covers the active settings route immediately', (
+    tester,
+  ) async {
+    final store = _WidgetPreferencesStore(
+      const AppLockPreferences(enabled: true),
+    );
+    final authenticator = _WidgetAuthenticator();
+    final controller = AppLockController(
+      preferencesStore: store,
+      authenticator: authenticator,
+      observeLifecycle: false,
+    );
+    await controller.initialize();
+    await controller.authenticateAutomatically();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: controller,
+        child: MaterialApp(
+          builder: (context, child) =>
+              AppLockGate(child: child ?? const SizedBox.shrink()),
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                key: const Key('open-app-lock-settings'),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const AppLockSettingsPage(),
+                  ),
+                ),
+                child: const Text('打开应用锁设置'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('open-app-lock-settings')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('app-lock-lock-now-button')));
+    await tester.pump();
+
+    expect(find.text('应用已锁定'), findsOneWidget);
+    expect(find.byType(AppLockSettingsPage), findsOneWidget);
+    expect(authenticator.authenticationCount, 1);
+    final title = tester.renderObject<RenderParagraph>(find.text('应用已锁定'));
+    expect(title.text.style?.decoration, isNot(TextDecoration.underline));
+  });
+
   testWidgets('settings enable the lock through system authentication', (
     tester,
   ) async {
@@ -177,6 +229,8 @@ class _WidgetAuthenticator implements DeviceAuthenticator {
               '',
             ),
           ];
+
+  int get authenticationCount => _index;
 
   @override
   Future<DeviceAuthenticationResult> authenticate({

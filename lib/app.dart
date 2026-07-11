@@ -368,7 +368,9 @@ class FkNotesApp extends StatelessWidget {
             space: 1,
           ),
         ),
-        home: const AppLockGate(child: HomePage()),
+        builder: (context, child) =>
+            AppLockGate(child: child ?? const SizedBox.shrink()),
+        home: const HomePage(),
       ),
     );
   }

@@ -67,7 +67,7 @@ class _AppLockScreen extends StatelessWidget {
     return MediaQuery.withClampedTextScaling(
       minScaleFactor: 1,
       maxScaleFactor: 1.3,
-      child: ColoredBox(
+      child: Material(
         color: AppColors.canvas,
         child: SafeArea(
           child: Padding(

@@ -1,17 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'services/file_storage_service.dart';
 import 'widgets/brand_mark.dart';
 import 'app.dart';
 
 Future<void> main() async {
-  assert(() {
-    // Flutter Inspector can leave baseline guides enabled in a debug session.
-    // They are diagnostics and are never part of the FKNotes interface.
-    debugPaintBaselinesEnabled = false;
-    return true;
-  }());
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   SystemChrome.setSystemUIOverlayStyle(
