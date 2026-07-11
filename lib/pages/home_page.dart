@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
 import '../app.dart';
 import '../models/note_entry.dart';
 import '../providers/app_lock_controller.dart';
 import '../providers/note_provider.dart';
+import '../services/app_build_metadata.dart';
 import '../services/backup_service.dart';
 import '../services/file_storage_service.dart';
 import '../widgets/empty_state.dart';
@@ -1077,13 +1077,13 @@ class _DataTab extends StatefulWidget {
 class _DataTabState extends State<_DataTab> {
   int? _actualSize;
   bool _backupBusy = false;
-  String? _appVersion;
+  AppBuildMetadata? _appBuildMetadata;
 
   @override
   void initState() {
     super.initState();
     _refreshSize();
-    _loadAppVersion();
+    _loadAppMetadata();
   }
 
   @override
@@ -1097,18 +1097,21 @@ class _DataTabState extends State<_DataTab> {
     if (mounted) setState(() => _actualSize = size);
   }
 
-  Future<void> _loadAppVersion() async {
+  Future<void> _loadAppMetadata() async {
     try {
-      final packageInfo = await PackageInfo.fromPlatform();
+      final metadata = await AppBuildMetadata.load();
       if (!mounted) return;
-      final buildNumber = packageInfo.buildNumber.trim();
-      setState(() {
-        _appVersion = buildNumber.isEmpty
-            ? '版本 ${packageInfo.version}'
-            : '版本 ${packageInfo.version} · 构建 $buildNumber';
-      });
+      setState(() => _appBuildMetadata = metadata);
     } catch (_) {
-      if (mounted) setState(() => _appVersion = '版本信息暂不可用');
+      if (mounted) {
+        setState(
+          () => _appBuildMetadata = const AppBuildMetadata(
+            version: '暂不可用',
+            buildNumber: '',
+            buildTime: null,
+          ),
+        );
+      }
     }
   }
 
@@ -1296,22 +1299,6 @@ class _DataTabState extends State<_DataTab> {
                   widget.onOpenLibrary();
                 },
               ),
-              const Divider(height: 1),
-              _SettingRow(
-                icon: Icons.refresh_rounded,
-                title: '重建数据索引',
-                subtitle: '刷新数据库与便携清单',
-                onTap: () async {
-                  await widget.provider.loadEntries();
-                  await _refreshSize();
-                  if (!context.mounted) return;
-                  {
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(const SnackBar(content: Text('索引已更新')));
-                  }
-                },
-              ),
             ],
           ),
           const SizedBox(height: 22),
@@ -1327,7 +1314,9 @@ class _DataTabState extends State<_DataTab> {
               _SettingRow(
                 icon: Icons.info_outline_rounded,
                 title: '非空笔记',
-                subtitle: _appVersion ?? '正在读取版本信息…',
+                subtitle: _appBuildMetadata == null
+                    ? '正在读取版本信息…'
+                    : '${_appBuildMetadata!.versionLabel}\n${_appBuildMetadata!.buildTimeLabel}',
                 showChevron: false,
               ),
             ],

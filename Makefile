@@ -12,6 +12,7 @@ DART ?= dart
 DEVICE ?=
 BUILD_NAME ?=
 BUILD_NUMBER ?=
+BUILD_TIME ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 DIST_DIR ?= dist
 
 PUB_VERSION := $(shell sed -n 's/^version: //p' pubspec.yaml | head -n 1)
@@ -21,6 +22,7 @@ ARTIFACT_BUILD_NAME := $(if $(BUILD_NAME),$(BUILD_NAME),$(PUB_BUILD_NAME))
 ARTIFACT_BUILD_NUMBER := $(if $(BUILD_NUMBER),$(BUILD_NUMBER),$(PUB_BUILD_NUMBER))
 ARTIFACT_VERSION := $(ARTIFACT_BUILD_NAME)$(if $(ARTIFACT_BUILD_NUMBER),+$(ARTIFACT_BUILD_NUMBER))
 BUILD_ARGS := $(if $(BUILD_NAME),--build-name=$(BUILD_NAME)) $(if $(BUILD_NUMBER),--build-number=$(BUILD_NUMBER))
+BUILD_METADATA_ARGS := --dart-define=FKNOTES_BUILD_TIME=$(BUILD_TIME)
 DEVICE_ARG := $(if $(DEVICE),-d $(DEVICE))
 
 .DEFAULT_GOAL := help
@@ -30,7 +32,7 @@ DEVICE_ARG := $(if $(DEVICE),-d $(DEVICE))
 
 help: ## 显示所有可用命令
 	@awk 'BEGIN {FS = ":.*##"}; /^[a-zA-Z0-9_-]+:.*##/ { printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
-	@printf '\n可选参数：DEVICE=<设备 ID>，BUILD_NAME=<版本名>，BUILD_NUMBER=<构建号>，DIST_DIR=<输出目录>\n'
+	@printf '\n可选参数：DEVICE=<设备 ID>，BUILD_NAME=<版本名>，BUILD_NUMBER=<构建号>，BUILD_TIME=<ISO 8601 时间>，DIST_DIR=<输出目录>\n'
 
 doctor: ## 检查 Flutter 开发环境
 	$(FLUTTER) doctor
@@ -62,30 +64,30 @@ emulators: ## 列出可用 Android 模拟器
 	$(FLUTTER) emulators
 
 run: get ## 在指定设备上调试运行；可传 DEVICE=<设备 ID>
-	$(FLUTTER) run $(DEVICE_ARG)
+	$(FLUTTER) run $(DEVICE_ARG) $(BUILD_METADATA_ARGS)
 
 run-android: get ## 在 Android 设备或模拟器上调试运行
-	$(FLUTTER) run -d $(if $(DEVICE),$(DEVICE),android)
+	$(FLUTTER) run -d $(if $(DEVICE),$(DEVICE),android) $(BUILD_METADATA_ARGS)
 
 run-ios: get ## 在 iOS 模拟器或设备上调试运行
-	$(FLUTTER) run -d $(if $(DEVICE),$(DEVICE),ios)
+	$(FLUTTER) run -d $(if $(DEVICE),$(DEVICE),ios) $(BUILD_METADATA_ARGS)
 
 run-macos: get ## 在 macOS 上调试运行
-	$(FLUTTER) run -d macos
+	$(FLUTTER) run -d macos $(BUILD_METADATA_ARGS)
 
 debug: apk-debug ## 打包默认 Android Debug APK
 
 package: apk ## 打包默认 Android 发布 APK
 
 apk-debug: get ## 打包 Android Debug APK，产物放入 dist/
-	$(FLUTTER) build apk --debug $(BUILD_ARGS)
+	$(FLUTTER) build apk --debug $(BUILD_ARGS) $(BUILD_METADATA_ARGS)
 	@mkdir -p $(DIST_DIR)
 	@rm -f $(DIST_DIR)/fknotes-debug.apk
 	@cp build/app/outputs/flutter-apk/app-debug.apk $(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-debug.apk
 	@echo "已生成：$(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-debug.apk"
 
 apk-debug-split: get ## 按 ABI 打包 Android Debug APK，产物放入 dist/
-	$(FLUTTER) build apk --debug --split-per-abi $(BUILD_ARGS)
+	$(FLUTTER) build apk --debug --split-per-abi $(BUILD_ARGS) $(BUILD_METADATA_ARGS)
 	@mkdir -p $(DIST_DIR)
 	@rm -f $(DIST_DIR)/app-*-debug.apk $(DIST_DIR)/fknotes-debug.apk
 	@cp build/app/outputs/flutter-apk/app-armeabi-v7a-debug.apk $(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-armeabi-v7a-debug.apk
@@ -96,14 +98,14 @@ apk-debug-split: get ## 按 ABI 打包 Android Debug APK，产物放入 dist/
 	@echo "已生成：$(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-x86_64-debug.apk"
 
 apk: get ## 打包 Android 发布 APK，产物放入 dist/
-	$(FLUTTER) build apk --release $(BUILD_ARGS)
+	$(FLUTTER) build apk --release $(BUILD_ARGS) $(BUILD_METADATA_ARGS)
 	@mkdir -p $(DIST_DIR)
 	@rm -f $(DIST_DIR)/fknotes-release.apk
 	@cp build/app/outputs/flutter-apk/app-release.apk $(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-release.apk
 	@echo "已生成：$(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-release.apk"
 
 apk-split: get ## 按 ABI 打包 Android 发布 APK，产物放入 dist/
-	$(FLUTTER) build apk --release --split-per-abi $(BUILD_ARGS)
+	$(FLUTTER) build apk --release --split-per-abi $(BUILD_ARGS) $(BUILD_METADATA_ARGS)
 	@mkdir -p $(DIST_DIR)
 	@rm -f $(DIST_DIR)/app-*-release.apk $(DIST_DIR)/fknotes-release.apk
 	@cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk $(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-armeabi-v7a-release.apk
@@ -114,26 +116,26 @@ apk-split: get ## 按 ABI 打包 Android 发布 APK，产物放入 dist/
 	@echo "已生成：$(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-x86_64-release.apk"
 
 aab: get ## 打包 Android 发布 AAB，产物放入 dist/
-	$(FLUTTER) build appbundle --release $(BUILD_ARGS)
+	$(FLUTTER) build appbundle --release $(BUILD_ARGS) $(BUILD_METADATA_ARGS)
 	@mkdir -p $(DIST_DIR)
 	@rm -f $(DIST_DIR)/fknotes-release.aab
 	@cp build/app/outputs/bundle/release/app-release.aab $(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-release.aab
 	@echo "已生成：$(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-release.aab"
 
 ios: get ## 打包 iOS Release（需 Xcode 签名配置）
-	$(FLUTTER) build ipa --release $(BUILD_ARGS)
+	$(FLUTTER) build ipa --release $(BUILD_ARGS) $(BUILD_METADATA_ARGS)
 
 macos: get ## 打包 macOS Release
-	$(FLUTTER) build macos --release $(BUILD_ARGS)
+	$(FLUTTER) build macos --release $(BUILD_ARGS) $(BUILD_METADATA_ARGS)
 
 linux: get ## 打包 Linux Release
-	$(FLUTTER) build linux --release $(BUILD_ARGS)
+	$(FLUTTER) build linux --release $(BUILD_ARGS) $(BUILD_METADATA_ARGS)
 
 windows: get ## 打包 Windows Release
-	$(FLUTTER) build windows --release $(BUILD_ARGS)
+	$(FLUTTER) build windows --release $(BUILD_ARGS) $(BUILD_METADATA_ARGS)
 
 web: get ## 打包 Web Release
-	$(FLUTTER) build web --release $(BUILD_ARGS)
+	$(FLUTTER) build web --release $(BUILD_ARGS) $(BUILD_METADATA_ARGS)
 
 clean: ## 清理 Flutter 构建缓存和 dist/ 产物
 	$(FLUTTER) clean

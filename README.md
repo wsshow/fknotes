@@ -252,7 +252,7 @@ git push origin v1.0.1
 
 GitHub Actions 会执行格式检查、静态分析和测试，构建已签名的通用 APK 与
 AAB，生成 SHA-256 校验文件，并创建带自动发行说明的 GitHub Release。
-`v1.0.1-beta.1` 一类 tag 会自动标记为预发布版本。
+构建时间会同时写入应用的“关于”区域；`v1.0.1-beta.1` 一类 tag 会自动标记为预发布版本。
 
 tag 去掉前缀 `v` 后作为 Android `versionName`，工作流运行序号作为递增的
 `versionCode`，不会修改 `pubspec.yaml`。后续发布必须继续使用同一发布密钥，

@@ -44,7 +44,7 @@ void main() {
     expect(find.text('图片'), findsWidgets);
   });
 
-  testWidgets('data tab shows the installed app version and build number', (
+  testWidgets('data tab shows the installed version and build metadata', (
     tester,
   ) async {
     _usePhoneViewport(tester);
@@ -66,7 +66,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('关于'), findsOneWidget);
-    expect(find.text('版本 2.3.4 · 构建 57'), findsOneWidget);
+    expect(find.textContaining('版本号 2.3.4 (57)'), findsOneWidget);
+    expect(find.textContaining('构建时间 未记录'), findsOneWidget);
+    expect(find.text('重建数据索引'), findsNothing);
   });
 
   testWidgets('tapping below the body editor focuses the final text block', (

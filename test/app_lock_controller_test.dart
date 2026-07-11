@@ -57,7 +57,7 @@ void main() {
         results: [
           const DeviceAuthenticationResult(
             DeviceAuthenticationStatus.canceled,
-            '身份验证已取消，内容仍处于锁定状态',
+            '认证已取消',
           ),
           const DeviceAuthenticationResult(
             DeviceAuthenticationStatus.authenticated,
@@ -77,7 +77,7 @@ void main() {
 
       expect(controller.locked, isTrue);
       expect(controller.shouldAutomaticallyAuthenticate, isFalse);
-      expect(controller.message, contains('仍处于锁定状态'));
+      expect(controller.message, '认证已取消');
 
       await controller.unlock();
       expect(controller.locked, isFalse);

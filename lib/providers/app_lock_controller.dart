@@ -72,7 +72,7 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
         '',
       );
     }
-    return _authenticate('验证设备身份以解锁非空笔记');
+    return _authenticate('验证设备身份以继续');
   }
 
   Future<DeviceAuthenticationResult> setEnabled(bool value) async {
@@ -128,7 +128,7 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
 
   void lockNow() {
     if (!enabled) return;
-    _lock(allowAutomaticPrompt: false);
+    _lock(allowAutomaticPrompt: true);
   }
 
   Future<DeviceAuthenticationResult> _authenticate(

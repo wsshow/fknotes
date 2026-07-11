@@ -54,8 +54,8 @@ class SystemDeviceAuthenticator implements DeviceAuthenticator {
         persistAcrossBackgrounding: true,
         authMessages: const [
           AndroidAuthMessages(
-            signInTitle: '解锁非空笔记',
-            signInHint: '验证设备身份以继续',
+            signInTitle: '非空笔记',
+            signInHint: '',
             cancelButton: '取消',
           ),
           IOSAuthMessages(cancelButton: '取消', localizedFallbackTitle: '使用设备密码'),
@@ -87,7 +87,7 @@ class SystemDeviceAuthenticator implements DeviceAuthenticator {
       case LocalAuthExceptionCode.timeout:
         return const DeviceAuthenticationResult(
           DeviceAuthenticationStatus.canceled,
-          '身份验证已取消，内容仍处于锁定状态',
+          '认证已取消',
         );
       case LocalAuthExceptionCode.noCredentialsSet:
       case LocalAuthExceptionCode.noBiometricsEnrolled:

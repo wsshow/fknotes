@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fknotes/app.dart';
 import 'package:fknotes/pages/app_lock_settings_page.dart';
 import 'package:fknotes/providers/app_lock_controller.dart';
@@ -12,13 +14,14 @@ void main() {
   testWidgets('lock screen stays visible after cancellation and allows retry', (
     tester,
   ) async {
+    _usePhoneViewport(tester);
     final store = _WidgetPreferencesStore(
       const AppLockPreferences(enabled: true),
     );
     final authenticator = _WidgetAuthenticator([
       const DeviceAuthenticationResult(
         DeviceAuthenticationStatus.canceled,
-        '身份验证已取消，内容仍处于锁定状态',
+        '认证已取消',
       ),
       const DeviceAuthenticationResult(
         DeviceAuthenticationStatus.authenticated,
@@ -36,18 +39,70 @@ void main() {
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
         value: controller,
-        child: const MaterialApp(home: AppLockGate(child: Text('私密笔记内容'))),
+        child: const MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(
+              size: Size(360, 800),
+              textScaler: TextScaler.linear(3.2),
+            ),
+            child: AppLockGate(child: Text('私密笔记内容')),
+          ),
+        ),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('非空笔记已锁定'), findsOneWidget);
-    expect(find.textContaining('仍处于锁定状态'), findsOneWidget);
+    expect(find.text('应用已锁定'), findsOneWidget);
+    expect(find.text('认证已取消'), findsOneWidget);
+    expect(tester.takeException(), isNull);
 
     await tester.tap(find.byKey(const Key('app-lock-unlock-button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('非空笔记已锁定'), findsNothing);
+    expect(find.text('应用已锁定'), findsNothing);
+    expect(find.text('私密笔记内容'), findsOneWidget);
+  });
+
+  testWidgets('lock now immediately enters the waiting-for-system state', (
+    tester,
+  ) async {
+    final store = _WidgetPreferencesStore(
+      const AppLockPreferences(enabled: true),
+    );
+    final authenticator = _DeferredWidgetAuthenticator();
+    final controller = AppLockController(
+      preferencesStore: store,
+      authenticator: authenticator,
+      observeLifecycle: false,
+    );
+    await controller.initialize();
+    await controller.authenticateAutomatically();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: controller,
+        child: const MaterialApp(home: AppLockGate(child: Text('私密笔记内容'))),
+      ),
+    );
+    expect(find.text('私密笔记内容'), findsOneWidget);
+
+    final pending = authenticator.deferNextAuthentication();
+    controller.lockNow();
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('等待系统验证'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byKey(const Key('app-lock-unlock-button')), findsNothing);
+
+    pending.complete(
+      const DeviceAuthenticationResult(
+        DeviceAuthenticationStatus.authenticated,
+        '',
+      ),
+    );
+    await tester.pumpAndSettle();
     expect(find.text('私密笔记内容'), findsOneWidget);
   });
 
@@ -81,6 +136,12 @@ void main() {
     expect(find.text('离开应用后自动锁定'), findsOneWidget);
     expect(find.text('1 分钟后'), findsOneWidget);
   });
+}
+
+void _usePhoneViewport(WidgetTester tester) {
+  tester.view.devicePixelRatio = 3;
+  tester.view.physicalSize = const Size(1080, 2400);
+  addTearDown(tester.view.reset);
 }
 
 class _WidgetPreferencesStore implements AppLockPreferencesStore {
@@ -118,6 +179,32 @@ class _WidgetAuthenticator implements DeviceAuthenticator {
     final result = _results[_index.clamp(0, _results.length - 1)];
     _index += 1;
     return result;
+  }
+
+  @override
+  Future<bool> isSupported() async => true;
+}
+
+class _DeferredWidgetAuthenticator implements DeviceAuthenticator {
+  Completer<DeviceAuthenticationResult>? _pending;
+
+  Completer<DeviceAuthenticationResult> deferNextAuthentication() {
+    return _pending = Completer<DeviceAuthenticationResult>();
+  }
+
+  @override
+  Future<DeviceAuthenticationResult> authenticate({
+    required String reason,
+  }) async {
+    final pending = _pending;
+    if (pending != null) {
+      _pending = null;
+      return pending.future;
+    }
+    return const DeviceAuthenticationResult(
+      DeviceAuthenticationStatus.authenticated,
+      '',
+    );
   }
 
   @override
