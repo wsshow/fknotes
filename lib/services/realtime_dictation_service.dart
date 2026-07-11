@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ffi' as ffi;
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math' as math;
@@ -19,6 +20,8 @@ const _initialSilenceEndpointSeconds = 15.0;
 const _recognizedSpeechEndpointSeconds = 1.2;
 const _maximumUtteranceSeconds = 20.0;
 const _emptyStreamRecycleSeconds = 30.0;
+const _stalledRecognizerRecoverySeconds = 10;
+const _audibleSpeechRmsDb = -38.0;
 
 /// Owns one device-local streaming dictation session.
 ///
@@ -63,6 +66,17 @@ class RealtimeDictationService extends ChangeNotifier {
   final List<String> _debugEvents = [];
   BytesBuilder _debugPcm = BytesBuilder(copy: false);
   bool _debugPcmTruncated = false;
+  BytesBuilder _recoveryPcm = BytesBuilder(copy: true);
+  bool _recoveryRequested = false;
+  double _sessionMaxRms = 0;
+  String _debugNativeRuntime = '-';
+  String _debugNativeAbi = '-';
+  String _debugCpuFingerprint = '-';
+  int _debugWorkerChunks = 0;
+  int _debugWorkerSamples = 0;
+  int _debugDecodeCalls = 0;
+  double _debugWorkerRmsDb = -160;
+  double _debugWorkerPeakDb = -160;
 
   static const _debugPcmLimitBytes = 16000 * 2 * 300;
 
@@ -106,6 +120,9 @@ class RealtimeDictationService extends ChangeNotifier {
       '线程数: 2',
       '端点规则: 15.0 / 1.2 / 20 s',
       '空流回收: 30 s（仅无任何 token 时）',
+      '原生运行库: $_debugNativeRuntime',
+      '原生 ABI: $_debugNativeAbi',
+      'CPU 指纹: $_debugCpuFingerprint',
       '',
       '[录音配置]',
       '编码: PCM16 little-endian',
@@ -130,6 +147,12 @@ class RealtimeDictationService extends ChangeNotifier {
       '当前音量值: ${inputLevel.toStringAsFixed(3)}',
       '诊断录音: ${(_debugPcm.length / 32000).toStringAsFixed(2)} s'
           '${_debugPcmTruncated ? '（已截断至 5 分钟）' : ''}',
+      'Worker 音频块: $_debugWorkerChunks',
+      'Worker 音频采样: $_debugWorkerSamples',
+      'Worker 最近 RMS: ${_debugWorkerRmsDb.toStringAsFixed(1)} dBFS',
+      'Worker 最近峰值: ${_debugWorkerPeakDb.toStringAsFixed(1)} dBFS',
+      '原生 decode 调用: $_debugDecodeCalls',
+      '自动恢复重放: ${_recoveryRequested ? "已触发" : "未触发"}',
       '已提交文本: ${committedText.isEmpty ? '-' : committedText}',
       '临时文本: ${partialText.isEmpty ? '-' : partialText}',
       '',
@@ -167,14 +190,29 @@ class RealtimeDictationService extends ChangeNotifier {
       _debugLastZeroCrossingPercent = 0;
       _debugPcm = BytesBuilder(copy: false);
       _debugPcmTruncated = false;
+      _debugNativeRuntime = '-';
+      _debugNativeAbi = '-';
+      _debugCpuFingerprint = '-';
+      _debugWorkerChunks = 0;
+      _debugWorkerSamples = 0;
+      _debugDecodeCalls = 0;
+      _debugWorkerRmsDb = -160;
+      _debugWorkerPeakDb = -160;
       _debugEvent('开始准备实时听写');
     }
+    _recoveryPcm = BytesBuilder(copy: true);
+    _recoveryRequested = false;
+    _sessionMaxRms = 0;
     _resetDebugAudioWindow();
     notifyListeners();
     try {
-      final model = await _models.inspect();
-      _debugEvent('模型检查: installed=${model.installed}');
-      if (!model.installed) throw StateError('请先下载实时语音输入模型');
+      final model = await _models.inspect(verifyIntegrity: true);
+      _debugEvent(
+        '模型完整性检查: installed=${model.installed}, problem=${model.problem ?? "-"}',
+      );
+      if (!model.installed) {
+        throw StateError(model.problem ?? '请先下载实时语音输入模型');
+      }
       var permission = await Permission.microphone.status;
       if (!permission.isGranted) {
         permission = await Permission.microphone.request();
@@ -217,6 +255,7 @@ class RealtimeDictationService extends ChangeNotifier {
       _debugEvent('录音流已启动，进入 listening');
       _timer = Timer.periodic(const Duration(seconds: 1), (_) {
         elapsed += const Duration(seconds: 1);
+        _recoverStalledRecognizerIfNeeded();
         notifyListeners();
       });
       notifyListeners();
@@ -245,6 +284,13 @@ class RealtimeDictationService extends ChangeNotifier {
           .timeout(const Duration(seconds: 12));
       committedText = result.trim();
       partialText = '';
+      if (committedText.isEmpty &&
+          _amplitudeDb(_sessionMaxRms) >= _audibleSpeechRmsDb) {
+        throw StateError(
+          '识别器已收到清晰语音并执行解码，但没有产生 token；'
+          '请导出诊断报告（其中已包含原生版本、ABI 和 Worker 输入统计）',
+        );
+      }
       status = RealtimeDictationStatus.idle;
       _debugEvent('识别完成: ${committedText.isEmpty ? "无文本" : committedText}');
       return committedText;
@@ -314,7 +360,13 @@ class RealtimeDictationService extends ChangeNotifier {
     if (message is! Map) return;
     switch (message['type']) {
       case 'ready':
-        _debugEvent('识别工作线程已就绪');
+        _debugNativeRuntime = message['runtime'] as String? ?? '-';
+        _debugNativeAbi = message['abi'] as String? ?? '-';
+        _debugCpuFingerprint = message['cpu'] as String? ?? '-';
+        _debugEvent(
+          '识别工作线程已就绪: runtime=$_debugNativeRuntime, '
+          'abi=$_debugNativeAbi, cpu=$_debugCpuFingerprint',
+        );
         _commandPort = message['commandPort'] as SendPort?;
         if (!(_readyCompleter?.isCompleted ?? true)) {
           _readyCompleter!.complete();
@@ -342,6 +394,22 @@ class RealtimeDictationService extends ChangeNotifier {
           '解码事件: ${message['event']}, text="${message['text'] ?? ''}"',
         );
         return;
+      case 'telemetry':
+        _debugWorkerChunks = message['chunks'] as int? ?? _debugWorkerChunks;
+        _debugWorkerSamples = message['samples'] as int? ?? _debugWorkerSamples;
+        _debugDecodeCalls = message['decodeCalls'] as int? ?? _debugDecodeCalls;
+        _debugWorkerRmsDb =
+            (message['rmsDb'] as num?)?.toDouble() ?? _debugWorkerRmsDb;
+        _debugWorkerPeakDb =
+            (message['peakDb'] as num?)?.toDouble() ?? _debugWorkerPeakDb;
+        _debugEvent(
+          'Worker PCM: chunks=$_debugWorkerChunks, '
+          'samples=$_debugWorkerSamples, '
+          'rms=${_debugWorkerRmsDb.toStringAsFixed(1)} dBFS, '
+          'peak=${_debugWorkerPeakDb.toStringAsFixed(1)} dBFS, '
+          'decodeCalls=$_debugDecodeCalls',
+        );
+        return;
     }
   }
 
@@ -349,6 +417,18 @@ class RealtimeDictationService extends ChangeNotifier {
     if (status != RealtimeDictationStatus.listening || bytes.isEmpty) return;
     final stats = _pcmStats(bytes);
     inputLevel = stats.level;
+    _sessionMaxRms = math.max(
+      _sessionMaxRms,
+      stats.samples == 0 ? 0 : math.sqrt(stats.squares / stats.samples),
+    );
+    final recoveryRemaining = _debugPcmLimitBytes - _recoveryPcm.length;
+    if (recoveryRemaining > 0) {
+      _recoveryPcm.add(
+        recoveryRemaining >= bytes.length
+            ? bytes
+            : bytes.sublist(0, recoveryRemaining),
+      );
+    }
     if (kDebugMode) {
       final remaining = _debugPcmLimitBytes - _debugPcm.length;
       if (remaining > 0) {
@@ -397,6 +477,27 @@ class RealtimeDictationService extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _recoverStalledRecognizerIfNeeded() {
+    if (_recoveryRequested ||
+        status != RealtimeDictationStatus.listening ||
+        elapsed.inSeconds < _stalledRecognizerRecoverySeconds ||
+        text.isNotEmpty ||
+        _amplitudeDb(_sessionMaxRms) < _audibleSpeechRmsDb ||
+        _recoveryPcm.isEmpty) {
+      return;
+    }
+    _recoveryRequested = true;
+    final pcm = _recoveryPcm.toBytes();
+    _debugEvent(
+      '检测到有声输入但持续零 token，重建解码流并重放 '
+      '${(pcm.length / 32000).toStringAsFixed(2)} s 音频',
+    );
+    _commandPort?.send({
+      'type': 'replay',
+      'data': TransferableTypedData.fromList([pcm]),
+    });
+  }
+
   void _fail(Object error) {
     _debugEvent('会话失败: $error');
     if (!(_readyCompleter?.isCompleted ?? true)) {
@@ -433,6 +534,7 @@ class RealtimeDictationService extends ChangeNotifier {
     _exits = null;
     await _recorder?.dispose();
     _recorder = null;
+    _recoveryPcm = BytesBuilder(copy: true);
   }
 
   _PcmStats _pcmStats(Uint8List bytes) {
@@ -594,7 +696,13 @@ void _realtimeRecognitionWorker(Map<String, Object> args) {
   var lastSentPartial = '';
   var emptyEndpointReported = false;
   var streamSamples = 0;
-  final pcmDecoder = _Pcm16StreamDecoder();
+  var pcmDecoder = _Pcm16StreamDecoder();
+  var workerChunks = 0;
+  var workerSamples = 0;
+  var decodeCalls = 0;
+  var telemetrySamples = 0;
+  var telemetrySquares = 0.0;
+  var telemetryPeak = 0.0;
 
   void sendUpdate(String partial) {
     if (committed == lastSentCommitted && partial == lastSentPartial) return;
@@ -613,6 +721,83 @@ void _realtimeRecognitionWorker(Map<String, Object> args) {
     if (segment.isEmpty) return;
     committed = _joinDictationSegments(committed, segment);
     lastPartial = '';
+  }
+
+  void sendTelemetry() {
+    if (telemetrySamples == 0) return;
+    final rms = math.sqrt(telemetrySquares / telemetrySamples);
+    sendPort.send({
+      'type': 'telemetry',
+      'chunks': workerChunks,
+      'samples': workerSamples,
+      'decodeCalls': decodeCalls,
+      'rmsDb': _amplitudeDb(rms),
+      'peakDb': _amplitudeDb(telemetryPeak),
+    });
+    telemetrySamples = 0;
+    telemetrySquares = 0;
+    telemetryPeak = 0;
+  }
+
+  void processSamples(Float32List samples, {required bool liveInput}) {
+    if (samples.isEmpty) return;
+    if (liveInput) {
+      workerChunks++;
+      workerSamples += samples.length;
+      telemetrySamples += samples.length;
+      for (final sample in samples) {
+        telemetrySquares += sample * sample;
+        telemetryPeak = math.max(telemetryPeak, sample.abs());
+      }
+    }
+    streamSamples += samples.length;
+    stream!.acceptWaveform(samples: samples, sampleRate: 16000);
+    while (recognizer!.isReady(stream!)) {
+      recognizer!.decode(stream!);
+      decodeCalls++;
+    }
+    final result = recognizer!.getResult(stream!).text.trim();
+    if (kDebugMode && result != lastPartial) {
+      sendPort.send({'type': 'debug', 'event': 'partial', 'text': result});
+    }
+    final isEndpoint = recognizer!.isEndpoint(stream!);
+    if (isEndpoint && result.isNotEmpty) {
+      if (kDebugMode) {
+        sendPort.send({'type': 'debug', 'event': 'endpoint', 'text': result});
+      }
+      finishSegment(result);
+      stream!.free();
+      stream = recognizer!.createStream();
+      streamSamples = 0;
+      emptyEndpointReported = false;
+      sendUpdate('');
+    } else if (isEndpoint &&
+        result.isEmpty &&
+        streamSamples >= 16000 * _emptyStreamRecycleSeconds) {
+      if (kDebugMode) {
+        sendPort.send({
+          'type': 'debug',
+          'event': 'empty_stream_recycled',
+          'text': '',
+        });
+      }
+      stream!.free();
+      stream = recognizer!.createStream();
+      streamSamples = 0;
+      emptyEndpointReported = false;
+    } else {
+      if (isEndpoint && !emptyEndpointReported && kDebugMode) {
+        sendPort.send({
+          'type': 'debug',
+          'event': 'empty_endpoint_ignored',
+          'text': '',
+        });
+        emptyEndpointReported = true;
+      }
+      if (!isEndpoint) emptyEndpointReported = false;
+      sendUpdate(result);
+    }
+    if (liveInput && telemetrySamples >= 16000) sendTelemetry();
   }
 
   try {
@@ -643,84 +828,57 @@ void _realtimeRecognitionWorker(Map<String, Object> args) {
       ),
     );
     stream = recognizer.createStream();
-    sendPort.send({'type': 'ready', 'commandPort': commands.sendPort});
+    sendPort.send({
+      'type': 'ready',
+      'commandPort': commands.sendPort,
+      'runtime':
+          '${sherpa.getVersion()} (${sherpa.getGitSha1()}, '
+          '${sherpa.getGitDate()})',
+      'abi': ffi.Abi.current().toString(),
+      'cpu': _androidCpuFingerprint(),
+    });
     commands.listen((dynamic raw) {
       if (raw is! Map) return;
       try {
         if (raw['type'] == 'audio') {
           final payload = raw['data'] as TransferableTypedData;
           final samples = pcmDecoder.add(payload.materialize().asUint8List());
-          if (samples.isEmpty) return;
-          streamSamples += samples.length;
-          stream!.acceptWaveform(samples: samples, sampleRate: 16000);
-          while (recognizer!.isReady(stream!)) {
-            recognizer!.decode(stream!);
+          processSamples(samples, liveInput: true);
+          return;
+        }
+        if (raw['type'] == 'replay') {
+          sendPort.send({
+            'type': 'debug',
+            'event': 'stalled_stream_replay_started',
+            'text': '',
+          });
+          stream!.free();
+          stream = recognizer!.createStream();
+          streamSamples = 0;
+          emptyEndpointReported = false;
+          pcmDecoder = _Pcm16StreamDecoder();
+          committed = '';
+          lastPartial = '';
+          lastSentCommitted = '';
+          lastSentPartial = '';
+          final payload = raw['data'] as TransferableTypedData;
+          final bytes = payload.materialize().asUint8List();
+          for (var offset = 0; offset < bytes.length; offset += 3200) {
+            final end = math.min(offset + 3200, bytes.length);
+            processSamples(
+              pcmDecoder.add(Uint8List.sublistView(bytes, offset, end)),
+              liveInput: false,
+            );
           }
-          final result = recognizer!.getResult(stream!).text.trim();
-          if (kDebugMode && result != lastPartial) {
-            sendPort.send({
-              'type': 'debug',
-              'event': 'partial',
-              'text': result,
-            });
-          }
-          final isEndpoint = recognizer!.isEndpoint(stream!);
-          if (isEndpoint && result.isNotEmpty) {
-            if (kDebugMode) {
-              sendPort.send({
-                'type': 'debug',
-                'event': 'endpoint',
-                'text': result,
-              });
-            }
-            finishSegment(result);
-            // Start every utterance with a fresh decoder stream. Reusing the
-            // same native stream via reset() can leave the transducer in an
-            // endpoint state on some Android runtimes: audio keeps arriving,
-            // but later utterances no longer produce hypotheses.
-            stream!.free();
-            stream = recognizer!.createStream();
-            streamSamples = 0;
-            emptyEndpointReported = false;
-            sendUpdate('');
-          } else if (isEndpoint &&
-              result.isEmpty &&
-              streamSamples >= 16000 * _emptyStreamRecycleSeconds) {
-            // Continuous dictation should not stop just because the user has
-            // not spoken. Recycle only a stream that has produced no token for
-            // a deliberately conservative interval; the session and model
-            // stay alive, while stale feature history is released.
-            if (kDebugMode) {
-              sendPort.send({
-                'type': 'debug',
-                'event': 'empty_stream_recycled',
-                'text': '',
-              });
-            }
-            stream!.free();
-            stream = recognizer!.createStream();
-            streamSamples = 0;
-            emptyEndpointReported = false;
-          } else {
-            // Rule 1 can report an endpoint after trailing silence even when
-            // the transducer has not emitted a token yet. Resetting here used
-            // to discard all acoustic context every few seconds, so longer-
-            // latency models could never produce their first hypothesis.
-            // Keep decoding the same stream until there is actual text.
-            if (isEndpoint && !emptyEndpointReported && kDebugMode) {
-              sendPort.send({
-                'type': 'debug',
-                'event': 'empty_endpoint_ignored',
-                'text': '',
-              });
-              emptyEndpointReported = true;
-            }
-            if (!isEndpoint) emptyEndpointReported = false;
-            sendUpdate(result);
-          }
+          sendPort.send({
+            'type': 'debug',
+            'event': 'stalled_stream_replay_finished',
+            'text': '$committed$lastPartial',
+          });
           return;
         }
         if (raw['type'] == 'stop') {
+          sendTelemetry();
           stream!.inputFinished();
           while (recognizer!.isReady(stream!)) {
             recognizer!.decode(stream!);
@@ -742,6 +900,34 @@ void _realtimeRecognitionWorker(Map<String, Object> args) {
     commands.close();
     stream?.free();
     recognizer?.free();
+  }
+}
+
+String _androidCpuFingerprint() {
+  if (!Platform.isAndroid) return '-';
+  try {
+    const usefulKeys = {
+      'hardware',
+      'model name',
+      'cpu implementer',
+      'cpu architecture',
+      'cpu variant',
+      'cpu part',
+      'cpu revision',
+      'features',
+    };
+    final values = <String>{};
+    for (final rawLine in File('/proc/cpuinfo').readAsLinesSync()) {
+      final separator = rawLine.indexOf(':');
+      if (separator < 0) continue;
+      final key = rawLine.substring(0, separator).trim();
+      if (!usefulKeys.contains(key.toLowerCase())) continue;
+      final value = rawLine.substring(separator + 1).trim();
+      if (value.isNotEmpty) values.add('$key=$value');
+    }
+    return ['cores=${Platform.numberOfProcessors}', ...values].join('; ');
+  } catch (error) {
+    return 'unavailable ($error)';
   }
 }
 

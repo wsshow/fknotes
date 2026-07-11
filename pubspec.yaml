@@ -49,7 +49,10 @@ dependencies:
   file_selector: ^1.1.0
   archive: ^4.0.9
   share_plus: ^13.2.0
-  sherpa_onnx: ^1.13.4
+  # 1.13.4 is the first release to bundle ORT 1.27, which produces blank-only
+  # Zipformer INT8 output on the affected physical arm64 device. 1.13.3 keeps
+  # the same Dart API and Android build fixes while using ORT 1.24.3.
+  sherpa_onnx: 1.13.3
   crypto: ^3.0.7
 
 dev_dependencies:
@@ -63,6 +66,18 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
   sqflite_common_ffi: ^2.4.2
+
+# sherpa_onnx's federated implementation constraints use caret ranges, so pin
+# every native package or pub silently selects the 1.13.4/ORT 1.27 binaries.
+dependency_overrides:
+  sherpa_onnx_android_arm64: 1.13.3
+  sherpa_onnx_android_armeabi: 1.13.3
+  sherpa_onnx_android_x86: 1.13.3
+  sherpa_onnx_android_x86_64: 1.13.3
+  sherpa_onnx_ios: 1.13.3
+  sherpa_onnx_linux: 1.13.3
+  sherpa_onnx_macos: 1.13.3
+  sherpa_onnx_windows: 1.13.3
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

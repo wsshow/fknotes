@@ -1,6 +1,7 @@
 # FK Notes Flutter project shortcuts.
 # Usage examples:
 #   make package
+#   make debug
 #   make run DEVICE=emulator-5554
 #   make apk BUILD_NAME=1.2.0 BUILD_NUMBER=12
 
@@ -25,7 +26,7 @@ DEVICE_ARG := $(if $(DEVICE),-d $(DEVICE))
 .DEFAULT_GOAL := help
 .PHONY: help doctor get upgrade outdated format analyze test check \
 	devices emulators run run-android run-ios run-macos clean clean-all \
-	package apk apk-split aab ios macos linux windows web
+	debug package apk-debug apk-debug-split apk apk-split aab ios macos linux windows web
 
 help: ## 显示所有可用命令
 	@awk 'BEGIN {FS = ":.*##"}; /^[a-zA-Z0-9_-]+:.*##/ { printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -72,7 +73,27 @@ run-ios: get ## 在 iOS 模拟器或设备上调试运行
 run-macos: get ## 在 macOS 上调试运行
 	$(FLUTTER) run -d macos
 
+debug: apk-debug ## 打包默认 Android Debug APK
+
 package: apk ## 打包默认 Android 发布 APK
+
+apk-debug: get ## 打包 Android Debug APK，产物放入 dist/
+	$(FLUTTER) build apk --debug $(BUILD_ARGS)
+	@mkdir -p $(DIST_DIR)
+	@rm -f $(DIST_DIR)/fknotes-debug.apk
+	@cp build/app/outputs/flutter-apk/app-debug.apk $(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-debug.apk
+	@echo "已生成：$(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-debug.apk"
+
+apk-debug-split: get ## 按 ABI 打包 Android Debug APK，产物放入 dist/
+	$(FLUTTER) build apk --debug --split-per-abi $(BUILD_ARGS)
+	@mkdir -p $(DIST_DIR)
+	@rm -f $(DIST_DIR)/app-*-debug.apk $(DIST_DIR)/fknotes-debug.apk
+	@cp build/app/outputs/flutter-apk/app-armeabi-v7a-debug.apk $(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-armeabi-v7a-debug.apk
+	@cp build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk $(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-arm64-v8a-debug.apk
+	@cp build/app/outputs/flutter-apk/app-x86_64-debug.apk $(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-x86_64-debug.apk
+	@echo "已生成：$(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-armeabi-v7a-debug.apk"
+	@echo "已生成：$(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-arm64-v8a-debug.apk"
+	@echo "已生成：$(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-x86_64-debug.apk"
 
 apk: get ## 打包 Android 发布 APK，产物放入 dist/
 	$(FLUTTER) build apk --release $(BUILD_ARGS)

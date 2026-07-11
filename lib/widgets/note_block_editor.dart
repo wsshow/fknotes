@@ -510,6 +510,63 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     _restoreSnapshot(target);
   }
 
+  /// Ensures continuous dictation has an editable insertion target without
+  /// taking ownership of the caret or disabling normal keyboard editing.
+  bool prepareDictationInsertion() {
+    if (_blocks.isEmpty) return false;
+    var block = _activeEditableBlock;
+    if (block == null) {
+      final index = _blocks.lastIndexWhere(
+        (item) =>
+            item.type != NoteBlockType.divider &&
+            item.type != NoteBlockType.attachment,
+      );
+      if (index < 0) return false;
+      _activeIndex = index;
+      block = _blocks[index];
+    }
+    final text = block.controller.visibleTextValue;
+    final selection = block.controller.visibleSelectionValue;
+    final caret = selection.isValid
+        ? selection.extentOffset.clamp(0, text.length)
+        : text.length;
+    block.controller.visibleSelectionValue = TextSelection.collapsed(
+      offset: caret,
+    );
+    _activeIndex = _blocks.indexOf(block);
+    activeType.value = block.type;
+    return true;
+  }
+
+  /// Inserts finalized, non-empty dictation at the user's current caret.
+  /// Manual edits and caret moves remain authoritative while listening.
+  bool insertDictationTextAtCaret(String value) {
+    if (value.trim().isEmpty) return true;
+    if (!prepareDictationInsertion()) return false;
+    final block = _activeEditableBlock!;
+    final composing = block.controller.value.composing;
+    if (composing.isValid && !composing.isCollapsed) {
+      // Do not destroy an in-progress Chinese/Japanese/Korean IME composition.
+      // The page retries the pending finalized segment after the manual edit
+      // produces its next stable document update.
+      return false;
+    }
+    final text = block.controller.visibleTextValue;
+    final selection = block.controller.visibleSelectionValue;
+    final caret = selection.isValid
+        ? selection.extentOffset.clamp(0, text.length)
+        : text.length;
+    final attributes = block.controller.attributesForSelection(
+      TextSelection.collapsed(offset: caret),
+    );
+    block.controller.typingAttributes = attributes;
+    block.controller.value = TextEditingValue(
+      text: text.replaceRange(caret, caret, value),
+      selection: TextSelection.collapsed(offset: caret + value.length),
+    );
+    return true;
+  }
+
   /// Anchors a live-dictation range at the current caret. Subsequent partial
   /// hypotheses replace only this range, so nearby note text never flickers or
   /// gets duplicated as the recognizer revises its result.

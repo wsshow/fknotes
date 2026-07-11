@@ -63,6 +63,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
   bool _saveAgain = false;
   bool _importing = false;
   bool _dictationAnchored = false;
+  String _dictationInsertedText = '';
   bool _recoveringDictationFailure = false;
   bool _dictationOperationPending = false;
   bool _showDictationDiagnostics = false;
@@ -132,6 +133,13 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     if (_richContent == value) return;
     _richContent = value;
     _markChanged();
+    if (_dictationAnchored &&
+        _dictationInsertedText != _dictation.committedText) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_dictationAnchored) return;
+        _insertCommittedDictation(_dictation.committedText);
+      });
+    }
   }
 
   void _markChanged() {
@@ -154,9 +162,6 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     WidgetsBinding.instance.removeObserver(this);
     _provider?.removeListener(_handleProviderChanged);
     _dictation.removeListener(_handleDictationChanged);
-    if (_dictationAnchored) {
-      _blockEditorKey.currentState?.finishDictation(keepText: false);
-    }
     if (_dictation.isActive) unawaited(_dictation.cancel());
     _title.dispose();
     _content.dispose();
@@ -174,15 +179,34 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       return;
     }
     if (_dictationAnchored) {
-      _blockEditorKey.currentState?.updateDictation(_dictation.text);
+      _insertCommittedDictation(_dictation.committedText);
     }
     setState(() {});
   }
 
+  void _insertCommittedDictation(String committed) {
+    if (committed == _dictationInsertedText) return;
+    if (!committed.startsWith(_dictationInsertedText)) {
+      // Committed recognition is expected to grow monotonically. If a native
+      // runtime ever revises it, wait for the final stop result rather than
+      // duplicating or overwriting text the user may be editing manually.
+      return;
+    }
+    final addition = committed.substring(_dictationInsertedText.length);
+    if (addition.trim().isEmpty) {
+      _dictationInsertedText = committed;
+      return;
+    }
+    final inserted =
+        _blockEditorKey.currentState?.insertDictationTextAtCaret(addition) ??
+        false;
+    if (inserted) _dictationInsertedText = committed;
+  }
+
   Future<void> _recoverFromDictationFailure() async {
     final message = _dictation.errorMessage ?? '实时听写没有完成';
-    _blockEditorKey.currentState?.finishDictation(keepText: false);
     _dictationAnchored = false;
+    _dictationInsertedText = '';
     await _dictation.cancel();
     _recoveringDictationFailure = false;
     if (!mounted) return;
@@ -242,7 +266,8 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       return;
     }
     if (!mounted) return;
-    final anchored = _blockEditorKey.currentState?.beginDictation() ?? false;
+    final anchored =
+        _blockEditorKey.currentState?.prepareDictationInsertion() ?? false;
     if (!anchored) {
       ScaffoldMessenger.of(
         context,
@@ -250,15 +275,14 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       return;
     }
     _dictationAnchored = true;
-    FocusManager.instance.primaryFocus?.unfocus();
-    await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+    _dictationInsertedText = '';
     _dictationOperationPending = true;
     try {
       await _dictation.start();
       HapticFeedback.mediumImpact();
     } catch (_) {
-      _blockEditorKey.currentState?.finishDictation(keepText: false);
       _dictationAnchored = false;
+      _dictationInsertedText = '';
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(_dictation.errorMessage ?? '无法开始实时听写')),
@@ -273,15 +297,13 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     _dictationOperationPending = true;
     try {
       final result = await _dictation.stop();
-      _blockEditorKey.currentState?.updateDictation(result);
-      _blockEditorKey.currentState?.finishDictation(
-        keepText: result.trim().isNotEmpty,
-      );
+      _insertCommittedDictation(result);
       _dictationAnchored = false;
+      _dictationInsertedText = '';
       HapticFeedback.mediumImpact();
     } catch (_) {
-      _blockEditorKey.currentState?.finishDictation(keepText: false);
       _dictationAnchored = false;
+      _dictationInsertedText = '';
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(_dictation.errorMessage ?? '实时听写没有完成')),
@@ -294,8 +316,8 @@ class _NoteEditorPageState extends State<NoteEditorPage>
 
   Future<void> _cancelDictation() async {
     await _dictation.cancel();
-    _blockEditorKey.currentState?.finishDictation(keepText: false);
     _dictationAnchored = false;
+    _dictationInsertedText = '';
     HapticFeedback.selectionClick();
   }
 
@@ -988,20 +1010,17 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                                 padding: EdgeInsets.symmetric(vertical: 18),
                                 child: Divider(),
                               ),
-                              IgnorePointer(
-                                ignoring: _dictation.isActive,
-                                child: NoteBlockEditor(
-                                  key: _blockEditorKey,
-                                  controller: _content,
-                                  initialRichContent: _richContent,
-                                  onRichContentChanged: _onRichContentChanged,
-                                  attachments: _attachments,
-                                  onOpenAttachment: _openAttachment,
-                                  minLines: hasAttachmentContent ? 10 : 16,
-                                  hintText: hasAttachmentContent
-                                      ? '添加说明、想法或摘要…'
-                                      : '开始记录…',
-                                ),
+                              NoteBlockEditor(
+                                key: _blockEditorKey,
+                                controller: _content,
+                                initialRichContent: _richContent,
+                                onRichContentChanged: _onRichContentChanged,
+                                attachments: _attachments,
+                                onOpenAttachment: _openAttachment,
+                                minLines: hasAttachmentContent ? 10 : 16,
+                                hintText: hasAttachmentContent
+                                    ? '添加说明、想法或摘要…'
+                                    : '开始记录…',
                               ),
                             ],
                           ),

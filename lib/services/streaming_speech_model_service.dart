@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:crypto/crypto.dart';
 import 'package:file_selector/file_selector.dart';
@@ -10,6 +11,7 @@ import 'speech_model_service.dart';
 
 class StreamingSpeechModelInfo {
   final bool installed;
+  final String? problem;
   final String encoderPath;
   final String decoderPath;
   final String joinerPath;
@@ -18,6 +20,7 @@ class StreamingSpeechModelInfo {
 
   const StreamingSpeechModelInfo({
     required this.installed,
+    this.problem,
     this.encoderPath = '',
     this.decoderPath = '',
     this.joinerPath = '',
@@ -91,7 +94,6 @@ class StreamingSpeechModelService {
   ];
 
   static const downloadSizeBytes = 167360920;
-  static const _runtimeSizeBytes = 167360920;
 
   final _storage = FileStorageService.instance;
   bool _operationBusy = false;
@@ -103,7 +105,9 @@ class StreamingSpeechModelService {
   String _partialPath(_RemoteModelFile file) =>
       p.join(_downloadDir, '${file.name}.part');
 
-  Future<StreamingSpeechModelInfo> inspect() async {
+  Future<StreamingSpeechModelInfo> inspect({
+    bool verifyIntegrity = false,
+  }) async {
     final encoder = File(p.join(_activeDir, encoderFileName));
     final decoder = File(p.join(_activeDir, decoderFileName));
     final joiner = File(p.join(_activeDir, joinerFileName));
@@ -111,7 +115,10 @@ class StreamingSpeechModelService {
     final manifest = File(p.join(_activeDir, _manifestFileName));
     final files = [encoder, decoder, joiner, tokens, manifest];
     if (files.any((file) => !file.existsSync())) {
-      return const StreamingSpeechModelInfo(installed: false);
+      return const StreamingSpeechModelInfo(
+        installed: false,
+        problem: '实时语音模型文件缺失，请重新下载',
+      );
     }
     try {
       final metadata = jsonDecode(await manifest.readAsString());
@@ -119,19 +126,47 @@ class StreamingSpeechModelService {
           metadata['id'] != modelId ||
           metadata['revision'] != _revision ||
           metadata['runtimeFiles'] != _runtimeLayout) {
-        return const StreamingSpeechModelInfo(installed: false);
+        return const StreamingSpeechModelInfo(
+          installed: false,
+          problem: '实时语音模型版本不匹配，请删除后重新下载',
+        );
       }
     } on FormatException {
-      return const StreamingSpeechModelInfo(installed: false);
+      return const StreamingSpeechModelInfo(
+        installed: false,
+        problem: '实时语音模型清单损坏，请删除后重新下载',
+      );
     } on FileSystemException {
-      return const StreamingSpeechModelInfo(installed: false);
+      return const StreamingSpeechModelInfo(
+        installed: false,
+        problem: '无法读取实时语音模型，请检查存储空间',
+      );
+    }
+    final runtimeFiles = [encoder, decoder, joiner, tokens];
+    for (var index = 0; index < runtimeFiles.length; index++) {
+      if (await runtimeFiles[index].length() != _files[index].sizeBytes) {
+        return StreamingSpeechModelInfo(
+          installed: false,
+          problem: '${_files[index].name} 大小异常，请删除模型后重新下载',
+        );
+      }
+    }
+    if (verifyIntegrity) {
+      final checks = [
+        for (var index = 0; index < runtimeFiles.length; index++)
+          _ModelHashCheck(runtimeFiles[index].path, _files[index].sha256),
+      ];
+      final valid = await Isolate.run(() => _verifyModelHashes(checks));
+      if (!valid) {
+        return const StreamingSpeechModelInfo(
+          installed: false,
+          problem: '实时语音模型完整性校验失败，请删除模型后重新下载',
+        );
+      }
     }
     var size = 0;
     for (final file in files) {
       size += await file.length();
-    }
-    if (size < _runtimeSizeBytes) {
-      return const StreamingSpeechModelInfo(installed: false);
     }
     return StreamingSpeechModelInfo(
       installed: true,
@@ -435,4 +470,19 @@ class StreamingSpeechModelService {
       _operationBusy = false;
     }
   }
+}
+
+class _ModelHashCheck {
+  final String path;
+  final String sha256Hex;
+
+  const _ModelHashCheck(this.path, this.sha256Hex);
+}
+
+Future<bool> _verifyModelHashes(List<_ModelHashCheck> checks) async {
+  for (final check in checks) {
+    final digest = await sha256.bind(File(check.path).openRead()).first;
+    if (digest.toString() != check.sha256Hex) return false;
+  }
+  return true;
 }

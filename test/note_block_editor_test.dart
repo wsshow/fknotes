@@ -547,6 +547,60 @@ void main() {
     expect(controller.text, '原有内容');
   });
 
+  testWidgets(
+    'finalized dictation ignores empty text and follows the current caret',
+    (tester) async {
+      final controller = TextEditingController(text: '已有');
+      final editorKey = GlobalKey<NoteBlockEditorState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: NoteBlockEditor(
+              key: editorKey,
+              controller: controller,
+              hintText: '开始记录',
+            ),
+          ),
+        ),
+      );
+
+      final field = find.byType(TextField).first;
+      await tester.tap(field);
+      await tester.pump();
+      final blockController = tester.widget<TextField>(field).controller!;
+      blockController.value = const TextEditingValue(
+        text: '已有',
+        selection: TextSelection.collapsed(offset: 1),
+      );
+      expect(blockController.selection.extentOffset, 2);
+      expect(editorKey.currentState!.prepareDictationInsertion(), isTrue);
+
+      expect(editorKey.currentState!.insertDictationTextAtCaret('   '), isTrue);
+      expect(controller.text, '已有');
+
+      expect(editorKey.currentState!.insertDictationTextAtCaret('语音'), isTrue);
+      await tester.pump();
+      expect(controller.text, '已语音有');
+
+      blockController.value = const TextEditingValue(
+        text: '已语音有手动',
+        selection: TextSelection.collapsed(offset: 6),
+      );
+      await tester.pump();
+      expect(editorKey.currentState!.insertDictationTextAtCaret('继续'), isTrue);
+      await tester.pump();
+      expect(controller.text, '已语音有手动继续');
+
+      blockController.value = const TextEditingValue(
+        text: '已语音有手动继续拼',
+        selection: TextSelection.collapsed(offset: 9),
+        composing: TextRange(start: 8, end: 9),
+      );
+      expect(editorKey.currentState!.insertDictationTextAtCaret('等待'), isFalse);
+      expect(controller.text, '已语音有手动继续拼');
+    },
+  );
+
   testWidgets('canceling live dictation restores the previous document', (
     tester,
   ) async {

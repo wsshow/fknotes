@@ -110,10 +110,44 @@ flutter run
 | `make test` | 运行全部测试 |
 | `make check` | 依次格式化、分析并测试 |
 | `make run DEVICE=<id>` | 在指定设备上运行 |
+| `make debug` | 生成带应用名和版本号的 Android 通用 Debug APK |
+| `make apk-debug-split` | 按 ABI 生成带应用名和版本号的 Debug APK |
 | `make package` | 生成 Android 通用 Release APK |
 | `make apk-split` | 按 ABI 生成带应用名和版本号的 Android APK |
 | `make aab` | 生成 Google Play 使用的 AAB |
 | `make clean` | 清理构建缓存和 `dist/` |
+
+## Android 调试包
+
+需要将 Debug 版本安装到模拟器或真实设备时，执行：
+
+```bash
+make debug
+```
+
+版本默认读取 `pubspec.yaml`，也可以临时覆盖：
+
+```bash
+make debug BUILD_NAME=1.0.1 BUILD_NUMBER=2
+```
+
+通用 Debug APK 产物命名为：
+
+```text
+dist/fknotes-<版本号>+<构建号>-debug.apk
+```
+
+如需按 CPU 架构分别打包：
+
+```bash
+make apk-debug-split
+```
+
+对应产物命名为：
+
+```text
+dist/fknotes-<版本号>+<构建号>-<ABI>-debug.apk
+```
 
 ## Android 正式包
 
