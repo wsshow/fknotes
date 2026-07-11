@@ -13,6 +13,26 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
+val environmentKeystorePath =
+    System.getenv("ANDROID_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }
+val environmentSigningAvailable =
+    listOf(
+        environmentKeystorePath,
+        System.getenv("ANDROID_KEYSTORE_PASSWORD"),
+        System.getenv("ANDROID_KEY_PASSWORD"),
+        System.getenv("ANDROID_KEY_ALIAS"),
+    ).all { !it.isNullOrBlank() }
+val releaseSigningAvailable =
+    keystorePropertiesFile.exists() || environmentSigningAvailable
+
+fun releaseSigningValue(
+    environmentName: String,
+    propertyName: String,
+): String =
+    System.getenv(environmentName)?.takeIf { it.isNotBlank() }
+        ?: keystoreProperties.getProperty(propertyName)
+        ?: error("Missing Android release signing value: $environmentName")
+
 android {
     namespace = "com.fknotes.app"
     compileSdk = 36
@@ -34,12 +54,13 @@ android {
     }
 
     signingConfigs {
-        if (keystorePropertiesFile.exists()) {
+        if (releaseSigningAvailable) {
             create("release") {
-                keyAlias = keystoreProperties["keyAlias"] as String
-                keyPassword = keystoreProperties["keyPassword"] as String
-                storeFile = (keystoreProperties["storeFile"] as String).let { file(it) }
-                storePassword = keystoreProperties["storePassword"] as String
+                keyAlias = releaseSigningValue("ANDROID_KEY_ALIAS", "keyAlias")
+                keyPassword = releaseSigningValue("ANDROID_KEY_PASSWORD", "keyPassword")
+                storeFile = file(releaseSigningValue("ANDROID_KEYSTORE_PATH", "storeFile"))
+                storePassword =
+                    releaseSigningValue("ANDROID_KEYSTORE_PASSWORD", "storePassword")
             }
         }
     }

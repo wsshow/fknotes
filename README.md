@@ -224,6 +224,39 @@ make aab BUILD_NAME=1.0.1 BUILD_NUMBER=2
 
 产物位于 `dist/`。AAB 不能直接安装到手机，需要上传到 Google Play Console。
 
+## GitHub 自动发布
+
+仓库内置了 tag 驱动的 Android 发布工作流。首次使用前，在 GitHub 仓库的
+`Settings > Secrets and variables > Actions` 中添加以下 Repository secrets：
+
+| Secret | 内容 |
+| --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | 发布密钥库文件的 Base64 内容 |
+| `ANDROID_KEYSTORE_PASSWORD` | 密钥库密码，对应 `storePassword` |
+| `ANDROID_KEY_PASSWORD` | 密钥密码，对应 `keyPassword` |
+| `ANDROID_KEY_ALIAS` | 密钥别名，对应 `keyAlias` |
+
+在 macOS 上可用以下命令生成待粘贴的密钥库 Base64 文本：
+
+```bash
+base64 -i android/app/fknotes-release.jks -o /tmp/fknotes-release.jks.base64
+```
+
+配置完成后，创建并推送符合语义化版本格式的 tag：
+
+```bash
+git tag -a v1.0.1 -m "FKNotes v1.0.1"
+git push origin v1.0.1
+```
+
+GitHub Actions 会执行格式检查、静态分析和测试，构建已签名的通用 APK 与
+AAB，生成 SHA-256 校验文件，并创建带自动发行说明的 GitHub Release。
+`v1.0.1-beta.1` 一类 tag 会自动标记为预发布版本。
+
+tag 去掉前缀 `v` 后作为 Android `versionName`，工作流运行序号作为递增的
+`versionCode`，不会修改 `pubspec.yaml`。后续发布必须继续使用同一发布密钥，
+否则无法覆盖安装旧版本。
+
 ## iOS 构建
 
 先在 Xcode 中为 Runner 配置 Apple Developer Team 和签名，再执行：
