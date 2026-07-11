@@ -7,6 +7,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 
 import 'file_storage_service.dart';
+import 'model_install_coordinator.dart';
 import 'speech_model_service.dart';
 
 class StreamingSpeechModelInfo {
@@ -185,7 +186,7 @@ class StreamingSpeechModelService {
   ];
 
   final _storage = FileStorageService.instance;
-  bool _operationBusy = false;
+  final Set<String> _busyModelIds = {};
 
   String get _selectionPath =>
       p.join(_storage.baseDir, 'models', 'asr', 'live-dictation.json');
@@ -361,7 +362,7 @@ class StreamingSpeechModelService {
     );
     final selected = await openFiles(acceptedTypeGroups: [group]);
     if (selected.isEmpty) return null;
-    return _runExclusive(() async {
+    return _runExclusive(modelId, () async {
       final byName = {for (final file in selected) file.name: file};
       final sourcesByDefinition = <_RemoteModelFile, XFile>{};
       for (final definition in spec.files) {
@@ -414,7 +415,7 @@ class StreamingSpeechModelService {
     String modelId, {
     void Function(SpeechModelImportProgress progress)? onProgress,
     bool Function()? shouldCancel,
-  }) => _runExclusive(() async {
+  }) => _runExclusive(modelId, () async {
     final spec = _spec(modelId);
     await Directory(_downloadDir(spec)).create(recursive: true);
     final currentBytes = <String, int>{};
@@ -460,7 +461,12 @@ class StreamingSpeechModelService {
       for (final definition in spec.files)
         definition.localName: File(_partialPath(spec, definition)),
     };
-    return _installFiles(spec, sources, onProgress: onProgress);
+    return _installFiles(
+      spec,
+      sources,
+      onProgress: onProgress,
+      shouldCancel: shouldCancel,
+    );
   });
 
   Future<bool> _matchesDefinition(
@@ -572,6 +578,24 @@ class StreamingSpeechModelService {
     _StreamingModelSpec spec,
     Map<String, File> sources, {
     void Function(SpeechModelImportProgress progress)? onProgress,
+    bool Function()? shouldCancel,
+  }) => ModelInstallCoordinator.instance.run(
+    () => _installFilesNow(spec, sources, onProgress: onProgress),
+    onWaiting: () => onProgress?.call(
+      SpeechModelImportProgress(
+        spec.downloadSizeBytes,
+        spec.downloadSizeBytes,
+        waitingForInstall: true,
+      ),
+    ),
+    isCanceled: shouldCancel,
+    cancellationError: () => const SpeechModelDownloadCanceled(),
+  );
+
+  Future<StreamingSpeechModelInfo> _installFilesNow(
+    _StreamingModelSpec spec,
+    Map<String, File> sources, {
+    void Function(SpeechModelImportProgress progress)? onProgress,
   }) async {
     onProgress?.call(
       SpeechModelImportProgress(
@@ -653,7 +677,9 @@ class StreamingSpeechModelService {
   }
 
   Future<void> remove(String modelId) async {
-    if (_operationBusy) throw StateError('实时语音模型正在下载或导入');
+    if (_busyModelIds.contains(modelId)) {
+      throw StateError('实时语音模型正在下载或导入');
+    }
     final spec = _spec(modelId);
     for (final name in ['active', '.download', '.importing', '.installing']) {
       final directory = Directory(p.join(_root(spec), name));
@@ -661,13 +687,18 @@ class StreamingSpeechModelService {
     }
   }
 
-  Future<T> _runExclusive<T>(Future<T> Function() operation) async {
-    if (_operationBusy) throw StateError('实时语音模型已有任务正在进行');
-    _operationBusy = true;
+  Future<T> _runExclusive<T>(
+    String modelId,
+    Future<T> Function() operation,
+  ) async {
+    if (_busyModelIds.contains(modelId)) {
+      throw StateError('该实时语音模型已有任务正在进行');
+    }
+    _busyModelIds.add(modelId);
     try {
       return await operation();
     } finally {
-      _operationBusy = false;
+      _busyModelIds.remove(modelId);
     }
   }
 }

@@ -8,6 +8,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 
 import 'file_storage_service.dart';
+import 'model_install_coordinator.dart';
 import 'speech_model_service.dart';
 
 class KokoroTtsModelInfo {
@@ -207,7 +208,11 @@ class KokoroTtsModelService {
     for (var attempt = 0; attempt < 4; attempt++) {
       try {
         await _downloadOnce(onProgress, shouldCancel);
-        return await _install(File(_partialPath), onProgress: onProgress);
+        return await _install(
+          File(_partialPath),
+          onProgress: onProgress,
+          shouldCancel: shouldCancel,
+        );
       } on SpeechModelDownloadCanceled {
         rethrow;
       } catch (error) {
@@ -282,6 +287,23 @@ class KokoroTtsModelService {
   }
 
   Future<KokoroTtsModelInfo> _install(
+    File archive, {
+    void Function(SpeechModelImportProgress progress)? onProgress,
+    bool Function()? shouldCancel,
+  }) => ModelInstallCoordinator.instance.run(
+    () => _installNow(archive, onProgress: onProgress),
+    onWaiting: () => onProgress?.call(
+      const SpeechModelImportProgress(
+        downloadSizeBytes,
+        downloadSizeBytes,
+        waitingForInstall: true,
+      ),
+    ),
+    isCanceled: shouldCancel,
+    cancellationError: () => const SpeechModelDownloadCanceled(),
+  );
+
+  Future<KokoroTtsModelInfo> _installNow(
     File archive, {
     void Function(SpeechModelImportProgress progress)? onProgress,
   }) async {

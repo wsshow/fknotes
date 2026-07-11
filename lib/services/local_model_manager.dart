@@ -17,6 +17,7 @@ import 'voice_activity_model_service.dart';
 enum ModelTransferStatus {
   downloading,
   importing,
+  waitingToInstall,
   verifying,
   completed,
   failed,
@@ -47,6 +48,7 @@ class ModelTransferState {
   bool get isRunning => switch (status) {
     ModelTransferStatus.downloading ||
     ModelTransferStatus.importing ||
+    ModelTransferStatus.waitingToInstall ||
     ModelTransferStatus.verifying => true,
     _ => false,
   };
@@ -56,7 +58,7 @@ class ModelTransferState {
 
   void updateProgress(SpeechModelImportProgress progress) {
     final now = DateTime.now();
-    if (!progress.verifying) {
+    if (!progress.verifying && !progress.waitingForInstall) {
       final previous = _speedSampleAt;
       if (previous == null) {
         _speedSampleAt = now;
@@ -76,7 +78,11 @@ class ModelTransferState {
     }
     transferredBytes = progress.copiedBytes;
     totalBytes = progress.totalBytes;
-    if (progress.verifying) status = ModelTransferStatus.verifying;
+    if (progress.waitingForInstall) {
+      status = ModelTransferStatus.waitingToInstall;
+    } else if (progress.verifying) {
+      status = ModelTransferStatus.verifying;
+    }
   }
 }
 
@@ -247,6 +253,8 @@ class LocalModelManager extends ChangeNotifier {
   final Map<String, LocalModelInstallation> _installations = {};
   final Map<String, ModelTransferState> _transfers = {};
   bool _initialized = false;
+  bool _importPickerBusy = false;
+  int _initializationGeneration = 0;
   String _selectedLiveDictationModelId = streamingChineseId;
 
   List<LocalModelDefinition> get models => catalog;
@@ -269,6 +277,7 @@ class LocalModelManager extends ChangeNotifier {
 
   Future<void> initialize({bool force = false}) async {
     if (_initialized && !force) return;
+    final generation = ++_initializationGeneration;
     final results = await Future.wait<Object>([
       _speechModels.inspect(),
       _speechModels.partialDownloadBytes(),
@@ -292,7 +301,7 @@ class LocalModelManager extends ChangeNotifier {
     final streamingPartial = results[3] as int;
     final bilingual = results[4] as StreamingSpeechModelInfo;
     final bilingualPartial = results[5] as int;
-    _selectedLiveDictationModelId = results[6] as String;
+    final selectedLiveDictationModelId = results[6] as String;
     final voiceActivity = results[7] as VoiceActivityModelInfo;
     final voiceActivityPartial = results[8] as int;
     final speechDenoiser = results[9] as SpeechDenoiserModelInfo;
@@ -301,6 +310,8 @@ class LocalModelManager extends ChangeNotifier {
     final speakerDiarizationPartial = results[12] as int;
     final kokoroTts = results[13] as KokoroTtsModelInfo;
     final kokoroTtsPartial = results[14] as int;
+    if (generation != _initializationGeneration) return;
+    _selectedLiveDictationModelId = selectedLiveDictationModelId;
     _installations[senseVoiceId] = LocalModelInstallation(
       installed: speech.installed,
       installedSizeBytes: speech.sizeBytes,
@@ -346,7 +357,7 @@ class LocalModelManager extends ChangeNotifier {
   Future<void> download(String modelId) async {
     final definition = _definition(modelId);
     if (definition.availability != LocalModelAvailability.downloadable) return;
-    if (_transfers.values.any((transfer) => transfer.isRunning)) return;
+    if (_transfers[modelId]?.isRunning == true) return;
     final partial = installationOf(modelId).partialSizeBytes;
     final transfer = ModelTransferState(
       modelId: modelId,
@@ -424,7 +435,8 @@ class LocalModelManager extends ChangeNotifier {
         !StreamingSpeechModelService.supportedModelIds.contains(modelId)) {
       return;
     }
-    if (_transfers.values.any((transfer) => transfer.isRunning)) return;
+    if (_transfers[modelId]?.isRunning == true || _importPickerBusy) return;
+    _importPickerBusy = true;
     final transfer = ModelTransferState(
       modelId: modelId,
       status: ModelTransferStatus.importing,
@@ -473,6 +485,8 @@ class LocalModelManager extends ChangeNotifier {
       transfer.status = ModelTransferStatus.failed;
       transfer.errorMessage = _friendlyError(error);
       notifyListeners();
+    } finally {
+      _importPickerBusy = false;
     }
   }
 

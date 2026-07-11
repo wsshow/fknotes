@@ -7,6 +7,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 
 import 'file_storage_service.dart';
+import 'model_install_coordinator.dart';
 import 'speech_model_service.dart';
 
 class VoiceActivityModelInfo {
@@ -155,7 +156,11 @@ class VoiceActivityModelService {
       try {
         await _downloadOnce(onProgress, shouldCancel);
         final partial = File(_partialPath);
-        return await _install(partial, onProgress: onProgress);
+        return await _install(
+          partial,
+          onProgress: onProgress,
+          shouldCancel: shouldCancel,
+        );
       } on SpeechModelDownloadCanceled {
         rethrow;
       } catch (error) {
@@ -235,6 +240,23 @@ class VoiceActivityModelService {
   }
 
   Future<VoiceActivityModelInfo> _install(
+    File source, {
+    void Function(SpeechModelImportProgress progress)? onProgress,
+    bool Function()? shouldCancel,
+  }) => ModelInstallCoordinator.instance.run(
+    () => _installNow(source, onProgress: onProgress),
+    onWaiting: () => onProgress?.call(
+      const SpeechModelImportProgress(
+        downloadSizeBytes,
+        downloadSizeBytes,
+        waitingForInstall: true,
+      ),
+    ),
+    isCanceled: shouldCancel,
+    cancellationError: () => const SpeechModelDownloadCanceled(),
+  );
+
+  Future<VoiceActivityModelInfo> _installNow(
     File source, {
     void Function(SpeechModelImportProgress progress)? onProgress,
   }) async {

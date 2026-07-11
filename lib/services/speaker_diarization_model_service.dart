@@ -8,6 +8,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 
 import 'file_storage_service.dart';
+import 'model_install_coordinator.dart';
 import 'speech_model_service.dart';
 
 class SpeakerDiarizationModelInfo {
@@ -255,6 +256,7 @@ class SpeakerDiarizationModelService {
           File(_segmentationPartial),
           File(_embeddingPartial),
           onProgress: onProgress,
+          shouldCancel: shouldCancel,
         );
       } on SpeechModelDownloadCanceled {
         rethrow;
@@ -339,6 +341,24 @@ class SpeakerDiarizationModelService {
   }
 
   Future<SpeakerDiarizationModelInfo> _install(
+    File archive,
+    File embedding, {
+    void Function(SpeechModelImportProgress progress)? onProgress,
+    bool Function()? shouldCancel,
+  }) => ModelInstallCoordinator.instance.run(
+    () => _installNow(archive, embedding, onProgress: onProgress),
+    onWaiting: () => onProgress?.call(
+      const SpeechModelImportProgress(
+        downloadSizeBytes,
+        downloadSizeBytes,
+        waitingForInstall: true,
+      ),
+    ),
+    isCanceled: shouldCancel,
+    cancellationError: () => const SpeechModelDownloadCanceled(),
+  );
+
+  Future<SpeakerDiarizationModelInfo> _installNow(
     File archive,
     File embedding, {
     void Function(SpeechModelImportProgress progress)? onProgress,

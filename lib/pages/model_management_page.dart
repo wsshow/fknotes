@@ -932,6 +932,9 @@ class _ModelCard extends StatelessWidget {
     if (state.status == ModelTransferStatus.verifying) {
       return '已下载 ${_formatBytes(state.transferredBytes)} · 正在完成安装';
     }
+    if (state.status == ModelTransferStatus.waitingToInstall) {
+      return '已下载 ${_formatBytes(state.transferredBytes)} · 等待安装';
+    }
     final verb = state.status == ModelTransferStatus.importing ? '已导入' : '已下载';
     final speed = state.bytesPerSecond <= 0
         ? '正在测速…'

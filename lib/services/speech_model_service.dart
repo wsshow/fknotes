@@ -7,6 +7,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 
 import 'file_storage_service.dart';
+import 'model_install_coordinator.dart';
 
 class SpeechModelInfo {
   final bool installed;
@@ -28,10 +29,12 @@ class SpeechModelImportProgress {
   final int copiedBytes;
   final int totalBytes;
   final bool verifying;
+  final bool waitingForInstall;
   const SpeechModelImportProgress(
     this.copiedBytes,
     this.totalBytes, {
     this.verifying = false,
+    this.waitingForInstall = false,
   });
 
   double get fraction =>
@@ -124,6 +127,20 @@ class SpeechModelService {
   }) => _runExclusive(() => _importFiles(files, onProgress: onProgress));
 
   Future<SpeechModelInfo> _importFiles(
+    List<XFile> files, {
+    void Function(SpeechModelImportProgress progress)? onProgress,
+  }) => ModelInstallCoordinator.instance.run(
+    () => _importFilesNow(files, onProgress: onProgress),
+    onWaiting: () => onProgress?.call(
+      const SpeechModelImportProgress(
+        downloadSizeBytes,
+        downloadSizeBytes,
+        waitingForInstall: true,
+      ),
+    ),
+  );
+
+  Future<SpeechModelInfo> _importFilesNow(
     List<XFile> files, {
     void Function(SpeechModelImportProgress progress)? onProgress,
   }) async {
@@ -224,40 +241,53 @@ class SpeechModelService {
         onProgress: onProgress,
         shouldCancel: shouldCancel,
       );
-      if (shouldCancel?.call() == true) {
-        throw const SpeechModelDownloadCanceled();
-      }
-      onProgress?.call(
-        const SpeechModelImportProgress(
-          downloadSizeBytes,
-          downloadSizeBytes,
-          verifying: true,
-        ),
-      );
-      final paths = [modelPart.path, tokensPart.path, licensePart.path];
-      final hashes = await Isolate.run(() async {
-        final results = <String>[];
-        for (final path in paths) {
-          results.add(
-            (await sha256.bind(File(path).openRead()).first).toString(),
+      return ModelInstallCoordinator.instance.run(
+        () async {
+          if (shouldCancel?.call() == true) {
+            throw const SpeechModelDownloadCanceled();
+          }
+          onProgress?.call(
+            const SpeechModelImportProgress(
+              downloadSizeBytes,
+              downloadSizeBytes,
+              verifying: true,
+            ),
           );
-        }
-        return results;
-      });
-      if (hashes[0] != _modelSha256 ||
-          hashes[1] != _tokensSha256 ||
-          hashes[2] != _licenseSha256) {
-        await modelPart.delete();
-        await tokensPart.delete();
-        await licensePart.delete();
-        throw const FormatException('模型完整性校验失败，请重新下载');
-      }
-      await modelPart.rename(p.join(staging.path, modelFileName));
-      await tokensPart.rename(p.join(staging.path, tokensFileName));
-      await licensePart.rename(p.join(staging.path, 'MODEL_LICENSE.txt'));
-      await _writeManifest(staging, source: 'modelscope');
-      await _activate(staging);
-      return inspect();
+          final paths = [modelPart.path, tokensPart.path, licensePart.path];
+          final hashes = await Isolate.run(() async {
+            final results = <String>[];
+            for (final path in paths) {
+              results.add(
+                (await sha256.bind(File(path).openRead()).first).toString(),
+              );
+            }
+            return results;
+          });
+          if (hashes[0] != _modelSha256 ||
+              hashes[1] != _tokensSha256 ||
+              hashes[2] != _licenseSha256) {
+            await modelPart.delete();
+            await tokensPart.delete();
+            await licensePart.delete();
+            throw const FormatException('模型完整性校验失败，请重新下载');
+          }
+          await modelPart.rename(p.join(staging.path, modelFileName));
+          await tokensPart.rename(p.join(staging.path, tokensFileName));
+          await licensePart.rename(p.join(staging.path, 'MODEL_LICENSE.txt'));
+          await _writeManifest(staging, source: 'modelscope');
+          await _activate(staging);
+          return inspect();
+        },
+        onWaiting: () => onProgress?.call(
+          const SpeechModelImportProgress(
+            downloadSizeBytes,
+            downloadSizeBytes,
+            waitingForInstall: true,
+          ),
+        ),
+        isCanceled: shouldCancel,
+        cancellationError: () => const SpeechModelDownloadCanceled(),
+      );
     } on SpeechModelDownloadCanceled {
       rethrow;
     } catch (_) {
