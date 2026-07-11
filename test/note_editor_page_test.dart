@@ -4,6 +4,7 @@ import 'package:fknotes/models/note_entry.dart';
 import 'package:fknotes/pages/home_page.dart';
 import 'package:fknotes/pages/media_detail_page.dart';
 import 'package:fknotes/pages/note_editor_page.dart';
+import 'package:fknotes/pages/transcript_editor_page.dart';
 import 'package:fknotes/providers/app_lock_controller.dart';
 import 'package:fknotes/providers/note_provider.dart';
 import 'package:fknotes/services/app_lock_preferences_service.dart';
@@ -292,6 +293,48 @@ void main() {
     expect(find.text('从文件导入'), findsOneWidget);
     expect(find.text('查看全部模型'), findsOneWidget);
     expect(find.textContaining('音频不会离开设备'), findsOneWidget);
+  });
+
+  testWidgets('audio transcript opens a full-screen editor', (tester) async {
+    _usePhoneViewport(tester);
+    final now = DateTime(2026, 7, 10);
+    final attachment = NoteAttachment(
+      type: NoteType.audio,
+      filePath: 'audio/transcribed.m4a',
+      fileName: 'transcribed.m4a',
+      fileSize: 1024,
+      mimeType: 'audio/mp4',
+      transcript: '已有转写文字',
+      createdAt: now,
+    );
+    final entry = NoteEntry(
+      type: NoteType.audio,
+      title: '语音笔记',
+      attachments: [attachment],
+      createdAt: now,
+      updatedAt: now,
+    );
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => NoteProvider(),
+        child: MaterialApp(
+          home: MediaDetailPage(entry: entry, attachment: attachment),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.widgetWithText(Tab, '转写文字'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('编辑文字'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TranscriptEditorPage), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing);
+
+    await tester.tap(find.byKey(const Key('cancel-transcript-edit')));
+    await tester.pumpAndSettle();
+    expect(find.byType(TranscriptEditorPage), findsNothing);
   });
 
   testWidgets('video import card reports progress without blocking editing', (

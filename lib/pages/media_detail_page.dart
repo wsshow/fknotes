@@ -19,6 +19,7 @@ import '../services/speaker_diarization_model_service.dart';
 import '../widgets/empty_state.dart';
 import 'note_editor_page.dart';
 import 'model_management_page.dart';
+import 'transcript_editor_page.dart';
 
 class MediaDetailPage extends StatefulWidget {
   final NoteEntry entry;
@@ -527,34 +528,14 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
   Future<void> _editTranscript() async {
     final item = attachment;
     if (item == null) return;
-    final controller = TextEditingController(text: item.transcript ?? '');
-    final value = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('编辑转写文字'),
-        content: SizedBox(
-          width: 520,
-          child: TextField(
-            controller: controller,
-            autofocus: true,
-            minLines: 8,
-            maxLines: 16,
-            decoration: const InputDecoration(hintText: '转写文字'),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('保存'),
-          ),
-        ],
+    final value = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) =>
+            TranscriptEditorPage(initialText: item.transcript ?? ''),
       ),
     );
-    controller.dispose();
     if (value == null || value.isEmpty || !mounted) return;
     final activePath = item.filePath;
     final updated = entry.copyWith(
