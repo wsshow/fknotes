@@ -233,12 +233,15 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     final installed = await StreamingSpeechModelService.instance.inspect();
     if (!installed.installed) {
       if (!mounted) return;
+      final definition = LocalModelManager.instance.modelOf(installed.modelId);
+      final downloadSize =
+          '${(definition.downloadSizeBytes / 1048576).toStringAsFixed(1)} MB';
       final openModels = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('需要实时语音模型'),
-          content: const Text(
-            '首次使用需下载约 159.6 MB 的 Streaming Zipformer 中文模型。'
+          content: Text(
+            '当前选择的是${definition.name}，首次使用需下载约 $downloadSize。'
             '下载完成后，听写全程断网可用。',
           ),
           actions: [
@@ -257,9 +260,8 @@ class _NoteEditorPageState extends State<NoteEditorPage>
         await Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => const ModelManagementPage(
-              focusModelId: LocalModelManager.streamingChineseId,
-            ),
+            builder: (_) =>
+                ModelManagementPage(focusModelId: installed.modelId),
           ),
         );
       }

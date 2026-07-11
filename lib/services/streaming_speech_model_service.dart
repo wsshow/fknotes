@@ -10,158 +10,284 @@ import 'file_storage_service.dart';
 import 'speech_model_service.dart';
 
 class StreamingSpeechModelInfo {
+  final String modelId;
+  final String displayName;
   final bool installed;
   final String? problem;
   final String encoderPath;
   final String decoderPath;
   final String joinerPath;
   final String tokensPath;
+  final String modelingUnit;
   final int sizeBytes;
 
   const StreamingSpeechModelInfo({
+    required this.modelId,
+    required this.displayName,
     required this.installed,
     this.problem,
     this.encoderPath = '',
     this.decoderPath = '',
     this.joinerPath = '',
     this.tokensPath = '',
+    this.modelingUnit = '',
     this.sizeBytes = 0,
   });
 }
 
 class _RemoteModelFile {
-  final String name;
+  final String localName;
   final String remotePath;
   final int sizeBytes;
   final String sha256;
 
   const _RemoteModelFile(
-    this.name,
+    this.localName,
     this.remotePath,
     this.sizeBytes,
     this.sha256,
   );
+
+  String get sourceName => p.basename(remotePath);
 }
 
-/// Installs the official 2025 streaming Chinese Zipformer model.
+class _StreamingModelSpec {
+  final String id;
+  final String displayName;
+  final String storageFolder;
+  final String repository;
+  final String revision;
+  final String runtimeLayout;
+  final String modelingUnit;
+  final List<_RemoteModelFile> files;
+
+  const _StreamingModelSpec({
+    required this.id,
+    required this.displayName,
+    required this.storageFolder,
+    required this.repository,
+    required this.revision,
+    required this.runtimeLayout,
+    required this.modelingUnit,
+    required this.files,
+  });
+
+  int get downloadSizeBytes =>
+      files.fold(0, (total, definition) => total + definition.sizeBytes);
+}
+
+/// Installs, verifies and selects device-local streaming ASR models.
 ///
-/// Files are fetched individually from the pinned Hugging Face repository via
-/// the domestic mirror. Every file supports resume and is verified before a
-/// transactional activation.
+/// Every model has an isolated transactional directory. Selection is stored
+/// separately, so users can keep multiple models installed and switch the one
+/// used by the next dictation session without moving model files.
 class StreamingSpeechModelService {
   StreamingSpeechModelService._();
   static final StreamingSpeechModelService instance =
       StreamingSpeechModelService._();
 
   static const modelId = 'streaming-zipformer-zh-int8-2025-06-30';
-  static const encoderFileName = 'encoder.int8.onnx';
-  static const decoderFileName = 'decoder.onnx';
-  static const joinerFileName = 'joiner.int8.onnx';
-  static const tokensFileName = 'tokens.txt';
-  static const _manifestFileName = 'manifest.json';
-  static const _runtimeLayout = 'int8-encoder + fp32-decoder + int8-joiner';
-  static const _revision = 'ad658fa0201659a09ea3c176129a191c77ecae8f';
-  static const _repository =
-      'csukuangfj/sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30';
-  static const _mirrorBase =
-      'https://hf-mirror.com/$_repository/resolve/$_revision';
+  static const bilingualModelId =
+      'streaming-zipformer-bilingual-zh-en-int8-2023-02-20';
+  static const downloadSizeBytes = 167360920;
+  static const bilingualDownloadSizeBytes = 198270793;
+  static const supportedModelIds = [modelId, bilingualModelId];
 
-  static const _files = <_RemoteModelFile>[
-    _RemoteModelFile(
-      encoderFileName,
-      encoderFileName,
-      161141793,
-      '5ac51e27981bb4dab01bb9be4958453ba50c3b61c063ddda0eab23fd3671aa4f',
+  static const _encoderFileName = 'encoder.int8.onnx';
+  static const _decoderFileName = 'decoder.onnx';
+  static const _joinerFileName = 'joiner.int8.onnx';
+  static const _tokensFileName = 'tokens.txt';
+  static const _manifestFileName = 'manifest.json';
+
+  static const _specs = <_StreamingModelSpec>[
+    _StreamingModelSpec(
+      id: modelId,
+      displayName: 'Streaming Zipformer 中文',
+      // Keep the original path so existing installations remain valid.
+      storageFolder: 'streaming-zipformer-zh-14m',
+      repository:
+          'csukuangfj/sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30',
+      revision: 'ad658fa0201659a09ea3c176129a191c77ecae8f',
+      runtimeLayout: 'int8-encoder + fp32-decoder + int8-joiner',
+      modelingUnit: 'cjkchar',
+      files: [
+        _RemoteModelFile(
+          _encoderFileName,
+          _encoderFileName,
+          161141793,
+          '5ac51e27981bb4dab01bb9be4958453ba50c3b61c063ddda0eab23fd3671aa4f',
+        ),
+        _RemoteModelFile(
+          _decoderFileName,
+          _decoderFileName,
+          5165083,
+          '06522ad63cec0fdf6809f4e1db9bb4f7d710c34582e3b35db62ac60eccafac7e',
+        ),
+        _RemoteModelFile(
+          _joinerFileName,
+          _joinerFileName,
+          1033416,
+          'b34584dc6f561089e1d747fedebb3765f2caa72c927ef54d7ca55e5ae40a814b',
+        ),
+        _RemoteModelFile(
+          _tokensFileName,
+          _tokensFileName,
+          20628,
+          '6193c7ea1c96d0d9a1e9652789b40d13a8a913b434a5451e93158f5a09fd6652',
+        ),
+      ],
     ),
-    _RemoteModelFile(
-      decoderFileName,
-      decoderFileName,
-      5165083,
-      '06522ad63cec0fdf6809f4e1db9bb4f7d710c34582e3b35db62ac60eccafac7e',
-    ),
-    _RemoteModelFile(
-      joinerFileName,
-      joinerFileName,
-      1033416,
-      'b34584dc6f561089e1d747fedebb3765f2caa72c927ef54d7ca55e5ae40a814b',
-    ),
-    _RemoteModelFile(
-      tokensFileName,
-      tokensFileName,
-      20628,
-      '6193c7ea1c96d0d9a1e9652789b40d13a8a913b434a5451e93158f5a09fd6652',
+    _StreamingModelSpec(
+      id: bilingualModelId,
+      displayName: 'Streaming Zipformer 中英双语',
+      storageFolder: 'streaming-zipformer-bilingual-zh-en-2023-02-20',
+      repository:
+          'csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20',
+      revision: '98590b7ed6443e77b714204da2757d75e1a642f4',
+      runtimeLayout: 'int8-encoder + int8-decoder + int8-joiner',
+      // The model already carries its mixed Chinese/English word-piece
+      // vocabulary in tokens.txt. modelingUnit is only needed for optional
+      // hotword encoding, so keep the recognizer default here.
+      modelingUnit: '',
+      files: [
+        _RemoteModelFile(
+          _encoderFileName,
+          'encoder-epoch-99-avg-1.int8.onnx',
+          181895032,
+          '8fa764187a261844f859d7143ebaa563af5d10adfece4c18a8f414c88cba2a9b',
+        ),
+        _RemoteModelFile(
+          _decoderFileName,
+          'decoder-epoch-99-avg-1.int8.onnx',
+          13091040,
+          '1a70c593d71e53f023f5f55b0b4cfff5055abb786ee3992e5f63dc2e273cc4fa',
+        ),
+        _RemoteModelFile(
+          _joinerFileName,
+          'joiner-epoch-99-avg-1.int8.onnx',
+          3228404,
+          '1ed689c5ed19dbaa725d9d191bb4822b5f4855a39e1ffd28cbc1f340d25b2ee0',
+        ),
+        _RemoteModelFile(
+          _tokensFileName,
+          _tokensFileName,
+          56317,
+          'a8e0e4ec53810e433789b54a5c0134a7eaa2ffca595a6334d54c00da858841d3',
+        ),
+      ],
     ),
   ];
-
-  static const downloadSizeBytes = 167360920;
 
   final _storage = FileStorageService.instance;
   bool _operationBusy = false;
 
-  String get _root =>
-      p.join(_storage.baseDir, 'models', 'asr', 'streaming-zipformer-zh-14m');
-  String get _activeDir => p.join(_root, 'active');
-  String get _downloadDir => p.join(_root, '.download');
-  String _partialPath(_RemoteModelFile file) =>
-      p.join(_downloadDir, '${file.name}.part');
+  String get _selectionPath =>
+      p.join(_storage.baseDir, 'models', 'asr', 'live-dictation.json');
+
+  _StreamingModelSpec _spec(String id) =>
+      _specs.firstWhere((definition) => definition.id == id);
+
+  String _root(_StreamingModelSpec spec) =>
+      p.join(_storage.baseDir, 'models', 'asr', spec.storageFolder);
+  String _activeDir(_StreamingModelSpec spec) => p.join(_root(spec), 'active');
+  String _downloadDir(_StreamingModelSpec spec) =>
+      p.join(_root(spec), '.download');
+  String _partialPath(_StreamingModelSpec spec, _RemoteModelFile file) =>
+      p.join(_downloadDir(spec), '${file.localName}.part');
+
+  String displayName(String id) => _spec(id).displayName;
+
+  Future<String> selectedModelId() async {
+    final selection = File(_selectionPath);
+    if (!selection.existsSync()) return modelId;
+    try {
+      final metadata = jsonDecode(selection.readAsStringSync());
+      final value = metadata is Map ? metadata['modelId'] : null;
+      final id = value is String ? value : null;
+      return supportedModelIds.contains(id) ? id! : modelId;
+    } on FormatException {
+      return modelId;
+    } on FileSystemException {
+      return modelId;
+    }
+  }
+
+  Future<void> selectModel(String id) async {
+    final info = await inspect(modelId: id);
+    if (!info.installed) {
+      throw StateError('${info.displayName}尚未安装');
+    }
+    final destination = File(_selectionPath);
+    await destination.parent.create(recursive: true);
+    final temporary = File('${destination.path}.tmp');
+    await temporary.writeAsString(
+      const JsonEncoder.withIndent(' ').convert({'modelId': id}),
+      flush: true,
+    );
+    try {
+      await temporary.rename(destination.path);
+    } on FileSystemException {
+      if (await destination.exists()) await destination.delete();
+      await temporary.rename(destination.path);
+    }
+  }
+
+  Future<void> resetSelection() async {
+    final selection = File(_selectionPath);
+    if (await selection.exists()) await selection.delete();
+  }
 
   Future<StreamingSpeechModelInfo> inspect({
+    String? modelId,
     bool verifyIntegrity = false,
   }) async {
-    final encoder = File(p.join(_activeDir, encoderFileName));
-    final decoder = File(p.join(_activeDir, decoderFileName));
-    final joiner = File(p.join(_activeDir, joinerFileName));
-    final tokens = File(p.join(_activeDir, tokensFileName));
-    final manifest = File(p.join(_activeDir, _manifestFileName));
+    final spec = _spec(modelId ?? await selectedModelId());
+    StreamingSpeechModelInfo unavailable(String problem) =>
+        StreamingSpeechModelInfo(
+          modelId: spec.id,
+          displayName: spec.displayName,
+          installed: false,
+          problem: problem,
+          modelingUnit: spec.modelingUnit,
+        );
+
+    final active = _activeDir(spec);
+    final encoder = File(p.join(active, _encoderFileName));
+    final decoder = File(p.join(active, _decoderFileName));
+    final joiner = File(p.join(active, _joinerFileName));
+    final tokens = File(p.join(active, _tokensFileName));
+    final manifest = File(p.join(active, _manifestFileName));
     final files = [encoder, decoder, joiner, tokens, manifest];
     if (files.any((file) => !file.existsSync())) {
-      return const StreamingSpeechModelInfo(
-        installed: false,
-        problem: '实时语音模型文件缺失，请重新下载',
-      );
+      return unavailable('实时语音模型尚未安装');
     }
     try {
       final metadata = jsonDecode(await manifest.readAsString());
       if (metadata is! Map ||
-          metadata['id'] != modelId ||
-          metadata['revision'] != _revision ||
-          metadata['runtimeFiles'] != _runtimeLayout) {
-        return const StreamingSpeechModelInfo(
-          installed: false,
-          problem: '实时语音模型版本不匹配，请删除后重新下载',
-        );
+          metadata['id'] != spec.id ||
+          metadata['revision'] != spec.revision ||
+          metadata['runtimeFiles'] != spec.runtimeLayout) {
+        return unavailable('实时语音模型版本不匹配，请删除后重新下载');
       }
     } on FormatException {
-      return const StreamingSpeechModelInfo(
-        installed: false,
-        problem: '实时语音模型清单损坏，请删除后重新下载',
-      );
+      return unavailable('实时语音模型清单损坏，请删除后重新下载');
     } on FileSystemException {
-      return const StreamingSpeechModelInfo(
-        installed: false,
-        problem: '无法读取实时语音模型，请检查存储空间',
-      );
+      return unavailable('无法读取实时语音模型，请检查存储空间');
     }
     final runtimeFiles = [encoder, decoder, joiner, tokens];
     for (var index = 0; index < runtimeFiles.length; index++) {
-      if (await runtimeFiles[index].length() != _files[index].sizeBytes) {
-        return StreamingSpeechModelInfo(
-          installed: false,
-          problem: '${_files[index].name} 大小异常，请删除模型后重新下载',
-        );
+      if (await runtimeFiles[index].length() != spec.files[index].sizeBytes) {
+        return unavailable('${spec.files[index].localName} 大小异常，请删除模型后重新下载');
       }
     }
     if (verifyIntegrity) {
       final checks = [
         for (var index = 0; index < runtimeFiles.length; index++)
-          _ModelHashCheck(runtimeFiles[index].path, _files[index].sha256),
+          _ModelHashCheck(runtimeFiles[index].path, spec.files[index].sha256),
       ];
       final valid = await Isolate.run(() => _verifyModelHashes(checks));
       if (!valid) {
-        return const StreamingSpeechModelInfo(
-          installed: false,
-          problem: '实时语音模型完整性校验失败，请删除模型后重新下载',
-        );
+        return unavailable('实时语音模型完整性校验失败，请删除模型后重新下载');
       }
     }
     var size = 0;
@@ -169,28 +295,34 @@ class StreamingSpeechModelService {
       size += await file.length();
     }
     return StreamingSpeechModelInfo(
+      modelId: spec.id,
+      displayName: spec.displayName,
       installed: true,
       encoderPath: encoder.path,
       decoderPath: decoder.path,
       joinerPath: joiner.path,
       tokensPath: tokens.path,
+      modelingUnit: spec.modelingUnit,
       sizeBytes: size,
     );
   }
 
-  Future<int> partialDownloadBytes() async {
+  Future<int> partialDownloadBytes(String modelId) async {
+    final spec = _spec(modelId);
     var total = 0;
-    for (final definition in _files) {
-      final file = File(_partialPath(definition));
+    for (final definition in spec.files) {
+      final file = File(_partialPath(spec, definition));
       if (!await file.exists()) continue;
       total += (await file.length()).clamp(0, definition.sizeBytes);
     }
     return total;
   }
 
-  Future<StreamingSpeechModelInfo?> pickAndImport({
+  Future<StreamingSpeechModelInfo?> pickAndImport(
+    String modelId, {
     void Function(SpeechModelImportProgress progress)? onProgress,
   }) async {
+    final spec = _spec(modelId);
     const group = XTypeGroup(
       label: 'Streaming Zipformer 模型文件',
       extensions: ['onnx', 'txt'],
@@ -199,24 +331,30 @@ class StreamingSpeechModelService {
     if (selected.isEmpty) return null;
     return _runExclusive(() async {
       final byName = {for (final file in selected) file.name: file};
-      if (_files.any((definition) => !byName.containsKey(definition.name))) {
-        throw const FormatException(
-          '请选择 encoder.int8.onnx、decoder.onnx、joiner.int8.onnx 和 tokens.txt',
-        );
+      final sourcesByDefinition = <_RemoteModelFile, XFile>{};
+      for (final definition in spec.files) {
+        final selectedFile =
+            byName[definition.localName] ?? byName[definition.sourceName];
+        if (selectedFile == null) {
+          throw FormatException(
+            '请选择 ${spec.files.map((file) => file.sourceName).join('、')}',
+          );
+        }
+        sourcesByDefinition[definition] = selectedFile;
       }
-      final importing = Directory(p.join(_root, '.importing'));
+      final importing = Directory(p.join(_root(spec), '.importing'));
       if (await importing.exists()) await importing.delete(recursive: true);
       await importing.create(recursive: true);
       var copiedTotal = 0;
       final sources = <String, File>{};
       try {
-        for (final definition in _files) {
-          final selectedFile = byName[definition.name]!;
+        for (final definition in spec.files) {
+          final selectedFile = sourcesByDefinition[definition]!;
           if (await selectedFile.length() != definition.sizeBytes) {
-            throw FormatException('${definition.name} 大小不匹配');
+            throw FormatException('${definition.sourceName} 大小不匹配');
           }
           final destination = File(
-            p.join(importing.path, '${definition.name}.part'),
+            p.join(importing.path, '${definition.localName}.part'),
           );
           final output = await destination.open(mode: FileMode.write);
           try {
@@ -224,36 +362,38 @@ class StreamingSpeechModelService {
               await output.writeFrom(chunk);
               copiedTotal += chunk.length;
               onProgress?.call(
-                SpeechModelImportProgress(copiedTotal, downloadSizeBytes),
+                SpeechModelImportProgress(copiedTotal, spec.downloadSizeBytes),
               );
             }
             await output.flush();
           } finally {
             await output.close();
           }
-          sources[definition.name] = destination;
+          sources[definition.localName] = destination;
         }
-        return await _installFiles(sources, onProgress: onProgress);
+        return await _installFiles(spec, sources, onProgress: onProgress);
       } finally {
         if (await importing.exists()) await importing.delete(recursive: true);
       }
     });
   }
 
-  Future<StreamingSpeechModelInfo> downloadFromHuggingFaceMirror({
+  Future<StreamingSpeechModelInfo> downloadFromHuggingFaceMirror(
+    String modelId, {
     void Function(SpeechModelImportProgress progress)? onProgress,
     bool Function()? shouldCancel,
   }) => _runExclusive(() async {
-    await Directory(_downloadDir).create(recursive: true);
+    final spec = _spec(modelId);
+    await Directory(_downloadDir(spec)).create(recursive: true);
     final currentBytes = <String, int>{};
-    for (final definition in _files) {
-      final partial = File(_partialPath(definition));
+    for (final definition in spec.files) {
+      final partial = File(_partialPath(spec, definition));
       var size = await partial.exists() ? await partial.length() : 0;
       if (size > definition.sizeBytes) {
         await partial.delete();
         size = 0;
       }
-      currentBytes[definition.name] = size;
+      currentBytes[definition.localName] = size;
     }
 
     void report(String name, int bytes) {
@@ -261,15 +401,16 @@ class StreamingSpeechModelService {
       onProgress?.call(
         SpeechModelImportProgress(
           currentBytes.values.fold(0, (sum, value) => sum + value),
-          downloadSizeBytes,
+          spec.downloadSizeBytes,
         ),
       );
     }
 
-    for (final definition in _files) {
+    for (final definition in spec.files) {
       await _downloadFile(
+        spec,
         definition,
-        onProgress: (bytes) => report(definition.name, bytes),
+        onProgress: (bytes) => report(definition.localName, bytes),
         shouldCancel: shouldCancel,
       );
     }
@@ -277,13 +418,14 @@ class StreamingSpeechModelService {
       throw const SpeechModelDownloadCanceled();
     }
     final sources = {
-      for (final definition in _files)
-        definition.name: File(_partialPath(definition)),
+      for (final definition in spec.files)
+        definition.localName: File(_partialPath(spec, definition)),
     };
-    return _installFiles(sources, onProgress: onProgress);
+    return _installFiles(spec, sources, onProgress: onProgress);
   });
 
   Future<void> _downloadFile(
+    _StreamingModelSpec spec,
     _RemoteModelFile definition, {
     required void Function(int bytes) onProgress,
     bool Function()? shouldCancel,
@@ -292,6 +434,7 @@ class StreamingSpeechModelService {
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
         await _downloadFileOnce(
+          spec,
           definition,
           onProgress: onProgress,
           shouldCancel: shouldCancel,
@@ -306,15 +449,16 @@ class StreamingSpeechModelService {
         }
       }
     }
-    throw lastError ?? HttpException('${definition.name} 下载失败');
+    throw lastError ?? HttpException('${definition.sourceName} 下载失败');
   }
 
   Future<void> _downloadFileOnce(
+    _StreamingModelSpec spec,
     _RemoteModelFile definition, {
     required void Function(int bytes) onProgress,
     bool Function()? shouldCancel,
   }) async {
-    final partial = File(_partialPath(definition));
+    final partial = File(_partialPath(spec, definition));
     var existing = await partial.exists() ? await partial.length() : 0;
     if (existing == definition.sizeBytes) {
       onProgress(existing);
@@ -328,17 +472,20 @@ class StreamingSpeechModelService {
     RandomAccessFile? output;
     try {
       final uri = Uri.parse(
-        '$_mirrorBase/${definition.remotePath}?download=true',
+        'https://hf-mirror.com/${spec.repository}/resolve/'
+        '${spec.revision}/${definition.remotePath}?download=true',
       );
       final request = await client.getUrl(uri);
       if (existing > 0) {
         request.headers.set(HttpHeaders.rangeHeader, 'bytes=$existing-');
       }
-      request.headers.set(HttpHeaders.userAgentHeader, 'fknotes/$modelId');
+      request.headers.set(HttpHeaders.userAgentHeader, 'fknotes/${spec.id}');
       final response = await request.close();
       final canResume = response.statusCode == HttpStatus.partialContent;
       if (response.statusCode != HttpStatus.ok && !canResume) {
-        throw HttpException('${definition.name} 下载失败（${response.statusCode}）');
+        throw HttpException(
+          '${definition.sourceName} 下载失败（${response.statusCode}）',
+        );
       }
       if (existing > 0 && !canResume) {
         await partial.delete();
@@ -355,7 +502,7 @@ class StreamingSpeechModelService {
         await output.writeFrom(chunk);
         received += chunk.length;
         if (received > definition.sizeBytes) {
-          throw FormatException('${definition.name} 下载大小异常');
+          throw FormatException('${definition.sourceName} 下载大小异常');
         }
         onProgress(received);
       }
@@ -363,7 +510,7 @@ class StreamingSpeechModelService {
       await output.close();
       output = null;
       if (received != definition.sizeBytes) {
-        throw FormatException('${definition.name} 下载不完整，将在下次继续');
+        throw FormatException('${definition.sourceName} 下载不完整，将在下次继续');
       }
     } finally {
       await output?.close();
@@ -372,38 +519,39 @@ class StreamingSpeechModelService {
   }
 
   Future<StreamingSpeechModelInfo> _installFiles(
+    _StreamingModelSpec spec,
     Map<String, File> sources, {
     void Function(SpeechModelImportProgress progress)? onProgress,
   }) async {
     onProgress?.call(
-      const SpeechModelImportProgress(
-        downloadSizeBytes,
-        downloadSizeBytes,
+      SpeechModelImportProgress(
+        spec.downloadSizeBytes,
+        spec.downloadSizeBytes,
         verifying: true,
       ),
     );
-    for (final definition in _files) {
-      final source = sources[definition.name];
+    for (final definition in spec.files) {
+      final source = sources[definition.localName];
       if (source == null || !await source.exists()) {
-        throw FormatException('缺少 ${definition.name}');
+        throw FormatException('缺少 ${definition.sourceName}');
       }
       if (await source.length() != definition.sizeBytes) {
-        throw FormatException('${definition.name} 大小不匹配');
+        throw FormatException('${definition.sourceName} 大小不匹配');
       }
       final digest = await sha256.bind(source.openRead()).first;
       if (digest.toString() != definition.sha256) {
         await source.delete();
-        throw const FormatException('模型文件不完整，请重新下载');
+        throw FormatException('${definition.sourceName} 文件不完整，请重新下载');
       }
     }
 
-    final staging = Directory(p.join(_root, '.installing'));
+    final staging = Directory(p.join(_root(spec), '.installing'));
     if (await staging.exists()) await staging.delete(recursive: true);
     await staging.create(recursive: true);
     try {
-      for (final definition in _files) {
-        final source = sources[definition.name]!;
-        final destination = File(p.join(staging.path, definition.name));
+      for (final definition in spec.files) {
+        final source = sources[definition.localName]!;
+        final destination = File(p.join(staging.path, definition.localName));
         try {
           await source.rename(destination.path);
         } on FileSystemException {
@@ -413,34 +561,35 @@ class StreamingSpeechModelService {
       }
       await File(p.join(staging.path, 'LICENSE.txt')).writeAsString(
         'Streaming Zipformer model: Apache License 2.0\n'
-        'Upstream: https://huggingface.co/$_repository\n',
+        'Upstream: https://huggingface.co/${spec.repository}\n',
         flush: true,
       );
       await File(p.join(staging.path, _manifestFileName)).writeAsString(
-        const JsonEncoder.withIndent('  ').convert({
-          'id': modelId,
-          'name': 'Streaming Zipformer 中文 2025 INT8',
+        const JsonEncoder.withIndent(' ').convert({
+          'id': spec.id,
+          'name': spec.displayName,
           'engine': 'sherpa-onnx',
           'source': 'huggingface-official-via-hf-mirror',
-          'repository': _repository,
-          'revision': _revision,
+          'repository': spec.repository,
+          'revision': spec.revision,
           'license': 'Apache-2.0',
-          'runtimeFiles': _runtimeLayout,
+          'runtimeFiles': spec.runtimeLayout,
         }),
         flush: true,
       );
-      await _activate(staging);
-      final download = Directory(_downloadDir);
+      await _activate(spec, staging);
+      final download = Directory(_downloadDir(spec));
       if (await download.exists()) await download.delete(recursive: true);
-      return inspect();
+      return inspect(modelId: spec.id);
     } finally {
       if (await staging.exists()) await staging.delete(recursive: true);
     }
   }
 
-  Future<void> _activate(Directory staging) async {
-    final active = Directory(_activeDir);
-    final previous = Directory('$_activeDir.previous');
+  Future<void> _activate(_StreamingModelSpec spec, Directory staging) async {
+    final activePath = _activeDir(spec);
+    final active = Directory(activePath);
+    final previous = Directory('$activePath.previous');
     if (await previous.exists()) await previous.delete(recursive: true);
     if (await active.exists()) await active.rename(previous.path);
     try {
@@ -453,10 +602,11 @@ class StreamingSpeechModelService {
     }
   }
 
-  Future<void> remove() async {
+  Future<void> remove(String modelId) async {
     if (_operationBusy) throw StateError('实时语音模型正在下载或导入');
+    final spec = _spec(modelId);
     for (final name in ['active', '.download', '.importing', '.installing']) {
-      final directory = Directory(p.join(_root, name));
+      final directory = Directory(p.join(_root(spec), name));
       if (await directory.exists()) await directory.delete(recursive: true);
     }
   }

@@ -8,12 +8,13 @@ import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 ///
 /// Usage:
 ///   dart run tool/streaming_asr_probe.dart `native-lib-dir model-dir wav`
-///       [--endpoint]
+///       [--endpoint] [--modeling-unit=cjkchar]
 void main(List<String> args) {
-  if (args.length < 3 || args.length > 4) {
+  if (args.length < 3) {
     stderr.writeln(
       'Usage: dart run tool/streaming_asr_probe.dart '
-      '<native-lib-dir> <model-dir> <wav> [--endpoint]',
+      '<native-lib-dir> <model-dir> <wav> '
+      '[--endpoint] [--modeling-unit=<unit>]',
     );
     exitCode = 64;
     return;
@@ -22,7 +23,18 @@ void main(List<String> args) {
   final nativeLibDir = args[0];
   final modelDir = args[1];
   final wavPath = args[2];
-  final enableEndpoint = args.length == 4 && args[3] == '--endpoint';
+  final options = args.skip(3).toList();
+  final enableEndpoint = options.remove('--endpoint');
+  var modelingUnit = '';
+  for (final option in options) {
+    const prefix = '--modeling-unit=';
+    if (!option.startsWith(prefix)) {
+      stderr.writeln('Unknown option: $option');
+      exitCode = 64;
+      return;
+    }
+    modelingUnit = option.substring(prefix.length);
+  }
   sherpa.initBindings(nativeLibDir);
 
   final wave = sherpa.readWave(wavPath);
@@ -47,7 +59,7 @@ void main(List<String> args) {
         numThreads: 2,
         debug: true,
         modelType: '',
-        modelingUnit: 'cjkchar',
+        modelingUnit: modelingUnit,
       ),
       enableEndpoint: enableEndpoint,
       rule1MinTrailingSilence: 15,

@@ -64,7 +64,18 @@ void main() {
 
     expect(find.text('Streaming Zipformer 中文'), findsOneWidget);
     expect(find.text('159.6 MB'), findsOneWidget);
+    expect(find.text('当前听写'), findsOneWidget);
     expect(find.text('下载'), findsWidgets);
+
+    await tester.scrollUntilVisible(
+      find.text('Streaming Zipformer 中英双语'),
+      350,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Streaming Zipformer 中英双语'), findsOneWidget);
+    expect(find.text('189.1 MB'), findsOneWidget);
 
     await tester.drag(find.byType(ListView), const Offset(0, -1000));
     await tester.pumpAndSettle();

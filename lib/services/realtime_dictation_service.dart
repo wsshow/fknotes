@@ -72,6 +72,8 @@ class RealtimeDictationService extends ChangeNotifier {
   String _debugNativeRuntime = '-';
   String _debugNativeAbi = '-';
   String _debugCpuFingerprint = '-';
+  String _debugModelId = '-';
+  String _debugModelName = '-';
   int _debugWorkerChunks = 0;
   int _debugWorkerSamples = 0;
   int _debugDecodeCalls = 0;
@@ -115,7 +117,8 @@ class RealtimeDictationService extends ChangeNotifier {
       '错误: ${errorMessage ?? '-'}',
       '',
       '[模型]',
-      'ID: ${StreamingSpeechModelService.modelId}',
+      'ID: $_debugModelId',
+      '名称: $_debugModelName',
       '类型: zipformer2',
       '线程数: 2',
       '端点规则: 15.0 / 1.2 / 20 s',
@@ -193,6 +196,8 @@ class RealtimeDictationService extends ChangeNotifier {
       _debugNativeRuntime = '-';
       _debugNativeAbi = '-';
       _debugCpuFingerprint = '-';
+      _debugModelId = '-';
+      _debugModelName = '-';
       _debugWorkerChunks = 0;
       _debugWorkerSamples = 0;
       _debugDecodeCalls = 0;
@@ -207,8 +212,11 @@ class RealtimeDictationService extends ChangeNotifier {
     notifyListeners();
     try {
       final model = await _models.inspect(verifyIntegrity: true);
+      _debugModelId = model.modelId;
+      _debugModelName = model.displayName;
       _debugEvent(
-        '模型完整性检查: installed=${model.installed}, problem=${model.problem ?? "-"}',
+        '模型完整性检查: id=${model.modelId}, '
+        'installed=${model.installed}, problem=${model.problem ?? "-"}',
       );
       if (!model.installed) {
         throw StateError(model.problem ?? '请先下载实时语音输入模型');
@@ -349,6 +357,7 @@ class RealtimeDictationService extends ChangeNotifier {
         'decoderPath': model.decoderPath,
         'joinerPath': model.joinerPath,
         'tokensPath': model.tokensPath,
+        'modelingUnit': model.modelingUnit,
       },
       onError: _errors!.sendPort,
       onExit: _exits!.sendPort,
@@ -816,7 +825,7 @@ void _realtimeRecognitionWorker(Map<String, Object> args) {
           // Match this model's official sherpa-onnx configuration exactly:
           // model type is inferred from ONNX metadata and tokens are CJK chars.
           modelType: '',
-          modelingUnit: 'cjkchar',
+          modelingUnit: args['modelingUnit'] as String? ?? '',
         ),
         enableEndpoint: true,
         // Treat leading silence, recognized-speech pauses, and long

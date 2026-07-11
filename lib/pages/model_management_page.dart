@@ -96,10 +96,13 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
                 installation: _manager.installationOf(speech[index].id),
                 transfer: _manager.transferOf(speech[index].id),
                 emphasized: speech[index].id == widget.focusModelId,
+                selectedForLiveDictation:
+                    speech[index].id == _manager.selectedLiveDictationModelId,
                 onDownload: () => _confirmDownload(speech[index]),
                 onImport: () => _manager.import(speech[index].id),
                 onCancel: () => _manager.cancel(speech[index].id),
                 onRemove: () => _confirmRemove(speech[index]),
+                onSelect: () => _selectForLiveDictation(speech[index]),
                 onDetails: () => _showDetails(speech[index]),
               ),
               if (index != speech.length - 1) const SizedBox(height: 12),
@@ -116,6 +119,7 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
                 onImport: () => _manager.import(vision[index].id),
                 onCancel: () => _manager.cancel(vision[index].id),
                 onRemove: () => _confirmRemove(vision[index]),
+                onSelect: () {},
                 onDetails: () => _showDetails(vision[index]),
               ),
               if (index != vision.length - 1) const SizedBox(height: 12),
@@ -182,6 +186,26 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
     if (confirmed != true) return;
     try {
       await _manager.remove(model.id);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.toString().replaceFirst('Bad state: ', '')),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _selectForLiveDictation(LocalModelDefinition model) async {
+    if (model.task != LocalModelTask.liveDictation) return;
+    try {
+      await _manager.selectForLiveDictation(model.id);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('已将${model.name}设为实时听写模型')));
+      }
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -280,20 +304,24 @@ class _ModelCard extends StatelessWidget {
   final LocalModelInstallation installation;
   final ModelTransferState? transfer;
   final bool emphasized;
+  final bool selectedForLiveDictation;
   final VoidCallback onDownload;
   final VoidCallback onImport;
   final VoidCallback onCancel;
   final VoidCallback onRemove;
+  final VoidCallback onSelect;
   final VoidCallback onDetails;
   const _ModelCard({
     required this.definition,
     required this.installation,
     required this.transfer,
     this.emphasized = false,
+    this.selectedForLiveDictation = false,
     required this.onDownload,
     required this.onImport,
     required this.onCancel,
     required this.onRemove,
+    required this.onSelect,
     required this.onDetails,
   });
 
@@ -350,6 +378,15 @@ class _ModelCard extends StatelessWidget {
                         if (definition.recommended) ...[
                           const SizedBox(width: 7),
                           const _StatusBadge(label: '推荐'),
+                        ],
+                        if (selectedForLiveDictation &&
+                            definition.task ==
+                                LocalModelTask.liveDictation) ...[
+                          const SizedBox(width: 7),
+                          _StatusBadge(
+                            label: '当前听写',
+                            installed: installation.installed,
+                          ),
                         ],
                       ],
                     ),
@@ -445,6 +482,13 @@ class _ModelCard extends StatelessWidget {
         children: [
           const _StatusBadge(label: '已安装', installed: true),
           const Spacer(),
+          if (definition.task == LocalModelTask.liveDictation &&
+              !selectedForLiveDictation)
+            TextButton.icon(
+              onPressed: onSelect,
+              icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+              label: const Text('用于听写'),
+            ),
           TextButton.icon(
             onPressed: onRemove,
             icon: const Icon(Icons.delete_outline_rounded, size: 19),

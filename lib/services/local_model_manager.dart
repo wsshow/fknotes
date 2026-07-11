@@ -80,6 +80,8 @@ class LocalModelManager extends ChangeNotifier {
 
   static const senseVoiceId = SpeechModelService.modelId;
   static const streamingChineseId = StreamingSpeechModelService.modelId;
+  static const streamingBilingualId =
+      StreamingSpeechModelService.bilingualModelId;
   static const mlKitChineseOcrId = 'mlkit-text-recognition-chinese';
   static const imageUnderstandingId = 'image-understanding-local';
 
@@ -112,6 +114,21 @@ class LocalModelManager extends ChangeNotifier {
       languages: ['普通话'],
       engine: 'sherpa-onnx',
       version: '2025-06-30 INT8',
+      source: 'Hugging Face 官方仓库 · hf-mirror 国内镜像',
+      license: 'Apache-2.0',
+    ),
+    LocalModelDefinition(
+      id: streamingBilingualId,
+      name: 'Streaming Zipformer 中英双语',
+      summary: '中英文混合实时语音输入',
+      description: '适合一句话内自然切换中文和英文的实时听写，全部识别均在设备端完成。',
+      category: LocalModelCategory.speech,
+      availability: LocalModelAvailability.downloadable,
+      task: LocalModelTask.liveDictation,
+      downloadSizeBytes: StreamingSpeechModelService.bilingualDownloadSizeBytes,
+      languages: ['普通话', '英语'],
+      engine: 'sherpa-onnx',
+      version: '2023-02-20 INT8',
       source: 'Hugging Face 官方仓库 · hf-mirror 国内镜像',
       license: 'Apache-2.0',
     ),
@@ -149,9 +166,12 @@ class LocalModelManager extends ChangeNotifier {
   final Map<String, LocalModelInstallation> _installations = {};
   final Map<String, ModelTransferState> _transfers = {};
   bool _initialized = false;
+  String _selectedLiveDictationModelId = streamingChineseId;
 
   List<LocalModelDefinition> get models => catalog;
   bool get initialized => _initialized;
+  String get selectedLiveDictationModelId => _selectedLiveDictationModelId;
+  LocalModelDefinition modelOf(String id) => _definition(id);
   LocalModelInstallation installationOf(String id) =>
       _installations[id] ?? const LocalModelInstallation();
   ModelTransferState? transferOf(String id) => _transfers[id];
@@ -171,13 +191,19 @@ class LocalModelManager extends ChangeNotifier {
     final results = await Future.wait<Object>([
       _speechModels.inspect(),
       _speechModels.partialDownloadBytes(),
-      _streamingModels.inspect(),
-      _streamingModels.partialDownloadBytes(),
+      _streamingModels.inspect(modelId: streamingChineseId),
+      _streamingModels.partialDownloadBytes(streamingChineseId),
+      _streamingModels.inspect(modelId: streamingBilingualId),
+      _streamingModels.partialDownloadBytes(streamingBilingualId),
+      _streamingModels.selectedModelId(),
     ]);
     final speech = results[0] as SpeechModelInfo;
     final partial = results[1] as int;
     final streaming = results[2] as StreamingSpeechModelInfo;
     final streamingPartial = results[3] as int;
+    final bilingual = results[4] as StreamingSpeechModelInfo;
+    final bilingualPartial = results[5] as int;
+    _selectedLiveDictationModelId = results[6] as String;
     _installations[senseVoiceId] = LocalModelInstallation(
       installed: speech.installed,
       installedSizeBytes: speech.sizeBytes,
@@ -187,6 +213,11 @@ class LocalModelManager extends ChangeNotifier {
       installed: streaming.installed,
       installedSizeBytes: streaming.sizeBytes,
       partialSizeBytes: streamingPartial,
+    );
+    _installations[streamingBilingualId] = LocalModelInstallation(
+      installed: bilingual.installed,
+      installedSizeBytes: bilingual.sizeBytes,
+      partialSizeBytes: bilingualPartial,
     );
     _installations[mlKitChineseOcrId] = const LocalModelInstallation(
       installed: true,
@@ -219,13 +250,19 @@ class LocalModelManager extends ChangeNotifier {
           shouldCancel: () => transfer.cancelRequested,
           onProgress: progress,
         );
-      } else if (modelId == streamingChineseId) {
+      } else if (StreamingSpeechModelService.supportedModelIds.contains(
+        modelId,
+      )) {
         await _streamingModels.downloadFromHuggingFaceMirror(
+          modelId,
           shouldCancel: () => transfer.cancelRequested,
           onProgress: progress,
         );
       } else {
         return;
+      }
+      if (StreamingSpeechModelService.supportedModelIds.contains(modelId)) {
+        await _selectIfNoUsableLiveModel(modelId);
       }
       transfer.status = ModelTransferStatus.completed;
       await initialize(force: true);
@@ -242,7 +279,10 @@ class LocalModelManager extends ChangeNotifier {
   }
 
   Future<void> import(String modelId) async {
-    if (modelId != senseVoiceId && modelId != streamingChineseId) return;
+    if (modelId != senseVoiceId &&
+        !StreamingSpeechModelService.supportedModelIds.contains(modelId)) {
+      return;
+    }
     if (_transfers.values.any((transfer) => transfer.isRunning)) return;
     final transfer = ModelTransferState(
       modelId: modelId,
@@ -260,11 +300,17 @@ class LocalModelManager extends ChangeNotifier {
       if (modelId == senseVoiceId) {
         imported = await _speechModels.pickAndImport(onProgress: progress);
       } else {
-        imported = await _streamingModels.pickAndImport(onProgress: progress);
+        imported = await _streamingModels.pickAndImport(
+          modelId,
+          onProgress: progress,
+        );
       }
       if (imported == null) {
         _transfers.remove(modelId);
       } else {
+        if (StreamingSpeechModelService.supportedModelIds.contains(modelId)) {
+          await _selectIfNoUsableLiveModel(modelId);
+        }
         transfer.status = ModelTransferStatus.completed;
       }
       await initialize(force: true);
@@ -290,16 +336,50 @@ class LocalModelManager extends ChangeNotifier {
         throw StateError('请先等待正在进行的转写结束');
       }
       await _speechModels.remove();
-    } else if (modelId == streamingChineseId) {
+    } else if (StreamingSpeechModelService.supportedModelIds.contains(
+      modelId,
+    )) {
       if (RealtimeDictationService.instance.isActive) {
         throw StateError('请先结束正在进行的实时听写');
       }
-      await _streamingModels.remove();
+      final wasSelected = _selectedLiveDictationModelId == modelId;
+      await _streamingModels.remove(modelId);
+      if (wasSelected) {
+        String? replacement;
+        for (final candidate in StreamingSpeechModelService.supportedModelIds) {
+          if (candidate == modelId) continue;
+          if ((await _streamingModels.inspect(modelId: candidate)).installed) {
+            replacement = candidate;
+            break;
+          }
+        }
+        if (replacement == null) {
+          await _streamingModels.resetSelection();
+        } else {
+          await _streamingModels.selectModel(replacement);
+        }
+      }
     } else {
       return;
     }
     _transfers.remove(modelId);
     await initialize(force: true);
+  }
+
+  Future<void> selectForLiveDictation(String modelId) async {
+    final definition = _definition(modelId);
+    if (definition.task != LocalModelTask.liveDictation) return;
+    await _streamingModels.selectModel(modelId);
+    _selectedLiveDictationModelId = modelId;
+    notifyListeners();
+  }
+
+  Future<void> _selectIfNoUsableLiveModel(String installedModelId) async {
+    final selected = await _streamingModels.inspect();
+    if (!selected.installed) {
+      await _streamingModels.selectModel(installedModelId);
+      _selectedLiveDictationModelId = installedModelId;
+    }
   }
 
   LocalModelDefinition _definition(String id) =>
