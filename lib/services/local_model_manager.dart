@@ -10,6 +10,7 @@ import 'realtime_dictation_service.dart';
 import 'speech_model_service.dart';
 import 'speech_denoiser_model_service.dart';
 import 'speech_transcription_service.dart';
+import 'speaker_diarization_model_service.dart';
 import 'streaming_speech_model_service.dart';
 import 'voice_activity_model_service.dart';
 
@@ -89,6 +90,7 @@ class LocalModelManager extends ChangeNotifier {
       StreamingSpeechModelService.bilingualModelId;
   static const voiceActivityId = VoiceActivityModelService.modelId;
   static const speechDenoiserId = SpeechDenoiserModelService.modelId;
+  static const speakerDiarizationId = SpeakerDiarizationModelService.modelId;
   static const kokoroTtsId = KokoroTtsModelService.modelId;
   static const mlKitChineseOcrId = 'mlkit-text-recognition-chinese';
   static const imageUnderstandingId = 'image-understanding-local';
@@ -174,6 +176,23 @@ class LocalModelManager extends ChangeNotifier {
       recommended: true,
     ),
     LocalModelDefinition(
+      id: speakerDiarizationId,
+      name: 'Pyannote + 3D-Speaker',
+      summary: '在录音转写中区分不同说话人',
+      description:
+          '使用 Pyannote INT8 定位说话区间，再用中文 3D-Speaker 嵌入模型聚类；支持自动估算或指定 2–8 位说话人。',
+      category: LocalModelCategory.speech,
+      availability: LocalModelAvailability.downloadable,
+      task: LocalModelTask.speakerDiarization,
+      downloadSizeBytes: SpeakerDiarizationModelService.downloadSizeBytes,
+      languages: ['与语言无关', '中文优化'],
+      engine: 'sherpa-onnx · Pyannote · 3D-Speaker',
+      version: 'Segmentation 3.0 INT8 · ERes2Net 16 kHz',
+      source: 'k2-fsa 官方模型',
+      license: 'MIT · Apache-2.0',
+      recommended: true,
+    ),
+    LocalModelDefinition(
       id: kokoroTtsId,
       name: 'Kokoro 中英双语 INT8',
       summary: '离线朗读中文与英文笔记',
@@ -222,6 +241,7 @@ class LocalModelManager extends ChangeNotifier {
   final _streamingModels = StreamingSpeechModelService.instance;
   final _voiceActivityModels = VoiceActivityModelService.instance;
   final _speechDenoiserModels = SpeechDenoiserModelService.instance;
+  final _speakerDiarizationModels = SpeakerDiarizationModelService.instance;
   final _kokoroTtsModels = KokoroTtsModelService.instance;
   final _dictationPreferences = RealtimeDictationPreferencesService.instance;
   final Map<String, LocalModelInstallation> _installations = {};
@@ -261,6 +281,8 @@ class LocalModelManager extends ChangeNotifier {
       _voiceActivityModels.partialDownloadBytes(),
       _speechDenoiserModels.inspect(),
       _speechDenoiserModels.partialDownloadBytes(),
+      _speakerDiarizationModels.inspect(),
+      _speakerDiarizationModels.partialDownloadBytes(),
       _kokoroTtsModels.inspect(),
       _kokoroTtsModels.partialDownloadBytes(),
     ]);
@@ -275,8 +297,10 @@ class LocalModelManager extends ChangeNotifier {
     final voiceActivityPartial = results[8] as int;
     final speechDenoiser = results[9] as SpeechDenoiserModelInfo;
     final speechDenoiserPartial = results[10] as int;
-    final kokoroTts = results[11] as KokoroTtsModelInfo;
-    final kokoroTtsPartial = results[12] as int;
+    final speakerDiarization = results[11] as SpeakerDiarizationModelInfo;
+    final speakerDiarizationPartial = results[12] as int;
+    final kokoroTts = results[13] as KokoroTtsModelInfo;
+    final kokoroTtsPartial = results[14] as int;
     _installations[senseVoiceId] = LocalModelInstallation(
       installed: speech.installed,
       installedSizeBytes: speech.sizeBytes,
@@ -301,6 +325,11 @@ class LocalModelManager extends ChangeNotifier {
       installed: speechDenoiser.installed,
       installedSizeBytes: speechDenoiser.sizeBytes,
       partialSizeBytes: speechDenoiserPartial,
+    );
+    _installations[speakerDiarizationId] = LocalModelInstallation(
+      installed: speakerDiarization.installed,
+      installedSizeBytes: speakerDiarization.sizeBytes,
+      partialSizeBytes: speakerDiarizationPartial,
     );
     _installations[kokoroTtsId] = LocalModelInstallation(
       installed: kokoroTts.installed,
@@ -348,6 +377,11 @@ class LocalModelManager extends ChangeNotifier {
           shouldCancel: () => transfer.cancelRequested,
           onProgress: progress,
         );
+      } else if (modelId == speakerDiarizationId) {
+        await _speakerDiarizationModels.download(
+          shouldCancel: () => transfer.cancelRequested,
+          onProgress: progress,
+        );
       } else if (modelId == kokoroTtsId) {
         await _kokoroTtsModels.download(
           shouldCancel: () => transfer.cancelRequested,
@@ -385,6 +419,7 @@ class LocalModelManager extends ChangeNotifier {
     if (modelId != senseVoiceId &&
         modelId != voiceActivityId &&
         modelId != speechDenoiserId &&
+        modelId != speakerDiarizationId &&
         modelId != kokoroTtsId &&
         !StreamingSpeechModelService.supportedModelIds.contains(modelId)) {
       return;
@@ -411,6 +446,10 @@ class LocalModelManager extends ChangeNotifier {
         );
       } else if (modelId == speechDenoiserId) {
         imported = await _speechDenoiserModels.pickAndImport(
+          onProgress: progress,
+        );
+      } else if (modelId == speakerDiarizationId) {
+        imported = await _speakerDiarizationModels.pickAndImport(
           onProgress: progress,
         );
       } else if (modelId == kokoroTtsId) {
@@ -479,6 +518,13 @@ class LocalModelManager extends ChangeNotifier {
           noiseSuppressionEnabled: false,
         );
       }
+    } else if (modelId == speakerDiarizationId) {
+      if (SpeechTranscriptionService.instance.jobs.any(
+        (job) => job.isRunning,
+      )) {
+        throw StateError('请先等待正在进行的转写结束');
+      }
+      await _speakerDiarizationModels.remove();
     } else if (modelId == kokoroTtsId) {
       if (NoteReadAloudService.instance.isActive) {
         throw StateError('请先停止正在进行的笔记朗读');

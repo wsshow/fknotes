@@ -7,6 +7,7 @@ enum LocalModelTask {
   liveDictation,
   voiceActivityDetection,
   speechEnhancement,
+  speakerDiarization,
   textToSpeech,
   textRecognition,
   imageUnderstanding,

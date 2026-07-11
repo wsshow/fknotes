@@ -739,6 +739,7 @@ class _ModelCard extends StatelessWidget {
       LocalModelTask.liveDictation => Icons.mic_rounded,
       LocalModelTask.voiceActivityDetection => Icons.multiline_chart_rounded,
       LocalModelTask.speechEnhancement => Icons.noise_control_off_rounded,
+      LocalModelTask.speakerDiarization => Icons.groups_2_outlined,
       LocalModelTask.textToSpeech => Icons.record_voice_over_rounded,
       LocalModelTask.textRecognition => Icons.document_scanner_rounded,
       LocalModelTask.imageUnderstanding => Icons.image_search_rounded,

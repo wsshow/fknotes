@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -11,11 +12,13 @@ import '../models/note_entry.dart';
 import 'file_storage_service.dart';
 import 'note_service.dart';
 import 'speech_model_service.dart';
+import 'speaker_diarization_model_service.dart';
 import 'voice_activity_model_service.dart';
 
 enum TranscriptionStatus {
   preparing,
   decoding,
+  diarizing,
   recognizing,
   saving,
   completed,
@@ -31,6 +34,7 @@ class TranscriptionJob {
   double progress;
   String partialText;
   String? errorMessage;
+  final int? speakerCount;
   DateTime updatedAt;
   Isolate? worker;
   VoidCallback? cancelWorker;
@@ -42,11 +46,13 @@ class TranscriptionJob {
     this.status = TranscriptionStatus.preparing,
     this.progress = 0,
     this.partialText = '',
+    this.speakerCount,
   }) : updatedAt = DateTime.now();
 
   bool get isRunning => switch (status) {
     TranscriptionStatus.preparing ||
     TranscriptionStatus.decoding ||
+    TranscriptionStatus.diarizing ||
     TranscriptionStatus.recognizing ||
     TranscriptionStatus.saving => true,
     _ => false,
@@ -65,6 +71,7 @@ class SpeechTranscriptionService extends ChangeNotifier {
   final _storage = FileStorageService.instance;
   final _models = SpeechModelService.instance;
   final _voiceActivityModels = VoiceActivityModelService.instance;
+  final _speakerDiarizationModels = SpeakerDiarizationModelService.instance;
   final _notes = NoteService.instance;
   final Map<String, TranscriptionJob> _jobs = {};
 
@@ -77,9 +84,15 @@ class SpeechTranscriptionService extends ChangeNotifier {
   Future<void> start({
     required int noteId,
     required NoteAttachment attachment,
+    int? speakerCount,
   }) async {
     if (attachment.type != NoteType.audio) {
       throw ArgumentError('只有音频附件可以转写');
+    }
+    if (speakerCount != null &&
+        speakerCount != -1 &&
+        (speakerCount < 2 || speakerCount > 8)) {
+      throw ArgumentError.value(speakerCount, 'speakerCount', '必须为自动或 2–8 人');
     }
     final existing = _jobs[attachment.filePath];
     if (existing?.isRunning == true) return;
@@ -87,6 +100,7 @@ class SpeechTranscriptionService extends ChangeNotifier {
       key: '${attachment.filePath}:${DateTime.now().microsecondsSinceEpoch}',
       noteId: noteId,
       filePath: attachment.filePath,
+      speakerCount: speakerCount,
     );
     _jobs[attachment.filePath] = job;
     notifyListeners();
@@ -101,6 +115,12 @@ class SpeechTranscriptionService extends ChangeNotifier {
       final voiceActivity = await _voiceActivityModels.inspect(
         verifyIntegrity: true,
       );
+      final diarization = job.speakerCount == null
+          ? const SpeakerDiarizationModelInfo(installed: false)
+          : await _speakerDiarizationModels.inspect(verifyIntegrity: true);
+      if (job.speakerCount != null && !diarization.installed) {
+        throw StateError(diarization.problem ?? '请先下载说话人分离模型');
+      }
       final source = _storage.absolutePath(job.filePath);
       if (!await File(source).exists()) throw StateError('音频文件不存在');
       _update(job, status: TranscriptionStatus.decoding, progress: .04);
@@ -113,6 +133,9 @@ class SpeechTranscriptionService extends ChangeNotifier {
         modelPath: model.modelPath,
         tokensPath: model.tokensPath,
         vadModelPath: voiceActivity.installed ? voiceActivity.modelPath : '',
+        segmentationModelPath: diarization.segmentationPath,
+        embeddingModelPath: diarization.embeddingPath,
+        speakerCount: job.speakerCount,
       );
       if (job.status == TranscriptionStatus.canceled) return;
       final normalized = text.trim();
@@ -123,7 +146,9 @@ class SpeechTranscriptionService extends ChangeNotifier {
         noteId: job.noteId,
         filePath: job.filePath,
         transcript: normalized,
-        model: SpeechModelService.modelId,
+        model: job.speakerCount == null
+            ? SpeechModelService.modelId
+            : '${SpeechModelService.modelId}+${SpeakerDiarizationModelService.modelId}',
         transcribedAt: now,
       );
       job.partialText = normalized;
@@ -194,6 +219,9 @@ class SpeechTranscriptionService extends ChangeNotifier {
     required String modelPath,
     required String tokensPath,
     required String vadModelPath,
+    String segmentationModelPath = '',
+    String embeddingModelPath = '',
+    int? speakerCount,
     String nativeLibDir = '',
   }) async {
     final messages = ReceivePort();
@@ -215,6 +243,9 @@ class SpeechTranscriptionService extends ChangeNotifier {
         case 'progress':
           final fraction = (message['progress'] as num?)?.toDouble() ?? 0;
           if (job != null) {
+            job.status = message['stage'] == 'diarizing'
+                ? TranscriptionStatus.diarizing
+                : TranscriptionStatus.recognizing;
             job.partialText = message['text'] as String? ?? job.partialText;
             _update(job, progress: .12 + fraction * .82);
           }
@@ -247,6 +278,9 @@ class SpeechTranscriptionService extends ChangeNotifier {
         'modelPath': modelPath,
         'tokensPath': tokensPath,
         'vadModelPath': vadModelPath,
+        'segmentationModelPath': segmentationModelPath,
+        'embeddingModelPath': embeddingModelPath,
+        'speakerCount': speakerCount ?? 0,
         'nativeLibDir': nativeLibDir,
       },
       onError: errors.sendPort,
@@ -323,13 +357,20 @@ void _transcriptionWorker(Map<String, Object> args) {
   final sendPort = args['sendPort'] as SendPort;
   sherpa.OfflineRecognizer? recognizer;
   sherpa.VoiceActivityDetector? vad;
+  sherpa.OfflineSpeakerDiarization? diarizer;
   _Pcm16WaveReader? wave;
   try {
     final nativeLibDir = args['nativeLibDir'] as String? ?? '';
     sherpa.initBindings(nativeLibDir.isEmpty ? null : nativeLibDir);
     final activeWave = _Pcm16WaveReader.open(args['wavePath'] as String);
     wave = activeWave;
-    final activeRecognizer = sherpa.OfflineRecognizer(
+    final segmentationModelPath =
+        args['segmentationModelPath'] as String? ?? '';
+    final embeddingModelPath = args['embeddingModelPath'] as String? ?? '';
+    final speakerMode =
+        segmentationModelPath.isNotEmpty && embeddingModelPath.isNotEmpty;
+
+    sherpa.OfflineRecognizer createRecognizer() => sherpa.OfflineRecognizer(
       sherpa.OfflineRecognizerConfig(
         model: sherpa.OfflineModelConfig(
           senseVoice: sherpa.OfflineSenseVoiceModelConfig(
@@ -343,23 +384,31 @@ void _transcriptionWorker(Map<String, Object> args) {
         ),
       ),
     );
-    recognizer = activeRecognizer;
+    late sherpa.OfflineRecognizer activeRecognizer;
+    if (!speakerMode) {
+      activeRecognizer = createRecognizer();
+      recognizer = activeRecognizer;
+    }
     final pieces = <String>[];
 
-    void recognize(Float32List samples) {
-      if (samples.isEmpty) return;
+    String recognize(Float32List samples, {int? sampleRate}) {
+      if (samples.isEmpty) return '';
       final stream = activeRecognizer.createStream();
       try {
         stream.acceptWaveform(
           samples: samples,
-          sampleRate: activeWave.sampleRate,
+          sampleRate: sampleRate ?? activeWave.sampleRate,
         );
         activeRecognizer.decode(stream);
-        final text = activeRecognizer.getResult(stream).text.trim();
-        if (text.isNotEmpty) pieces.add(text);
+        return activeRecognizer.getResult(stream).text.trim();
       } finally {
         stream.free();
       }
+    }
+
+    void recognizeAndAppend(Float32List samples) {
+      final text = recognize(samples);
+      if (text.isNotEmpty) pieces.add(text);
     }
 
     void report(int completedFrames) {
@@ -367,11 +416,90 @@ void _transcriptionWorker(Map<String, Object> args) {
         'type': 'progress',
         'progress': completedFrames / activeWave.totalFrames,
         'text': pieces.join('\n'),
+        'stage': 'recognizing',
       });
     }
 
     final vadModelPath = args['vadModelPath'] as String? ?? '';
-    if (vadModelPath.isNotEmpty && activeWave.sampleRate == 16000) {
+    if (speakerMode) {
+      var samples = activeWave.readSamples(activeWave.totalFrames);
+      if (activeWave.sampleRate != 16000) {
+        samples = _resampleLinear(samples, activeWave.sampleRate, 16000);
+      }
+      if (samples.length > 16000 * 60 * 30) {
+        throw StateError('区分说话人的录音暂时不能超过 30 分钟，请先拆分音频');
+      }
+      final activeDiarizer = sherpa.OfflineSpeakerDiarization(
+        sherpa.OfflineSpeakerDiarizationConfig(
+          segmentation: sherpa.OfflineSpeakerSegmentationModelConfig(
+            pyannote: sherpa.OfflineSpeakerSegmentationPyannoteModelConfig(
+              model: segmentationModelPath,
+            ),
+            numThreads: 1,
+            debug: false,
+          ),
+          embedding: sherpa.SpeakerEmbeddingExtractorConfig(
+            model: embeddingModelPath,
+            numThreads: 1,
+            debug: false,
+          ),
+          clustering: sherpa.FastClusteringConfig(
+            numClusters: args['speakerCount'] as int? ?? -1,
+            threshold: 0.75,
+          ),
+          minDurationOn: 0.3,
+          minDurationOff: 0.5,
+        ),
+      );
+      diarizer = activeDiarizer;
+      if (activeDiarizer.sampleRate != 16000) {
+        throw StateError('说话人分离模型采样率必须为 16000 Hz');
+      }
+      final rawSegments = activeDiarizer.processWithCallback(
+        samples: samples,
+        callback: (processed, total) {
+          sendPort.send({
+            'type': 'progress',
+            'progress': total <= 0 ? 0.0 : processed / total * 0.55,
+            'text': pieces.join('\n\n'),
+            'stage': 'diarizing',
+          });
+          return 0;
+        },
+      );
+      activeDiarizer.free();
+      diarizer = null;
+      final segments = _mergeDiarizationSegments(rawSegments);
+      if (segments.isEmpty) {
+        throw StateError('没有检测到可区分的说话区间');
+      }
+      activeRecognizer = createRecognizer();
+      recognizer = activeRecognizer;
+      for (var index = 0; index < segments.length; index++) {
+        final segment = segments[index];
+        final start = (segment.start * 16000).floor().clamp(0, samples.length);
+        final end = (segment.end * 16000).ceil().clamp(start, samples.length);
+        final text = recognize(
+          Float32List.sublistView(samples, start, end),
+          sampleRate: 16000,
+        );
+        if (text.isNotEmpty) {
+          pieces.add(
+            '说话人 ${segment.speaker + 1}'
+            '（${_formatSegmentTime(segment.start)}–'
+            '${_formatSegmentTime(segment.end)}）：$text',
+          );
+        }
+        sendPort.send({
+          'type': 'progress',
+          'progress': segments.isEmpty
+              ? 1.0
+              : 0.55 + (index + 1) / segments.length * 0.45,
+          'text': pieces.join('\n\n'),
+          'stage': 'recognizing',
+        });
+      }
+    } else if (vadModelPath.isNotEmpty && activeWave.sampleRate == 16000) {
       final activeVad = sherpa.VoiceActivityDetector(
         config: sherpa.VadModelConfig(
           sileroVad: sherpa.SileroVadModelConfig(
@@ -399,7 +527,7 @@ void _transcriptionWorker(Map<String, Object> args) {
         while (!activeVad.isEmpty()) {
           final segment = activeVad.front();
           activeVad.pop();
-          recognize(segment.samples);
+          recognizeAndAppend(segment.samples);
         }
       }
 
@@ -422,19 +550,72 @@ void _transcriptionWorker(Map<String, Object> args) {
           activeWave.sampleRate * chunkSeconds,
         );
         if (samples.isEmpty) break;
-        recognize(samples);
+        recognizeAndAppend(samples);
         completedFrames += samples.length;
         report(completedFrames);
       }
     }
-    sendPort.send({'type': 'result', 'text': pieces.join('\n')});
+    sendPort.send({
+      'type': 'result',
+      'text': pieces.join(segmentationModelPath.isEmpty ? '\n' : '\n\n'),
+    });
   } catch (error) {
     sendPort.send({'type': 'error', 'message': error.toString()});
   } finally {
     wave?.close();
     vad?.free();
+    diarizer?.free();
     recognizer?.free();
   }
+}
+
+Float32List _resampleLinear(Float32List input, int sourceRate, int targetRate) {
+  if (input.isEmpty || sourceRate == targetRate) return input;
+  if (sourceRate <= 0 || targetRate <= 0) {
+    throw const FormatException('音频采样率无效');
+  }
+  final outputLength = (input.length * targetRate / sourceRate).round();
+  final output = Float32List(outputLength);
+  final ratio = sourceRate / targetRate;
+  for (var index = 0; index < outputLength; index++) {
+    final position = index * ratio;
+    final lower = position.floor().clamp(0, input.length - 1);
+    final upper = (lower + 1).clamp(0, input.length - 1);
+    final fraction = position - lower;
+    output[index] = input[lower] * (1 - fraction) + input[upper] * fraction;
+  }
+  return output;
+}
+
+List<sherpa.OfflineSpeakerDiarizationSegment> _mergeDiarizationSegments(
+  List<sherpa.OfflineSpeakerDiarizationSegment> segments,
+) {
+  if (segments.isEmpty) return const [];
+  final merged = <sherpa.OfflineSpeakerDiarizationSegment>[];
+  for (final segment in segments) {
+    if (segment.end <= segment.start) continue;
+    final previous = merged.isEmpty ? null : merged.last;
+    if (previous != null &&
+        previous.speaker == segment.speaker &&
+        segment.start <= previous.end + 0.35) {
+      merged[merged.length - 1] = sherpa.OfflineSpeakerDiarizationSegment(
+        start: previous.start,
+        end: math.max(previous.end, segment.end),
+        speaker: previous.speaker,
+      );
+    } else {
+      merged.add(segment);
+    }
+  }
+  return merged;
+}
+
+String _formatSegmentTime(double seconds) {
+  final total = seconds.round().clamp(0, 24 * 60 * 60 - 1);
+  final minutes = total ~/ 60;
+  final remainingSeconds = total.remainder(60);
+  return '${minutes.toString().padLeft(2, '0')}:'
+      '${remainingSeconds.toString().padLeft(2, '0')}';
 }
 
 class _Pcm16WaveReader {

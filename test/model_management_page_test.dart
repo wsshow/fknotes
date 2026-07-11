@@ -5,6 +5,7 @@ import 'package:fknotes/services/file_storage_service.dart';
 import 'package:fknotes/services/local_model_manager.dart';
 import 'package:fknotes/services/kokoro_tts_model_service.dart';
 import 'package:fknotes/services/speech_model_service.dart';
+import 'package:fknotes/services/speaker_diarization_model_service.dart';
 import 'package:fknotes/services/speech_denoiser_model_service.dart';
 import 'package:fknotes/services/voice_activity_model_service.dart';
 import 'package:flutter/material.dart';
@@ -60,6 +61,28 @@ void main() {
     );
     await denoiserPartial.parent.create(recursive: true);
     await denoiserPartial.writeAsBytes(List<int>.filled(456, 6));
+    final speakerDownload = Directory(
+      p.join(
+        storageDirectory.path,
+        'models',
+        'audio',
+        SpeakerDiarizationModelService.modelId,
+        '.download',
+      ),
+    );
+    await speakerDownload.create(recursive: true);
+    await File(
+      p.join(
+        speakerDownload.path,
+        '${SpeakerDiarizationModelService.segmentationArchiveName}.part',
+      ),
+    ).writeAsBytes(List<int>.filled(111, 7));
+    await File(
+      p.join(
+        speakerDownload.path,
+        '${SpeakerDiarizationModelService.embeddingFileName}.part',
+      ),
+    ).writeAsBytes(List<int>.filled(222, 8));
     final ttsPartial = File(
       p.join(
         storageDirectory.path,
@@ -89,6 +112,10 @@ void main() {
     expect(
       await SpeechDenoiserModelService.instance.partialDownloadBytes(),
       456,
+    );
+    expect(
+      await SpeakerDiarizationModelService.instance.partialDownloadBytes(),
+      333,
     );
   });
 
@@ -196,6 +223,16 @@ void main() {
 
     expect(find.text('DPDFNet 实时降噪'), findsOneWidget);
     expect(find.text('8.4 MB'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('Pyannote + 3D-Speaker'),
+      350,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pyannote + 3D-Speaker'), findsOneWidget);
+    expect(find.text('44.4 MB'), findsOneWidget);
 
     await tester.scrollUntilVisible(
       find.text('Kokoro 中英双语 INT8'),

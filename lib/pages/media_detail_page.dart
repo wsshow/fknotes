@@ -15,6 +15,7 @@ import '../services/note_service.dart';
 import '../services/ocr_service.dart';
 import '../services/speech_model_service.dart';
 import '../services/speech_transcription_service.dart';
+import '../services/speaker_diarization_model_service.dart';
 import '../widgets/empty_state.dart';
 import 'note_editor_page.dart';
 import 'model_management_page.dart';
@@ -38,7 +39,9 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
   bool _recognizing = false;
   final _speech = SpeechTranscriptionService.instance;
   final _speechModels = SpeechModelService.instance;
+  final _speakerModels = SpeakerDiarizationModelService.instance;
   SpeechModelInfo? _speechModel;
+  SpeakerDiarizationModelInfo? _speakerModel;
   double? _modelImportProgress;
   bool _importingModel = false;
   bool _cancelModelDownload = false;
@@ -79,8 +82,16 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
   }
 
   Future<void> _loadSpeechModel() async {
-    final info = await _speechModels.inspect();
-    if (mounted) setState(() => _speechModel = info);
+    final results = await Future.wait<Object>([
+      _speechModels.inspect(),
+      _speakerModels.inspect(),
+    ]);
+    if (mounted) {
+      setState(() {
+        _speechModel = results[0] as SpeechModelInfo;
+        _speakerModel = results[1] as SpeakerDiarizationModelInfo;
+      });
+    }
   }
 
   void _speechChanged() {
@@ -406,6 +417,89 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
     }
     await _audio?.pause();
     await _speech.start(noteId: noteId, attachment: item);
+  }
+
+  Future<void> _startSpeakerTranscription() async {
+    final item = attachment;
+    final noteId = entry.id;
+    if (item == null || noteId == null) return;
+    if (_speechModel?.installed != true) {
+      await _importSpeechModel();
+      if (_speechModel?.installed != true) return;
+    }
+    var speakerModel = await _speakerModels.inspect();
+    if (!speakerModel.installed) {
+      if (!mounted) return;
+      final manage = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('需要说话人分离模型'),
+          content: const Text(
+            '首次使用需在本地模型中下载约 44.4 MB。'
+            '模型安装后，分段和转写都完全在设备上完成。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('管理模型'),
+            ),
+          ],
+        ),
+      );
+      if (manage == true && mounted) {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const ModelManagementPage(
+              focusModelId: SpeakerDiarizationModelService.modelId,
+            ),
+          ),
+        );
+        speakerModel = await _speakerModels.inspect();
+        if (mounted) setState(() => _speakerModel = speakerModel);
+      }
+      if (!speakerModel.installed) return;
+    }
+    if (!mounted) return;
+    final speakerCount = await showDialog<int>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('说话人数量'),
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(24, 0, 24, 12),
+            child: Text(
+              '当前支持最长 30 分钟的录音；人数越准确，分离结果通常越稳定。',
+              style: TextStyle(color: AppColors.muted, height: 1.45),
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, -1),
+            child: const ListTile(
+              leading: Icon(Icons.auto_awesome_rounded),
+              title: Text('自动估算'),
+              subtitle: Text('适合不确定人数的录音'),
+            ),
+          ),
+          for (var count = 2; count <= 8; count++)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, count),
+              child: Text('$count 位说话人'),
+            ),
+        ],
+      ),
+    );
+    if (speakerCount == null) return;
+    await _audio?.pause();
+    await _speech.start(
+      noteId: noteId,
+      attachment: item,
+      speakerCount: speakerCount,
+    );
   }
 
   Future<void> _openModelManager() async {
@@ -741,6 +835,19 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
           ),
         ],
         if (modelInstalled && job?.isRunning != true) ...[
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            key: const Key('speaker-diarization-transcription'),
+            onPressed: _startSpeakerTranscription,
+            icon: const Icon(Icons.groups_2_outlined),
+            label: Text(
+              _speakerModel?.installed == true
+                  ? '区分说话人转写'
+                  : '区分说话人转写 · 需 44.4 MB 模型',
+            ),
+          ),
+        ],
+        if (modelInstalled && job?.isRunning != true) ...[
           const SizedBox(height: 22),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -786,6 +893,7 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
   String _statusText(TranscriptionStatus status) => switch (status) {
     TranscriptionStatus.preparing => '正在准备本地转写',
     TranscriptionStatus.decoding => '正在读取音频',
+    TranscriptionStatus.diarizing => '正在区分说话人',
     TranscriptionStatus.recognizing => '正在本地识别',
     TranscriptionStatus.saving => '正在保存转写文字',
     _ => '正在处理',
