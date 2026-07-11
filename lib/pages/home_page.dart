@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
 import '../app.dart';
@@ -1074,10 +1075,13 @@ class _DataTab extends StatefulWidget {
 class _DataTabState extends State<_DataTab> {
   int? _actualSize;
   bool _backupBusy = false;
+  String? _appVersion;
+
   @override
   void initState() {
     super.initState();
     _refreshSize();
+    _loadAppVersion();
   }
 
   @override
@@ -1089,6 +1093,21 @@ class _DataTabState extends State<_DataTab> {
   Future<void> _refreshSize() async {
     final size = await FileStorageService.instance.storageSize();
     if (mounted) setState(() => _actualSize = size);
+  }
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      if (!mounted) return;
+      final buildNumber = packageInfo.buildNumber.trim();
+      setState(() {
+        _appVersion = buildNumber.isEmpty
+            ? '版本 ${packageInfo.version}'
+            : '版本 ${packageInfo.version} · 构建 $buildNumber';
+      });
+    } catch (_) {
+      if (mounted) setState(() => _appVersion = '版本信息暂不可用');
+    }
   }
 
   @override
@@ -1275,6 +1294,24 @@ class _DataTabState extends State<_DataTab> {
                     ).showSnackBar(const SnackBar(content: Text('索引已更新')));
                   }
                 },
+              ),
+            ],
+          ),
+          const SizedBox(height: 22),
+          Text(
+            '关于',
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 12),
+          _SettingCard(
+            children: [
+              _SettingRow(
+                icon: Icons.info_outline_rounded,
+                title: '非空笔记',
+                subtitle: _appVersion ?? '正在读取版本信息…',
+                showChevron: false,
               ),
             ],
           ),

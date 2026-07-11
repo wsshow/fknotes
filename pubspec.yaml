@@ -49,6 +49,7 @@ dependencies:
   file_selector: ^1.1.0
   archive: ^4.0.9
   share_plus: ^13.2.0
+  package_info_plus: ^10.2.0
   # 1.13.4 is the first release to bundle ORT 1.27, which produces blank-only
   # Zipformer INT8 output on the affected physical arm64 device. 1.13.3 keeps
   # the same Dart API and Android build fixes while using ORT 1.24.3.

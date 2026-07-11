@@ -10,6 +10,7 @@ import 'package:fknotes/services/video_import_service.dart';
 import 'package:fknotes/widgets/note_block_editor.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
 void main() {
@@ -43,6 +44,35 @@ void main() {
     expect(find.text('拍照'), findsOneWidget);
     expect(find.text('拍照 OCR'), findsNothing);
     expect(find.text('图片'), findsWidgets);
+  });
+
+  testWidgets('data tab shows the installed app version and build number', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    PackageInfo.setMockInitialValues(
+      appName: '非空笔记',
+      packageName: 'com.fknotes.app',
+      version: '2.3.4',
+      buildNumber: '57',
+      buildSignature: '',
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => NoteProvider(),
+        child: const MaterialApp(home: HomePage()),
+      ),
+    );
+    await tester.tap(find.text('数据'));
+    await tester.pumpAndSettle();
+    expect(find.text('本地数据'), findsOneWidget);
+
+    await tester.drag(find.byType(ListView), const Offset(0, -1200));
+    await tester.pumpAndSettle();
+
+    expect(find.text('关于'), findsOneWidget);
+    expect(find.text('版本 2.3.4 · 构建 57'), findsOneWidget);
   });
 
   testWidgets('tapping below the body editor focuses the final text block', (
