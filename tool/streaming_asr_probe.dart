@@ -9,12 +9,14 @@ import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 /// Usage:
 ///   dart run tool/streaming_asr_probe.dart `native-lib-dir model-dir wav`
 ///       [--endpoint] [--modeling-unit=cjkchar]
+///       [--bpe-vocab=path] [--hotwords-file=path] [--hotwords-score=2.0]
 void main(List<String> args) {
   if (args.length < 3) {
     stderr.writeln(
       'Usage: dart run tool/streaming_asr_probe.dart '
       '<native-lib-dir> <model-dir> <wav> '
-      '[--endpoint] [--modeling-unit=<unit>]',
+      '[--endpoint] [--modeling-unit=<unit>] [--bpe-vocab=<path>] '
+      '[--hotwords-file=<path>] [--hotwords-score=<score>]',
     );
     exitCode = 64;
     return;
@@ -26,14 +28,25 @@ void main(List<String> args) {
   final options = args.skip(3).toList();
   final enableEndpoint = options.remove('--endpoint');
   var modelingUnit = '';
+  var bpeVocab = '';
+  var hotwordsFile = '';
+  var hotwordsScore = 2.0;
   for (final option in options) {
-    const prefix = '--modeling-unit=';
-    if (!option.startsWith(prefix)) {
+    if (option.startsWith('--modeling-unit=')) {
+      modelingUnit = option.substring('--modeling-unit='.length);
+    } else if (option.startsWith('--bpe-vocab=')) {
+      bpeVocab = option.substring('--bpe-vocab='.length);
+    } else if (option.startsWith('--hotwords-file=')) {
+      hotwordsFile = option.substring('--hotwords-file='.length);
+    } else if (option.startsWith('--hotwords-score=')) {
+      hotwordsScore = double.parse(
+        option.substring('--hotwords-score='.length),
+      );
+    } else {
       stderr.writeln('Unknown option: $option');
       exitCode = 64;
       return;
     }
-    modelingUnit = option.substring(prefix.length);
   }
   sherpa.initBindings(nativeLibDir);
 
@@ -60,7 +73,14 @@ void main(List<String> args) {
         debug: true,
         modelType: '',
         modelingUnit: modelingUnit,
+        bpeVocab: bpeVocab,
       ),
+      decodingMethod: hotwordsFile.isEmpty
+          ? 'greedy_search'
+          : 'modified_beam_search',
+      maxActivePaths: 4,
+      hotwordsFile: hotwordsFile,
+      hotwordsScore: hotwordsScore,
       enableEndpoint: enableEndpoint,
       rule1MinTrailingSilence: 15,
       rule2MinTrailingSilence: 1.2,

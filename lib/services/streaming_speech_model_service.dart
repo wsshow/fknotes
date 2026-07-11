@@ -19,6 +19,7 @@ class StreamingSpeechModelInfo {
   final String joinerPath;
   final String tokensPath;
   final String modelingUnit;
+  final String bpeVocabPath;
   final int sizeBytes;
 
   const StreamingSpeechModelInfo({
@@ -31,6 +32,7 @@ class StreamingSpeechModelInfo {
     this.joinerPath = '',
     this.tokensPath = '',
     this.modelingUnit = '',
+    this.bpeVocabPath = '',
     this.sizeBytes = 0,
   });
 }
@@ -90,13 +92,14 @@ class StreamingSpeechModelService {
   static const bilingualModelId =
       'streaming-zipformer-bilingual-zh-en-int8-2023-02-20';
   static const downloadSizeBytes = 167360920;
-  static const bilingualDownloadSizeBytes = 198270793;
+  static const bilingualDownloadSizeBytes = 198283357;
   static const supportedModelIds = [modelId, bilingualModelId];
 
   static const _encoderFileName = 'encoder.int8.onnx';
   static const _decoderFileName = 'decoder.onnx';
   static const _joinerFileName = 'joiner.int8.onnx';
   static const _tokensFileName = 'tokens.txt';
+  static const _bpeVocabFileName = 'bpe.vocab';
   static const _manifestFileName = 'manifest.json';
 
   static const _specs = <_StreamingModelSpec>[
@@ -145,10 +148,7 @@ class StreamingSpeechModelService {
           'csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20',
       revision: '98590b7ed6443e77b714204da2757d75e1a642f4',
       runtimeLayout: 'int8-encoder + int8-decoder + int8-joiner',
-      // The model already carries its mixed Chinese/English word-piece
-      // vocabulary in tokens.txt. modelingUnit is only needed for optional
-      // hotword encoding, so keep the recognizer default here.
-      modelingUnit: '',
+      modelingUnit: 'cjkchar+bpe',
       files: [
         _RemoteModelFile(
           _encoderFileName,
@@ -173,6 +173,12 @@ class StreamingSpeechModelService {
           _tokensFileName,
           56317,
           'a8e0e4ec53810e433789b54a5c0134a7eaa2ffca595a6334d54c00da858841d3',
+        ),
+        _RemoteModelFile(
+          _bpeVocabFileName,
+          _bpeVocabFileName,
+          12564,
+          'd0b642f3a2eacd5fadefdeff9e0e1358cab729647cbb7fe58cf738e1f7407029',
         ),
       ],
     ),
@@ -256,9 +262,26 @@ class StreamingSpeechModelService {
     final decoder = File(p.join(active, _decoderFileName));
     final joiner = File(p.join(active, _joinerFileName));
     final tokens = File(p.join(active, _tokensFileName));
+    final bpeVocab = File(p.join(active, _bpeVocabFileName));
     final manifest = File(p.join(active, _manifestFileName));
-    final files = [encoder, decoder, joiner, tokens, manifest];
-    if (files.any((file) => !file.existsSync())) {
+    final runtimeFilesByName = {
+      _encoderFileName: encoder,
+      _decoderFileName: decoder,
+      _joinerFileName: joiner,
+      _tokensFileName: tokens,
+      if (spec.files.any((file) => file.localName == _bpeVocabFileName))
+        _bpeVocabFileName: bpeVocab,
+    };
+    final runtimeFiles = [
+      for (final definition in spec.files)
+        runtimeFilesByName[definition.localName]!,
+    ];
+    final files = [...runtimeFiles, manifest];
+    if (!manifest.existsSync() ||
+        runtimeFiles.any((file) => !file.existsSync())) {
+      if (spec.modelingUnit == 'cjkchar+bpe' && !bpeVocab.existsSync()) {
+        return unavailable('中英模型需补充热词词表，请继续下载完成增量升级');
+      }
       return unavailable('实时语音模型尚未安装');
     }
     try {
@@ -274,7 +297,6 @@ class StreamingSpeechModelService {
     } on FileSystemException {
       return unavailable('无法读取实时语音模型，请检查存储空间');
     }
-    final runtimeFiles = [encoder, decoder, joiner, tokens];
     for (var index = 0; index < runtimeFiles.length; index++) {
       if (await runtimeFiles[index].length() != spec.files[index].sizeBytes) {
         return unavailable('${spec.files[index].localName} 大小异常，请删除模型后重新下载');
@@ -303,6 +325,7 @@ class StreamingSpeechModelService {
       joinerPath: joiner.path,
       tokensPath: tokens.path,
       modelingUnit: spec.modelingUnit,
+      bpeVocabPath: spec.modelingUnit.contains('bpe') ? bpeVocab.path : '',
       sizeBytes: size,
     );
   }
@@ -311,9 +334,18 @@ class StreamingSpeechModelService {
     final spec = _spec(modelId);
     var total = 0;
     for (final definition in spec.files) {
-      final file = File(_partialPath(spec, definition));
-      if (!await file.exists()) continue;
-      total += (await file.length()).clamp(0, definition.sizeBytes);
+      final partial = File(_partialPath(spec, definition));
+      if (await partial.exists()) {
+        total += (await partial.length()).clamp(0, definition.sizeBytes);
+        continue;
+      }
+      // Count reusable files from a previous model layout so the model manager
+      // accurately presents a tiny metadata upgrade instead of a full re-download.
+      final active = File(p.join(_activeDir(spec), definition.localName));
+      if (await active.exists() &&
+          await active.length() == definition.sizeBytes) {
+        total += definition.sizeBytes;
+      }
     }
     return total;
   }
@@ -325,7 +357,7 @@ class StreamingSpeechModelService {
     final spec = _spec(modelId);
     const group = XTypeGroup(
       label: 'Streaming Zipformer 模型文件',
-      extensions: ['onnx', 'txt'],
+      extensions: ['onnx', 'txt', 'vocab'],
     );
     final selected = await openFiles(acceptedTypeGroups: [group]);
     if (selected.isEmpty) return null;
@@ -393,6 +425,13 @@ class StreamingSpeechModelService {
         await partial.delete();
         size = 0;
       }
+      if (size == 0) {
+        final reusable = File(p.join(_activeDir(spec), definition.localName));
+        if (await _matchesDefinition(reusable, definition)) {
+          await reusable.copy(partial.path);
+          size = definition.sizeBytes;
+        }
+      }
       currentBytes[definition.localName] = size;
     }
 
@@ -423,6 +462,17 @@ class StreamingSpeechModelService {
     };
     return _installFiles(spec, sources, onProgress: onProgress);
   });
+
+  Future<bool> _matchesDefinition(
+    File file,
+    _RemoteModelFile definition,
+  ) async {
+    if (!await file.exists() || await file.length() != definition.sizeBytes) {
+      return false;
+    }
+    final digest = await sha256.bind(file.openRead()).first;
+    return digest.toString() == definition.sha256;
+  }
 
   Future<void> _downloadFile(
     _StreamingModelSpec spec,

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../app.dart';
 import '../models/local_model.dart';
 import '../services/local_model_manager.dart';
+import '../services/realtime_dictation_preferences_service.dart';
 
 class ModelManagementPage extends StatefulWidget {
   final String? focusModelId;
@@ -16,6 +17,9 @@ class ModelManagementPage extends StatefulWidget {
 
 class _ModelManagementPageState extends State<ModelManagementPage> {
   final _manager = LocalModelManager.instance;
+  final _dictationPreferences = RealtimeDictationPreferencesService.instance;
+  RealtimeDictationPreferences _preferences =
+      const RealtimeDictationPreferences();
 
   @override
   void initState() {
@@ -25,6 +29,12 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
     // this page. Always validate the on-disk runtime instead of showing a
     // possibly stale singleton snapshot.
     unawaited(_manager.initialize(force: true));
+    unawaited(_loadDictationPreferences());
+  }
+
+  Future<void> _loadDictationPreferences() async {
+    final preferences = await _dictationPreferences.load();
+    if (mounted) setState(() => _preferences = preferences);
   }
 
   void _changed() {
@@ -87,6 +97,10 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
                 ],
               ),
             ),
+            const SizedBox(height: 26),
+            _sectionTitle('实时听写设置'),
+            const SizedBox(height: 12),
+            _HotwordsCard(preferences: _preferences, onTap: _editHotwords),
             const SizedBox(height: 26),
             _sectionTitle('语音模型'),
             const SizedBox(height: 12),
@@ -217,6 +231,27 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
     }
   }
 
+  Future<void> _editHotwords() async {
+    final result = await showDialog<RealtimeDictationPreferences>(
+      context: context,
+      builder: (_) => _HotwordsDialog(
+        initial: _preferences,
+        service: _dictationPreferences,
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() => _preferences = result);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          result.hotwordsEnabled
+              ? '已保存 ${result.hotwords.length} 个热词'
+              : '已关闭实时听写热词',
+        ),
+      ),
+    );
+  }
+
   void _showDetails(LocalModelDefinition model) {
     showModalBottomSheet<void>(
       context: context,
@@ -245,6 +280,204 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
       ),
     );
   }
+}
+
+class _HotwordsDialog extends StatefulWidget {
+  final RealtimeDictationPreferences initial;
+  final RealtimeDictationPreferencesService service;
+
+  const _HotwordsDialog({required this.initial, required this.service});
+
+  @override
+  State<_HotwordsDialog> createState() => _HotwordsDialogState();
+}
+
+class _HotwordsDialogState extends State<_HotwordsDialog> {
+  late final TextEditingController _controller;
+  late double _score;
+  String? _validationMessage;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(
+      text: widget.initial.hotwords.join('\n'),
+    );
+    _score = widget.initial.hotwordsScore;
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() {
+      _saving = true;
+      _validationMessage = null;
+    });
+    try {
+      final saved = await widget.service.save(
+        hotwordsText: _controller.text,
+        hotwordsScore: _score,
+      );
+      if (mounted) Navigator.pop(context, saved);
+    } on FormatException catch (error) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _validationMessage = error.message.toString();
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _validationMessage = '保存失败，请检查设备存储空间';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    scrollable: true,
+    title: const Text('实时听写热词'),
+    content: SizedBox(
+      width: 460,
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '每行输入一个人名、产品名或专业术语；留空即关闭。热词从下一次听写开始生效。',
+              style: TextStyle(color: AppColors.muted, height: 1.5),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              key: const Key('live-dictation-hotwords-field'),
+              controller: _controller,
+              minLines: 4,
+              maxLines: 8,
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: '非空笔记\nFKNotes\nsherpa onnx',
+                labelText: '热词列表',
+                errorText: _validationMessage,
+                alignLabelWithHint: true,
+                border: const OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                const Expanded(child: Text('增强强度')),
+                Text(
+                  _score.toStringAsFixed(1),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+            Slider(
+              key: const Key('live-dictation-hotwords-score'),
+              value: _score,
+              min: RealtimeDictationPreferencesService.minHotwordsScore,
+              max: RealtimeDictationPreferencesService.maxHotwordsScore,
+              divisions: 8,
+              label: _score.toStringAsFixed(1),
+              onChanged: _saving
+                  ? null
+                  : (value) => setState(() => _score = value),
+            ),
+            const Text(
+              '过高的强度可能把发音相近的普通词误判为热词，建议先使用 2.0。',
+              style: TextStyle(
+                color: AppColors.muted,
+                fontSize: 12,
+                height: 1.45,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: _saving ? null : () => Navigator.pop(context),
+        child: const Text('取消'),
+      ),
+      FilledButton(
+        key: const Key('save-live-dictation-hotwords'),
+        onPressed: _saving ? null : _save,
+        child: Text(_saving ? '保存中…' : '保存'),
+      ),
+    ],
+  );
+}
+
+class _HotwordsCard extends StatelessWidget {
+  final RealtimeDictationPreferences preferences;
+  final VoidCallback onTap;
+
+  const _HotwordsCard({required this.preferences, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: AppColors.surface,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(18),
+      side: const BorderSide(color: AppColors.line),
+    ),
+    child: InkWell(
+      key: const Key('live-dictation-hotwords-card'),
+      borderRadius: BorderRadius.circular(18),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppColors.softGreen,
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: const Icon(
+                Icons.local_fire_department_outlined,
+                color: AppColors.moss,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '热词增强',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    preferences.hotwordsEnabled
+                        ? '${preferences.hotwords.length} 个热词 · 强度 '
+                              '${preferences.hotwordsScore.toStringAsFixed(1)}'
+                        : '优先识别人名、品牌与专业术语',
+                    style: const TextStyle(color: AppColors.muted),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.muted),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class _ModelSummary extends StatelessWidget {

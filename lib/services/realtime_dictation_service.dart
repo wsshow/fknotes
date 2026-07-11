@@ -12,6 +12,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 
+import 'realtime_dictation_preferences_service.dart';
 import 'streaming_speech_model_service.dart';
 
 enum RealtimeDictationStatus { idle, preparing, listening, stopping, failed }
@@ -33,6 +34,7 @@ class RealtimeDictationService extends ChangeNotifier {
   static final RealtimeDictationService instance = RealtimeDictationService._();
 
   final _models = StreamingSpeechModelService.instance;
+  final _preferences = RealtimeDictationPreferencesService.instance;
   AudioRecorder? _recorder;
   StreamSubscription<Uint8List>? _audioSubscription;
   StreamSubscription<dynamic>? _messageSubscription;
@@ -74,6 +76,8 @@ class RealtimeDictationService extends ChangeNotifier {
   String _debugCpuFingerprint = '-';
   String _debugModelId = '-';
   String _debugModelName = '-';
+  int _debugHotwordsCount = 0;
+  double _debugHotwordsScore = 0;
   int _debugWorkerChunks = 0;
   int _debugWorkerSamples = 0;
   int _debugDecodeCalls = 0;
@@ -126,6 +130,9 @@ class RealtimeDictationService extends ChangeNotifier {
       '原生运行库: $_debugNativeRuntime',
       '原生 ABI: $_debugNativeAbi',
       'CPU 指纹: $_debugCpuFingerprint',
+      '热词: ${_debugHotwordsCount == 0 ? "未启用" : "$_debugHotwordsCount 个"}',
+      if (_debugHotwordsCount > 0)
+        '热词增强强度: ${_debugHotwordsScore.toStringAsFixed(1)}',
       '',
       '[录音配置]',
       '编码: PCM16 little-endian',
@@ -198,6 +205,8 @@ class RealtimeDictationService extends ChangeNotifier {
       _debugCpuFingerprint = '-';
       _debugModelId = '-';
       _debugModelName = '-';
+      _debugHotwordsCount = 0;
+      _debugHotwordsScore = 0;
       _debugWorkerChunks = 0;
       _debugWorkerSamples = 0;
       _debugDecodeCalls = 0;
@@ -221,13 +230,22 @@ class RealtimeDictationService extends ChangeNotifier {
       if (!model.installed) {
         throw StateError(model.problem ?? '请先下载实时语音输入模型');
       }
+      final preferences = await _preferences.load();
+      _debugHotwordsCount = preferences.hotwords.length;
+      _debugHotwordsScore = preferences.hotwordsScore;
+      _debugEvent(
+        preferences.hotwordsEnabled
+            ? '热词配置: ${preferences.hotwords.length} 个，'
+                  'score=${preferences.hotwordsScore.toStringAsFixed(1)}'
+            : '热词配置: 未启用',
+      );
       var permission = await Permission.microphone.status;
       if (!permission.isGranted) {
         permission = await Permission.microphone.request();
       }
       if (!permission.isGranted) throw StateError('需要麦克风权限才能实时听写');
       _debugEvent('麦克风权限: granted');
-      await _startWorker(model);
+      await _startWorker(model, preferences);
       final recorder = AudioRecorder();
       _recorder = recorder;
       final supported = await recorder.isEncoderSupported(
@@ -331,7 +349,10 @@ class RealtimeDictationService extends ChangeNotifier {
     }
   }
 
-  Future<void> _startWorker(StreamingSpeechModelInfo model) async {
+  Future<void> _startWorker(
+    StreamingSpeechModelInfo model,
+    RealtimeDictationPreferences preferences,
+  ) async {
     _messages = ReceivePort();
     _errors = ReceivePort();
     _exits = ReceivePort();
@@ -358,6 +379,11 @@ class RealtimeDictationService extends ChangeNotifier {
         'joinerPath': model.joinerPath,
         'tokensPath': model.tokensPath,
         'modelingUnit': model.modelingUnit,
+        'bpeVocabPath': model.bpeVocabPath,
+        'hotwordsFilePath': preferences.hotwordsEnabled
+            ? _preferences.hotwordsFilePath
+            : '',
+        'hotwordsScore': preferences.hotwordsScore,
       },
       onError: _errors!.sendPort,
       onExit: _exits!.sendPort,
@@ -826,7 +852,14 @@ void _realtimeRecognitionWorker(Map<String, Object> args) {
           // model type is inferred from ONNX metadata and tokens are CJK chars.
           modelType: '',
           modelingUnit: args['modelingUnit'] as String? ?? '',
+          bpeVocab: args['bpeVocabPath'] as String? ?? '',
         ),
+        decodingMethod: (args['hotwordsFilePath'] as String? ?? '').isNotEmpty
+            ? 'modified_beam_search'
+            : 'greedy_search',
+        maxActivePaths: 4,
+        hotwordsFile: args['hotwordsFilePath'] as String? ?? '',
+        hotwordsScore: args['hotwordsScore'] as double? ?? 2.0,
         enableEndpoint: true,
         // Treat leading silence, recognized-speech pauses, and long
         // utterances as separate concerns. This mirrors mature continuous

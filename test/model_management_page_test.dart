@@ -75,6 +75,35 @@ void main() {
     expect(find.text('语音模型'), findsOneWidget);
     expect(find.text('SenseVoice Small INT8'), findsOneWidget);
     expect(find.text('继续下载'), findsOneWidget);
+    expect(find.text('实时听写设置'), findsOneWidget);
+    expect(find.text('热词增强'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('live-dictation-hotwords-card')));
+    await tester.pumpAndSettle();
+    expect(find.text('实时听写热词'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const Key('live-dictation-hotwords-field')),
+      'FKNotes\n非空笔记\nfknotes',
+    );
+    tester.testTextInput.hide();
+    await tester.ensureVisible(
+      find.byKey(const Key('save-live-dictation-hotwords')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('save-live-dictation-hotwords')).hitTestable(),
+      findsOneWidget,
+    );
+    final saveButton = tester.widget<FilledButton>(
+      find.byKey(const Key('save-live-dictation-hotwords')),
+    );
+    await tester.runAsync(() async {
+      await (saveButton.onPressed as dynamic)();
+    });
+    await tester.pumpAndSettle();
+    expect(find.text('实时听写热词'), findsNothing);
+    expect(find.text('已保存 2 个热词'), findsOneWidget);
+    expect(find.text('2 个热词 · 强度 2.0'), findsOneWidget);
 
     await tester.drag(find.byType(ListView), const Offset(0, -700));
     await tester.pumpAndSettle();
