@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'pages/home_page.dart';
+import 'providers/app_lock_controller.dart';
 import 'providers/note_provider.dart';
+import 'widgets/app_lock_gate.dart';
 
 class AppColors {
   static const ink = Color(0xFF28231F);
@@ -76,8 +78,13 @@ class FkNotesApp extends StatelessWidget {
       surfaceTint: Colors.transparent,
     );
 
-    return ChangeNotifierProvider(
-      create: (_) => NoteProvider()..loadEntries(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+          create: (_) => AppLockController()..initialize(),
+        ),
+        ChangeNotifierProvider(create: (_) => NoteProvider()..loadEntries()),
+      ],
       child: MaterialApp(
         title: '非空笔记',
         debugShowCheckedModeBanner: false,
@@ -361,7 +368,7 @@ class FkNotesApp extends StatelessWidget {
             space: 1,
           ),
         ),
-        home: const HomePage(),
+        home: const AppLockGate(child: HomePage()),
       ),
     );
   }

@@ -28,6 +28,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>用于拍摄图片并在设备上完成 OCR 文字识别。</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>用于通过系统 Face ID 解锁非空笔记中的本地内容。</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>用于创建仅保存在本机的语音笔记。</string>
 	<key>NSPhotoLibraryUsageDescription</key>

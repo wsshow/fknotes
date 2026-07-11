@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../app.dart';
 import '../models/note_entry.dart';
+import '../providers/app_lock_controller.dart';
 import '../providers/note_provider.dart';
 import '../services/backup_service.dart';
 import '../services/file_storage_service.dart';
@@ -15,6 +16,7 @@ import '../widgets/note_card.dart';
 import '../widgets/navigation_icons.dart';
 import 'note_editor_page.dart';
 import 'model_management_page.dart';
+import 'app_lock_settings_page.dart';
 import 'record_audio_page.dart';
 import 'search_page.dart';
 
@@ -1112,6 +1114,7 @@ class _DataTabState extends State<_DataTab> {
 
   @override
   Widget build(BuildContext context) {
+    final appLock = context.watch<AppLockController>();
     return SafeArea(
       bottom: false,
       child: ListView(
@@ -1260,6 +1263,20 @@ class _DataTabState extends State<_DataTab> {
           const SizedBox(height: 12),
           _SettingCard(
             children: [
+              _SettingRow(
+                icon: Icons.lock_outline_rounded,
+                title: '应用锁',
+                subtitle: appLock.enabled
+                    ? '已开启 · 离开应用 ${appLock.timeout.label}锁定'
+                    : '使用系统指纹、人脸或锁屏密码',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AppLockSettingsPage(),
+                  ),
+                ),
+              ),
+              const Divider(height: 1),
               _SettingRow(
                 icon: Icons.archive_outlined,
                 title: '归档',

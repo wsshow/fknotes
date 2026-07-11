@@ -4,7 +4,10 @@ import 'package:fknotes/models/note_entry.dart';
 import 'package:fknotes/pages/home_page.dart';
 import 'package:fknotes/pages/media_detail_page.dart';
 import 'package:fknotes/pages/note_editor_page.dart';
+import 'package:fknotes/providers/app_lock_controller.dart';
 import 'package:fknotes/providers/note_provider.dart';
+import 'package:fknotes/services/app_lock_preferences_service.dart';
+import 'package:fknotes/services/device_authentication_service.dart';
 import 'package:fknotes/services/file_storage_service.dart';
 import 'package:fknotes/services/video_import_service.dart';
 import 'package:fknotes/widgets/note_block_editor.dart';
@@ -31,12 +34,7 @@ void main() {
     tester,
   ) async {
     _usePhoneViewport(tester);
-    await tester.pumpWidget(
-      ChangeNotifierProvider(
-        create: (_) => NoteProvider(),
-        child: const MaterialApp(home: HomePage()),
-      ),
-    );
+    await _pumpHomePage(tester);
 
     await tester.tap(find.text('新建'));
     await tester.pumpAndSettle();
@@ -58,15 +56,11 @@ void main() {
       buildSignature: '',
     );
 
-    await tester.pumpWidget(
-      ChangeNotifierProvider(
-        create: (_) => NoteProvider(),
-        child: const MaterialApp(home: HomePage()),
-      ),
-    );
+    await _pumpHomePage(tester);
     await tester.tap(find.text('数据'));
     await tester.pumpAndSettle();
     expect(find.text('本地数据'), findsOneWidget);
+    expect(find.text('应用锁'), findsOneWidget);
 
     await tester.drag(find.byType(ListView), const Offset(0, -1200));
     await tester.pumpAndSettle();
@@ -386,4 +380,41 @@ void _usePhoneViewport(WidgetTester tester) {
   tester.view.devicePixelRatio = 3;
   tester.view.physicalSize = const Size(1080, 2400);
   addTearDown(tester.view.reset);
+}
+
+Future<void> _pumpHomePage(WidgetTester tester) async {
+  final appLock = AppLockController(
+    preferencesStore: _DisabledAppLockPreferencesStore(),
+    authenticator: _UnusedDeviceAuthenticator(),
+    observeLifecycle: false,
+  );
+  await appLock.initialize();
+  addTearDown(appLock.dispose);
+  await tester.pumpWidget(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: appLock),
+        ChangeNotifierProvider(create: (_) => NoteProvider()),
+      ],
+      child: const MaterialApp(home: HomePage()),
+    ),
+  );
+}
+
+class _DisabledAppLockPreferencesStore implements AppLockPreferencesStore {
+  @override
+  Future<AppLockPreferences> load() async => const AppLockPreferences();
+
+  @override
+  Future<void> save(AppLockPreferences preferences) async {}
+}
+
+class _UnusedDeviceAuthenticator implements DeviceAuthenticator {
+  @override
+  Future<DeviceAuthenticationResult> authenticate({
+    required String reason,
+  }) async => throw StateError('Authentication should not be requested');
+
+  @override
+  Future<bool> isSupported() async => false;
 }
