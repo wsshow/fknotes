@@ -757,7 +757,10 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
         ? block.controller.typingAttributes
         : block.controller.attributesForSelection(selection);
     if (selection.isCollapsed) {
-      block.controller.typingAttributes = update(current, !read(current));
+      block.controller.setTypingAttributesForSelection(
+        selection,
+        update(current, !read(current)),
+      );
       activeFormat.value = NoteEditorFormatState(
         bold: block.controller.typingAttributes.bold,
         underline: block.controller.typingAttributes.underline,
@@ -785,8 +788,10 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     HapticFeedback.selectionClick();
     final selection = block.controller.visibleSelectionValue;
     if (selection.isCollapsed) {
-      block.controller.typingAttributes = block.controller.typingAttributes
-          .copyWith(fontSize: fontSize);
+      block.controller.setTypingAttributesForSelection(
+        selection,
+        block.controller.typingAttributes.copyWith(fontSize: fontSize),
+      );
       activeFormat.value = NoteEditorFormatState(
         bold: block.controller.typingAttributes.bold,
         underline: block.controller.typingAttributes.underline,
@@ -1186,9 +1191,23 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     }
 
     final quote = block.type == NoteBlockType.quote;
+    final connectsPreviousQuote =
+        quote &&
+        index > 0 &&
+        _blocks[index - 1].type == NoteBlockType.quote &&
+        _blocks[index - 1].indent == block.indent;
+    final connectsNextQuote =
+        quote &&
+        index + 1 < _blocks.length &&
+        _blocks[index + 1].type == NoteBlockType.quote &&
+        _blocks[index + 1].indent == block.indent;
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 1),
-      padding: EdgeInsets.only(left: block.indent * 18 + (quote ? 10 : 0)),
+      margin: EdgeInsets.only(
+        left: quote ? block.indent * 18 : 0,
+        top: connectsPreviousQuote ? 0 : 1,
+        bottom: connectsNextQuote ? 0 : 1,
+      ),
+      padding: EdgeInsets.only(left: quote ? 10 : block.indent * 18),
       decoration: BoxDecoration(
         border: Border(
           left: BorderSide(
@@ -1445,8 +1464,10 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
 
 class _BlockTextEditingController extends TextEditingController {
   static const boundary = editorBlockBoundary;
+  static final _underlineGap = RegExp(r'^\s$', unicode: true);
   List<NoteTextAttributes> _attributes;
   NoteTextAttributes typingAttributes = NoteTextAttributes.defaults;
+  int? _typingAttributesOffset;
 
   _BlockTextEditingController({
     String text = '',
@@ -1590,6 +1611,9 @@ class _BlockTextEditingController extends TextEditingController {
     if (_attributes.isEmpty) return typingAttributes;
     if (!selection.isValid || selection.isCollapsed) {
       final offset = selection.isValid ? selection.extentOffset : 0;
+      if (selection.isValid && _typingAttributesOffset == offset) {
+        return typingAttributes;
+      }
       final index = offset <= 0
           ? 0
           : (offset - 1).clamp(0, _attributes.length - 1);
@@ -1646,6 +1670,7 @@ class _BlockTextEditingController extends TextEditingController {
 
   void replaceVisibleText(String text, List<NoteTextStyleRange> styles) {
     _attributes = _expandStyles(text.length, styles);
+    _typingAttributesOffset = null;
     typingAttributes = _attributes.isEmpty
         ? NoteTextAttributes.defaults
         : _attributes.last;
@@ -1663,7 +1688,23 @@ class _BlockTextEditingController extends TextEditingController {
     final oldText = visibleText(super.text);
     final newText = visibleText(normalized.text);
     if (oldText != newText) _reconcileStyles(oldText, newText);
+    final selection = visibleSelection(normalized.selection);
+    if (!selection.isValid ||
+        !selection.isCollapsed ||
+        selection.extentOffset != _typingAttributesOffset) {
+      _typingAttributesOffset = null;
+    }
     super.value = normalized;
+  }
+
+  void setTypingAttributesForSelection(
+    TextSelection selection,
+    NoteTextAttributes attributes,
+  ) {
+    typingAttributes = attributes;
+    _typingAttributesOffset = selection.isValid && selection.isCollapsed
+        ? selection.extentOffset
+        : null;
   }
 
   void _reconcileStyles(String oldText, String newText) {
@@ -1718,18 +1759,26 @@ class _BlockTextEditingController extends TextEditingController {
           : NoteTextAttributes.defaults;
       final rawIndex = start + boundary.length;
       final composing = isComposing(rawIndex);
+      final manuallyUnderlined =
+          attributes.underline && !_underlineGap.hasMatch(text[start]);
       var end = start + 1;
       while (end < text.length) {
         final next = end < _attributes.length
             ? _attributes[end]
             : NoteTextAttributes.defaults;
         final nextComposing = isComposing(end + boundary.length);
-        if (next != attributes || nextComposing != composing) break;
+        final nextManuallyUnderlined =
+            next.underline && !_underlineGap.hasMatch(text[end]);
+        if (next != attributes ||
+            nextComposing != composing ||
+            nextManuallyUnderlined != manuallyUnderlined) {
+          break;
+        }
         end++;
       }
       final decorations = <TextDecoration>[
         if (base.decoration != null) base.decoration!,
-        if (attributes.underline || composing) TextDecoration.underline,
+        if (manuallyUnderlined || composing) TextDecoration.underline,
       ];
       children.add(
         TextSpan(

@@ -148,6 +148,11 @@ void main() {
 
     expect(find.text('14'), findsOneWidget);
     expect(find.text('28'), findsOneWidget);
+
+    await tester.tap(find.text('24'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('24'), findsOneWidget);
   });
 
   testWidgets('editor image imports do not present OCR as a capture mode', (

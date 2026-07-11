@@ -1,3 +1,4 @@
+import 'package:fknotes/app.dart';
 import 'package:fknotes/widgets/note_block_editor.dart';
 import 'package:fknotes/models/note_entry.dart';
 import 'package:flutter/material.dart';
@@ -140,6 +141,121 @@ void main() {
     expect(block.styles.single.attributes.underline, isTrue);
     expect(block.styles.single.attributes.fontSize, 20);
     expect(tester.widget<TextField>(field).focusNode?.hasFocus, isTrue);
+  });
+
+  testWidgets('underlined words leave whitespace undecorated', (tester) async {
+    final controller = TextEditingController(text: '甲 乙');
+    final richContent = NoteRichDocumentCodec.encode(const [
+      NoteBlockData(
+        NoteBlockType.paragraph,
+        '甲 乙',
+        styles: [NoteTextStyleRange(0, 3, NoteTextAttributes(underline: true))],
+      ),
+    ]);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            controller: controller,
+            initialRichContent: richContent,
+            hintText: '开始记录',
+          ),
+        ),
+      ),
+    );
+
+    final field = find.byType(TextField).first;
+    final widget = tester.widget<TextField>(field);
+    final span = widget.controller!.buildTextSpan(
+      context: tester.element(field),
+      style: widget.style,
+      withComposing: false,
+    );
+    final visibleSpans = span.children!.whereType<TextSpan>().skip(1).toList();
+
+    expect(visibleSpans.map((child) => child.text), ['甲', ' ', '乙']);
+    expect(visibleSpans[0].style?.decoration, TextDecoration.underline);
+    expect(visibleSpans[1].style?.decoration, isNull);
+    expect(visibleSpans[2].style?.decoration, TextDecoration.underline);
+  });
+
+  testWidgets('collapsed font size survives focus restoration', (tester) async {
+    final controller = TextEditingController();
+    final editorKey = GlobalKey<NoteBlockEditorState>();
+    String? richContent;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            key: editorKey,
+            controller: controller,
+            hintText: '开始记录',
+            onRichContentChanged: (value) => richContent = value,
+          ),
+        ),
+      ),
+    );
+
+    final field = find.byType(TextField).first;
+    await tester.tap(field);
+    await tester.enterText(field, '正文');
+    final focusNode = tester.widget<TextField>(field).focusNode!;
+    focusNode.unfocus();
+    await tester.pump();
+
+    editorKey.currentState!.setFontSize(24);
+    await tester.pump();
+    expect(editorKey.currentState!.activeFormat.value.fontSize, 24);
+    expect(focusNode.hasFocus, isTrue);
+
+    await tester.enterText(field, '正文大');
+    await tester.pump();
+    final block = NoteRichDocumentCodec.tryDecode(richContent)!.single;
+    expect(block.styles.single.start, 2);
+    expect(block.styles.single.end, 3);
+    expect(block.styles.single.attributes.fontSize, 24);
+  });
+
+  testWidgets('adjacent quote blocks share a continuous border', (
+    tester,
+  ) async {
+    const blocks = [
+      NoteBlockData(NoteBlockType.quote, '第一行'),
+      NoteBlockData(NoteBlockType.quote, '第二行'),
+      NoteBlockData(NoteBlockType.quote, '缩进引用', indent: 1),
+      NoteBlockData(NoteBlockType.paragraph, '普通段落'),
+    ];
+    final controller = TextEditingController(
+      text: NoteBlockCodec.encode(blocks),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            controller: controller,
+            initialRichContent: NoteRichDocumentCodec.encode(blocks),
+            hintText: '开始记录',
+          ),
+        ),
+      ),
+    );
+
+    final quoteContainers = tester
+        .widgetList<Container>(find.byType(Container))
+        .where((container) {
+          final decoration = container.decoration;
+          final border = decoration is BoxDecoration ? decoration.border : null;
+          return border is Border &&
+              border.left.width == 2 &&
+              border.left.color == AppColors.coral;
+        })
+        .toList();
+    expect(quoteContainers, hasLength(3));
+    final [first, second, indented] = quoteContainers;
+
+    expect(first.margin, const EdgeInsets.only(top: 1));
+    expect(second.margin, const EdgeInsets.only(bottom: 1));
+    expect(indented.margin, const EdgeInsets.only(left: 18, top: 1, bottom: 1));
   });
 
   testWidgets('undo and redo restore typed text', (tester) async {
