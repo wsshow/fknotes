@@ -7,6 +7,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 
 import 'file_storage_service.dart';
+import 'model_download_transport.dart';
 import 'model_install_coordinator.dart';
 import 'speech_model_service.dart';
 
@@ -436,12 +437,14 @@ class StreamingSpeechModelService {
       currentBytes[definition.localName] = size;
     }
 
-    void report(String name, int bytes) {
-      currentBytes[name] = bytes;
+    void report(String name, ModelDownloadEvent event) {
+      currentBytes[name] = event.transferredBytes;
       onProgress?.call(
         SpeechModelImportProgress(
           currentBytes.values.fold(0, (sum, value) => sum + value),
           spec.downloadSizeBytes,
+          connecting: event.connecting,
+          sourceLabel: event.sourceLabel,
         ),
       );
     }
@@ -450,7 +453,7 @@ class StreamingSpeechModelService {
       await _downloadFile(
         spec,
         definition,
-        onProgress: (bytes) => report(definition.localName, bytes),
+        onProgress: (event) => report(definition.localName, event),
         shouldCancel: shouldCancel,
       );
     }
@@ -483,7 +486,7 @@ class StreamingSpeechModelService {
   Future<void> _downloadFile(
     _StreamingModelSpec spec,
     _RemoteModelFile definition, {
-    required void Function(int bytes) onProgress,
+    required void Function(ModelDownloadEvent event) onProgress,
     bool Function()? shouldCancel,
   }) async {
     Object? lastError;
@@ -511,67 +514,31 @@ class StreamingSpeechModelService {
   Future<void> _downloadFileOnce(
     _StreamingModelSpec spec,
     _RemoteModelFile definition, {
-    required void Function(int bytes) onProgress,
+    required void Function(ModelDownloadEvent event) onProgress,
     bool Function()? shouldCancel,
   }) async {
-    final partial = File(_partialPath(spec, definition));
-    var existing = await partial.exists() ? await partial.length() : 0;
-    if (existing == definition.sizeBytes) {
-      onProgress(existing);
-      return;
-    }
-    if (shouldCancel?.call() == true) {
-      throw const SpeechModelDownloadCanceled();
-    }
-    final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 20);
-    RandomAccessFile? output;
-    try {
-      final uri = Uri.parse(
-        'https://hf-mirror.com/${spec.repository}/resolve/'
-        '${spec.revision}/${definition.remotePath}?download=true',
-      );
-      final request = await client.getUrl(uri);
-      if (existing > 0) {
-        request.headers.set(HttpHeaders.rangeHeader, 'bytes=$existing-');
-      }
-      request.headers.set(HttpHeaders.userAgentHeader, 'fknotes/${spec.id}');
-      final response = await request.close();
-      final canResume = response.statusCode == HttpStatus.partialContent;
-      if (response.statusCode != HttpStatus.ok && !canResume) {
-        throw HttpException(
-          '${definition.sourceName} 下载失败（${response.statusCode}）',
-        );
-      }
-      if (existing > 0 && !canResume) {
-        await partial.delete();
-        existing = 0;
-      }
-      output = await partial.open(
-        mode: existing > 0 ? FileMode.append : FileMode.write,
-      );
-      var received = existing;
-      await for (final chunk in response) {
-        if (shouldCancel?.call() == true) {
-          throw const SpeechModelDownloadCanceled();
-        }
-        await output.writeFrom(chunk);
-        received += chunk.length;
-        if (received > definition.sizeBytes) {
-          throw FormatException('${definition.sourceName} 下载大小异常');
-        }
-        onProgress(received);
-      }
-      await output.flush();
-      await output.close();
-      output = null;
-      if (received != definition.sizeBytes) {
-        throw FormatException('${definition.sourceName} 下载不完整，将在下次继续');
-      }
-    } finally {
-      await output?.close();
-      client.close(force: true);
-    }
+    final path = '${spec.revision}/${definition.remotePath}?download=true';
+    await ModelDownloadTransport.instance.download(
+      sources: [
+        ModelDownloadSource(
+          uri: Uri.parse(
+            'https://hf-mirror.com/${spec.repository}/resolve/$path',
+          ),
+          label: 'Hugging Face 国内镜像',
+        ),
+        ModelDownloadSource(
+          uri: Uri.parse(
+            'https://huggingface.co/${spec.repository}/resolve/$path',
+          ),
+          label: 'Hugging Face',
+        ),
+      ],
+      partial: File(_partialPath(spec, definition)),
+      expectedBytes: definition.sizeBytes,
+      userAgent: 'fknotes/${spec.id}',
+      onProgress: onProgress,
+      shouldCancel: shouldCancel,
+    );
   }
 
   Future<StreamingSpeechModelInfo> _installFiles(

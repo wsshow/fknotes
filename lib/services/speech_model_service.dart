@@ -7,6 +7,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 
 import 'file_storage_service.dart';
+import 'model_download_transport.dart';
 import 'model_install_coordinator.dart';
 
 class SpeechModelInfo {
@@ -25,16 +26,22 @@ class SpeechModelInfo {
   });
 }
 
+typedef SpeechModelDownloadCanceled = ModelDownloadCanceled;
+
 class SpeechModelImportProgress {
   final int copiedBytes;
   final int totalBytes;
   final bool verifying;
   final bool waitingForInstall;
+  final bool connecting;
+  final String sourceLabel;
   const SpeechModelImportProgress(
     this.copiedBytes,
     this.totalBytes, {
     this.verifying = false,
     this.waitingForInstall = false,
+    this.connecting = false,
+    this.sourceLabel = '',
   });
 
   double get fraction =>
@@ -340,60 +347,21 @@ class SpeechModelService {
     void Function(SpeechModelImportProgress progress)? onProgress,
     bool Function()? shouldCancel,
   }) async {
-    var existing = await partial.exists() ? await partial.length() : 0;
-    if (existing > expectedSize) {
-      await partial.delete();
-      existing = 0;
-    }
-    if (existing == expectedSize) {
-      onProgress?.call(
-        SpeechModelImportProgress(completedBefore + existing, totalSize),
-      );
-      return;
-    }
-    if (shouldCancel?.call() == true) throw const SpeechModelDownloadCanceled();
-    final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 20);
-    RandomAccessFile? output;
-    try {
-      final request = await client.getUrl(uri);
-      if (existing > 0) {
-        request.headers.set(HttpHeaders.rangeHeader, 'bytes=$existing-');
-      }
-      request.headers.set(HttpHeaders.userAgentHeader, 'fknotes/$modelId');
-      final response = await request.close();
-      final canResume = response.statusCode == HttpStatus.partialContent;
-      if (response.statusCode != HttpStatus.ok && !canResume) {
-        throw HttpException('模型下载失败（${response.statusCode}）', uri: uri);
-      }
-      if (existing > 0 && !canResume) {
-        await partial.delete();
-        existing = 0;
-      }
-      output = await partial.open(
-        mode: existing > 0 ? FileMode.append : FileMode.write,
-      );
-      var received = existing;
-      await for (final chunk in response) {
-        if (shouldCancel?.call() == true) {
-          throw const SpeechModelDownloadCanceled();
-        }
-        await output.writeFrom(chunk);
-        received += chunk.length;
-        onProgress?.call(
-          SpeechModelImportProgress(completedBefore + received, totalSize),
-        );
-      }
-      await output.flush();
-      await output.close();
-      output = null;
-      if (received != expectedSize) {
-        throw const FormatException('模型下载不完整，将在下次继续下载');
-      }
-    } finally {
-      await output?.close();
-      client.close(force: true);
-    }
+    await ModelDownloadTransport.instance.download(
+      sources: [ModelDownloadSource(uri: uri, label: 'ModelScope 魔搭')],
+      partial: partial,
+      expectedBytes: expectedSize,
+      userAgent: 'fknotes/$modelId',
+      shouldCancel: shouldCancel,
+      onProgress: (event) => onProgress?.call(
+        SpeechModelImportProgress(
+          completedBefore + event.transferredBytes,
+          totalSize,
+          connecting: event.connecting,
+          sourceLabel: event.sourceLabel,
+        ),
+      ),
+    );
   }
 
   Future<void> _writeManifest(
@@ -476,8 +444,4 @@ class SpeechModelService {
       _operationBusy = false;
     }
   }
-}
-
-class SpeechModelDownloadCanceled implements Exception {
-  const SpeechModelDownloadCanceled();
 }

@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
 import '../models/local_model.dart';
 import 'kokoro_tts_model_service.dart';
+import 'model_download_transport.dart';
 import 'note_read_aloud_service.dart';
 import 'realtime_dictation_preferences_service.dart';
 import 'realtime_dictation_service.dart';
@@ -15,10 +17,12 @@ import 'streaming_speech_model_service.dart';
 import 'voice_activity_model_service.dart';
 
 enum ModelTransferStatus {
+  connecting,
   downloading,
   importing,
   waitingToInstall,
   verifying,
+  canceling,
   completed,
   failed,
   canceled,
@@ -31,6 +35,8 @@ class ModelTransferState {
   int totalBytes;
   double bytesPerSecond;
   String? errorMessage;
+  String sourceLabel;
+  final bool cancelable;
   bool cancelRequested;
   DateTime? _speedSampleAt;
   int _speedSampleBytes;
@@ -42,14 +48,18 @@ class ModelTransferState {
     this.totalBytes = 0,
     this.bytesPerSecond = 0,
     this.errorMessage,
+    this.sourceLabel = '',
+    this.cancelable = true,
     this.cancelRequested = false,
   }) : _speedSampleBytes = transferredBytes;
 
   bool get isRunning => switch (status) {
+    ModelTransferStatus.connecting ||
     ModelTransferStatus.downloading ||
     ModelTransferStatus.importing ||
     ModelTransferStatus.waitingToInstall ||
-    ModelTransferStatus.verifying => true,
+    ModelTransferStatus.verifying ||
+    ModelTransferStatus.canceling => true,
     _ => false,
   };
 
@@ -58,7 +68,9 @@ class ModelTransferState {
 
   void updateProgress(SpeechModelImportProgress progress) {
     final now = DateTime.now();
-    if (!progress.verifying && !progress.waitingForInstall) {
+    if (!progress.verifying &&
+        !progress.waitingForInstall &&
+        !progress.connecting) {
       final previous = _speedSampleAt;
       if (previous == null) {
         _speedSampleAt = now;
@@ -78,10 +90,19 @@ class ModelTransferState {
     }
     transferredBytes = progress.copiedBytes;
     totalBytes = progress.totalBytes;
+    if (progress.sourceLabel.isNotEmpty) sourceLabel = progress.sourceLabel;
+    if (status == ModelTransferStatus.canceling) return;
     if (progress.waitingForInstall) {
       status = ModelTransferStatus.waitingToInstall;
     } else if (progress.verifying) {
       status = ModelTransferStatus.verifying;
+    } else if (progress.connecting) {
+      status = ModelTransferStatus.connecting;
+      bytesPerSecond = 0;
+      _speedSampleAt = null;
+      _speedSampleBytes = transferredBytes;
+    } else if (status == ModelTransferStatus.connecting) {
+      status = ModelTransferStatus.downloading;
     }
   }
 }
@@ -160,7 +181,7 @@ class LocalModelManager extends ChangeNotifier {
       languages: ['与语言无关'],
       engine: 'sherpa-onnx · Silero VAD',
       version: 'INT8 · 16 kHz',
-      source: 'k2-fsa 官方模型',
+      source: 'k2-fsa 官方模型 · GitHub 官方源',
       license: 'MIT',
       recommended: true,
     ),
@@ -177,7 +198,7 @@ class LocalModelManager extends ChangeNotifier {
       languages: ['与语言无关'],
       engine: 'sherpa-onnx · DPDFNet',
       version: 'Baseline · 16 kHz',
-      source: 'k2-fsa 官方模型',
+      source: 'k2-fsa 官方模型 · 国内镜像优先 / GitHub 兜底',
       license: 'Apache-2.0',
       recommended: true,
     ),
@@ -194,7 +215,7 @@ class LocalModelManager extends ChangeNotifier {
       languages: ['与语言无关', '中文优化'],
       engine: 'sherpa-onnx · Pyannote · 3D-Speaker',
       version: 'Segmentation 3.0 INT8 · ERes2Net 16 kHz',
-      source: 'k2-fsa 官方模型',
+      source: 'k2-fsa 官方模型 · 国内镜像与 GitHub 分文件下载',
       license: 'MIT · Apache-2.0',
       recommended: true,
     ),
@@ -210,7 +231,7 @@ class LocalModelManager extends ChangeNotifier {
       languages: ['中文', '英语'],
       engine: 'sherpa-onnx · Kokoro',
       version: 'v1.1 INT8',
-      source: 'k2-fsa 官方模型',
+      source: 'k2-fsa 官方模型 · GitHub 官方源',
       license: 'Apache-2.0',
       recommended: true,
     ),
@@ -414,7 +435,7 @@ class LocalModelManager extends ChangeNotifier {
       }
       transfer.status = ModelTransferStatus.completed;
       await initialize(force: true);
-    } on SpeechModelDownloadCanceled {
+    } on ModelDownloadCanceled {
       transfer.status = ModelTransferStatus.canceled;
       await initialize(force: true);
     } catch (error) {
@@ -440,6 +461,7 @@ class LocalModelManager extends ChangeNotifier {
     final transfer = ModelTransferState(
       modelId: modelId,
       status: ModelTransferStatus.importing,
+      cancelable: false,
     );
     _transfers[modelId] = transfer;
     notifyListeners();
@@ -492,8 +514,9 @@ class LocalModelManager extends ChangeNotifier {
 
   void cancel(String modelId) {
     final transfer = _transfers[modelId];
-    if (transfer?.isRunning != true) return;
+    if (transfer?.isRunning != true || transfer?.cancelable != true) return;
     transfer!.cancelRequested = true;
+    transfer.status = ModelTransferStatus.canceling;
     notifyListeners();
   }
 
@@ -593,8 +616,17 @@ class LocalModelManager extends ChangeNotifier {
   LocalModelDefinition _definition(String id) =>
       catalog.firstWhere((model) => model.id == id);
 
-  String _friendlyError(Object error) => error.toString().replaceFirst(
-    RegExp(r'^(StateError|Exception|FormatException):\s*'),
-    '',
-  );
+  String _friendlyError(Object error) {
+    if (error is TimeoutException) {
+      return '下载节点连接超时，请检查网络后重试';
+    }
+    if (error is SocketException) {
+      return '无法连接下载节点，请检查网络后重试';
+    }
+    if (error is HttpException) return error.message;
+    return error.toString().replaceFirst(
+      RegExp(r'^(StateError|Exception|FormatException):\s*'),
+      '',
+    );
+  }
 }

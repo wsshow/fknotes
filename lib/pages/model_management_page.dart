@@ -846,7 +846,9 @@ class _ModelCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (transfer!.status == ModelTransferStatus.verifying)
+                if (transfer!.status == ModelTransferStatus.verifying ||
+                    transfer!.status == ModelTransferStatus.canceling ||
+                    !transfer!.cancelable)
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     child: Text(
@@ -929,6 +931,13 @@ class _ModelCard extends StatelessWidget {
   }
 
   String _transferDescription(ModelTransferState state) {
+    if (state.status == ModelTransferStatus.canceling) {
+      return '正在取消并保留已下载内容…';
+    }
+    if (state.status == ModelTransferStatus.connecting) {
+      final source = state.sourceLabel.isEmpty ? '' : ' · ${state.sourceLabel}';
+      return '正在连接下载节点$source';
+    }
     if (state.status == ModelTransferStatus.verifying) {
       return '已下载 ${_formatBytes(state.transferredBytes)} · 正在完成安装';
     }
@@ -937,10 +946,11 @@ class _ModelCard extends StatelessWidget {
     }
     final verb = state.status == ModelTransferStatus.importing ? '已导入' : '已下载';
     final speed = state.bytesPerSecond <= 0
-        ? '正在测速…'
+        ? '等待首个数据包…'
         : '${_formatBytes(state.bytesPerSecond.round())}/s';
+    final source = state.sourceLabel.isEmpty ? '' : ' · ${state.sourceLabel}';
     return '$verb ${_formatBytes(state.transferredBytes)} / '
-        '${_formatBytes(state.totalBytes)} · $speed';
+        '${_formatBytes(state.totalBytes)}$source · $speed';
   }
 }
 

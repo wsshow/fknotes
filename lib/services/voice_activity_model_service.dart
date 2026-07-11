@@ -7,6 +7,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 
 import 'file_storage_service.dart';
+import 'model_download_transport.dart';
 import 'model_install_coordinator.dart';
 import 'speech_model_service.dart';
 
@@ -177,66 +178,23 @@ class VoiceActivityModelService {
     void Function(SpeechModelImportProgress progress)? onProgress,
     bool Function()? shouldCancel,
   ) async {
-    final partial = File(_partialPath);
-    var existing = await partial.exists() ? await partial.length() : 0;
-    if (existing > downloadSizeBytes) {
-      await partial.delete();
-      existing = 0;
-    }
-    if (existing == downloadSizeBytes) {
-      onProgress?.call(
-        const SpeechModelImportProgress(downloadSizeBytes, downloadSizeBytes),
-      );
-      return;
-    }
-    if (shouldCancel?.call() == true) {
-      throw const SpeechModelDownloadCanceled();
-    }
-    final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 20);
-    RandomAccessFile? output;
-    try {
-      final request = await client.getUrl(Uri.parse(_downloadUrl));
-      if (existing > 0) {
-        request.headers.set(HttpHeaders.rangeHeader, 'bytes=$existing-');
-      }
-      request.headers.set(HttpHeaders.userAgentHeader, 'fknotes/$modelId');
-      final response = await request.close();
-      final canResume = response.statusCode == HttpStatus.partialContent;
-      if (response.statusCode != HttpStatus.ok && !canResume) {
-        throw HttpException('Silero VAD 下载失败（${response.statusCode}）');
-      }
-      if (existing > 0 && !canResume) {
-        await partial.delete();
-        existing = 0;
-      }
-      output = await partial.open(
-        mode: existing > 0 ? FileMode.append : FileMode.write,
-      );
-      var received = existing;
-      await for (final chunk in response) {
-        if (shouldCancel?.call() == true) {
-          throw const SpeechModelDownloadCanceled();
-        }
-        await output.writeFrom(chunk);
-        received += chunk.length;
-        if (received > downloadSizeBytes) {
-          throw const FormatException('Silero VAD 下载大小异常');
-        }
-        onProgress?.call(
-          SpeechModelImportProgress(received, downloadSizeBytes),
-        );
-      }
-      await output.flush();
-      await output.close();
-      output = null;
-      if (received != downloadSizeBytes) {
-        throw const FormatException('Silero VAD 下载不完整，将在下次继续');
-      }
-    } finally {
-      await output?.close();
-      client.close(force: true);
-    }
+    await ModelDownloadTransport.instance.download(
+      sources: [
+        ModelDownloadSource(uri: Uri.parse(_downloadUrl), label: 'GitHub 官方源'),
+      ],
+      partial: File(_partialPath),
+      expectedBytes: downloadSizeBytes,
+      userAgent: 'fknotes/$modelId',
+      shouldCancel: shouldCancel,
+      onProgress: (event) => onProgress?.call(
+        SpeechModelImportProgress(
+          event.transferredBytes,
+          downloadSizeBytes,
+          connecting: event.connecting,
+          sourceLabel: event.sourceLabel,
+        ),
+      ),
+    );
   }
 
   Future<VoiceActivityModelInfo> _install(

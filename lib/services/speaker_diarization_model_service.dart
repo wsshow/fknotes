@@ -8,6 +8,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 
 import 'file_storage_service.dart';
+import 'model_download_transport.dart';
 import 'model_install_coordinator.dart';
 import 'speech_model_service.dart';
 
@@ -56,6 +57,10 @@ class SpeakerDiarizationModelService {
   static const _embeddingUrl =
       'https://github.com/k2-fsa/sherpa-onnx/releases/download/'
       'speaker-recongition-models/$embeddingFileName';
+  static const _embeddingMirrorRepository =
+      'csukuangfj/speaker-embedding-models';
+  static const _embeddingMirrorRevision =
+      '0743f301363dec56491a490f6d6cbc9d67f9a3bf';
 
   final _storage = FileStorageService.instance;
   bool _operationBusy = false;
@@ -237,7 +242,12 @@ class SpeakerDiarizationModelService {
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
         await _downloadAsset(
-          url: _segmentationUrl,
+          sources: [
+            ModelDownloadSource(
+              uri: Uri.parse(_segmentationUrl),
+              label: 'GitHub 官方源',
+            ),
+          ],
           path: _segmentationPartial,
           expectedBytes: segmentationArchiveBytes,
           baseBytes: 0,
@@ -245,7 +255,26 @@ class SpeakerDiarizationModelService {
           shouldCancel: shouldCancel,
         );
         await _downloadAsset(
-          url: _embeddingUrl,
+          sources: [
+            ModelDownloadSource(
+              uri: Uri.parse(
+                'https://hf-mirror.com/$_embeddingMirrorRepository/resolve/'
+                '$_embeddingMirrorRevision/$embeddingFileName?download=true',
+              ),
+              label: 'Hugging Face 国内镜像',
+            ),
+            ModelDownloadSource(
+              uri: Uri.parse(
+                'https://huggingface.co/$_embeddingMirrorRepository/resolve/'
+                '$_embeddingMirrorRevision/$embeddingFileName?download=true',
+              ),
+              label: 'Hugging Face',
+            ),
+            ModelDownloadSource(
+              uri: Uri.parse(_embeddingUrl),
+              label: 'GitHub 官方源',
+            ),
+          ],
           path: _embeddingPartial,
           expectedBytes: embeddingBytes,
           baseBytes: segmentationArchiveBytes,
@@ -271,73 +300,28 @@ class SpeakerDiarizationModelService {
   });
 
   Future<void> _downloadAsset({
-    required String url,
+    required List<ModelDownloadSource> sources,
     required String path,
     required int expectedBytes,
     required int baseBytes,
     void Function(SpeechModelImportProgress progress)? onProgress,
     bool Function()? shouldCancel,
   }) async {
-    final partial = File(path);
-    var existing = await partial.exists() ? await partial.length() : 0;
-    if (existing > expectedBytes) {
-      await partial.delete();
-      existing = 0;
-    }
-    if (existing == expectedBytes) {
-      onProgress?.call(
-        SpeechModelImportProgress(baseBytes + existing, downloadSizeBytes),
-      );
-      return;
-    }
-    if (shouldCancel?.call() == true) {
-      throw const SpeechModelDownloadCanceled();
-    }
-    final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 20);
-    RandomAccessFile? output;
-    try {
-      final request = await client.getUrl(Uri.parse(url));
-      if (existing > 0) {
-        request.headers.set(HttpHeaders.rangeHeader, 'bytes=$existing-');
-      }
-      request.headers.set(HttpHeaders.userAgentHeader, 'fknotes/$modelId');
-      final response = await request.close();
-      final canResume = response.statusCode == HttpStatus.partialContent;
-      if (response.statusCode != HttpStatus.ok && !canResume) {
-        throw HttpException('说话人分离模型下载失败（${response.statusCode}）');
-      }
-      if (existing > 0 && !canResume) {
-        await partial.delete();
-        existing = 0;
-      }
-      output = await partial.open(
-        mode: existing > 0 ? FileMode.append : FileMode.write,
-      );
-      var received = existing;
-      await for (final chunk in response) {
-        if (shouldCancel?.call() == true) {
-          throw const SpeechModelDownloadCanceled();
-        }
-        await output.writeFrom(chunk);
-        received += chunk.length;
-        if (received > expectedBytes) {
-          throw const FormatException('说话人分离模型下载大小异常');
-        }
-        onProgress?.call(
-          SpeechModelImportProgress(baseBytes + received, downloadSizeBytes),
-        );
-      }
-      await output.flush();
-      await output.close();
-      output = null;
-      if (received != expectedBytes) {
-        throw const FormatException('说话人分离模型下载中断，将自动续传');
-      }
-    } finally {
-      await output?.close();
-      client.close(force: true);
-    }
+    await ModelDownloadTransport.instance.download(
+      sources: sources,
+      partial: File(path),
+      expectedBytes: expectedBytes,
+      userAgent: 'fknotes/$modelId',
+      shouldCancel: shouldCancel,
+      onProgress: (event) => onProgress?.call(
+        SpeechModelImportProgress(
+          baseBytes + event.transferredBytes,
+          downloadSizeBytes,
+          connecting: event.connecting,
+          sourceLabel: event.sourceLabel,
+        ),
+      ),
+    );
   }
 
   Future<SpeakerDiarizationModelInfo> _install(

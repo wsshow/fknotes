@@ -105,6 +105,35 @@ void main() {
     expect(transfer.isRunning, isTrue);
     expect(transfer.progress, 1);
   });
+
+  test('model transfer exposes connection source and preserves canceling', () {
+    final transfer = ModelTransferState(
+      modelId: 'test-model',
+      status: ModelTransferStatus.downloading,
+      transferredBytes: 25,
+      totalBytes: 100,
+    );
+
+    transfer.updateProgress(
+      const SpeechModelImportProgress(
+        25,
+        100,
+        connecting: true,
+        sourceLabel: '国内镜像',
+      ),
+    );
+
+    expect(transfer.status, ModelTransferStatus.connecting);
+    expect(transfer.sourceLabel, '国内镜像');
+
+    transfer.status = ModelTransferStatus.canceling;
+    transfer.updateProgress(
+      const SpeechModelImportProgress(30, 100, sourceLabel: '国内镜像'),
+    );
+
+    expect(transfer.status, ModelTransferStatus.canceling);
+    expect(transfer.transferredBytes, 30);
+  });
 }
 
 class _Canceled implements Exception {
