@@ -155,6 +155,45 @@ void main() {
     expect(find.text('24'), findsOneWidget);
   });
 
+  testWidgets('tag editor uses a bottom sheet and saves unique tags', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => NoteProvider(),
+        child: const MaterialApp(home: NoteEditorPage()),
+      ),
+    );
+
+    await tester.tap(find.text('添加标签'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.text('使用逗号分隔多个标签，重复标签会自动合并。'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('note-tags-field')),
+      '工作，灵感, 工作',
+    );
+    await tester.pump();
+    expect(find.text('2/8'), findsOneWidget);
+    expect(find.text('#工作'), findsOneWidget);
+    expect(find.text('#灵感'), findsOneWidget);
+
+    tester.testTextInput.hide();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('save-note-tags')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BottomSheet), findsNothing);
+    expect(find.text('#工作'), findsOneWidget);
+    expect(find.text('#灵感'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('editor image imports do not present OCR as a capture mode', (
     tester,
   ) async {

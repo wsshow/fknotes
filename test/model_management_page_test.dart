@@ -154,6 +154,8 @@ void main() {
     await tester.tap(find.byKey(const Key('live-dictation-hotwords-card')));
     await tester.pumpAndSettle();
     expect(find.text('实时听写热词'), findsOneWidget);
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing);
     await tester.enterText(
       find.byKey(const Key('live-dictation-hotwords-field')),
       'FKNotes\n非空笔记\nfknotes',

@@ -247,12 +247,13 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
   }
 
   Future<void> _editHotwords() async {
-    final result = await showDialog<RealtimeDictationPreferences>(
+    final result = await showModalBottomSheet<RealtimeDictationPreferences>(
       context: context,
-      builder: (_) => _HotwordsDialog(
-        initial: _preferences,
-        service: _dictationPreferences,
-      ),
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (_) =>
+          _HotwordsSheet(initial: _preferences, service: _dictationPreferences),
     );
     if (result == null || !mounted) return;
     setState(() => _preferences = result);
@@ -341,17 +342,17 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
   }
 }
 
-class _HotwordsDialog extends StatefulWidget {
+class _HotwordsSheet extends StatefulWidget {
   final RealtimeDictationPreferences initial;
   final RealtimeDictationPreferencesService service;
 
-  const _HotwordsDialog({required this.initial, required this.service});
+  const _HotwordsSheet({required this.initial, required this.service});
 
   @override
-  State<_HotwordsDialog> createState() => _HotwordsDialogState();
+  State<_HotwordsSheet> createState() => _HotwordsSheetState();
 }
 
-class _HotwordsDialogState extends State<_HotwordsDialog> {
+class _HotwordsSheetState extends State<_HotwordsSheet> {
   late final TextEditingController _controller;
   late double _score;
   String? _validationMessage;
@@ -404,80 +405,120 @@ class _HotwordsDialogState extends State<_HotwordsDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    scrollable: true,
-    title: const Text('实时听写热词'),
-    content: SizedBox(
-      width: 460,
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              '每行输入一个人名、产品名或专业术语；留空即关闭。热词从下一次听写开始生效。',
-              style: TextStyle(color: AppColors.muted, height: 1.5),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              key: const Key('live-dictation-hotwords-field'),
-              controller: _controller,
-              minLines: 4,
-              maxLines: 8,
-              autofocus: true,
-              decoration: InputDecoration(
-                hintText: '非空笔记\nFKNotes\nsherpa onnx',
-                labelText: '热词列表',
-                errorText: _validationMessage,
-                alignLabelWithHint: true,
-                border: const OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 18),
-            Row(
+  Widget build(BuildContext context) {
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    final availableHeight =
+        MediaQuery.sizeOf(context).height - keyboardInset - 24;
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      padding: EdgeInsets.only(bottom: keyboardInset),
+      child: SafeArea(
+        top: false,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: availableHeight),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Expanded(child: Text('增强强度')),
                 Text(
-                  _score.toStringAsFixed(1),
-                  style: const TextStyle(fontWeight: FontWeight.w700),
+                  '实时听写热词',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  '每行输入一个人名、产品名或专业术语；留空即关闭。热词从下一次听写开始生效。',
+                  style: TextStyle(color: AppColors.muted, height: 1.45),
+                ),
+                const SizedBox(height: 14),
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TextField(
+                          key: const Key('live-dictation-hotwords-field'),
+                          controller: _controller,
+                          minLines: 4,
+                          maxLines: 8,
+                          autofocus: true,
+                          decoration: InputDecoration(
+                            hintText: '非空笔记\nFKNotes\nsherpa onnx',
+                            labelText: '热词列表',
+                            errorText: _validationMessage,
+                            alignLabelWithHint: true,
+                            border: const OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        Row(
+                          children: [
+                            const Expanded(child: Text('增强强度')),
+                            Text(
+                              _score.toStringAsFixed(1),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Slider(
+                          key: const Key('live-dictation-hotwords-score'),
+                          value: _score,
+                          min: RealtimeDictationPreferencesService
+                              .minHotwordsScore,
+                          max: RealtimeDictationPreferencesService
+                              .maxHotwordsScore,
+                          divisions: 8,
+                          label: _score.toStringAsFixed(1),
+                          onChanged: _saving
+                              ? null
+                              : (value) => setState(() => _score = value),
+                        ),
+                        const Text(
+                          '过高的强度可能把发音相近的普通词误判为热词，建议先使用 2.0。',
+                          style: TextStyle(
+                            color: AppColors.muted,
+                            fontSize: 12,
+                            height: 1.45,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _saving
+                            ? null
+                            : () => Navigator.pop(context),
+                        child: const Text('取消'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton(
+                        key: const Key('save-live-dictation-hotwords'),
+                        onPressed: _saving ? null : _save,
+                        child: Text(_saving ? '保存中…' : '保存'),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-            Slider(
-              key: const Key('live-dictation-hotwords-score'),
-              value: _score,
-              min: RealtimeDictationPreferencesService.minHotwordsScore,
-              max: RealtimeDictationPreferencesService.maxHotwordsScore,
-              divisions: 8,
-              label: _score.toStringAsFixed(1),
-              onChanged: _saving
-                  ? null
-                  : (value) => setState(() => _score = value),
-            ),
-            const Text(
-              '过高的强度可能把发音相近的普通词误判为热词，建议先使用 2.0。',
-              style: TextStyle(
-                color: AppColors.muted,
-                fontSize: 12,
-                height: 1.45,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
-    ),
-    actions: [
-      TextButton(
-        onPressed: _saving ? null : () => Navigator.pop(context),
-        child: const Text('取消'),
-      ),
-      FilledButton(
-        key: const Key('save-live-dictation-hotwords'),
-        onPressed: _saving ? null : _save,
-        child: Text(_saving ? '保存中…' : '保存'),
-      ),
-    ],
-  );
+    );
+  }
 }
 
 class _TwoPassCard extends StatelessWidget {

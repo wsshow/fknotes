@@ -800,39 +800,14 @@ class _NoteEditorPageState extends State<NoteEditorPage>
   }
 
   Future<void> _editTags() async {
-    final controller = TextEditingController(text: _tags.join(', '));
-    final tags = await showDialog<List<String>>(
+    final tags = await showModalBottomSheet<List<String>>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('编辑标签'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(hintText: '例如：工作, 灵感, 稍后阅读'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(
-              context,
-              controller.text
-                  .split(RegExp('[,，]'))
-                  .map((e) => e.trim())
-                  .where((e) => e.isNotEmpty)
-                  .toSet()
-                  .take(8)
-                  .toList(),
-            ),
-            child: const Text('完成'),
-          ),
-        ],
-      ),
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (_) => _TagEditorSheet(initialTags: _tags),
     );
-    controller.dispose();
-    if (tags != null) {
+    if (tags != null && mounted) {
       setState(() {
         _tags = tags;
         _changed = true;
@@ -1337,6 +1312,147 @@ class _ToolbarEdgeFade extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _TagEditorSheet extends StatefulWidget {
+  final List<String> initialTags;
+
+  const _TagEditorSheet({required this.initialTags});
+
+  @override
+  State<_TagEditorSheet> createState() => _TagEditorSheetState();
+}
+
+class _TagEditorSheetState extends State<_TagEditorSheet> {
+  late final TextEditingController _controller;
+  late List<String> _tags;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialTags.join(', '));
+    _tags = _parseTags(_controller.text);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  static List<String> _parseTags(String value) => value
+      .split(RegExp('[,，]'))
+      .map((tag) => tag.trim())
+      .where((tag) => tag.isNotEmpty)
+      .toSet()
+      .take(8)
+      .toList();
+
+  void _changed(String value) => setState(() => _tags = _parseTags(value));
+
+  void _remove(String tag) {
+    _tags = [..._tags]..remove(tag);
+    final value = _tags.join(', ');
+    _controller.value = TextEditingValue(
+      text: value,
+      selection: TextSelection.collapsed(offset: value.length),
+    );
+    setState(() {});
+  }
+
+  void _finish() => Navigator.pop(context, _parseTags(_controller.text));
+
+  @override
+  Widget build(BuildContext context) {
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      padding: EdgeInsets.only(bottom: keyboardInset),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '编辑标签',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${_tags.length}/8',
+                    style: const TextStyle(
+                      color: AppColors.muted,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                '使用逗号分隔多个标签，重复标签会自动合并。',
+                style: TextStyle(color: AppColors.muted, height: 1.45),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                key: const Key('note-tags-field'),
+                controller: _controller,
+                autofocus: true,
+                textInputAction: TextInputAction.done,
+                onChanged: _changed,
+                onSubmitted: (_) => _finish(),
+                decoration: const InputDecoration(
+                  labelText: '标签',
+                  hintText: '例如：工作, 灵感, 稍后阅读',
+                ),
+              ),
+              if (_tags.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final tag in _tags)
+                      InputChip(
+                        label: Text('#$tag'),
+                        onDeleted: () => _remove(tag),
+                      ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 22),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('取消'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      key: const Key('save-note-tags'),
+                      onPressed: _finish,
+                      child: const Text('完成'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _EditorToolbar extends StatefulWidget {
