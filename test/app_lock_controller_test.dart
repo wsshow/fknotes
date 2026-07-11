@@ -162,6 +162,26 @@ void main() {
       expect(authenticator.authenticationCount, 0);
     },
   );
+
+  test('manual lock waits for the user to request authentication', () async {
+    final authenticator = _FakeAuthenticator();
+    final controller = AppLockController(
+      preferencesStore: _MemoryPreferencesStore(
+        const AppLockPreferences(enabled: true),
+      ),
+      authenticator: authenticator,
+      observeLifecycle: false,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    await controller.authenticateAutomatically();
+
+    controller.lockNow();
+
+    expect(controller.locked, isTrue);
+    expect(controller.shouldAutomaticallyAuthenticate, isFalse);
+    expect(authenticator.authenticationCount, 1);
+  });
 }
 
 class _MemoryPreferencesStore implements AppLockPreferencesStore {

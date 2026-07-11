@@ -54,7 +54,7 @@ class SystemDeviceAuthenticator implements DeviceAuthenticator {
         persistAcrossBackgrounding: true,
         authMessages: const [
           AndroidAuthMessages(
-            signInTitle: '非空笔记',
+            signInTitle: '验证身份',
             signInHint: '',
             cancelButton: '取消',
           ),

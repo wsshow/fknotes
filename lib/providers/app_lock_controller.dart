@@ -128,7 +128,7 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
 
   void lockNow() {
     if (!enabled) return;
-    _lock(allowAutomaticPrompt: true);
+    _lock(allowAutomaticPrompt: false);
   }
 
   Future<DeviceAuthenticationResult> _authenticate(

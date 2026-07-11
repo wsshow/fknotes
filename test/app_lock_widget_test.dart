@@ -63,7 +63,7 @@ void main() {
     expect(find.text('私密笔记内容'), findsOneWidget);
   });
 
-  testWidgets('lock now immediately enters the waiting-for-system state', (
+  testWidgets('lock now waits for an explicit unlock action before auth', (
     tester,
   ) async {
     final store = _WidgetPreferencesStore(
@@ -90,11 +90,17 @@ void main() {
     final pending = authenticator.deferNextAuthentication();
     controller.lockNow();
     await tester.pump();
+
+    expect(find.text('应用已锁定'), findsOneWidget);
+    expect(find.byKey(const Key('app-lock-unlock-button')), findsOneWidget);
+    expect(authenticator.authenticationCount, 1);
+
+    await tester.tap(find.byKey(const Key('app-lock-unlock-button')));
     await tester.pump();
 
     expect(find.text('等待系统验证'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
-    expect(find.byKey(const Key('app-lock-unlock-button')), findsNothing);
+    expect(authenticator.authenticationCount, 2);
 
     pending.complete(
       const DeviceAuthenticationResult(
@@ -187,6 +193,7 @@ class _WidgetAuthenticator implements DeviceAuthenticator {
 
 class _DeferredWidgetAuthenticator implements DeviceAuthenticator {
   Completer<DeviceAuthenticationResult>? _pending;
+  int authenticationCount = 0;
 
   Completer<DeviceAuthenticationResult> deferNextAuthentication() {
     return _pending = Completer<DeviceAuthenticationResult>();
@@ -196,6 +203,7 @@ class _DeferredWidgetAuthenticator implements DeviceAuthenticator {
   Future<DeviceAuthenticationResult> authenticate({
     required String reason,
   }) async {
+    authenticationCount += 1;
     final pending = _pending;
     if (pending != null) {
       _pending = null;
