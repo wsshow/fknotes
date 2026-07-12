@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:markdown/markdown.dart' as md;
 
 import '../app.dart';
 import '../models/note_entry.dart';
@@ -13,10 +14,13 @@ import 'note_card.dart';
 
 enum NoteBlockType {
   paragraph,
+  heading,
   bullet,
   ordered,
   todo,
   quote,
+  code,
+  rawMarkdown,
   divider,
   attachment,
 }
@@ -27,6 +31,8 @@ class NoteBlockData {
   final bool checked;
   final String? attachmentPath;
   final int indent;
+  final int headingLevel;
+  final String? codeLanguage;
   final List<NoteTextStyleRange> styles;
 
   const NoteBlockData(
@@ -35,6 +41,8 @@ class NoteBlockData {
     this.checked = false,
     this.attachmentPath,
     this.indent = 0,
+    this.headingLevel = 0,
+    this.codeLanguage,
     this.styles = const [],
   });
 }
@@ -44,48 +52,86 @@ class NoteTextAttributes {
   static const defaults = NoteTextAttributes();
 
   final bool bold;
+  final bool italic;
+  final bool strikethrough;
+  final bool inlineCode;
   final bool underline;
   final double fontSize;
+  final String? link;
+
+  static const Object _keepLink = Object();
 
   const NoteTextAttributes({
     this.bold = false,
+    this.italic = false,
+    this.strikethrough = false,
+    this.inlineCode = false,
     this.underline = false,
     this.fontSize = defaultFontSize,
+    this.link,
   });
 
   NoteTextAttributes copyWith({
     bool? bold,
+    bool? italic,
+    bool? strikethrough,
+    bool? inlineCode,
     bool? underline,
     double? fontSize,
+    Object? link = _keepLink,
   }) => NoteTextAttributes(
     bold: bold ?? this.bold,
+    italic: italic ?? this.italic,
+    strikethrough: strikethrough ?? this.strikethrough,
+    inlineCode: inlineCode ?? this.inlineCode,
     underline: underline ?? this.underline,
     fontSize: fontSize ?? this.fontSize,
+    link: identical(link, _keepLink) ? this.link : link as String?,
   );
 
   Map<String, Object> toMap() => {
     if (bold) 'bold': true,
+    if (italic) 'italic': true,
+    if (strikethrough) 'strikethrough': true,
+    if (inlineCode) 'inlineCode': true,
     if (underline) 'underline': true,
     if (fontSize != defaultFontSize) 'fontSize': fontSize,
+    'link': ?link,
   };
 
   factory NoteTextAttributes.fromMap(Map<String, Object?> map) =>
       NoteTextAttributes(
         bold: map['bold'] == true,
+        italic: map['italic'] == true,
+        strikethrough: map['strikethrough'] == true,
+        inlineCode: map['inlineCode'] == true,
         underline: map['underline'] == true,
         fontSize: ((map['fontSize'] as num?)?.toDouble() ?? defaultFontSize)
             .clamp(12, 36),
+        link: map['link'] as String?,
       );
 
   @override
   bool operator ==(Object other) =>
       other is NoteTextAttributes &&
       bold == other.bold &&
+      italic == other.italic &&
+      strikethrough == other.strikethrough &&
+      inlineCode == other.inlineCode &&
       underline == other.underline &&
-      fontSize == other.fontSize;
+      fontSize == other.fontSize &&
+      link == other.link;
 
   @override
-  int get hashCode => Object.hash(bold, underline, fontSize);
+  int get hashCode => Object.hash(
+    bold,
+    italic,
+    strikethrough,
+    inlineCode,
+    underline,
+    fontSize,
+    link,
+  );
 }
 
 class NoteTextStyleRange {
@@ -163,7 +209,7 @@ class _EditorSnapshot {
 }
 
 class NoteRichDocumentCodec {
-  static const version = 1;
+  static const version = 2;
 
   static String encode(List<NoteBlockData> blocks) => jsonEncode({
     'version': version,
@@ -176,6 +222,9 @@ class NoteRichDocumentCodec {
           if (block.attachmentPath != null)
             'attachmentPath': block.attachmentPath,
           if (block.indent > 0) 'indent': block.indent,
+          if (block.headingLevel > 0) 'headingLevel': block.headingLevel,
+          if (block.codeLanguage?.isNotEmpty == true)
+            'codeLanguage': block.codeLanguage,
           if (block.styles.isNotEmpty)
             'styles': block.styles.map((range) => range.toMap()).toList(),
         },
@@ -214,6 +263,8 @@ class NoteRichDocumentCodec {
           checked: map['checked'] == true,
           attachmentPath: map['attachmentPath'] as String?,
           indent: (map['indent'] as int? ?? 0).clamp(0, 3),
+          headingLevel: (map['headingLevel'] as int? ?? 0).clamp(0, 6),
+          codeLanguage: map['codeLanguage'] as String?,
           styles: ranges,
         );
       }).toList();
@@ -223,66 +274,316 @@ class NoteRichDocumentCodec {
   }
 }
 
-/// Keeps the visual document readable by search, export and other text apps.
+/// Converts between the editor's blocks and GitHub Flavored Markdown.
+///
+/// Parsing is delegated to the mature `markdown` AST. FKNotes only maps that
+/// AST to editable blocks and retains its local attachment reference extension.
 class NoteBlockCodec {
-  static final _divider = RegExp(r'^\s*(?:---|___|\*\*\*|─{3,})\s*$');
-  static final _todo = RegExp(r'^\s*(☐|☑|\[[ xX]\])(?:\s+(.*))?\s*$');
-  static final _ordered = RegExp(r'^\s*\d+[.)、](?:\s+(.*))?\s*$');
-  static final _bullet = RegExp(r'^\s*[•*-](?:\s+(.*))?\s*$');
-  static final _quote = RegExp(r'^\s*>(?:\s?(.*))?\s*$');
   static final _attachment = RegExp(r'^\[\[附件:(.+)\]\]$');
 
   static List<NoteBlockData> decode(String source) {
     if (source.isEmpty) {
       return const [NoteBlockData(NoteBlockType.paragraph, '')];
     }
-    final parsed = source.replaceAll('\r\n', '\n').split('\n').map((line) {
-      final attachment = _attachment.firstMatch(line);
-      if (attachment != null) {
-        return NoteBlockData(
+    final normalized = source.replaceAll('\r\n', '\n');
+    final blocks = <NoteBlockData>[];
+    final markdownLines = <String>[];
+
+    void flushMarkdown() {
+      if (markdownLines.isEmpty) return;
+      final markdownSource = markdownLines.join('\n');
+      markdownLines.clear();
+      if (markdownSource.trim().isEmpty) return;
+      try {
+        final nodes = md.Document(
+          extensionSet: md.ExtensionSet.gitHubFlavored,
+        ).parse(markdownSource);
+        for (final node in nodes) {
+          _appendNode(blocks, node);
+        }
+      } catch (_) {
+        blocks.add(NoteBlockData(NoteBlockType.paragraph, markdownSource));
+      }
+    }
+
+    for (final line in normalized.split('\n')) {
+      final attachment = _attachment.firstMatch(line.trim());
+      if (attachment == null) {
+        markdownLines.add(line);
+        continue;
+      }
+      flushMarkdown();
+      blocks.add(
+        NoteBlockData(
           NoteBlockType.attachment,
           '',
           attachmentPath: attachment.group(1),
-        );
-      }
-      if (_divider.hasMatch(line)) {
-        return const NoteBlockData(NoteBlockType.divider, '');
-      }
-      final todo = _todo.firstMatch(line);
-      if (todo != null) {
-        final marker = todo.group(1)!;
-        return NoteBlockData(
-          NoteBlockType.todo,
-          todo.group(2) ?? '',
-          checked: marker == '☑' || marker.toLowerCase() == '[x]',
-        );
-      }
-      final ordered = _ordered.firstMatch(line);
-      if (ordered != null) {
-        return NoteBlockData(NoteBlockType.ordered, ordered.group(1) ?? '');
-      }
-      final bullet = _bullet.firstMatch(line);
-      if (bullet != null) {
-        return NoteBlockData(NoteBlockType.bullet, bullet.group(1) ?? '');
-      }
-      final quote = _quote.firstMatch(line);
-      if (quote != null) {
-        return NoteBlockData(NoteBlockType.quote, quote.group(1) ?? '');
-      }
-      return NoteBlockData(NoteBlockType.paragraph, line);
-    }).toList();
-    // A divider owns its vertical rhythm, so redundant blank blocks directly
-    // beside it are omitted from the visual document.
-    return [
-      for (var index = 0; index < parsed.length; index++)
-        if (!(parsed[index].type == NoteBlockType.paragraph &&
-            parsed[index].text.isEmpty &&
-            ((index > 0 && parsed[index - 1].type == NoteBlockType.divider) ||
-                (index + 1 < parsed.length &&
-                    parsed[index + 1].type == NoteBlockType.divider))))
-          parsed[index],
-    ];
+        ),
+      );
+    }
+    flushMarkdown();
+    return blocks.isEmpty
+        ? const [NoteBlockData(NoteBlockType.paragraph, '')]
+        : blocks;
   }
+
+  static void _appendNode(
+    List<NoteBlockData> blocks,
+    md.Node node, {
+    int indent = 0,
+    bool quoted = false,
+  }) {
+    if (node is md.Text) {
+      if (node.text.trim().isNotEmpty) {
+        blocks.add(NoteBlockData(NoteBlockType.paragraph, node.text));
+      }
+      return;
+    }
+    if (node is! md.Element) return;
+    final tag = node.tag;
+    if (RegExp(r'^h[1-6]$').hasMatch(tag)) {
+      final inline = _inlineData(node.children);
+      blocks.add(
+        NoteBlockData(
+          quoted ? NoteBlockType.quote : NoteBlockType.heading,
+          inline.text,
+          indent: indent,
+          headingLevel: int.parse(tag.substring(1)),
+          styles: inline.styles,
+        ),
+      );
+      return;
+    }
+    switch (tag) {
+      case 'p':
+        final inline = _inlineData(node.children);
+        blocks.add(
+          NoteBlockData(
+            quoted ? NoteBlockType.quote : NoteBlockType.paragraph,
+            inline.text,
+            indent: indent,
+            styles: inline.styles,
+          ),
+        );
+        break;
+      case 'ul':
+      case 'ol':
+        _appendList(
+          blocks,
+          node,
+          ordered: tag == 'ol',
+          indent: indent,
+          quoted: quoted,
+        );
+        break;
+      case 'blockquote':
+        for (final child in node.children ?? const <md.Node>[]) {
+          _appendNode(
+            blocks,
+            child,
+            indent: quoted ? (indent + 1).clamp(0, 3) : indent,
+            quoted: true,
+          );
+        }
+        break;
+      case 'pre':
+        final code = (node.children ?? const <md.Node>[])
+            .whereType<md.Element>()
+            .firstWhere(
+              (child) => child.tag == 'code',
+              orElse: () => md.Element.text('code', node.textContent),
+            );
+        final className = code.attributes['class'] ?? '';
+        blocks.add(
+          NoteBlockData(
+            NoteBlockType.code,
+            code.textContent.replaceFirst(RegExp(r'\n$'), ''),
+            codeLanguage: className.startsWith('language-')
+                ? className.substring('language-'.length)
+                : null,
+          ),
+        );
+        break;
+      case 'hr':
+        blocks.add(const NoteBlockData(NoteBlockType.divider, ''));
+        break;
+      case 'table':
+        blocks.add(
+          NoteBlockData(NoteBlockType.rawMarkdown, _tableToMarkdown(node)),
+        );
+        break;
+      default:
+        final inline = _inlineData(node.children);
+        if (inline.text.trim().isNotEmpty) {
+          blocks.add(
+            NoteBlockData(
+              quoted ? NoteBlockType.quote : NoteBlockType.paragraph,
+              inline.text,
+              indent: indent,
+              styles: inline.styles,
+            ),
+          );
+        }
+        break;
+    }
+  }
+
+  static void _appendList(
+    List<NoteBlockData> blocks,
+    md.Element list, {
+    required bool ordered,
+    required int indent,
+    required bool quoted,
+  }) {
+    final listChildren = list.children;
+    if (listChildren == null) return;
+    for (final item in listChildren.whereType<md.Element>()) {
+      if (item.tag != 'li') continue;
+      final input = _findFirstElement(item, 'input');
+      final inline = _inlineData(item.children, skipBlockLists: true);
+      blocks.add(
+        NoteBlockData(
+          quoted
+              ? NoteBlockType.quote
+              : input != null
+              ? NoteBlockType.todo
+              : ordered
+              ? NoteBlockType.ordered
+              : NoteBlockType.bullet,
+          inline.text.trimRight(),
+          checked: input?.attributes['checked'] == 'true',
+          indent: indent,
+          styles: inline.styles,
+        ),
+      );
+      for (final child
+          in (item.children ?? const <md.Node>[]).whereType<md.Element>()) {
+        if (child.tag == 'ul' || child.tag == 'ol') {
+          _appendList(
+            blocks,
+            child,
+            ordered: child.tag == 'ol',
+            indent: (indent + 1).clamp(0, 3),
+            quoted: quoted,
+          );
+        }
+      }
+    }
+  }
+
+  static md.Element? _findFirstElement(md.Element root, String tag) {
+    for (final child in root.children ?? const <md.Node>[]) {
+      if (child is! md.Element) continue;
+      if (child.tag == tag) return child;
+      final nested = _findFirstElement(child, tag);
+      if (nested != null) return nested;
+    }
+    return null;
+  }
+
+  static _InlineData _inlineData(
+    List<md.Node>? nodes, {
+    bool skipBlockLists = false,
+  }) {
+    final output = _InlineAccumulator();
+    void visit(md.Node node, NoteTextAttributes attributes) {
+      if (node is md.Text) {
+        output.write(node.text, attributes);
+        return;
+      }
+      if (node is! md.Element || node.tag == 'input') return;
+      if (skipBlockLists && (node.tag == 'ul' || node.tag == 'ol')) return;
+      if (node.tag == 'br') {
+        output.write('\n', attributes);
+        return;
+      }
+      var next = attributes;
+      switch (node.tag) {
+        case 'strong':
+          next = next.copyWith(bold: true);
+          break;
+        case 'em':
+          next = next.copyWith(italic: true);
+          break;
+        case 'del':
+          next = next.copyWith(strikethrough: true);
+          break;
+        case 'code':
+          next = next.copyWith(inlineCode: true);
+          break;
+        case 'a':
+          next = next.copyWith(link: node.attributes['href']);
+          break;
+        case 'img':
+          final alt = node.attributes['alt'] ?? node.textContent;
+          output.write(alt, next.copyWith(link: node.attributes['src']));
+          return;
+        default:
+          break;
+      }
+      for (final child in node.children ?? const <md.Node>[]) {
+        visit(child, next);
+      }
+    }
+
+    for (final node in nodes ?? const <md.Node>[]) {
+      visit(node, NoteTextAttributes.defaults);
+    }
+    return output.finish();
+  }
+
+  static String _tableToMarkdown(md.Element table) {
+    final rows = <List<String>>[];
+    final alignments = <String>[];
+    void visit(md.Element element) {
+      if (element.tag == 'tr') {
+        final cells = <String>[];
+        for (final cell
+            in (element.children ?? const <md.Node>[])
+                .whereType<md.Element>()) {
+          if (cell.tag != 'th' && cell.tag != 'td') continue;
+          cells.add(_escapeTableCell(cell.textContent));
+          if (rows.isEmpty) {
+            final alignment = cell.attributes['style'] ?? '';
+            alignments.add(
+              alignment.contains('center')
+                  ? ':---:'
+                  : alignment.contains('right')
+                  ? '---:'
+                  : ':---',
+            );
+          }
+        }
+        if (cells.isNotEmpty) rows.add(cells);
+      }
+      for (final child
+          in (element.children ?? const <md.Node>[]).whereType<md.Element>()) {
+        visit(child);
+      }
+    }
+
+    visit(table);
+    if (rows.isEmpty) return table.textContent;
+    final width = rows.fold<int>(
+      0,
+      (value, row) => row.length > value ? row.length : value,
+    );
+    String row(List<String> cells) =>
+        '| ${List.generate(width, (index) => index < cells.length ? cells[index] : '').join(' | ')} |';
+    return [
+      row(rows.first),
+      row(
+        List.generate(
+          width,
+          (index) => index < alignments.length ? alignments[index] : '---',
+        ),
+      ),
+      ...rows.skip(1).map(row),
+    ].join('\n');
+  }
+
+  static String _escapeTableCell(String value) =>
+      value.replaceAll('|', r'\|').replaceAll('\n', '<br>');
 
   static int visibleCharacterCount(String source) =>
       decode(source).fold(0, (count, block) => count + block.text.runes.length);
@@ -290,28 +591,174 @@ class NoteBlockCodec {
   static String encode(List<NoteBlockData> blocks) {
     var orderedNumber = 0;
     NoteBlockType? previous;
-    final lines = <String>[];
+    final sections = <({NoteBlockData block, String markdown})>[];
     for (final block in blocks) {
       if (block.type == NoteBlockType.ordered) {
-        orderedNumber = previous == NoteBlockType.ordered
+        final previousBlock = sections.isEmpty ? null : sections.last.block;
+        orderedNumber =
+            previous == NoteBlockType.ordered &&
+                previousBlock?.indent == block.indent
             ? orderedNumber + 1
             : 1;
       } else {
         orderedNumber = 0;
       }
-      lines.add(switch (block.type) {
-        NoteBlockType.paragraph => block.text,
-        NoteBlockType.bullet => '• ${block.text}',
-        NoteBlockType.ordered => '$orderedNumber. ${block.text}',
-        NoteBlockType.todo => '${block.checked ? '☑' : '☐'} ${block.text}',
-        NoteBlockType.quote => '> ${block.text}',
+      final text = _encodeInline(block);
+      final markdown = switch (block.type) {
+        NoteBlockType.paragraph => text,
+        NoteBlockType.heading =>
+          '${'#' * block.headingLevel.clamp(1, 6)} $text',
+        NoteBlockType.bullet => '${'  ' * block.indent}- $text',
+        NoteBlockType.ordered => '${'  ' * block.indent}$orderedNumber. $text',
+        NoteBlockType.todo =>
+          '${'  ' * block.indent}- [${block.checked ? 'x' : ' '}] $text',
+        NoteBlockType.quote =>
+          '${List.filled(block.indent + 1, '>').join()} $text',
+        NoteBlockType.code => _encodeCodeBlock(block),
+        NoteBlockType.rawMarkdown => block.text,
         NoteBlockType.divider => '---',
         NoteBlockType.attachment => '[[附件:${block.attachmentPath ?? ''}]]',
-      });
+      };
+      sections.add((block: block, markdown: markdown));
       previous = block.type;
     }
-    return lines.join('\n');
+    final output = StringBuffer();
+    for (var index = 0; index < sections.length; index++) {
+      if (index > 0) {
+        final before = sections[index - 1].block;
+        final current = sections[index].block;
+        final sameList = _isList(before.type) && _isList(current.type);
+        output.write(sameList ? '\n' : '\n\n');
+      }
+      output.write(sections[index].markdown);
+    }
+    return output.toString();
   }
+
+  static bool _isList(NoteBlockType type) =>
+      type == NoteBlockType.bullet ||
+      type == NoteBlockType.ordered ||
+      type == NoteBlockType.todo;
+
+  static String _encodeInline(NoteBlockData block) {
+    if (block.text.isEmpty) return '';
+    final attributes = List<NoteTextAttributes>.filled(
+      block.text.length,
+      NoteTextAttributes.defaults,
+    );
+    for (final range in block.styles) {
+      final start = range.start.clamp(0, block.text.length);
+      final end = range.end.clamp(start, block.text.length);
+      for (var index = start; index < end; index++) {
+        attributes[index] = range.attributes;
+      }
+    }
+    final output = StringBuffer();
+    var start = 0;
+    while (start < block.text.length) {
+      final current = attributes[start];
+      var end = start + 1;
+      while (end < block.text.length && attributes[end] == current) {
+        end++;
+      }
+      output.write(_encodeInlineRun(block.text.substring(start, end), current));
+      start = end;
+    }
+    return output.toString();
+  }
+
+  static String _encodeInlineRun(String value, NoteTextAttributes attributes) {
+    var encoded = attributes.inlineCode
+        ? _wrapInlineCode(value)
+        : value
+              .replaceAll('\\', r'\\')
+              .replaceAllMapped(
+                RegExp(r'([`*_\[\]~])'),
+                (match) => '\\${match.group(1)}',
+              )
+              .replaceAll('\n', '  \n');
+    if (!attributes.inlineCode) {
+      if (attributes.strikethrough) encoded = '~~$encoded~~';
+      if (attributes.italic) encoded = '*$encoded*';
+      if (attributes.bold) encoded = '**$encoded**';
+    }
+    final link = attributes.link;
+    if (link != null && link.isNotEmpty) {
+      final target = link.replaceAll('\\', r'\\').replaceAll(')', r'\)');
+      encoded = '[$encoded]($target)';
+    }
+    return encoded;
+  }
+
+  static String _wrapInlineCode(String value) {
+    final longest = RegExp(r'`+')
+        .allMatches(value)
+        .fold<int>(
+          0,
+          (length, match) =>
+              match.group(0)!.length > length ? match.group(0)!.length : length,
+        );
+    final fence = '`' * (longest + 1);
+    final padding = value.startsWith('`') || value.endsWith('`') ? ' ' : '';
+    return '$fence$padding$value$padding$fence';
+  }
+
+  static String _encodeCodeBlock(NoteBlockData block) {
+    final longest = RegExp(r'`{3,}')
+        .allMatches(block.text)
+        .fold<int>(
+          2,
+          (length, match) =>
+              match.group(0)!.length > length ? match.group(0)!.length : length,
+        );
+    final fence = '`' * (longest + 1);
+    return '$fence${block.codeLanguage ?? ''}\n${block.text}\n$fence';
+  }
+
+  static bool structurallyMatches(List<NoteBlockData> cached, String markdown) {
+    if (encode(cached) == markdown) return true;
+    final parsed = decode(markdown);
+    if (cached.length != parsed.length) return false;
+    for (var index = 0; index < cached.length; index++) {
+      final left = cached[index];
+      final right = parsed[index];
+      if (left.type != right.type ||
+          left.text != right.text ||
+          left.checked != right.checked ||
+          left.attachmentPath != right.attachmentPath ||
+          left.indent != right.indent ||
+          left.headingLevel != right.headingLevel ||
+          left.codeLanguage != right.codeLanguage) {
+        return false;
+      }
+    }
+    return true;
+  }
+}
+
+class _InlineData {
+  final String text;
+  final List<NoteTextStyleRange> styles;
+
+  const _InlineData(this.text, this.styles);
+}
+
+class _InlineAccumulator {
+  final _text = StringBuffer();
+  final _styles = <NoteTextStyleRange>[];
+  var _length = 0;
+
+  void write(String value, NoteTextAttributes attributes) {
+    if (value.isEmpty) return;
+    final start = _length;
+    _text.write(value);
+    _length += value.length;
+    if (attributes != NoteTextAttributes.defaults) {
+      _styles.add(NoteTextStyleRange(start, _length, attributes));
+    }
+  }
+
+  _InlineData finish() => _InlineData(_text.toString(), _styles);
 }
 
 class NoteBlockEditor extends StatefulWidget {
@@ -373,7 +820,10 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     final plainBlocks = NoteBlockCodec.decode(widget.controller.text);
     final blocks =
         richBlocks != null &&
-            NoteBlockCodec.encode(richBlocks) == widget.controller.text
+            NoteBlockCodec.structurallyMatches(
+              richBlocks,
+              widget.controller.text,
+            )
         ? richBlocks
         : plainBlocks;
     _blocks = blocks.map(_makeBlock).toList();
@@ -388,6 +838,8 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
       checked: data.checked,
       attachmentPath: data.attachmentPath,
       indent: data.indent,
+      headingLevel: data.headingLevel,
+      codeLanguage: data.codeLanguage,
       controller: _BlockTextEditingController(
         text: data.text,
         styles: data.styles,
@@ -415,6 +867,8 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
         checked: block.checked,
         attachmentPath: block.attachmentPath,
         indent: block.indent,
+        headingLevel: block.headingLevel,
+        codeLanguage: block.codeLanguage,
         styles: block.controller.styleRanges,
       ),
   ];
@@ -583,17 +1037,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     });
     _blocks.add(
       _makeBlock(
-        NoteBlockData(
-          NoteBlockType.paragraph,
-          heading,
-          styles: [
-            NoteTextStyleRange(
-              0,
-              heading.length,
-              const NoteTextAttributes(bold: true, fontSize: 20),
-            ),
-          ],
-        ),
+        NoteBlockData(NoteBlockType.heading, heading, headingLevel: 2),
       ),
     );
     _blocks.addAll(generated.map(_makeBlock));
@@ -885,13 +1329,19 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     }
     final selection = block.controller.visibleSelectionValue;
     setState(() {
-      block.type = block.type == type ? NoteBlockType.paragraph : type;
-      if (block.type != NoteBlockType.todo) block.checked = false;
+      _setBlockType(block, block.type == type ? NoteBlockType.paragraph : type);
       activeType.value = block.type;
     });
     _syncDocument();
     _refocus(block, selection: selection);
     _endDiscreteChange();
+  }
+
+  void _setBlockType(_EditableBlock block, NoteBlockType type) {
+    block.type = type;
+    if (type != NoteBlockType.todo) block.checked = false;
+    if (type != NoteBlockType.heading) block.headingLevel = 0;
+    if (type != NoteBlockType.code) block.codeLanguage = null;
   }
 
   void insertDivider() {
@@ -1030,8 +1480,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
         before.trim().isEmpty &&
         after.trim().isEmpty) {
       setState(() {
-        block.type = NoteBlockType.paragraph;
-        block.checked = false;
+        _setBlockType(block, NoteBlockType.paragraph);
         activeType.value = NoteBlockType.paragraph;
       });
       _syncDocument();
@@ -1114,8 +1563,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
 
     if (block.type != NoteBlockType.paragraph) {
       setState(() {
-        block.type = NoteBlockType.paragraph;
-        block.checked = false;
+        _setBlockType(block, NoteBlockType.paragraph);
         _activeIndex = index;
         activeType.value = NoteBlockType.paragraph;
       });
@@ -1238,6 +1686,9 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     }
 
     final quote = block.type == NoteBlockType.quote;
+    final code = block.type == NoteBlockType.code;
+    final rawMarkdown = block.type == NoteBlockType.rawMarkdown;
+    final heading = block.type == NoteBlockType.heading;
     final connectsPreviousQuote =
         quote &&
         index > 0 &&
@@ -1256,6 +1707,10 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
       ),
       padding: EdgeInsets.only(left: quote ? 10 : block.indent * 18),
       decoration: BoxDecoration(
+        color: code || rawMarkdown
+            ? AppColors.softBlue.withValues(alpha: .52)
+            : Colors.transparent,
+        borderRadius: code || rawMarkdown ? BorderRadius.circular(12) : null,
         border: Border(
           left: BorderSide(
             color: quote ? AppColors.coral : Colors.transparent,
@@ -1267,7 +1722,14 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: block.type == NoteBlockType.paragraph || quote ? 0 : 34,
+            width:
+                block.type == NoteBlockType.paragraph ||
+                    quote ||
+                    heading ||
+                    code ||
+                    rawMarkdown
+                ? 0
+                : 34,
             height: 43,
             child: _buildLeading(index, block),
           ),
@@ -1285,6 +1747,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
                       _BlockInputFormatter(
                         onNewline: (selection) => _splitBlock(block, selection),
                         onBackspaceAtStart: () => _backspaceAtStart(block),
+                        allowNewlines: code || rawMarkdown,
                       ),
                     ],
                     maxLines: null,
@@ -1293,10 +1756,19 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
                     textCapitalization: TextCapitalization.sentences,
                     cursorColor: AppColors.coral,
                     style: TextStyle(
-                      fontSize: 17,
-                      height: 1.62,
+                      fontSize: heading
+                          ? switch (block.headingLevel.clamp(1, 6)) {
+                              1 => 28,
+                              2 => 24,
+                              3 => 21,
+                              _ => 18,
+                            }
+                          : 17,
+                      height: code || rawMarkdown ? 1.48 : 1.62,
                       color: quote ? AppColors.muted : AppColors.ink,
                       fontStyle: quote ? FontStyle.italic : FontStyle.normal,
+                      fontWeight: heading ? FontWeight.w800 : null,
+                      fontFamily: code || rawMarkdown ? 'monospace' : null,
                       decoration:
                           block.type == NoteBlockType.todo && block.checked
                           ? TextDecoration.lineThrough
@@ -1673,11 +2145,17 @@ class _BlockTextEditingController extends TextEditingController {
     final first = selected.first;
     return NoteTextAttributes(
       bold: selected.every((attributes) => attributes.bold),
+      italic: selected.every((attributes) => attributes.italic),
+      strikethrough: selected.every((attributes) => attributes.strikethrough),
+      inlineCode: selected.every((attributes) => attributes.inlineCode),
       underline: selected.every((attributes) => attributes.underline),
       fontSize:
           selected.every((attributes) => attributes.fontSize == first.fontSize)
           ? first.fontSize
           : NoteTextAttributes.defaultFontSize,
+      link: selected.every((attributes) => attributes.link == first.link)
+          ? first.link
+          : null,
     );
   }
 
@@ -1826,13 +2304,22 @@ class _BlockTextEditingController extends TextEditingController {
       final decorations = <TextDecoration>[
         if (base.decoration != null) base.decoration!,
         if (manuallyUnderlined || composing) TextDecoration.underline,
+        if (attributes.strikethrough) TextDecoration.lineThrough,
       ];
       children.add(
         TextSpan(
           text: text.substring(start, end),
           style: base.copyWith(
             fontWeight: attributes.bold ? FontWeight.w700 : base.fontWeight,
-            fontSize: attributes.fontSize,
+            fontStyle: attributes.italic ? FontStyle.italic : base.fontStyle,
+            fontFamily: attributes.inlineCode ? 'monospace' : base.fontFamily,
+            backgroundColor: attributes.inlineCode
+                ? AppColors.softBlue
+                : base.backgroundColor,
+            color: attributes.link != null ? AppColors.coral : base.color,
+            fontSize: attributes.fontSize == NoteTextAttributes.defaultFontSize
+                ? base.fontSize
+                : attributes.fontSize,
             decoration: decorations.isEmpty
                 ? null
                 : TextDecoration.combine(decorations),
@@ -1849,6 +2336,8 @@ class _EditableBlock {
   NoteBlockType type;
   bool checked;
   int indent;
+  int headingLevel;
+  String? codeLanguage;
   final String? attachmentPath;
   final _BlockTextEditingController controller;
   final FocusNode focusNode;
@@ -1857,6 +2346,8 @@ class _EditableBlock {
     required this.type,
     required this.checked,
     required this.indent,
+    required this.headingLevel,
+    this.codeLanguage,
     this.attachmentPath,
     required this.controller,
     required this.focusNode,
@@ -1871,10 +2362,12 @@ class _EditableBlock {
 class _BlockInputFormatter extends TextInputFormatter {
   final ValueChanged<TextSelection> onNewline;
   final VoidCallback onBackspaceAtStart;
+  final bool allowNewlines;
 
   const _BlockInputFormatter({
     required this.onNewline,
     required this.onBackspaceAtStart,
+    this.allowNewlines = false,
   });
 
   @override
@@ -1896,6 +2389,7 @@ class _BlockInputFormatter extends TextInputFormatter {
     final normalized = _BlockTextEditingController.withBoundary(newValue);
     final oldText = _BlockTextEditingController.visibleText(oldValue.text);
     final newText = _BlockTextEditingController.visibleText(normalized.text);
+    if (allowNewlines) return normalized;
     final insertedNewline =
         newText.length >= oldText.length &&
         newText.contains('\n') &&

@@ -19,6 +19,7 @@ import '../services/note_assistant_prompt_builder.dart';
 import '../services/realtime_dictation_service.dart';
 import '../services/streaming_speech_model_service.dart';
 import '../services/video_import_service.dart';
+import '../utils/markdown_text.dart';
 import '../widgets/app_popup_menu.dart';
 import '../widgets/editor_context_menu.dart';
 import '../widgets/note_assistant_sheet.dart';
@@ -241,7 +242,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     }
     final text = [
       _title.text.trim(),
-      _content.text.trim(),
+      MarkdownText.toPlainText(_content.text).trim(),
     ].where((part) => part.isNotEmpty).join('。');
     try {
       await _readAloud.speak(text);

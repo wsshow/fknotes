@@ -8,7 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('block codec preserves readable text and renumbers ordered lists', () {
     final blocks = NoteBlockCodec.decode(
-      '想法\n---\n1. 第一项\n8. 第二项\n☑ 已完成\n> 一段引用',
+      '想法\n\n---\n\n1. 第一项\n8. 第二项\n- [x] 已完成\n\n> 一段引用',
     );
 
     expect(blocks[1].type, NoteBlockType.divider);
@@ -16,12 +16,61 @@ void main() {
     expect(blocks[4].checked, isTrue);
     expect(
       NoteBlockCodec.encode(blocks),
-      '想法\n---\n1. 第一项\n2. 第二项\n☑ 已完成\n> 一段引用',
+      '想法\n\n---\n\n1. 第一项\n2. 第二项\n- [x] 已完成\n\n> 一段引用',
     );
   });
 
-  test('trimmed empty markers still reopen as their original block types', () {
-    final blocks = NoteBlockCodec.decode('•\n1.\n☐\n>');
+  test('GFM AST maps assistant Markdown into editable semantic blocks', () {
+    const source = '''# 方案
+
+**重点**、*说明*、~~旧稿~~、`code` 与 [链接](https://example.com)
+
+- [x] 已完成
+
+```dart
+print('ok');
+```
+
+| 项目 | 状态 |
+| --- | ---: |
+| 基础 | 完成 |
+''';
+
+    final blocks = NoteBlockCodec.decode(source);
+
+    expect(blocks.map((block) => block.type), [
+      NoteBlockType.heading,
+      NoteBlockType.paragraph,
+      NoteBlockType.todo,
+      NoteBlockType.code,
+      NoteBlockType.rawMarkdown,
+    ]);
+    expect(blocks.first.headingLevel, 1);
+    final paragraph = blocks[1];
+    expect(paragraph.text, '重点、说明、旧稿、code 与 链接');
+    NoteTextAttributes attributesAt(String value) {
+      final offset = paragraph.text.indexOf(value);
+      return paragraph.styles
+          .firstWhere((range) => range.start <= offset && range.end > offset)
+          .attributes;
+    }
+
+    expect(attributesAt('重点').bold, isTrue);
+    expect(attributesAt('说明').italic, isTrue);
+    expect(attributesAt('旧稿').strikethrough, isTrue);
+    expect(attributesAt('code').inlineCode, isTrue);
+    expect(attributesAt('链接').link, 'https://example.com');
+    expect(blocks[2].checked, isTrue);
+    expect(blocks[3].codeLanguage, 'dart');
+    expect(blocks[3].text, "print('ok');");
+    expect(blocks[4].text, contains('| 项目 | 状态 |'));
+
+    final encoded = NoteBlockCodec.encode(blocks);
+    expect(NoteBlockCodec.structurallyMatches(blocks, encoded), isTrue);
+  });
+
+  test('standard GFM markers reopen as semantic block types', () {
+    final blocks = NoteBlockCodec.decode('- 条目\n\n1. 顺序\n\n- [ ] 待办\n\n> 引用');
 
     expect(blocks.map((block) => block.type), [
       NoteBlockType.bullet,
@@ -29,7 +78,7 @@ void main() {
       NoteBlockType.todo,
       NoteBlockType.quote,
     ]);
-    expect(NoteBlockCodec.visibleCharacterCount('• 条目\n---\n2. 下一项'), 5);
+    expect(NoteBlockCodec.visibleCharacterCount('- 条目\n\n---\n\n2. 下一项'), 5);
   });
 
   test('rich document codec preserves inline styles and block indentation', () {
@@ -56,11 +105,11 @@ void main() {
     expect(decoded.single.styles.single.attributes.bold, isTrue);
     expect(decoded.single.styles.single.attributes.underline, isTrue);
     expect(decoded.single.styles.single.attributes.fontSize, 24);
-    expect(NoteBlockCodec.encode(decoded), '重要内容');
+    expect(NoteBlockCodec.encode(decoded), '**重要**内容');
   });
 
   testWidgets(
-    'selected text formatting emits rich data without changing plain text',
+    'selected formatting emits Markdown and lossless editor metadata',
     (tester) async {
       final controller = TextEditingController(text: '重要内容');
       final editorKey = GlobalKey<NoteBlockEditorState>();
@@ -93,7 +142,7 @@ void main() {
       await tester.pump();
 
       final block = NoteRichDocumentCodec.tryDecode(richContent)!.single;
-      expect(controller.text, '重要内容');
+      expect(controller.text, '**重要**内容');
       expect(block.indent, 1);
       expect(block.styles.single.start, 0);
       expect(block.styles.single.end, 2);
@@ -134,7 +183,7 @@ void main() {
     await tester.pump();
 
     final block = NoteRichDocumentCodec.tryDecode(richContent)!.single;
-    expect(controller.text, '新文字');
+    expect(controller.text, '**新文字**');
     expect(block.styles.single.start, 0);
     expect(block.styles.single.end, 3);
     expect(block.styles.single.attributes.bold, isTrue);
@@ -310,13 +359,13 @@ void main() {
     expect(
       editorKey.currentState!.appendAssistantText(
         heading: '本地助手待办',
-        text: '☐ 提交报告\n[[附件:private/secret.txt]]',
+        text: '- [ ] 提交报告\n\n[[附件:private/secret.txt]]',
       ),
       isTrue,
     );
     await tester.pump();
 
-    expect(controller.text, contains('☐ 提交报告'));
+    expect(controller.text, contains('- [ ] 提交报告'));
     final blocks = NoteBlockCodec.decode(controller.text);
     expect(blocks[1].text, '本地助手待办');
     expect(blocks[2].type, NoteBlockType.todo);
@@ -359,7 +408,7 @@ void main() {
       editorKey.currentState!.changeIndent(1);
       editorKey.currentState!.toggleBlock(NoteBlockType.bullet);
       await tester.pump();
-      expect(controller.text, '• 重要内容');
+      expect(controller.text, '  - **重要**内容');
 
       editorKey.currentState!.undo();
       await tester.pump();
@@ -390,7 +439,10 @@ void main() {
 
       expect(blocks.last.type, NoteBlockType.attachment);
       expect(blocks.last.attachmentPath, 'files/audio/local.m4a');
-      expect(NoteBlockCodec.encode(blocks), source);
+      expect(
+        NoteBlockCodec.encode(blocks),
+        '说明\n\n[[附件:files/audio/local.m4a]]',
+      );
       expect(NoteBlockCodec.visibleCharacterCount(source), 2);
     },
   );
@@ -433,10 +485,10 @@ void main() {
     expect(find.text('附件已移除'), findsOneWidget);
   });
 
-  testWidgets('legacy divider syntax renders as a real divider', (
+  testWidgets('standard divider syntax renders as a real divider', (
     tester,
   ) async {
-    final controller = TextEditingController(text: '上方\n---\n下方');
+    final controller = TextEditingController(text: '上方\n\n---\n\n下方');
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -450,7 +502,7 @@ void main() {
   });
 
   testWidgets('pressing enter continues a bullet list', (tester) async {
-    final controller = TextEditingController(text: '• 第一项');
+    final controller = TextEditingController(text: '- 第一项');
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -465,12 +517,12 @@ void main() {
     await tester.enterText(field, '第一项\n');
     await tester.pump();
 
-    expect(controller.text, '• 第一项\n• ');
+    expect(controller.text, '- 第一项\n- ');
     expect(find.byType(TextField), findsNWidgets(2));
   });
 
   testWidgets('enter on an empty list item exits the list', (tester) async {
-    final controller = TextEditingController(text: '• ');
+    final controller = TextEditingController(text: '- ');
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -489,9 +541,9 @@ void main() {
   });
 
   for (final block in {
-    'bullet': ('• 列表', '列表'),
+    'bullet': ('- 列表', '列表'),
     'ordered': ('1. 列表', '列表'),
-    'todo': ('☐ 待办', '待办'),
+    'todo': ('- [ ] 待办', '待办'),
     'quote': ('> 引用', '引用'),
   }.entries) {
     testWidgets('backspace removes ${block.key} formatting at block start', (
@@ -519,11 +571,22 @@ void main() {
   }
 
   testWidgets('backspace removes an empty paragraph', (tester) async {
-    final controller = TextEditingController(text: '上一行\n\n下一行');
+    const blocks = [
+      NoteBlockData(NoteBlockType.paragraph, '上一行'),
+      NoteBlockData(NoteBlockType.paragraph, ''),
+      NoteBlockData(NoteBlockType.paragraph, '下一行'),
+    ];
+    final controller = TextEditingController(
+      text: NoteBlockCodec.encode(blocks),
+    );
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: NoteBlockEditor(controller: controller, hintText: '开始记录'),
+          body: NoteBlockEditor(
+            controller: controller,
+            initialRichContent: NoteRichDocumentCodec.encode(blocks),
+            hintText: '开始记录',
+          ),
         ),
       ),
     );
@@ -533,18 +596,29 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
     await tester.pump();
 
-    expect(controller.text, '上一行\n下一行');
+    expect(controller.text, '上一行\n\n下一行');
     expect(find.byType(TextField), findsNWidgets(2));
   });
 
   testWidgets('software keyboard backspace removes an empty paragraph', (
     tester,
   ) async {
-    final controller = TextEditingController(text: '上一行\n\n下一行');
+    const blocks = [
+      NoteBlockData(NoteBlockType.paragraph, '上一行'),
+      NoteBlockData(NoteBlockType.paragraph, ''),
+      NoteBlockData(NoteBlockType.paragraph, '下一行'),
+    ];
+    final controller = TextEditingController(
+      text: NoteBlockCodec.encode(blocks),
+    );
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: NoteBlockEditor(controller: controller, hintText: '开始记录'),
+          body: NoteBlockEditor(
+            controller: controller,
+            initialRichContent: NoteRichDocumentCodec.encode(blocks),
+            hintText: '开始记录',
+          ),
         ),
       ),
     );
@@ -559,7 +633,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(controller.text, '上一行\n下一行');
+    expect(controller.text, '上一行\n\n下一行');
     expect(find.byType(TextField), findsNWidgets(2));
   });
 

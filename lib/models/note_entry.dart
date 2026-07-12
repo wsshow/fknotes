@@ -1,3 +1,5 @@
+import '../utils/markdown_text.dart';
+
 enum NoteType {
   text,
   image,
@@ -275,7 +277,7 @@ class NoteEntry {
   String get attachmentSummary {
     final items = allAttachments;
     if (items.isEmpty) {
-      final count = (content ?? '').trim().runes.length;
+      final count = plainTextContent.replaceAll('\n', '').runes.length;
       return '文字 · $count 字';
     }
     final types = items.map((item) => item.type).toSet();
@@ -368,7 +370,7 @@ class NoteEntry {
   }
 
   String get previewText {
-    if (readableContent.isNotEmpty) return readableContent;
+    if (plainTextContent.isNotEmpty) return plainTextContent;
     if (aggregateOcr.isNotEmpty) return aggregateOcr;
     if (aggregateTranscripts.isNotEmpty) return aggregateTranscripts;
     if (ocrText?.trim().isNotEmpty ?? false) return ocrText!;
@@ -391,6 +393,8 @@ class NoteEntry {
       },
     );
   }
+
+  String get plainTextContent => MarkdownText.toPlainText(readableContent);
 
   bool get hasMedia => allAttachments.isNotEmpty;
 }
