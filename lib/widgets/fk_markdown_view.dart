@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
-import 'package:markdown/markdown.dart' as md;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../app.dart';
 import 'editor_context_menu.dart';
+import 'markdown_latex.dart';
 
 /// Shared Markdown reading surface for model output and notes.
 ///
@@ -39,7 +39,17 @@ class FkMarkdownView extends StatelessWidget {
       data: data,
       selectable: selectable,
       contextMenuBuilder: buildAppEditableTextContextMenu,
-      extensionSet: md.ExtensionSet.gitHubFlavored,
+      extensionSet: fkMarkdownExtensionSet,
+      builders: {
+        markdownInlineMathTag: FkLatexElementBuilder(
+          displayMode: false,
+          textStyle: base ?? TextStyle(color: color, fontSize: 15),
+        ),
+        markdownBlockMathTag: FkLatexElementBuilder(
+          displayMode: true,
+          textStyle: (base ?? TextStyle(color: color)).copyWith(fontSize: 16),
+        ),
+      },
       softLineBreak: true,
       fitContent: true,
       imageBuilder: (uri, title, alt) => _BlockedMarkdownImage(

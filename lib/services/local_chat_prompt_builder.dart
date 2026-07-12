@@ -6,7 +6,8 @@ class LocalChatPromptBuilder {
   static const maxSystemPromptCharacters = 2000;
   static const markdownRenderingInstruction =
       '回答可使用标准 GitHub Flavored Markdown（标题、列表、引用、表格、链接和三反引号代码块）。'
-      '不要输出用于布局的 HTML 标签；当前界面不渲染 LaTeX，公式请改用普通文本或代码块。'
+      r'数学公式使用 LaTeX：行内公式用 $...$，独立公式块用 $$ 单独占行包围。'
+      '不要输出用于布局的 HTML 标签。'
       '表格必须包含表头和分隔行。';
 
   static LocalLlmGenerationRequest build({

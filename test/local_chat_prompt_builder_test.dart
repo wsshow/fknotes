@@ -33,6 +33,8 @@ void main() {
       request.messages.first.content,
       contains('GitHub Flavored Markdown'),
     );
+    expect(request.messages.first.content, contains('LaTeX'));
+    expect(request.messages.first.content, contains(r'行内公式用 $...$'));
     expect(request.messages.map((item) => item.role), [
       LocalLlmRole.system,
       LocalLlmRole.user,

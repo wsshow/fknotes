@@ -64,6 +64,8 @@ dependencies:
   # through an intentional, tested upgrade.
   markdown: 7.3.1
   flutter_markdown_plus: 1.0.12
+  # Pure Flutter KaTeX-compatible renderer used by the shared Markdown view.
+  flutter_math_fork: 0.7.4
   url_launcher: 6.3.2
 
 dev_dependencies:
