@@ -217,7 +217,7 @@ class _FakeAuthenticator implements DeviceAuthenticator {
 
   @override
   Future<DeviceAuthenticationResult> authenticate({
-    required String reason,
+    required DeviceAuthenticationPrompt prompt,
   }) async {
     final index = authenticationCount.clamp(0, _results.length - 1);
     authenticationCount += 1;

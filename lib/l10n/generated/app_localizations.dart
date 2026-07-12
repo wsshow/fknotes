@@ -176,6 +176,12 @@ abstract class AppLocalizations {
   /// **'语言设置保存失败'**
   String get languageSaveFailed;
 
+  /// No description provided for @localStorageInitializationFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地存储初始化失败'**
+  String get localStorageInitializationFailed;
+
   /// No description provided for @home.
   ///
   /// In zh, this message translates to:
@@ -1489,6 +1495,156 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'应用锁用于阻止他人在已解锁设备上直接查看内容，不会加密数据库、附件或已经导出的备份。'**
   String get appLockLimitDescription;
+
+  /// No description provided for @privacyProtection.
+  ///
+  /// In zh, this message translates to:
+  /// **'隐私保护'**
+  String get privacyProtection;
+
+  /// No description provided for @systemAuthenticationPrivacyFooter.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统身份验证 · 本地内容保持私密'**
+  String get systemAuthenticationPrivacyFooter;
+
+  /// No description provided for @waitingForSystemAuthentication.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在等待系统身份验证'**
+  String get waitingForSystemAuthentication;
+
+  /// No description provided for @preparingAppLock.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在准备应用锁'**
+  String get preparingAppLock;
+
+  /// No description provided for @waitingForSystemVerification.
+  ///
+  /// In zh, this message translates to:
+  /// **'等待系统验证'**
+  String get waitingForSystemVerification;
+
+  /// No description provided for @appLocked.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用已锁定'**
+  String get appLocked;
+
+  /// No description provided for @loadingLocalSecuritySettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在载入本地安全设置'**
+  String get loadingLocalSecuritySettings;
+
+  /// No description provided for @completeSystemAuthentication.
+  ///
+  /// In zh, this message translates to:
+  /// **'请在系统弹窗中完成身份验证'**
+  String get completeSystemAuthentication;
+
+  /// No description provided for @unlockAppDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'验证设备身份后继续使用非空笔记'**
+  String get unlockAppDescription;
+
+  /// No description provided for @authenticateAndUnlock.
+  ///
+  /// In zh, this message translates to:
+  /// **'验证并解锁'**
+  String get authenticateAndUnlock;
+
+  /// No description provided for @contentHidden.
+  ///
+  /// In zh, this message translates to:
+  /// **'内容已隐藏'**
+  String get contentHidden;
+
+  /// No description provided for @authenticateToContinue.
+  ///
+  /// In zh, this message translates to:
+  /// **'验证设备身份以继续'**
+  String get authenticateToContinue;
+
+  /// No description provided for @authenticateToEnableAppLock.
+  ///
+  /// In zh, this message translates to:
+  /// **'验证设备身份以开启应用锁'**
+  String get authenticateToEnableAppLock;
+
+  /// No description provided for @authenticateToDisableAppLock.
+  ///
+  /// In zh, this message translates to:
+  /// **'验证设备身份以关闭应用锁'**
+  String get authenticateToDisableAppLock;
+
+  /// No description provided for @useDevicePassword.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用设备密码'**
+  String get useDevicePassword;
+
+  /// No description provided for @authenticationCanceled.
+  ///
+  /// In zh, this message translates to:
+  /// **'认证已取消'**
+  String get authenticationCanceled;
+
+  /// No description provided for @authenticationFailedRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'身份验证失败，请重试'**
+  String get authenticationFailedRetry;
+
+  /// No description provided for @authenticationTemporarilyUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法调用系统身份验证，请稍后重试'**
+  String get authenticationTemporarilyUnavailable;
+
+  /// No description provided for @authenticationCredentialsRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先在系统设置中配置锁屏密码、指纹或人脸识别'**
+  String get authenticationCredentialsRequired;
+
+  /// No description provided for @authenticationUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前设备无法使用系统身份验证'**
+  String get authenticationUnavailable;
+
+  /// No description provided for @authenticationLockedOut.
+  ///
+  /// In zh, this message translates to:
+  /// **'尝试次数过多，请使用设备密码或稍后重试'**
+  String get authenticationLockedOut;
+
+  /// No description provided for @authenticationInProgress.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统身份验证正在进行'**
+  String get authenticationInProgress;
+
+  /// No description provided for @authenticationUiUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法显示系统身份验证界面'**
+  String get authenticationUiUnavailable;
+
+  /// No description provided for @appLockSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用锁设置保存失败，请检查设备存储空间'**
+  String get appLockSaveFailed;
+
+  /// No description provided for @autoLockSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动锁定时间保存失败，请检查设备存储空间'**
+  String get autoLockSaveFailed;
 
   /// No description provided for @back.
   ///

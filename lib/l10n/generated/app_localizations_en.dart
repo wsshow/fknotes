@@ -50,6 +50,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get languageSaveFailed => 'Couldn\'t save the language setting';
 
   @override
+  String get localStorageInitializationFailed =>
+      'Local storage could not be initialized';
+
+  @override
   String get home => 'Home';
 
   @override
@@ -844,6 +848,96 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get appLockLimitDescription =>
       'App lock prevents others from viewing content on an unlocked device. It does not encrypt the database, attachments, or exported backups.';
+
+  @override
+  String get privacyProtection => 'Privacy protection';
+
+  @override
+  String get systemAuthenticationPrivacyFooter =>
+      'System authentication · Local content stays private';
+
+  @override
+  String get waitingForSystemAuthentication =>
+      'Waiting for system authentication';
+
+  @override
+  String get preparingAppLock => 'Preparing App lock';
+
+  @override
+  String get waitingForSystemVerification => 'Waiting for system verification';
+
+  @override
+  String get appLocked => 'App locked';
+
+  @override
+  String get loadingLocalSecuritySettings => 'Loading local security settings';
+
+  @override
+  String get completeSystemAuthentication =>
+      'Complete authentication in the system prompt';
+
+  @override
+  String get unlockAppDescription =>
+      'Verify your device identity to continue using FKNotes';
+
+  @override
+  String get authenticateAndUnlock => 'Authenticate and unlock';
+
+  @override
+  String get contentHidden => 'Content hidden';
+
+  @override
+  String get authenticateToContinue =>
+      'Verify your device identity to continue';
+
+  @override
+  String get authenticateToEnableAppLock =>
+      'Verify your device identity to enable App lock';
+
+  @override
+  String get authenticateToDisableAppLock =>
+      'Verify your device identity to disable App lock';
+
+  @override
+  String get useDevicePassword => 'Use device passcode';
+
+  @override
+  String get authenticationCanceled => 'Authentication canceled';
+
+  @override
+  String get authenticationFailedRetry => 'Authentication failed. Try again.';
+
+  @override
+  String get authenticationTemporarilyUnavailable =>
+      'System authentication is temporarily unavailable. Try again later.';
+
+  @override
+  String get authenticationCredentialsRequired =>
+      'Set up a screen lock, fingerprint, or face unlock in system settings first.';
+
+  @override
+  String get authenticationUnavailable =>
+      'System authentication is not available on this device.';
+
+  @override
+  String get authenticationLockedOut =>
+      'Too many attempts. Use your device passcode or try again later.';
+
+  @override
+  String get authenticationInProgress =>
+      'System authentication is already in progress.';
+
+  @override
+  String get authenticationUiUnavailable =>
+      'The system authentication prompt is temporarily unavailable.';
+
+  @override
+  String get appLockSaveFailed =>
+      'Couldn\'t save App lock settings. Check available storage.';
+
+  @override
+  String get autoLockSaveFailed =>
+      'Couldn\'t save the auto-lock timeout. Check available storage.';
 
   @override
   String get back => 'Back';

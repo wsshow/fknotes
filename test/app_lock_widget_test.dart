@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:fknotes/app.dart';
+import 'package:fknotes/l10n/generated/app_localizations.dart';
 import 'package:fknotes/pages/app_lock_settings_page.dart';
 import 'package:fknotes/providers/app_lock_controller.dart';
 import 'package:fknotes/services/app_lock_preferences_service.dart';
@@ -114,6 +115,46 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('私密笔记内容'), findsOneWidget);
+  });
+
+  testWidgets('lock screen and authentication result render in English', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final controller = AppLockController(
+      preferencesStore: _WidgetPreferencesStore(
+        const AppLockPreferences(enabled: true),
+      ),
+      authenticator: _WidgetAuthenticator([
+        const DeviceAuthenticationResult(
+          DeviceAuthenticationStatus.canceled,
+          '认证已取消',
+          messageId: DeviceAuthenticationMessage.canceled,
+        ),
+      ]),
+      observeLifecycle: false,
+    );
+    await controller.initialize();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: controller,
+        child: const MaterialApp(
+          locale: Locale('en'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: AppLockGate(child: Text('Private note content')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('App locked'), findsOneWidget);
+    expect(find.text('Authentication canceled'), findsOneWidget);
+    expect(find.text('Authenticate and unlock'), findsOneWidget);
+    expect(find.text('Local first · Private by design'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('lock now covers the active settings route immediately', (
@@ -237,7 +278,7 @@ class _WidgetAuthenticator implements DeviceAuthenticator {
 
   @override
   Future<DeviceAuthenticationResult> authenticate({
-    required String reason,
+    required DeviceAuthenticationPrompt prompt,
   }) async {
     final result = _results[_index.clamp(0, _results.length - 1)];
     _index += 1;
@@ -258,7 +299,7 @@ class _DeferredWidgetAuthenticator implements DeviceAuthenticator {
 
   @override
   Future<DeviceAuthenticationResult> authenticate({
-    required String reason,
+    required DeviceAuthenticationPrompt prompt,
   }) async {
     authenticationCount += 1;
     final pending = _pending;

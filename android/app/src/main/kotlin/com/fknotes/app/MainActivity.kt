@@ -75,7 +75,11 @@ class MainActivity : FlutterFragmentActivity() {
                     val type = call.argument<String>("type")
                     val request = type?.let(::requestForType)
                     if (request == null) {
-                        result.error("unsupported_attachment", "不支持的附件类型", null)
+                        result.error(
+                            "unsupported_attachment",
+                            getString(R.string.unsupported_attachment_type),
+                            null,
+                        )
                     } else {
                         launchPicker(request, result)
                     }
@@ -85,7 +89,11 @@ class MainActivity : FlutterFragmentActivity() {
                     val request = type?.let(::requestForType)
                     val files = call.argument<List<Map<String, Any?>>>("files")
                     if (request == null || files == null) {
-                        result.error("invalid_import", "附件导入参数无效", null)
+                        result.error(
+                            "invalid_import",
+                            getString(R.string.invalid_attachment_import),
+                            null,
+                        )
                     } else {
                         prepareLocalImports(request, files, result)
                     }
@@ -118,7 +126,11 @@ class MainActivity : FlutterFragmentActivity() {
             val sourcePath = call.argument<String>("sourcePath")
             val outputPath = call.argument<String>("outputPath")
             if (sourcePath == null || outputPath == null) {
-                result.error("invalid_audio", "音频解码参数无效", null)
+                result.error(
+                    "invalid_audio",
+                    getString(R.string.invalid_audio_decode),
+                    null,
+                )
                 return@setMethodCallHandler
             }
             preparationExecutor.execute {
@@ -130,7 +142,7 @@ class MainActivity : FlutterFragmentActivity() {
                     mainHandler.post {
                         result.error(
                             "audio_decode_failed",
-                            error.message ?: "无法解码音频",
+                            error.message ?: getString(R.string.audio_decode_failed),
                             null,
                         )
                     }
@@ -161,7 +173,7 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     private fun decodeAudioToWav(source: File, destination: File) {
-        require(source.exists()) { "音频文件不存在" }
+        require(source.exists()) { getString(R.string.audio_file_missing) }
         destination.parentFile?.mkdirs()
         val extractor = MediaExtractor()
         var decoder: MediaCodec? = null
@@ -179,7 +191,9 @@ class MainActivity : FlutterFragmentActivity() {
                     break
                 }
             }
-            require(trackIndex >= 0 && inputFormat != null) { "文件中没有可识别的音轨" }
+            require(trackIndex >= 0 && inputFormat != null) {
+                getString(R.string.audio_track_missing)
+            }
             extractor.selectTrack(trackIndex)
             val format = requireNotNull(inputFormat)
             val mime = requireNotNull(format.getString(MediaFormat.KEY_MIME))
@@ -234,7 +248,7 @@ class MainActivity : FlutterFragmentActivity() {
                             outputFormat.containsKey(MediaFormat.KEY_PCM_ENCODING) &&
                             outputFormat.getInteger(MediaFormat.KEY_PCM_ENCODING) != AudioFormat.ENCODING_PCM_16BIT
                         ) {
-                            error("设备输出了不支持的 PCM 音频格式")
+                            error(getString(R.string.unsupported_pcm_format))
                         }
                     }
                     MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
@@ -302,7 +316,11 @@ class MainActivity : FlutterFragmentActivity() {
 
     private fun launchPicker(request: ImportRequest, result: MethodChannel.Result) {
         if (pendingResult != null) {
-            result.error("attachment_import_busy", "已有文件选择器正在打开", null)
+            result.error(
+                "attachment_import_busy",
+                getString(R.string.attachment_picker_busy),
+                null,
+            )
             return
         }
         pendingResult = result
@@ -378,8 +396,11 @@ class MainActivity : FlutterFragmentActivity() {
         preparationExecutor.execute {
             try {
                 val tasks = files.map { item ->
-                    val source = File(item["path"] as? String ?: error("缺少文件路径"))
-                    require(source.exists()) { "所选文件不存在" }
+                    val source = File(
+                        item["path"] as? String
+                            ?: error(getString(R.string.file_path_missing)),
+                    )
+                    require(source.exists()) { getString(R.string.selected_file_missing) }
                     val displayName = (item["name"] as? String)
                         ?.takeIf { it.isNotBlank() }
                         ?: source.name
@@ -407,7 +428,9 @@ class MainActivity : FlutterFragmentActivity() {
         sourceFile: File? = null,
     ): ImportTask {
         val targetDirectory = File(filesDir, request.folder).apply {
-            if (!exists() && !mkdirs()) error("无法创建附件目录")
+            if (!exists() && !mkdirs()) {
+                error(getString(R.string.attachment_directory_failed))
+            }
         }
         val extension = resolveExtension(metadata.displayName, metadata.mimeType, request.type)
         val jobId = UUID.randomUUID().toString()
@@ -471,7 +494,9 @@ class MainActivity : FlutterFragmentActivity() {
                 }
             }
             if (task.canceled.get()) throw ImportCanceledException()
-            if (!task.partialFile.renameTo(task.destination)) error("无法完成附件文件写入")
+            if (!task.partialFile.renameTo(task.destination)) {
+                error(getString(R.string.attachment_write_failed))
+            }
             val thumbnail = if (task.request.type == "image") {
                 createThumbnail(task.destination, task.id)
             } else {
@@ -507,7 +532,9 @@ class MainActivity : FlutterFragmentActivity() {
                 "failed",
                 mapOf(
                     "jobId" to task.id,
-                    "message" to (error.message ?: "附件导入失败"),
+                    "message" to (
+                        error.message ?: getString(R.string.attachment_import_failed)
+                    ),
                 ),
             )
         } finally {
@@ -517,10 +544,10 @@ class MainActivity : FlutterFragmentActivity() {
 
     private fun openInput(task: ImportTask): InputStream = when {
         task.sourceUri != null -> requireNotNull(contentResolver.openInputStream(task.sourceUri)) {
-            "无法读取所选文件"
+            getString(R.string.selected_file_read_failed)
         }
         task.sourceFile != null -> FileInputStream(task.sourceFile)
-        else -> error("附件来源无效")
+        else -> error(getString(R.string.invalid_attachment_source))
     }
 
     private fun ensureImportCapacity(tasks: List<ImportTask>) {
@@ -534,8 +561,11 @@ class MainActivity : FlutterFragmentActivity() {
         val availableBytes = StatFs(filesDir.absolutePath).availableBytes
         if (availableBytes < requiredBytes) {
             throw IOException(
-                "存储空间不足：导入至少需要 ${formatMegabytes(requiredBytes)}，" +
-                    "当前可用 ${formatMegabytes(availableBytes)}",
+                getString(
+                    R.string.storage_insufficient,
+                    formatMegabytes(requiredBytes),
+                    formatMegabytes(availableBytes),
+                ),
             )
         }
     }
@@ -586,12 +616,14 @@ class MainActivity : FlutterFragmentActivity() {
             drawBitmap(oriented, null, Rect(0, 0, targetWidth, targetHeight), null)
         }
         val directory = File(filesDir, "thumbnails").apply {
-            if (!exists() && !mkdirs()) error("无法创建缩略图目录")
+            if (!exists() && !mkdirs()) {
+                error(getString(R.string.thumbnail_directory_failed))
+            }
         }
         val output = File(directory, "${jobId}_thumb.jpg")
         FileOutputStream(output).use { stream ->
             if (!thumbnail.compress(Bitmap.CompressFormat.JPEG, 86, stream)) {
-                error("无法生成缩略图")
+                error(getString(R.string.thumbnail_generation_failed))
             }
         }
         if (oriented !== decoded) oriented.recycle()
@@ -683,7 +715,11 @@ class MainActivity : FlutterFragmentActivity() {
                 pendingResult = null
                 pendingRequest = null
             }
-            result.error("attachment_import_failed", error.message ?: "附件导入失败", null)
+            result.error(
+                "attachment_import_failed",
+                error.message ?: getString(R.string.attachment_import_failed),
+                null,
+            )
         }
     }
 

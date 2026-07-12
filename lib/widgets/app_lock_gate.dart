@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../app.dart';
+import '../l10n/generated/app_localizations.dart';
+import '../l10n/l10n.dart';
 import '../providers/app_lock_controller.dart';
+import '../services/device_authentication_service.dart';
 import 'brand_mark.dart';
 
 class AppLockGate extends StatelessWidget {
@@ -13,9 +16,10 @@ class AppLockGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<AppLockController>();
+    final prompt = _authenticationPrompt(context.l10n);
     if (controller.shouldAutomaticallyAuthenticate) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        controller.authenticateAutomatically();
+        controller.authenticateAutomatically(prompt: prompt);
       });
     }
 
@@ -37,7 +41,8 @@ class AppLockGate extends StatelessWidget {
                 controller.authenticating ||
                 controller.shouldAutomaticallyAuthenticate,
             message: controller.message,
-            onUnlock: controller.unlock,
+            messageId: controller.messageId,
+            onUnlock: () => controller.unlock(prompt: prompt),
           ),
       ],
     );
@@ -50,6 +55,7 @@ class _AppLockScreen extends StatelessWidget {
   final bool obscured;
   final bool waitingForAuthentication;
   final String? message;
+  final DeviceAuthenticationMessage messageId;
   final VoidCallback onUnlock;
 
   const _AppLockScreen({
@@ -58,17 +64,19 @@ class _AppLockScreen extends StatelessWidget {
     required this.obscured,
     required this.waitingForAuthentication,
     required this.message,
+    required this.messageId,
     required this.onUnlock,
   });
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final privacyOnly = obscured && !locked;
     return Semantics(
       scopesRoute: true,
       namesRoute: true,
       explicitChildNodes: true,
-      label: privacyOnly ? '隐私保护' : '应用锁',
+      label: privacyOnly ? l10n.privacyProtection : l10n.appLock,
       child: Material(
         color: AppColors.canvas,
         child: SafeArea(
@@ -102,26 +110,27 @@ class _AppLockScreen extends StatelessWidget {
                                       waitingForAuthentication:
                                           waitingForAuthentication,
                                       message: message,
+                                      messageId: messageId,
                                       onUnlock: onUnlock,
                                     ),
                             ),
                           ),
                         ),
                       ),
-                      const Row(
+                      Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.shield_outlined,
                             size: 15,
                             color: AppColors.muted,
                           ),
-                          SizedBox(width: 6),
+                          const SizedBox(width: 6),
                           Flexible(
                             child: Text(
-                              '系统身份验证 · 本地内容保持私密',
+                              l10n.systemAuthenticationPrivacyFooter,
                               textAlign: TextAlign.center,
-                              style: TextStyle(
+                              style: const TextStyle(
                                 color: AppColors.muted,
                                 fontSize: 11.5,
                                 fontWeight: FontWeight.w500,
@@ -146,18 +155,18 @@ class _LockBrandHeader extends StatelessWidget {
   const _LockBrandHeader();
 
   @override
-  Widget build(BuildContext context) => const Row(
+  Widget build(BuildContext context) => Row(
     mainAxisSize: MainAxisSize.min,
     children: [
-      BrandMark(size: 42),
-      SizedBox(width: 11),
+      const BrandMark(size: 42),
+      const SizedBox(width: 11),
       Flexible(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '非空笔记',
-              style: TextStyle(
+              context.l10n.appTitle,
+              style: const TextStyle(
                 color: AppColors.ink,
                 fontFamily: 'serif',
                 fontSize: 17,
@@ -165,10 +174,10 @@ class _LockBrandHeader extends StatelessWidget {
                 fontWeight: FontWeight.w700,
               ),
             ),
-            SizedBox(height: 2),
+            const SizedBox(height: 2),
             Text(
-              '本地优先 · 私密可靠',
-              style: TextStyle(
+              context.l10n.appTagline,
+              style: const TextStyle(
                 color: AppColors.muted,
                 fontSize: 10.5,
                 fontWeight: FontWeight.w500,
@@ -185,18 +194,26 @@ class _AuthenticationCard extends StatelessWidget {
   final bool initializing;
   final bool waitingForAuthentication;
   final String? message;
+  final DeviceAuthenticationMessage messageId;
   final VoidCallback onUnlock;
 
   const _AuthenticationCard({
     required this.initializing,
     required this.waitingForAuthentication,
     required this.message,
+    required this.messageId,
     required this.onUnlock,
   });
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final waiting = initializing || waitingForAuthentication;
+    final localizedMessage = _localizedAuthenticationMessage(
+      l10n,
+      messageId,
+      message,
+    );
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
       decoration: BoxDecoration(
@@ -224,7 +241,7 @@ class _AuthenticationCard extends StatelessWidget {
             alignment: Alignment.center,
             child: waiting
                 ? Semantics(
-                    label: '正在等待系统身份验证',
+                    label: l10n.waitingForSystemAuthentication,
                     liveRegion: true,
                     child: const SizedBox(
                       width: 27,
@@ -241,10 +258,10 @@ class _AuthenticationCard extends StatelessWidget {
           const SizedBox(height: 20),
           Text(
             initializing
-                ? '正在准备应用锁'
+                ? l10n.preparingAppLock
                 : waitingForAuthentication
-                ? '等待系统验证'
-                : '应用已锁定',
+                ? l10n.waitingForSystemVerification
+                : l10n.appLocked,
             key: const Key('app-lock-state-title'),
             textAlign: TextAlign.center,
             style: const TextStyle(
@@ -258,10 +275,10 @@ class _AuthenticationCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             initializing
-                ? '正在载入本地安全设置'
+                ? l10n.loadingLocalSecuritySettings
                 : waitingForAuthentication
-                ? '请在系统弹窗中完成身份验证'
-                : '验证设备身份后继续使用非空笔记',
+                ? l10n.completeSystemAuthentication
+                : l10n.unlockAppDescription,
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: AppColors.muted,
@@ -269,7 +286,7 @@ class _AuthenticationCard extends StatelessWidget {
               height: 1.45,
             ),
           ),
-          if (!waiting && message?.isNotEmpty == true) ...[
+          if (!waiting && localizedMessage.isNotEmpty) ...[
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
@@ -288,7 +305,7 @@ class _AuthenticationCard extends StatelessWidget {
                   const SizedBox(width: 7),
                   Flexible(
                     child: Text(
-                      message!,
+                      localizedMessage,
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -311,7 +328,7 @@ class _AuthenticationCard extends StatelessWidget {
                 key: const Key('app-lock-unlock-button'),
                 onPressed: onUnlock,
                 icon: const Icon(Icons.fingerprint_rounded, size: 21),
-                label: const Text('验证并解锁'),
+                label: Text(l10n.authenticateAndUnlock),
               ),
             ),
           ],
@@ -325,10 +342,10 @@ class _PrivacyOnlyState extends StatelessWidget {
   const _PrivacyOnlyState();
 
   @override
-  Widget build(BuildContext context) => const Column(
+  Widget build(BuildContext context) => Column(
     mainAxisSize: MainAxisSize.min,
     children: [
-      DecoratedBox(
+      const DecoratedBox(
         decoration: BoxDecoration(
           color: AppColors.softGreen,
           shape: BoxShape.circle,
@@ -344,8 +361,8 @@ class _PrivacyOnlyState extends StatelessWidget {
       ),
       SizedBox(height: 18),
       Text(
-        '内容已隐藏',
-        style: TextStyle(
+        context.l10n.contentHidden,
+        style: const TextStyle(
           color: AppColors.ink,
           fontFamily: 'serif',
           fontSize: 21,
@@ -355,3 +372,30 @@ class _PrivacyOnlyState extends StatelessWidget {
     ],
   );
 }
+
+DeviceAuthenticationPrompt _authenticationPrompt(AppLocalizations l10n) =>
+    DeviceAuthenticationPrompt(
+      reason: l10n.authenticateToContinue,
+      cancelButton: l10n.cancel,
+      fallbackTitle: l10n.useDevicePassword,
+    );
+
+String _localizedAuthenticationMessage(
+  AppLocalizations l10n,
+  DeviceAuthenticationMessage messageId,
+  String? fallback,
+) => switch (messageId) {
+  DeviceAuthenticationMessage.none => fallback ?? '',
+  DeviceAuthenticationMessage.canceled => l10n.authenticationCanceled,
+  DeviceAuthenticationMessage.credentialsRequired =>
+    l10n.authenticationCredentialsRequired,
+  DeviceAuthenticationMessage.unavailable => l10n.authenticationUnavailable,
+  DeviceAuthenticationMessage.lockedOut => l10n.authenticationLockedOut,
+  DeviceAuthenticationMessage.inProgress => l10n.authenticationInProgress,
+  DeviceAuthenticationMessage.uiUnavailable => l10n.authenticationUiUnavailable,
+  DeviceAuthenticationMessage.temporarilyUnavailable =>
+    l10n.authenticationTemporarilyUnavailable,
+  DeviceAuthenticationMessage.appLockSaveFailed => l10n.appLockSaveFailed,
+  DeviceAuthenticationMessage.autoLockSaveFailed => l10n.autoLockSaveFailed,
+  DeviceAuthenticationMessage.failed => l10n.authenticationFailedRetry,
+};

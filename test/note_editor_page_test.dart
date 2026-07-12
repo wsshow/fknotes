@@ -821,7 +821,7 @@ class _DisabledAppLockPreferencesStore implements AppLockPreferencesStore {
 class _UnusedDeviceAuthenticator implements DeviceAuthenticator {
   @override
   Future<DeviceAuthenticationResult> authenticate({
-    required String reason,
+    required DeviceAuthenticationPrompt prompt,
   }) async => throw StateError('Authentication should not be requested');
 
   @override

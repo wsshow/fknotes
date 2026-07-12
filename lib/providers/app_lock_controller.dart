@@ -30,6 +30,7 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
   bool _automaticPromptAttempted = false;
   DateTime? _backgroundedAt;
   String? _message;
+  DeviceAuthenticationMessage _messageId = DeviceAuthenticationMessage.none;
 
   bool get initialized => _initialized;
   bool get enabled => _preferences.enabled;
@@ -38,6 +39,7 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
   bool get obscured => enabled && _obscured;
   bool get authenticating => _authenticating;
   String? get message => _message;
+  DeviceAuthenticationMessage get messageId => _messageId;
   bool get shouldAutomaticallyAuthenticate =>
       _initialized &&
       enabled &&
@@ -54,7 +56,11 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  Future<DeviceAuthenticationResult> authenticateAutomatically() async {
+  Future<DeviceAuthenticationResult> authenticateAutomatically({
+    DeviceAuthenticationPrompt prompt = const DeviceAuthenticationPrompt(
+      reason: 'Verify your device identity to continue',
+    ),
+  }) async {
     if (!shouldAutomaticallyAuthenticate) {
       return const DeviceAuthenticationResult(
         DeviceAuthenticationStatus.canceled,
@@ -62,20 +68,27 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
       );
     }
     _automaticPromptAttempted = true;
-    return unlock();
+    return unlock(prompt: prompt);
   }
 
-  Future<DeviceAuthenticationResult> unlock() async {
+  Future<DeviceAuthenticationResult> unlock({
+    DeviceAuthenticationPrompt prompt = const DeviceAuthenticationPrompt(
+      reason: 'Verify your device identity to continue',
+    ),
+  }) async {
     if (!enabled || !_locked) {
       return const DeviceAuthenticationResult(
         DeviceAuthenticationStatus.authenticated,
         '',
       );
     }
-    return _authenticate('验证设备身份以继续');
+    return _authenticate(prompt);
   }
 
-  Future<DeviceAuthenticationResult> setEnabled(bool value) async {
+  Future<DeviceAuthenticationResult> setEnabled(
+    bool value, {
+    DeviceAuthenticationPrompt? prompt,
+  }) async {
     if (!_initialized || value == enabled) {
       return const DeviceAuthenticationResult(
         DeviceAuthenticationStatus.authenticated,
@@ -86,10 +99,16 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
       return const DeviceAuthenticationResult(
         DeviceAuthenticationStatus.unavailable,
         '请先在系统设置中配置锁屏密码、指纹或人脸识别',
+        messageId: DeviceAuthenticationMessage.credentialsRequired,
       );
     }
     final result = await _authenticate(
-      value ? '验证设备身份以开启应用锁' : '验证设备身份以关闭应用锁',
+      prompt ??
+          DeviceAuthenticationPrompt(
+            reason: value
+                ? 'Verify your device identity to enable App lock'
+                : 'Verify your device identity to disable App lock',
+          ),
       unlockOnSuccess: false,
     );
     if (!result.authenticated) return result;
@@ -102,6 +121,7 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
       return const DeviceAuthenticationResult(
         DeviceAuthenticationStatus.failed,
         '应用锁设置保存失败，请检查设备存储空间',
+        messageId: DeviceAuthenticationMessage.appLockSaveFailed,
       );
     }
     _preferences = updated;
@@ -109,6 +129,7 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
     _obscured = false;
     _automaticPromptAttempted = false;
     _message = null;
+    _messageId = DeviceAuthenticationMessage.none;
     notifyListeners();
     return result;
   }
@@ -132,26 +153,30 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<DeviceAuthenticationResult> _authenticate(
-    String reason, {
+    DeviceAuthenticationPrompt prompt, {
     bool unlockOnSuccess = true,
   }) async {
     if (_authenticating) {
       return const DeviceAuthenticationResult(
         DeviceAuthenticationStatus.failed,
         '系统身份验证正在进行',
+        messageId: DeviceAuthenticationMessage.inProgress,
       );
     }
     _authenticating = true;
     _message = null;
+    _messageId = DeviceAuthenticationMessage.none;
     notifyListeners();
-    final result = await _authenticator.authenticate(reason: reason);
+    final result = await _authenticator.authenticate(prompt: prompt);
     _authenticating = false;
     if (result.authenticated) {
       if (unlockOnSuccess) _locked = false;
       _message = null;
+      _messageId = DeviceAuthenticationMessage.none;
       _backgroundedAt = null;
     } else {
       _message = result.message;
+      _messageId = result.messageId;
     }
     notifyListeners();
     return result;
@@ -194,6 +219,7 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
   void _lock({required bool allowAutomaticPrompt, bool notify = true}) {
     _locked = true;
     _message = null;
+    _messageId = DeviceAuthenticationMessage.none;
     _automaticPromptAttempted = !allowAutomaticPrompt;
     if (notify) notifyListeners();
   }

@@ -1,4 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">FKNotes</string>
+    <string name="unsupported_attachment_type">Unsupported attachment type</string>
+    <string name="invalid_attachment_import">Invalid attachment import parameters</string>
+    <string name="invalid_audio_decode">Invalid audio decoding parameters</string>
+    <string name="audio_decode_failed">Could not decode audio</string>
+    <string name="audio_file_missing">Audio file not found</string>
+    <string name="audio_track_missing">No recognizable audio track found</string>
+    <string name="unsupported_pcm_format">The device produced an unsupported PCM audio format</string>
+    <string name="attachment_picker_busy">A file picker is already open</string>
+    <string name="file_path_missing">File path is missing</string>
+    <string name="selected_file_missing">The selected file no longer exists</string>
+    <string name="attachment_directory_failed">Could not create the attachment directory</string>
+    <string name="attachment_write_failed">Could not finish writing the attachment</string>
+    <string name="attachment_import_failed">Attachment import failed</string>
+    <string name="selected_file_read_failed">Could not read the selected file</string>
+    <string name="invalid_attachment_source">Invalid attachment source</string>
+    <string name="storage_insufficient">Not enough storage. Import requires at least %1$s; %2$s is available.</string>
+    <string name="thumbnail_directory_failed">Could not create the thumbnail directory</string>
+    <string name="thumbnail_generation_failed">Could not generate the thumbnail</string>
 </resources>

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'l10n/generated/app_localizations.dart';
+import 'l10n/l10n.dart';
 import 'providers/app_locale_controller.dart';
 import 'services/file_storage_service.dart';
 import 'services/model_download_source_policy.dart';
@@ -35,10 +37,12 @@ Future<void> main() async {
 class _InitializationFailureApp extends StatelessWidget {
   const _InitializationFailureApp();
   @override
-  Widget build(BuildContext context) => const MaterialApp(
-    title: '非空笔记',
+  Widget build(BuildContext context) => MaterialApp(
+    onGenerateTitle: (context) => context.l10n.appTitle,
+    supportedLocales: AppLocalizations.supportedLocales,
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
     debugShowCheckedModeBanner: false,
-    home: _BrandLaunchScreen(error: true),
+    home: const _BrandLaunchScreen(error: true),
   );
 }
 
@@ -70,14 +74,14 @@ class _BrandLaunchScreen extends StatelessWidget {
             ),
           ),
           if (error)
-            const Positioned(
+            Positioned(
               left: 0,
               right: 0,
               bottom: 42,
               child: Center(
                 child: Text(
-                  '本地存储初始化失败',
-                  style: TextStyle(color: AppColors.coral, fontSize: 12),
+                  context.l10n.localStorageInitializationFailed,
+                  style: const TextStyle(color: AppColors.coral, fontSize: 12),
                 ),
               ),
             ),
@@ -96,13 +100,13 @@ class _BrandWordmark extends StatelessWidget {
     children: [
       const BrandMark(size: 68),
       const SizedBox(width: 18),
-      const Column(
+      Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '非空笔记',
-            style: TextStyle(
+            context.l10n.appTitle,
+            style: const TextStyle(
               color: AppColors.ink,
               fontFamily: 'serif',
               fontSize: 31,
@@ -111,10 +115,10 @@ class _BrandWordmark extends StatelessWidget {
               letterSpacing: .4,
             ),
           ),
-          SizedBox(height: 5),
+          const SizedBox(height: 5),
           Text(
-            '本地优先 · 私密可靠',
-            style: TextStyle(
+            context.l10n.appTagline,
+            style: const TextStyle(
               color: AppColors.muted,
               fontSize: 12.5,
               height: 1.2,

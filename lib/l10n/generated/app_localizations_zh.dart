@@ -48,6 +48,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get languageSaveFailed => '语言设置保存失败';
 
   @override
+  String get localStorageInitializationFailed => '本地存储初始化失败';
+
+  @override
   String get home => '主页';
 
   @override
@@ -772,6 +775,81 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get appLockLimitDescription =>
       '应用锁用于阻止他人在已解锁设备上直接查看内容，不会加密数据库、附件或已经导出的备份。';
+
+  @override
+  String get privacyProtection => '隐私保护';
+
+  @override
+  String get systemAuthenticationPrivacyFooter => '系统身份验证 · 本地内容保持私密';
+
+  @override
+  String get waitingForSystemAuthentication => '正在等待系统身份验证';
+
+  @override
+  String get preparingAppLock => '正在准备应用锁';
+
+  @override
+  String get waitingForSystemVerification => '等待系统验证';
+
+  @override
+  String get appLocked => '应用已锁定';
+
+  @override
+  String get loadingLocalSecuritySettings => '正在载入本地安全设置';
+
+  @override
+  String get completeSystemAuthentication => '请在系统弹窗中完成身份验证';
+
+  @override
+  String get unlockAppDescription => '验证设备身份后继续使用非空笔记';
+
+  @override
+  String get authenticateAndUnlock => '验证并解锁';
+
+  @override
+  String get contentHidden => '内容已隐藏';
+
+  @override
+  String get authenticateToContinue => '验证设备身份以继续';
+
+  @override
+  String get authenticateToEnableAppLock => '验证设备身份以开启应用锁';
+
+  @override
+  String get authenticateToDisableAppLock => '验证设备身份以关闭应用锁';
+
+  @override
+  String get useDevicePassword => '使用设备密码';
+
+  @override
+  String get authenticationCanceled => '认证已取消';
+
+  @override
+  String get authenticationFailedRetry => '身份验证失败，请重试';
+
+  @override
+  String get authenticationTemporarilyUnavailable => '暂时无法调用系统身份验证，请稍后重试';
+
+  @override
+  String get authenticationCredentialsRequired => '请先在系统设置中配置锁屏密码、指纹或人脸识别';
+
+  @override
+  String get authenticationUnavailable => '当前设备无法使用系统身份验证';
+
+  @override
+  String get authenticationLockedOut => '尝试次数过多，请使用设备密码或稍后重试';
+
+  @override
+  String get authenticationInProgress => '系统身份验证正在进行';
+
+  @override
+  String get authenticationUiUnavailable => '暂时无法显示系统身份验证界面';
+
+  @override
+  String get appLockSaveFailed => '应用锁设置保存失败，请检查设备存储空间';
+
+  @override
+  String get autoLockSaveFailed => '自动锁定时间保存失败，请检查设备存储空间';
 
   @override
   String get back => '返回';
