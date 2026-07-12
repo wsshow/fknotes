@@ -64,6 +64,10 @@ void main() {
     expect(tester.takeException(), isNull, reason: 'opening role sheet');
     final promptField = find.byKey(const Key('local-chat-system-prompt'));
     expect(promptField, findsOneWidget);
+    expect(
+      tester.widget<TextField>(promptField).textAlignVertical,
+      TextAlignVertical.top,
+    );
     await tester.enterText(promptField, '你是一位测试助手');
     await tester.pump();
     expect(tester.takeException(), isNull, reason: 'editing role prompt');

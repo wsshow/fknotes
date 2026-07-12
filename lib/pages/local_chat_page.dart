@@ -967,6 +967,7 @@ class _SystemPromptSheetState extends State<_SystemPromptSheet> {
                     minLines: null,
                     maxLines: null,
                     expands: true,
+                    textAlignVertical: TextAlignVertical.top,
                     maxLength: 2000,
                     onChanged: (_) => setState(() {}),
                     decoration: const InputDecoration(
