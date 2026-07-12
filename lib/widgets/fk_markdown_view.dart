@@ -80,7 +80,24 @@ class FkMarkdownView extends StatelessWidget {
         listBullet: base,
         tableBody: base?.copyWith(fontSize: 13),
         tableHead: base?.copyWith(fontSize: 13, fontWeight: FontWeight.w700),
-        tableBorder: TableBorder.all(color: AppColors.line),
+        tableHeadAlign: TextAlign.left,
+        tableBorder: TableBorder.all(
+          color: AppColors.line,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        tableColumnWidth: const IntrinsicColumnWidth(),
+        tableCellsPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 9,
+        ),
+        tableHeadCellsPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
+        tableHeadCellsDecoration: const BoxDecoration(
+          color: AppColors.softGreen,
+        ),
+        tableVerticalAlignment: TableCellVerticalAlignment.top,
         horizontalRuleDecoration: const BoxDecoration(
           border: Border(top: BorderSide(color: AppColors.line)),
         ),

@@ -87,6 +87,20 @@ print('ok');
     );
   });
 
+  test('Markdown table data removes model-generated trailing empty rows', () {
+    final table = MarkdownTableData.tryParse(
+      '| 类别 | 核心名称 | 简要描述 |\n'
+      '| :--- | :--- | :--- |\n'
+      '| 历史典故 | 桃园三结义 | 刘关张在桃园结拜。 |\n'
+      '|  |  |  |',
+    )!;
+
+    expect(table.rows, [
+      ['历史典故', '桃园三结义', '刘关张在桃园结拜。'],
+    ]);
+    expect(table.encode(), isNot(endsWith('|  |  |  |')));
+  });
+
   test('images and nested blockquotes survive an AST round trip', () {
     const source = '''![架构图](https://example.com/private.png)
 
@@ -757,7 +771,11 @@ print('ok');
     tester,
   ) async {
     final controller = TextEditingController(
-      text: '| 项目 | 状态 |\n| :--- | ---: |\n| 基础 | 完成 |',
+      text:
+          '| 类别 | 核心名称 | 简要描述 |\n'
+          '| :--- | :---: | ---: |\n'
+          '| 历史典故 | 桃园三结义 | 《三国演义》中的经典桥段，指刘备、关羽、张飞三人在桃园结拜。 |\n'
+          '|  |  |  |',
     );
     await tester.pumpWidget(
       MaterialApp(
@@ -768,20 +786,32 @@ print('ok');
     );
 
     expect(find.text('Markdown 表格'), findsOneWidget);
-    await tester.tap(find.text('编辑表格'));
+    expect(find.text('3 列 · 1 行'), findsOneWidget);
+    expect(find.textContaining('| :---'), findsNothing);
+    expect(find.byType(Table), findsOneWidget);
+
+    await tester.tap(find.byTooltip('编辑表格'));
     await tester.pumpAndSettle();
-    expect(find.text('表头、对齐和单元格会同步保存为标准 GFM 表格。'), findsOneWidget);
+    expect(find.text('3 列 · 1 行 · 左右滑动查看全部列'), findsOneWidget);
+
+    final initialBodyFields = find.widgetWithText(TextField, '内容');
+    expect(initialBodyFields, findsNWidgets(3));
+    final rowTop = tester.getTopLeft(initialBodyFields.first).dy;
+    for (var index = 1; index < 3; index++) {
+      expect(tester.getTopLeft(initialBodyFields.at(index)).dy, rowTop);
+    }
 
     await tester.tap(find.byKey(const Key('markdown-table-add-row')));
     await tester.pump();
     final bodyFields = find.widgetWithText(TextField, '内容');
-    expect(bodyFields, findsNWidgets(4));
+    expect(bodyFields, findsNWidgets(6));
     await tester.enterText(bodyFields.last, '新增');
     await tester.tap(find.byKey(const Key('markdown-table-save')));
     await tester.pumpAndSettle();
 
-    expect(controller.text, contains('|  | 新增 |'));
-    expect(controller.text, contains('| :--- | ---: |'));
+    expect(controller.text, contains('|  |  | 新增 |'));
+    expect(controller.text, contains('| :--- | :---: | ---: |'));
+    expect(controller.text, isNot(endsWith('|  |  |  |')));
   });
 
   testWidgets('standard divider syntax renders as a real divider', (

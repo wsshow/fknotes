@@ -262,8 +262,11 @@ void main() {
         .join('\n');
     expect(visibleText, contains('标题'));
     expect(visibleText, contains('重点'));
-    expect(visibleText, contains('项目'));
-    expect(visibleText, contains('状态'));
+    expect(find.text('项目'), findsOneWidget);
+    expect(find.text('状态'), findsOneWidget);
+    expect(find.text('基础'), findsOneWidget);
+    expect(find.text('完成'), findsOneWidget);
+    expect(find.textContaining('| ---'), findsNothing);
   });
 
   testWidgets('editor exposes the local assistant action', (tester) async {

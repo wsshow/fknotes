@@ -41,6 +41,37 @@ void main() {
     expect(find.byType(Image), findsNothing);
   });
 
+  testWidgets('renders GFM tables as a scrollable grid', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 320,
+            child: FkMarkdownView(
+              data:
+                  '| 类别 | 核心名称 | 简要描述 |\n'
+                  '| :--- | :---: | ---: |\n'
+                  '| 历史典故 | 桃园三结义 | 刘备、关羽、张飞三人在桃园结拜。 |',
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(Table), findsOneWidget);
+    expect(find.text('类别'), findsOneWidget);
+    expect(find.text('桃园三结义'), findsOneWidget);
+    expect(find.textContaining('| :---'), findsNothing);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is SingleChildScrollView &&
+            widget.scrollDirection == Axis.horizontal,
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('external links require an explicit confirmation', (
     tester,
   ) async {

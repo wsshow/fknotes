@@ -12,6 +12,7 @@ import '../services/file_storage_service.dart';
 import '../services/note_assistant_prompt_builder.dart';
 import 'app_popup_menu.dart';
 import 'editor_context_menu.dart';
+import 'fk_markdown_view.dart';
 import 'note_card.dart';
 
 enum NoteBlockType {
@@ -885,6 +886,9 @@ class MarkdownTableData {
           (index) => index < cells.length ? cells[index] : '',
         ),
       );
+    }
+    while (rows.isNotEmpty && rows.last.every((cell) => cell.trim().isEmpty)) {
+      rows.removeLast();
     }
     return MarkdownTableData(
       headers: headers,
@@ -2426,6 +2430,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
   }
 
   Widget _buildTableBlock(_EditableBlock block) {
+    final table = MarkdownTableData.tryParse(block.controller.visibleTextValue);
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6),
       decoration: BoxDecoration(
@@ -2447,53 +2452,80 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
                 ),
                 const SizedBox(width: 8),
                 const Expanded(
-                  child: Text(
-                    'Markdown 表格',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Markdown 表格',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                TextButton.icon(
+                if (table != null)
+                  Text(
+                    '${table.headers.length} 列 · ${table.rows.length} 行',
+                    style: const TextStyle(
+                      color: AppColors.muted,
+                      fontSize: 11,
+                    ),
+                  ),
+                IconButton(
+                  tooltip: '删除表格',
+                  onPressed: () => _removeNonTextBlock(block),
+                  icon: const Icon(Icons.delete_outline_rounded, size: 19),
+                ),
+                IconButton(
+                  tooltip: '编辑表格',
                   onPressed: () => _editMarkdownTable(block),
-                  icon: const Icon(Icons.grid_on_rounded, size: 17),
-                  label: const Text('编辑表格'),
+                  icon: const Icon(Icons.edit_outlined, size: 19),
                 ),
               ],
             ),
           ),
-          Focus(
-            canRequestFocus: false,
-            onKeyEvent: (_, event) => _handleBlockKeyEvent(block, event),
-            child: TextField(
-              controller: block.controller,
-              focusNode: block.focusNode,
-              contextMenuBuilder: _buildBlockContextMenu,
-              inputFormatters: [
-                _BlockInputFormatter(
-                  onNewline: (selection) => _splitBlock(block, selection),
-                  onBackspaceAtStart: () => _backspaceAtStart(block),
-                  allowNewlines: true,
+          if (table == null)
+            Focus(
+              canRequestFocus: false,
+              onKeyEvent: (_, event) => _handleBlockKeyEvent(block, event),
+              child: TextField(
+                controller: block.controller,
+                focusNode: block.focusNode,
+                contextMenuBuilder: _buildBlockContextMenu,
+                inputFormatters: [
+                  _BlockInputFormatter(
+                    onNewline: (selection) => _splitBlock(block, selection),
+                    onBackspaceAtStart: () => _backspaceAtStart(block),
+                    allowNewlines: true,
+                  ),
+                ],
+                maxLines: null,
+                keyboardType: TextInputType.multiline,
+                textInputAction: TextInputAction.newline,
+                cursorColor: AppColors.coral,
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 14,
+                  height: 1.5,
+                  color: AppColors.ink,
                 ),
-              ],
-              maxLines: null,
-              keyboardType: TextInputType.multiline,
-              textInputAction: TextInputAction.newline,
-              cursorColor: AppColors.coral,
-              style: const TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 14,
-                height: 1.5,
-                color: AppColors.ink,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  filled: false,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  contentPadding: EdgeInsets.fromLTRB(12, 6, 12, 12),
+                ),
               ),
-              decoration: const InputDecoration(
-                isDense: true,
-                filled: false,
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                contentPadding: EdgeInsets.fromLTRB(12, 6, 12, 12),
-              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+              child: FkMarkdownView(data: table.encode(), compact: true),
             ),
-          ),
         ],
       ),
     );
@@ -2608,7 +2640,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
                 ),
                 IconButton(
                   tooltip: '移除引用',
-                  onPressed: () => _removeAtomicBlock(index),
+                  onPressed: () => _removeNonTextBlock(block),
                   icon: const Icon(Icons.close_rounded, size: 19),
                   color: AppColors.muted,
                 ),
@@ -2620,11 +2652,16 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     );
   }
 
-  void _removeAtomicBlock(int index) {
+  void _removeNonTextBlock(_EditableBlock block) {
+    final index = _blocks.indexOf(block);
+    if (index < 0) return;
     _beginDiscreteChange();
     HapticFeedback.selectionClick();
     final removed = _blocks.removeAt(index)..dispose();
-    assert(removed.type == NoteBlockType.attachment);
+    assert(
+      removed.type == NoteBlockType.attachment ||
+          removed.type == NoteBlockType.rawMarkdown,
+    );
     _EditableBlock target;
     if (_blocks.isEmpty) {
       target = _makeBlock(const NoteBlockData(NoteBlockType.paragraph, ''));
@@ -2786,21 +2823,24 @@ class _MarkdownTableEditorSheetState extends State<_MarkdownTableEditorSheet> {
             children: [
               Row(
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        const Text(
                           '编辑表格',
                           style: TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                        SizedBox(height: 3),
+                        const SizedBox(height: 3),
                         Text(
-                          '表头、对齐和单元格会同步保存为标准 GFM 表格。',
-                          style: TextStyle(color: AppColors.muted),
+                          '${_cells.first.length} 列 · ${_cells.length - 1} 行 · 左右滑动查看全部列',
+                          style: const TextStyle(
+                            color: AppColors.muted,
+                            fontSize: 12,
+                          ),
                         ),
                       ],
                     ),
@@ -2821,49 +2861,91 @@ class _MarkdownTableEditorSheetState extends State<_MarkdownTableEditorSheet> {
               const SizedBox(height: 14),
               Expanded(
                 child: SingleChildScrollView(
+                  padding: const EdgeInsets.only(bottom: 8),
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(width: 38),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          border: Border.all(color: AppColors.line),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Table(
+                          defaultVerticalAlignment:
+                              TableCellVerticalAlignment.top,
+                          columnWidths: {
+                            0: const FixedColumnWidth(48),
                             for (
                               var column = 0;
                               column < _cells.first.length;
                               column++
                             )
-                              _TableHeaderCell(
-                                controller: _cells.first[column],
-                                alignment: _alignments[column],
-                                canRemove: _cells.first.length > 1,
-                                onAlignmentChanged: (value) =>
-                                    setState(() => _alignments[column] = value),
-                                onRemove: () => _removeColumn(column),
+                              column + 1: const FixedColumnWidth(190),
+                          },
+                          border: const TableBorder(
+                            horizontalInside: BorderSide(color: AppColors.line),
+                            verticalInside: BorderSide(color: AppColors.line),
+                          ),
+                          children: [
+                            TableRow(
+                              decoration: const BoxDecoration(
+                                color: AppColors.softGreen,
+                              ),
+                              children: [
+                                const TableCell(
+                                  verticalAlignment:
+                                      TableCellVerticalAlignment.middle,
+                                  child: Icon(
+                                    Icons.view_column_outlined,
+                                    size: 19,
+                                    color: AppColors.muted,
+                                  ),
+                                ),
+                                for (
+                                  var column = 0;
+                                  column < _cells.first.length;
+                                  column++
+                                )
+                                  _TableHeaderCell(
+                                    controller: _cells.first[column],
+                                    alignment: _alignments[column],
+                                    canRemove: _cells.first.length > 1,
+                                    onAlignmentChanged: (value) => setState(
+                                      () => _alignments[column] = value,
+                                    ),
+                                    onRemove: () => _removeColumn(column),
+                                  ),
+                              ],
+                            ),
+                            for (var row = 1; row < _cells.length; row++)
+                              TableRow(
+                                decoration: BoxDecoration(
+                                  color: row.isEven
+                                      ? AppColors.canvas.withValues(alpha: .55)
+                                      : AppColors.surface,
+                                ),
+                                children: [
+                                  TableCell(
+                                    verticalAlignment:
+                                        TableCellVerticalAlignment.middle,
+                                    child: IconButton(
+                                      tooltip: '删除第 $row 行',
+                                      onPressed: () => _removeRow(row),
+                                      icon: const Icon(
+                                        Icons.remove_circle_outline_rounded,
+                                        size: 19,
+                                      ),
+                                    ),
+                                  ),
+                                  for (final controller in _cells[row])
+                                    _TableBodyCell(controller: controller),
+                                ],
                               ),
                           ],
                         ),
-                        for (var row = 1; row < _cells.length; row++)
-                          Row(
-                            children: [
-                              SizedBox(
-                                width: 38,
-                                child: IconButton(
-                                  tooltip: '删除第 $row 行',
-                                  onPressed: () => _removeRow(row),
-                                  icon: const Icon(
-                                    Icons.remove_circle_outline_rounded,
-                                    size: 19,
-                                  ),
-                                ),
-                              ),
-                              for (final controller in _cells[row])
-                                _TableBodyCell(controller: controller),
-                            ],
-                          ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -2915,13 +2997,8 @@ class _TableHeaderCell extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: 168,
-    padding: const EdgeInsets.all(8),
-    decoration: BoxDecoration(
-      color: AppColors.softGreen,
-      border: Border.all(color: AppColors.line),
-    ),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(8, 7, 8, 8),
     child: Column(
       children: [
         Row(
@@ -2932,6 +3009,14 @@ class _TableHeaderCell extends StatelessWidget {
                 decoration: const InputDecoration(
                   isDense: true,
                   hintText: '表头',
+                  filled: false,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 10,
+                  ),
                 ),
               ),
             ),
@@ -2968,18 +3053,27 @@ class _TableHeaderCell extends StatelessWidget {
             ),
           ],
           child: SizedBox(
-            height: 48,
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(switch (alignment) {
-                    MarkdownTableAlignment.left => '左对齐',
-                    MarkdownTableAlignment.center => '居中',
-                    MarkdownTableAlignment.right => '右对齐',
-                  }),
-                ),
-                const Icon(Icons.arrow_drop_down_rounded),
-              ],
+            height: 40,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      switch (alignment) {
+                        MarkdownTableAlignment.left => '左对齐',
+                        MarkdownTableAlignment.center => '居中',
+                        MarkdownTableAlignment.right => '右对齐',
+                      },
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const Icon(Icons.arrow_drop_down_rounded, size: 19),
+                ],
+              ),
             ),
           ),
         ),
@@ -2994,15 +3088,22 @@ class _TableBodyCell extends StatelessWidget {
   const _TableBodyCell({required this.controller});
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: 168,
-    padding: const EdgeInsets.all(8),
-    decoration: BoxDecoration(border: Border.all(color: AppColors.line)),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.all(4),
     child: TextField(
       controller: controller,
       minLines: 1,
-      maxLines: 3,
-      decoration: const InputDecoration(isDense: true, hintText: '内容'),
+      maxLines: 6,
+      textAlignVertical: TextAlignVertical.top,
+      decoration: const InputDecoration(
+        isDense: true,
+        hintText: '内容',
+        filled: false,
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
+        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+      ),
     ),
   );
 }
