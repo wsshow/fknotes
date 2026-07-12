@@ -71,25 +71,14 @@ void main() {
 
     expect(find.byType(LocalChatPage), findsOneWidget);
     expect(find.text('本地助手'), findsOneWidget);
-    expect(find.byTooltip('角色设定'), findsOneWidget);
-
-    await tester.tap(find.byTooltip('角色设定'));
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull, reason: 'opening role sheet');
-    final promptField = find.byKey(const Key('local-chat-system-prompt'));
-    expect(promptField, findsOneWidget);
+    expect(find.byTooltip('角色管理'), findsOneWidget);
     expect(
-      tester.widget<TextField>(promptField).textAlignVertical,
-      TextAlignVertical.top,
+      find.byKey(const Key('local-chat-persona-switcher')),
+      findsOneWidget,
     );
-    await tester.enterText(promptField, '你是一位测试助手');
-    await tester.pump();
-    expect(tester.takeException(), isNull, reason: 'editing role prompt');
-    await tester.tap(find.text('保存设定'));
-    await tester.pump();
-    expect(tester.takeException(), isNull, reason: 'starting sheet dismissal');
-    await tester.pumpAndSettle();
-    expect(promptField, findsNothing);
+    expect(find.byKey(const Key('local-chat-add-image')), findsOneWidget);
+    expect(find.byKey(const Key('local-chat-voice-input')), findsOneWidget);
+    expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
