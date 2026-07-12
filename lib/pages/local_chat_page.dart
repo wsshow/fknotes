@@ -1107,6 +1107,16 @@ class _ChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = message.role == LocalChatRole.user;
+    if (user && message.attachments.isNotEmpty) {
+      return Semantics(
+        container: true,
+        label: '你的图片消息',
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: _UserMediaMessage(message: message),
+        ),
+      );
+    }
     return Semantics(
       container: true,
       liveRegion: generating,
@@ -1676,46 +1686,153 @@ class _ChatMessageAttachments extends StatelessWidget {
   const _ChatMessageAttachments({required this.attachments});
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 132,
-    child: ListView.separated(
-      scrollDirection: Axis.horizontal,
-      shrinkWrap: true,
-      itemCount: attachments.length,
-      separatorBuilder: (_, _) => const SizedBox(width: 7),
-      itemBuilder: (context, index) {
-        final attachment = attachments[index];
-        return Semantics(
-          button: true,
-          label: '预览图片 ${index + 1}',
-          child: InkWell(
-            key: Key('sent-chat-image-${attachment.id}'),
-            onTap: () => _showChatImagePreview(context, attachments, index),
-            borderRadius: BorderRadius.circular(12),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.file(
-                File(
-                  FileStorageService.instance.absolutePath(attachment.filePath),
-                ),
-                width: 176,
-                height: 132,
-                fit: BoxFit.cover,
-                cacheWidth: 520,
-                errorBuilder: (_, _, _) => const SizedBox(
-                  width: 176,
-                  child: ColoredBox(
-                    color: AppColors.softBlue,
-                    child: Icon(Icons.broken_image_outlined),
-                  ),
-                ),
+  Widget build(BuildContext context) {
+    if (attachments.length == 1) {
+      return _SentChatImage(
+        attachment: attachments.single,
+        index: 0,
+        attachments: attachments,
+        large: true,
+      );
+    }
+    return SizedBox(
+      key: const Key('sent-chat-image-strip'),
+      height: 116,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        shrinkWrap: true,
+        itemCount: attachments.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 7),
+        itemBuilder: (context, index) => _SentChatImage(
+          attachment: attachments[index],
+          index: index,
+          attachments: attachments,
+        ),
+      ),
+    );
+  }
+}
+
+class _UserMediaMessage extends StatelessWidget {
+  final LocalChatMessage message;
+
+  const _UserMediaMessage({required this.message});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    constraints: BoxConstraints(
+      maxWidth: MediaQuery.sizeOf(context).width * .76,
+    ),
+    margin: const EdgeInsets.only(bottom: 14),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        _ChatMessageAttachments(attachments: message.attachments),
+        if (message.content.isNotEmpty) ...[
+          const SizedBox(height: 7),
+          Container(
+            padding: const EdgeInsets.fromLTRB(13, 9, 13, 7),
+            decoration: const BoxDecoration(
+              color: AppColors.moss,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
+                bottomLeft: Radius.circular(16),
+                bottomRight: Radius.circular(5),
               ),
             ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SelectableText(
+                  message.content,
+                  contextMenuBuilder: buildAppEditableTextContextMenu,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    LocalChatTimeLabel.time(message.createdAt),
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: .72),
+                      fontSize: 10,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        );
-      },
+        ] else ...[
+          const SizedBox(height: 4),
+          Text(
+            LocalChatTimeLabel.time(message.createdAt),
+            style: const TextStyle(color: AppColors.muted, fontSize: 10),
+          ),
+        ],
+      ],
     ),
   );
+}
+
+class _SentChatImage extends StatelessWidget {
+  final LocalChatAttachment attachment;
+  final int index;
+  final List<LocalChatAttachment> attachments;
+  final bool large;
+
+  const _SentChatImage({
+    required this.attachment,
+    required this.index,
+    required this.attachments,
+    this.large = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final borderRadius = BorderRadius.circular(15);
+    final image = Image.file(
+      File(FileStorageService.instance.absolutePath(attachment.filePath)),
+      width: large ? MediaQuery.sizeOf(context).width * .76 : 116,
+      height: large ? null : 116,
+      fit: large ? BoxFit.contain : BoxFit.cover,
+      cacheWidth: large ? 960 : 360,
+      errorBuilder: (_, _, _) => SizedBox(
+        width: large ? MediaQuery.sizeOf(context).width * .76 : 116,
+        height: large ? 180 : 116,
+        child: const ColoredBox(
+          color: AppColors.softBlue,
+          child: Icon(Icons.broken_image_outlined),
+        ),
+      ),
+    );
+    return Semantics(
+      button: true,
+      label: '预览图片 ${index + 1}',
+      child: Material(
+        color: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: borderRadius,
+          side: const BorderSide(color: AppColors.line),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          key: Key('sent-chat-image-${attachment.id}'),
+          onTap: () => _showChatImagePreview(context, attachments, index),
+          child: large
+              ? ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 340),
+                  child: image,
+                )
+              : image,
+        ),
+      ),
+    );
+  }
 }
 
 Future<void> _showChatImagePreview(
