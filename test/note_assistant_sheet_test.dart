@@ -30,7 +30,7 @@ void main() {
   });
 
   testWidgets('note assistant accepts a free-form instruction', (tester) async {
-    NoteAssistantAction? selected;
+    NoteAssistantInvocation? selected;
     await tester.pumpWidget(
       MaterialApp(
         home: Builder(
@@ -63,8 +63,51 @@ void main() {
     await tester.tap(find.byKey(const Key('note-assistant-submit-custom')));
     await tester.pumpAndSettle();
 
-    expect(selected?.isCustom, isTrue);
-    expect(selected?.instruction, '请把这些想法写成一首短诗');
-    expect(selected?.resultHeading, 'AI 生成内容');
+    expect(selected?.action.isCustom, isTrue);
+    expect(selected?.action.instruction, '请把这些想法写成一首短诗');
+    expect(selected?.action.resultHeading, 'AI 生成内容');
+    expect(selected?.scope, NoteAssistantScope.fullNote);
+  });
+
+  testWidgets('note assistant lets the user choose an available scope', (
+    tester,
+  ) async {
+    NoteAssistantInvocation? selected;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: FilledButton(
+              onPressed: () async {
+                selected = await showNoteAssistantTaskSheet(
+                  context,
+                  availableScopes: const {
+                    NoteAssistantScope.selection,
+                    NoteAssistantScope.currentBlock,
+                    NoteAssistantScope.fullNote,
+                  },
+                  initialScope: NoteAssistantScope.selection,
+                );
+              },
+              child: const Text('打开范围选择'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('打开范围选择'));
+    await tester.pumpAndSettle();
+    expect(find.text('选中文字'), findsOneWidget);
+    expect(find.text('当前段落'), findsOneWidget);
+    expect(find.text('整篇笔记'), findsOneWidget);
+
+    await tester.tap(find.text('当前段落'));
+    await tester.pump();
+    await tester.tap(find.text('总结笔记'));
+    await tester.pumpAndSettle();
+
+    expect(selected?.scope, NoteAssistantScope.currentBlock);
+    expect(selected?.action.task, NoteAssistantTask.summarize);
   });
 }

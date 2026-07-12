@@ -16,6 +16,7 @@ import '../services/language_model_service.dart';
 import '../services/local_model_manager.dart';
 import '../services/kokoro_tts_model_service.dart';
 import '../services/note_read_aloud_service.dart';
+import '../services/note_assistant_prompt_builder.dart';
 import '../services/realtime_dictation_service.dart';
 import '../services/streaming_speech_model_service.dart';
 import '../services/video_import_service.dart';
@@ -508,8 +509,28 @@ class _NoteEditorPageState extends State<NoteEditorPage>
 
   Future<void> _openLocalAssistant() async {
     try {
-      final action = await showNoteAssistantTaskSheet(context);
-      if (action == null || !mounted) return;
+      _richContent =
+          _blockEditorKey.currentState?.flushPendingChanges() ?? _richContent;
+      final editor = _blockEditorKey.currentState;
+      final anchor = editor?.captureAssistantContext();
+      final scopes = <NoteAssistantScope>{NoteAssistantScope.fullNote};
+      if (anchor != null) {
+        scopes.add(NoteAssistantScope.currentBlock);
+      }
+      if (anchor?.hasSelection == true) {
+        scopes.add(NoteAssistantScope.selection);
+      }
+      final initialScope = anchor?.hasSelection == true
+          ? NoteAssistantScope.selection
+          : anchor?.currentBlockContent.trim().isNotEmpty == true
+          ? NoteAssistantScope.currentBlock
+          : NoteAssistantScope.fullNote;
+      final invocation = await showNoteAssistantTaskSheet(
+        context,
+        availableScopes: scopes,
+        initialScope: initialScope,
+      );
+      if (invocation == null || !mounted || anchor == null) return;
 
       final models = LanguageModelService.instance;
       final selectedId = await models.selectedModelId();
@@ -554,26 +575,51 @@ class _NoteEditorPageState extends State<NoteEditorPage>
         }
       }
 
-      final generated = await showModalBottomSheet<String>(
+      final sourceContent = switch (invocation.scope) {
+        NoteAssistantScope.selection => anchor.selectedText,
+        NoteAssistantScope.currentBlock => anchor.currentBlockContent,
+        NoteAssistantScope.fullNote => _content.text,
+      };
+      final placements = invocation.scope == NoteAssistantScope.fullNote
+          ? const {
+              NoteAssistantPlacement.replace,
+              NoteAssistantPlacement.append,
+            }
+          : NoteAssistantPlacement.values.toSet();
+      final generated = await showModalBottomSheet<NoteAssistantResult>(
         context: context,
         isScrollControlled: true,
         builder: (context) => NoteAssistantResultSheet(
-          action: action,
+          action: invocation.action,
+          scope: invocation.scope,
           title: _title.text,
-          content: _content.text,
+          content: sourceContent,
+          placements: placements,
         ),
       );
       if (generated == null || !mounted) return;
       final inserted =
-          _blockEditorKey.currentState?.appendAssistantText(
-            heading: action.resultHeading,
-            text: generated,
+          _blockEditorKey.currentState?.applyAssistantResult(
+            anchor: anchor,
+            scope: invocation.scope,
+            placement: generated.placement,
+            heading: invocation.action.resultHeading,
+            text: generated.text,
           ) ??
           false;
       if (inserted) {
+        final message = switch (generated.placement) {
+          NoteAssistantPlacement.replace => '已替换原内容',
+          NoteAssistantPlacement.insertBelow => '已插入到当前段落下方',
+          NoteAssistantPlacement.append => '已追加到笔记末尾',
+        };
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('生成内容已插入笔记末尾')));
+        ).showSnackBar(SnackBar(content: Text(message)));
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('笔记内容已经变化，请重新发起 AI 操作')));
       }
     } catch (error) {
       if (!mounted) return;

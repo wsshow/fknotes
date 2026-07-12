@@ -9,6 +9,7 @@ import 'package:markdown/markdown.dart' as md;
 import '../app.dart';
 import '../models/note_entry.dart';
 import '../services/file_storage_service.dart';
+import '../services/note_assistant_prompt_builder.dart';
 import 'editor_context_menu.dart';
 import 'note_card.dart';
 
@@ -229,6 +230,26 @@ class NoteHistoryState {
 
   @override
   int get hashCode => Object.hash(canUndo, canRedo);
+}
+
+class NoteAssistantEditorContext {
+  final int blockIndex;
+  final TextSelection selection;
+  final String selectedText;
+  final String currentBlockContent;
+  final String expectedBlockText;
+  final String expectedDocument;
+
+  const NoteAssistantEditorContext({
+    required this.blockIndex,
+    required this.selection,
+    required this.selectedText,
+    required this.currentBlockContent,
+    required this.expectedBlockText,
+    required this.expectedDocument,
+  });
+
+  bool get hasSelection => selectedText.trim().isNotEmpty;
 }
 
 class _EditorSnapshot {
@@ -1249,13 +1270,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
   bool appendAssistantText({required String heading, required String text}) {
     if (text.trim().isEmpty) return false;
     _beginDiscreteChange();
-    final generated = NoteBlockCodec.decode(text.trim()).map((block) {
-      if (block.type != NoteBlockType.attachment) return block;
-      return NoteBlockData(
-        NoteBlockType.paragraph,
-        '附件引用：${block.attachmentPath ?? ''}',
-      );
-    });
+    final generated = _safeAssistantBlocks(text);
     _blocks.add(
       _makeBlock(
         NoteBlockData(NoteBlockType.heading, heading, headingLevel: 2),
@@ -1278,6 +1293,144 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     }
     return true;
   }
+
+  NoteAssistantEditorContext? captureAssistantContext() {
+    var block = _activeEditableBlock;
+    if (block == null) {
+      final index = _blocks.lastIndexWhere(
+        (item) =>
+            item.type != NoteBlockType.divider &&
+            item.type != NoteBlockType.attachment,
+      );
+      if (index < 0) {
+        return NoteAssistantEditorContext(
+          blockIndex: -1,
+          selection: const TextSelection.collapsed(offset: 0),
+          selectedText: '',
+          currentBlockContent: '',
+          expectedBlockText: '',
+          expectedDocument: NoteRichDocumentCodec.encode(_document),
+        );
+      }
+      block = _blocks[index];
+    }
+    final blockIndex = _blocks.indexOf(block);
+    final text = block.controller.visibleTextValue;
+    final rawSelection = block.controller.visibleSelectionValue;
+    final selection = rawSelection.isValid
+        ? TextSelection(
+            baseOffset: rawSelection.baseOffset.clamp(0, text.length),
+            extentOffset: rawSelection.extentOffset.clamp(0, text.length),
+          )
+        : TextSelection.collapsed(offset: text.length);
+    final start = selection.start.clamp(0, text.length);
+    final end = selection.end.clamp(start, text.length);
+    return NoteAssistantEditorContext(
+      blockIndex: blockIndex,
+      selection: selection,
+      selectedText: text.substring(start, end),
+      currentBlockContent: NoteBlockCodec.encode([_document[blockIndex]]),
+      expectedBlockText: text,
+      expectedDocument: NoteRichDocumentCodec.encode(_document),
+    );
+  }
+
+  bool applyAssistantResult({
+    required NoteAssistantEditorContext anchor,
+    required NoteAssistantScope scope,
+    required NoteAssistantPlacement placement,
+    required String text,
+    required String heading,
+  }) {
+    if (text.trim().isEmpty ||
+        NoteRichDocumentCodec.encode(_document) != anchor.expectedDocument) {
+      return false;
+    }
+    if (placement == NoteAssistantPlacement.append) {
+      return appendAssistantText(heading: heading, text: text);
+    }
+    if (scope == NoteAssistantScope.fullNote) {
+      if (placement != NoteAssistantPlacement.replace) return false;
+      final generated = _safeAssistantBlocks(text);
+      if (generated.isEmpty) return false;
+      _beginDiscreteChange();
+      _syncing = true;
+      for (final block in _blocks) {
+        block.dispose();
+      }
+      _blocks
+        ..clear()
+        ..addAll(generated.map(_makeBlock));
+      _syncing = false;
+      _activeIndex = _blocks.length - 1;
+      activeType.value = _blocks[_activeIndex].type;
+      _syncDocument();
+      _endDiscreteChange();
+      setState(() {});
+      _focusAssistantResult();
+      return true;
+    }
+    if (anchor.blockIndex < 0 || anchor.blockIndex >= _blocks.length) {
+      return false;
+    }
+    final block = _blocks[anchor.blockIndex];
+    if (block.controller.visibleTextValue != anchor.expectedBlockText) {
+      return false;
+    }
+    if (placement == NoteAssistantPlacement.replace) {
+      _activeIndex = anchor.blockIndex;
+      block.controller.visibleSelectionValue =
+          scope == NoteAssistantScope.selection
+          ? anchor.selection
+          : TextSelection(
+              baseOffset: 0,
+              extentOffset: block.controller.visibleTextValue.length,
+            );
+      return _pasteMarkdown(block, text.trim());
+    }
+    if (placement != NoteAssistantPlacement.insertBelow) return false;
+    final generated = _safeAssistantBlocks(text);
+    if (generated.isEmpty) return false;
+    _beginDiscreteChange();
+    _syncing = true;
+    final inserted = generated.map(_makeBlock).toList();
+    _blocks.insertAll(anchor.blockIndex + 1, inserted);
+    _syncing = false;
+    _activeIndex = anchor.blockIndex + inserted.length;
+    activeType.value = _blocks[_activeIndex].type;
+    _syncDocument();
+    _endDiscreteChange();
+    setState(() {});
+    _focusAssistantResult();
+    return true;
+  }
+
+  void _focusAssistantResult() {
+    final index = _blocks.lastIndexWhere(
+      (item) =>
+          item.type != NoteBlockType.divider &&
+          item.type != NoteBlockType.attachment,
+      _activeIndex,
+    );
+    if (index < 0) {
+      _refreshActiveFormat();
+      return;
+    }
+    _activeIndex = index;
+    activeType.value = _blocks[index].type;
+    _refocus(_blocks[index]);
+  }
+
+  List<NoteBlockData> _safeAssistantBlocks(String text) =>
+      NoteBlockCodec.decode(text.trim())
+          .map((block) {
+            if (block.type != NoteBlockType.attachment) return block;
+            return NoteBlockData(
+              NoteBlockType.paragraph,
+              '附件引用：${block.attachmentPath ?? ''}',
+            );
+          })
+          .toList(growable: false);
 
   Future<void> _pasteFromClipboard(_EditableBlock block) async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);

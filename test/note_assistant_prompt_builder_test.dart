@@ -27,6 +27,18 @@ void main() {
     expect(request.messages.last.content, contains('每行使用“☐ ”开头'));
   });
 
+  test('prompt describes the selected editor scope precisely', () {
+    final request = NoteAssistantPromptBuilder.build(
+      action: const NoteAssistantAction.preset(NoteAssistantTask.polish),
+      title: '上下文标题',
+      content: '只处理这一小段',
+      scope: NoteAssistantScope.selection,
+    );
+
+    expect(request.messages.last.content, contains('润色选中的文字'));
+    expect(request.messages.last.content, contains('只处理这一小段'));
+  });
+
   test('long notes keep both ends within the mobile context budget', () {
     final content = '开' * 4000 + '中' * 4000 + '尾' * 4000;
     final request = NoteAssistantPromptBuilder.build(

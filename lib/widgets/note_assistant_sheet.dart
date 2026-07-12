@@ -19,15 +19,32 @@ bool canInsertNoteAssistantOutput({
         finishReason == LocalLlmFinishReason.maxTokens ||
         finishReason == LocalLlmFinishReason.canceled);
 
-Future<NoteAssistantAction?> showNoteAssistantTaskSheet(BuildContext context) =>
-    showModalBottomSheet<NoteAssistantAction>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => const _NoteAssistantTaskSheet(),
-    );
+Future<NoteAssistantInvocation?> showNoteAssistantTaskSheet(
+  BuildContext context, {
+  Set<NoteAssistantScope> availableScopes = const {NoteAssistantScope.fullNote},
+  NoteAssistantScope initialScope = NoteAssistantScope.fullNote,
+}) {
+  assert(availableScopes.isNotEmpty);
+  return showModalBottomSheet<NoteAssistantInvocation>(
+    context: context,
+    isScrollControlled: true,
+    builder: (context) => _NoteAssistantTaskSheet(
+      availableScopes: Set.unmodifiable(availableScopes),
+      initialScope: availableScopes.contains(initialScope)
+          ? initialScope
+          : availableScopes.first,
+    ),
+  );
+}
 
 class _NoteAssistantTaskSheet extends StatefulWidget {
-  const _NoteAssistantTaskSheet();
+  final Set<NoteAssistantScope> availableScopes;
+  final NoteAssistantScope initialScope;
+
+  const _NoteAssistantTaskSheet({
+    required this.availableScopes,
+    required this.initialScope,
+  });
 
   @override
   State<_NoteAssistantTaskSheet> createState() =>
@@ -36,6 +53,13 @@ class _NoteAssistantTaskSheet extends StatefulWidget {
 
 class _NoteAssistantTaskSheetState extends State<_NoteAssistantTaskSheet> {
   final _controller = TextEditingController();
+  late NoteAssistantScope _scope;
+
+  @override
+  void initState() {
+    super.initState();
+    _scope = widget.initialScope;
+  }
 
   @override
   void dispose() {
@@ -47,7 +71,13 @@ class _NoteAssistantTaskSheetState extends State<_NoteAssistantTaskSheet> {
     final instruction = _controller.text.trim();
     if (instruction.isEmpty) return;
     FocusManager.instance.primaryFocus?.unfocus();
-    Navigator.pop(context, NoteAssistantAction.custom(instruction));
+    Navigator.pop(
+      context,
+      NoteAssistantInvocation(
+        action: NoteAssistantAction.custom(instruction),
+        scope: _scope,
+      ),
+    );
   }
 
   @override
@@ -75,6 +105,26 @@ class _NoteAssistantTaskSheetState extends State<_NoteAssistantTaskSheet> {
               const Text(
                 '直接告诉 AI 你想做什么。笔记内容只在设备上处理。',
                 style: TextStyle(color: AppColors.muted),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                '处理范围',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final scope in NoteAssistantScope.values)
+                    if (widget.availableScopes.contains(scope))
+                      ChoiceChip(
+                        key: Key('note-assistant-scope-${scope.name}'),
+                        label: Text(scope.label),
+                        selected: _scope == scope,
+                        onSelected: (_) => setState(() => _scope = scope),
+                      ),
+                ],
               ),
               const SizedBox(height: 14),
               TextField(
@@ -121,16 +171,19 @@ class _NoteAssistantTaskSheetState extends State<_NoteAssistantTaskSheet> {
               ),
               _TaskTile(
                 task: NoteAssistantTask.summarize,
+                scope: _scope,
                 icon: Icons.summarize_outlined,
                 subtitle: '提炼核心结论与关键要点',
               ),
               _TaskTile(
                 task: NoteAssistantTask.extractTodos,
+                scope: _scope,
                 icon: Icons.checklist_rounded,
                 subtitle: '找出明确、可执行的事项',
               ),
               _TaskTile(
                 task: NoteAssistantTask.polish,
+                scope: _scope,
                 icon: Icons.auto_fix_high_rounded,
                 subtitle: '保留事实与结构，改善表达',
               ),
@@ -144,11 +197,13 @@ class _NoteAssistantTaskSheetState extends State<_NoteAssistantTaskSheet> {
 
 class _TaskTile extends StatelessWidget {
   final NoteAssistantTask task;
+  final NoteAssistantScope scope;
   final IconData icon;
   final String subtitle;
 
   const _TaskTile({
     required this.task,
+    required this.scope,
     required this.icon,
     required this.subtitle,
   });
@@ -171,21 +226,31 @@ class _TaskTile extends StatelessWidget {
     ),
     subtitle: Text(subtitle),
     trailing: const Icon(Icons.chevron_right_rounded),
-    onTap: () => Navigator.pop(context, NoteAssistantAction.preset(task)),
+    onTap: () => Navigator.pop(
+      context,
+      NoteAssistantInvocation(
+        action: NoteAssistantAction.preset(task),
+        scope: scope,
+      ),
+    ),
   );
 }
 
 class NoteAssistantResultSheet extends StatefulWidget {
   final NoteAssistantAction action;
+  final NoteAssistantScope scope;
   final String title;
   final String content;
+  final Set<NoteAssistantPlacement> placements;
 
   const NoteAssistantResultSheet({
     super.key,
     required this.action,
+    required this.scope,
     required this.title,
     required this.content,
-  });
+    required this.placements,
+  }) : assert(placements.length > 0);
 
   @override
   State<NoteAssistantResultSheet> createState() =>
@@ -220,6 +285,7 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
         action: widget.action,
         title: widget.title,
         content: widget.content,
+        scope: widget.scope,
       );
       await for (final event in _assistant.generate(request)) {
         if (!mounted) return;
@@ -370,19 +436,50 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
                       icon: const Icon(Icons.refresh_rounded),
                     ),
                   const Spacer(),
-                  FilledButton.icon(
-                    onPressed:
-                        canInsertNoteAssistantOutput(
-                          output: _visibleOutput,
-                          finishReason: _finishReason,
-                        )
-                        ? () => Navigator.pop(context, _visibleOutput.trim())
-                        : null,
-                    icon: const Icon(Icons.add_rounded),
-                    label: Text(
-                      _finishReason == LocalLlmFinishReason.canceled
-                          ? '插入当前内容'
-                          : '插入笔记末尾',
+                  PopupMenuButton<NoteAssistantPlacement>(
+                    key: const Key('note-assistant-use-result'),
+                    enabled: canInsertNoteAssistantOutput(
+                      output: _visibleOutput,
+                      finishReason: _finishReason,
+                    ),
+                    tooltip: '选择如何使用生成内容',
+                    onSelected: (placement) => Navigator.pop(
+                      context,
+                      NoteAssistantResult(
+                        text: _visibleOutput.trim(),
+                        placement: placement,
+                      ),
+                    ),
+                    itemBuilder: (_) => [
+                      for (final placement in NoteAssistantPlacement.values)
+                        if (widget.placements.contains(placement))
+                          PopupMenuItem(
+                            value: placement,
+                            child: Row(
+                              children: [
+                                Icon(_placementIcon(placement), size: 20),
+                                const SizedBox(width: 10),
+                                Text(placement.label),
+                              ],
+                            ),
+                          ),
+                    ],
+                    child: IgnorePointer(
+                      child: FilledButton.icon(
+                        onPressed:
+                            canInsertNoteAssistantOutput(
+                              output: _visibleOutput,
+                              finishReason: _finishReason,
+                            )
+                            ? () {}
+                            : null,
+                        icon: const Icon(Icons.check_rounded),
+                        label: Text(
+                          _finishReason == LocalLlmFinishReason.canceled
+                              ? '使用当前内容'
+                              : '使用生成内容',
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -430,6 +527,13 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
       null => '本地生成未完成',
     };
   }
+
+  IconData _placementIcon(NoteAssistantPlacement placement) =>
+      switch (placement) {
+        NoteAssistantPlacement.replace => Icons.find_replace_rounded,
+        NoteAssistantPlacement.insertBelow => Icons.vertical_align_bottom,
+        NoteAssistantPlacement.append => Icons.playlist_add_rounded,
+      };
 }
 
 class _ErrorContent extends StatelessWidget {

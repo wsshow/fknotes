@@ -2,6 +2,26 @@ import '../models/local_llm.dart';
 
 enum NoteAssistantTask { summarize, extractTodos, polish }
 
+enum NoteAssistantScope { selection, currentBlock, fullNote }
+
+extension NoteAssistantScopeInfo on NoteAssistantScope {
+  String get label => switch (this) {
+    NoteAssistantScope.selection => '选中文字',
+    NoteAssistantScope.currentBlock => '当前段落',
+    NoteAssistantScope.fullNote => '整篇笔记',
+  };
+}
+
+enum NoteAssistantPlacement { replace, insertBelow, append }
+
+extension NoteAssistantPlacementInfo on NoteAssistantPlacement {
+  String get label => switch (this) {
+    NoteAssistantPlacement.replace => '替换原内容',
+    NoteAssistantPlacement.insertBelow => '插入到段落下方',
+    NoteAssistantPlacement.append => '追加到笔记末尾',
+  };
+}
+
 extension NoteAssistantTaskInfo on NoteAssistantTask {
   String get label => switch (this) {
     NoteAssistantTask.summarize => '总结笔记',
@@ -34,6 +54,20 @@ class NoteAssistantAction {
   String get resultHeading => task?.resultHeading ?? 'AI 生成内容';
 }
 
+class NoteAssistantInvocation {
+  final NoteAssistantAction action;
+  final NoteAssistantScope scope;
+
+  const NoteAssistantInvocation({required this.action, required this.scope});
+}
+
+class NoteAssistantResult {
+  final String text;
+  final NoteAssistantPlacement placement;
+
+  const NoteAssistantResult({required this.text, required this.placement});
+}
+
 class NoteAssistantPromptBuilder {
   // Conservative for Chinese text: leaves room for instructions and up to 768
   // generated tokens inside the mobile runtime's default 4096-token context.
@@ -43,16 +77,22 @@ class NoteAssistantPromptBuilder {
     required NoteAssistantAction action,
     required String title,
     required String content,
+    NoteAssistantScope scope = NoteAssistantScope.fullNote,
   }) {
+    final target = switch (scope) {
+      NoteAssistantScope.selection => '选中的文字',
+      NoteAssistantScope.currentBlock => '当前段落',
+      NoteAssistantScope.fullNote => '这篇笔记',
+    };
     final rawInstruction = switch (action.task) {
       NoteAssistantTask.summarize =>
-        '请用简洁的中文总结这篇笔记。先给出一句核心结论，再列出不超过 5 个要点。'
+        '请用简洁的中文总结$target。先给出一句核心结论，再列出不超过 5 个要点。'
             '不要添加原文没有的信息，不要输出思考过程。',
       NoteAssistantTask.extractTodos =>
-        '请从笔记中提取明确可执行的待办事项。每行使用“☐ ”开头。'
+        '请从$target中提取明确可执行的待办事项。每行使用“☐ ”开头。'
             '不要臆造任务；如果没有待办，只回答“没有发现明确待办”。不要输出思考过程。',
       NoteAssistantTask.polish =>
-        '请在不改变事实、数字、专有名词和中英文含义的前提下润色这篇笔记。'
+        '请在不改变事实、数字、专有名词和中英文含义的前提下润色$target。'
             '保留原有段落结构，直接输出润色稿，不要解释修改过程。',
       null => action.instruction!,
     };

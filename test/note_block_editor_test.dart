@@ -1,4 +1,5 @@
 import 'package:fknotes/app.dart';
+import 'package:fknotes/services/note_assistant_prompt_builder.dart';
 import 'package:fknotes/widgets/note_block_editor.dart';
 import 'package:fknotes/models/note_entry.dart';
 import 'package:flutter/material.dart';
@@ -515,6 +516,133 @@ print('ok');
     editorKey.currentState!.undo();
     await tester.pump();
     expect(controller.text, '原始内容');
+  });
+
+  testWidgets('assistant replaces the selected text as one undoable edit', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '保留这段旧内容');
+    final editorKey = GlobalKey<NoteBlockEditorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            key: editorKey,
+            controller: controller,
+            hintText: '开始记录',
+          ),
+        ),
+      ),
+    );
+    final field = find.byType(TextField).first;
+    await tester.tap(field);
+    final fieldController = tester.widget<TextField>(field).controller!;
+    fieldController.selection = const TextSelection(
+      baseOffset: 5,
+      extentOffset: 8,
+    );
+    final anchor = editorKey.currentState!.captureAssistantContext()!;
+
+    expect(anchor.selectedText, '旧内容');
+    expect(
+      editorKey.currentState!.applyAssistantResult(
+        anchor: anchor,
+        scope: NoteAssistantScope.selection,
+        placement: NoteAssistantPlacement.replace,
+        text: '**新内容**',
+        heading: 'AI 生成内容',
+      ),
+      isTrue,
+    );
+    await tester.pump();
+
+    expect(controller.text, '保留这段**新内容**');
+    editorKey.currentState!.undo();
+    await tester.pump();
+    expect(controller.text, '保留这段旧内容');
+  });
+
+  testWidgets('assistant can insert below a block or replace the full note', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '第一段\n\n第二段');
+    final editorKey = GlobalKey<NoteBlockEditorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            key: editorKey,
+            controller: controller,
+            hintText: '开始记录',
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byType(TextField).first);
+    final blockAnchor = editorKey.currentState!.captureAssistantContext()!;
+    expect(blockAnchor.currentBlockContent, '第一段');
+
+    expect(
+      editorKey.currentState!.applyAssistantResult(
+        anchor: blockAnchor,
+        scope: NoteAssistantScope.currentBlock,
+        placement: NoteAssistantPlacement.insertBelow,
+        text: '- [ ] AI 待办',
+        heading: 'AI 生成内容',
+      ),
+      isTrue,
+    );
+    await tester.pump();
+    expect(controller.text, '第一段\n\n- [ ] AI 待办\n\n第二段');
+
+    final fullAnchor = editorKey.currentState!.captureAssistantContext()!;
+    expect(
+      editorKey.currentState!.applyAssistantResult(
+        anchor: fullAnchor,
+        scope: NoteAssistantScope.fullNote,
+        placement: NoteAssistantPlacement.replace,
+        text: '# 新文档\n\n替换完成',
+        heading: 'AI 生成内容',
+      ),
+      isTrue,
+    );
+    await tester.pump();
+    expect(controller.text, '# 新文档\n\n替换完成');
+  });
+
+  testWidgets('assistant refuses to overwrite an anchor that has changed', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '原文');
+    final editorKey = GlobalKey<NoteBlockEditorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            key: editorKey,
+            controller: controller,
+            hintText: '开始记录',
+          ),
+        ),
+      ),
+    );
+    final field = find.byType(TextField).first;
+    await tester.tap(field);
+    final anchor = editorKey.currentState!.captureAssistantContext()!;
+    await tester.enterText(field, '用户的新编辑');
+    await tester.pump();
+
+    expect(
+      editorKey.currentState!.applyAssistantResult(
+        anchor: anchor,
+        scope: NoteAssistantScope.currentBlock,
+        placement: NoteAssistantPlacement.replace,
+        text: 'AI 覆盖',
+        heading: 'AI 生成内容',
+      ),
+      isFalse,
+    );
+    expect(controller.text, '用户的新编辑');
   });
 
   testWidgets(
