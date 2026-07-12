@@ -2,28 +2,64 @@ import 'package:flutter/material.dart';
 
 import '../app.dart';
 
-/// The editor keeps this zero-width boundary inside block fields so mobile
-/// keyboards can report backspace at the start of an otherwise empty block.
-/// It must never become part of a user's copied or cut text.
+/// The block editor keeps this zero-width boundary inside block fields so
+/// mobile keyboards can report backspace at the start of an otherwise empty
+/// block. It must never become part of a user's copied or cut text.
 const editorBlockBoundary = '\u200B';
 
-Widget buildEditorContextMenu(
+const _supportedAppContextMenuActions = {
+  ContextMenuButtonType.cut,
+  ContextMenuButtonType.copy,
+  ContextMenuButtonType.paste,
+  ContextMenuButtonType.selectAll,
+  ContextMenuButtonType.share,
+};
+
+/// FKNotes' app-wide context menu for editable and selectable text.
+///
+/// Filtering the framework-provided actions also prevents Android services
+/// and third-party apps from injecting unrelated menu entries.
+Widget buildAppEditableTextContextMenu(
   BuildContext context,
   EditableTextState editableTextState, {
   Future<void> Function()? onPaste,
 }) {
-  const supported = {
-    ContextMenuButtonType.cut,
-    ContextMenuButtonType.copy,
-    ContextMenuButtonType.paste,
-    ContextMenuButtonType.selectAll,
-  };
   final items = editableTextState.contextMenuButtonItems
-      .where((item) => supported.contains(item.type))
+      .where((item) => _supportedAppContextMenuActions.contains(item.type))
       .toList(growable: false);
-  if (items.isEmpty) return const SizedBox.shrink();
+  return _buildAppTextSelectionToolbar(
+    anchors: editableTextState.contextMenuAnchors,
+    items: items,
+    beforeAction: (type) {
+      _excludeBlockBoundary(editableTextState);
+      if (type != ContextMenuButtonType.paste || onPaste == null) return false;
+      ContextMenuController.removeAny();
+      onPaste();
+      return true;
+    },
+  );
+}
 
-  final anchors = editableTextState.contextMenuAnchors;
+/// FKNotes' app-wide context menu for a multi-widget [SelectionArea].
+Widget buildAppSelectableRegionContextMenu(
+  BuildContext context,
+  SelectableRegionState selectableRegionState,
+) {
+  final items = selectableRegionState.contextMenuButtonItems
+      .where((item) => _supportedAppContextMenuActions.contains(item.type))
+      .toList(growable: false);
+  return _buildAppTextSelectionToolbar(
+    anchors: selectableRegionState.contextMenuAnchors,
+    items: items,
+  );
+}
+
+Widget _buildAppTextSelectionToolbar({
+  required TextSelectionToolbarAnchors anchors,
+  required List<ContextMenuButtonItem> items,
+  bool Function(ContextMenuButtonType type)? beforeAction,
+}) {
+  if (items.isEmpty) return const SizedBox.shrink();
   return TextSelectionToolbar(
     anchorAbove: anchors.primaryAnchor,
     anchorBelow: anchors.secondaryAnchor ?? anchors.primaryAnchor,
@@ -31,6 +67,7 @@ Widget buildEditorContextMenu(
       color: AppColors.surface,
       elevation: 5,
       shadowColor: AppColors.ink.withValues(alpha: .12),
+      surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: const BorderSide(color: AppColors.line),
@@ -40,19 +77,13 @@ Widget buildEditorContextMenu(
     ),
     children: [
       for (final item in items)
-        _EditorContextMenuButton(
+        _AppContextMenuButton(
           type: item.type,
           onPressed: item.onPressed == null
               ? null
               : () {
-                  _excludeBlockBoundary(editableTextState);
-                  if (item.type == ContextMenuButtonType.paste &&
-                      onPaste != null) {
-                    ContextMenuController.removeAny();
-                    onPaste();
-                    return;
-                  }
-                  item.onPressed!.call();
+                  final handled = beforeAction?.call(item.type) ?? false;
+                  if (!handled) item.onPressed!.call();
                 },
         ),
     ],
@@ -79,11 +110,11 @@ void _excludeBlockBoundary(EditableTextState editableTextState) {
   );
 }
 
-class _EditorContextMenuButton extends StatelessWidget {
+class _AppContextMenuButton extends StatelessWidget {
   final ContextMenuButtonType type;
   final VoidCallback? onPressed;
 
-  const _EditorContextMenuButton({required this.type, this.onPressed});
+  const _AppContextMenuButton({required this.type, this.onPressed});
 
   @override
   Widget build(BuildContext context) => TextButton.icon(
@@ -105,6 +136,7 @@ class _EditorContextMenuButton extends StatelessWidget {
     ContextMenuButtonType.copy => '复制',
     ContextMenuButtonType.paste => '粘贴',
     ContextMenuButtonType.selectAll => '全选',
+    ContextMenuButtonType.share => '分享',
     _ => '',
   };
 
@@ -113,6 +145,7 @@ class _EditorContextMenuButton extends StatelessWidget {
     ContextMenuButtonType.copy => Icons.content_copy_rounded,
     ContextMenuButtonType.paste => Icons.content_paste_rounded,
     ContextMenuButtonType.selectAll => Icons.select_all_rounded,
+    ContextMenuButtonType.share => Icons.ios_share_rounded,
     _ => Icons.more_horiz_rounded,
   };
 }

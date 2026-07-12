@@ -9,6 +9,7 @@ import '../services/local_assistant_service.dart';
 import '../services/local_llm/local_llm_output_filter.dart';
 import '../services/note_assistant_prompt_builder.dart';
 import 'app_popup_menu.dart';
+import 'editor_context_menu.dart';
 import 'fk_markdown_view.dart';
 
 bool canInsertNoteAssistantOutput({
@@ -131,6 +132,7 @@ class _NoteAssistantTaskSheetState extends State<_NoteAssistantTaskSheet> {
               TextField(
                 key: const Key('note-assistant-custom-instruction'),
                 controller: _controller,
+                contextMenuBuilder: buildAppEditableTextContextMenu,
                 minLines: 2,
                 maxLines: 5,
                 textInputAction: TextInputAction.newline,

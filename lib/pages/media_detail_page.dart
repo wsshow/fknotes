@@ -17,6 +17,7 @@ import '../services/speech_model_service.dart';
 import '../services/speech_transcription_service.dart';
 import '../services/speaker_diarization_model_service.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/editor_context_menu.dart';
 import '../widgets/fk_markdown_view.dart';
 import 'note_editor_page.dart';
 import 'model_management_page.dart';
@@ -696,6 +697,7 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
         else
           SelectableText(
             text,
+            contextMenuBuilder: buildAppEditableTextContextMenu,
             style: const TextStyle(
               fontSize: 17,
               height: 1.72,
@@ -803,6 +805,7 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
         else ...[
           SelectableText(
             text,
+            contextMenuBuilder: buildAppEditableTextContextMenu,
             style: const TextStyle(
               fontSize: 17,
               height: 1.72,

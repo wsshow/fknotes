@@ -6,6 +6,7 @@ import '../app.dart';
 import '../models/local_model.dart';
 import '../services/local_model_manager.dart';
 import '../services/realtime_dictation_preferences_service.dart';
+import '../widgets/editor_context_menu.dart';
 
 class ModelManagementPage extends StatefulWidget {
   final String? focusModelId;
@@ -491,6 +492,7 @@ class _HotwordsSheetState extends State<_HotwordsSheet> {
                         TextField(
                           key: const Key('live-dictation-hotwords-field'),
                           controller: _controller,
+                          contextMenuBuilder: buildAppEditableTextContextMenu,
                           minLines: 4,
                           maxLines: 8,
                           autofocus: true,

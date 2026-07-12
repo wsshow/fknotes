@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app.dart';
+import '../widgets/editor_context_menu.dart';
 
 class TranscriptEditorPage extends StatefulWidget {
   final String initialText;
@@ -97,6 +98,7 @@ class _TranscriptEditorPageState extends State<TranscriptEditorPage> {
                   child: TextField(
                     key: const Key('transcript-editor-field'),
                     controller: _controller,
+                    contextMenuBuilder: buildAppEditableTextContextMenu,
                     autofocus: true,
                     expands: true,
                     minLines: null,

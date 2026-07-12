@@ -1177,7 +1177,8 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                             children: [
                               TextField(
                                 controller: _title,
-                                contextMenuBuilder: buildEditorContextMenu,
+                                contextMenuBuilder:
+                                    buildAppEditableTextContextMenu,
                                 maxLines: null,
                                 textCapitalization:
                                     TextCapitalization.sentences,
@@ -1623,6 +1624,7 @@ class _TagEditorSheetState extends State<_TagEditorSheet> {
               TextField(
                 key: const Key('note-tags-field'),
                 controller: _controller,
+                contextMenuBuilder: buildAppEditableTextContextMenu,
                 autofocus: true,
                 textInputAction: TextInputAction.done,
                 onChanged: _changed,
@@ -1921,6 +1923,7 @@ class _LinkEditorSheetState extends State<_LinkEditorSheet> {
             TextField(
               key: const Key('note-link-field'),
               controller: _controller,
+              contextMenuBuilder: buildAppEditableTextContextMenu,
               autofocus: true,
               keyboardType: TextInputType.url,
               textInputAction: TextInputAction.done,
@@ -2184,6 +2187,7 @@ class _DictationDiagnosticsOverlayState
                     padding: const EdgeInsets.fromLTRB(12, 12, 18, 12),
                     child: SelectableText(
                       service.debugReport,
+                      contextMenuBuilder: buildAppEditableTextContextMenu,
                       style: const TextStyle(
                         color: Color(0xFFD8F8D2),
                         fontFamily: 'monospace',

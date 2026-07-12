@@ -12,6 +12,7 @@ import '../app.dart';
 import '../models/note_entry.dart';
 import '../providers/note_provider.dart';
 import '../services/file_storage_service.dart';
+import '../widgets/editor_context_menu.dart';
 
 enum _RecorderStage { ready, recording, paused, review, saving }
 
@@ -413,6 +414,7 @@ class _RecordAudioPageState extends State<RecordAudioPage> {
     children: [
       TextField(
         controller: _title,
+        contextMenuBuilder: buildAppEditableTextContextMenu,
         style: const TextStyle(
           fontFamily: 'serif',
           fontSize: 25,

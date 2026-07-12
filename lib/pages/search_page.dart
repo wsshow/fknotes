@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../app.dart';
 import '../services/search_service.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/editor_context_menu.dart';
 import '../widgets/note_card.dart';
 import 'local_chat_page.dart';
 import 'note_editor_page.dart';
@@ -117,6 +118,7 @@ class _SearchPageState extends State<SearchPage> {
                         child: TextField(
                           controller: _controller,
                           focusNode: _focusNode,
+                          contextMenuBuilder: buildAppEditableTextContextMenu,
                           autofocus: true,
                           textInputAction: TextInputAction.search,
                           onSubmitted: (value) {

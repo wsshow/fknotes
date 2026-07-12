@@ -6,6 +6,7 @@ import 'package:markdown/markdown.dart' as md;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../app.dart';
+import 'editor_context_menu.dart';
 
 /// Shared Markdown reading surface for model output and notes.
 ///
@@ -37,6 +38,7 @@ class FkMarkdownView extends StatelessWidget {
     return MarkdownBody(
       data: data,
       selectable: selectable,
+      contextMenuBuilder: buildAppEditableTextContextMenu,
       extensionSet: md.ExtensionSet.gitHubFlavored,
       softLineBreak: true,
       fitContent: true,

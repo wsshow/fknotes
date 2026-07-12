@@ -1062,7 +1062,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
       }
     }
     final block = owner;
-    return buildEditorContextMenu(
+    return buildAppEditableTextContextMenu(
       context,
       editableTextState,
       onPaste: block == null ? null : () => _pasteFromClipboard(block),
@@ -3006,6 +3006,7 @@ class _TableHeaderCell extends StatelessWidget {
             Expanded(
               child: TextField(
                 controller: controller,
+                contextMenuBuilder: buildAppEditableTextContextMenu,
                 decoration: const InputDecoration(
                   isDense: true,
                   hintText: '表头',
@@ -3092,6 +3093,7 @@ class _TableBodyCell extends StatelessWidget {
     padding: const EdgeInsets.all(4),
     child: TextField(
       controller: controller,
+      contextMenuBuilder: buildAppEditableTextContextMenu,
       minLines: 1,
       maxLines: 6,
       textAlignVertical: TextAlignVertical.top,

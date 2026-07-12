@@ -12,6 +12,7 @@ import '../services/local_chat_prompt_builder.dart';
 import '../services/local_chat_store.dart';
 import '../services/local_llm/local_llm_output_filter.dart';
 import '../widgets/app_popup_menu.dart';
+import '../widgets/editor_context_menu.dart';
 import '../widgets/fk_markdown_view.dart';
 import 'model_management_page.dart';
 
@@ -725,6 +726,7 @@ class _ChatBubble extends StatelessWidget {
               else if (user)
                 SelectableText(
                   message.content,
+                  contextMenuBuilder: buildAppEditableTextContextMenu,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 15,
@@ -821,6 +823,7 @@ class _Composer extends StatelessWidget {
               key: const Key('local-chat-input'),
               controller: controller,
               focusNode: focusNode,
+              contextMenuBuilder: buildAppEditableTextContextMenu,
               enabled: !generating,
               minLines: 1,
               maxLines: 6,
@@ -991,6 +994,7 @@ class _SystemPromptSheetState extends State<_SystemPromptSheet> {
                   child: TextField(
                     key: const Key('local-chat-system-prompt'),
                     controller: _controller,
+                    contextMenuBuilder: buildAppEditableTextContextMenu,
                     autofocus: true,
                     minLines: null,
                     maxLines: null,
