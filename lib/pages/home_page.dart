@@ -9,6 +9,7 @@ import '../providers/note_provider.dart';
 import '../services/app_build_metadata.dart';
 import '../services/backup_service.dart';
 import '../services/file_storage_service.dart';
+import '../widgets/app_feedback.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/app_popup_menu.dart';
 import '../widgets/background_task_center_sheet.dart';
@@ -164,14 +165,11 @@ class _HomePageState extends State<HomePage> {
     final provider = context.read<NoteProvider>();
     await provider.moveToTrash(entry);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('已移到回收站'),
-        action: SnackBarAction(
-          label: '撤销',
-          onPressed: () => provider.restore(entry),
-        ),
-      ),
+    AppFeedback.action(
+      context,
+      '已移到回收站',
+      actionLabel: '撤销',
+      onAction: () => provider.restore(entry),
     );
   }
 
@@ -357,9 +355,7 @@ class _HomePageState extends State<HomePage> {
       final message = error is PlatformException
           ? error.message ?? '${type.label}导入失败'
           : error.toString();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      AppFeedback.error(context, message);
     }
   }
 
@@ -1416,15 +1412,11 @@ class _DataTabState extends State<_DataTab> {
       );
       await widget.provider.loadEntries();
       if (exported && mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('备份已交给系统保存')));
+        AppFeedback.success(context, '备份已交给系统保存');
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('导出失败：$error')));
+        AppFeedback.error(context, '导出失败：$error');
       }
     } finally {
       if (mounted) setState(() => _backupBusy = false);
@@ -1466,16 +1458,12 @@ class _DataTabState extends State<_DataTab> {
         await widget.provider.loadEntries();
         await _refreshSize();
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('备份已安全恢复')));
+          AppFeedback.success(context, '备份已安全恢复');
         }
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('恢复失败：$error')));
+        AppFeedback.error(context, '恢复失败：$error');
       }
     } finally {
       if (mounted) setState(() => _backupBusy = false);

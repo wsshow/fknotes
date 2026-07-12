@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../app.dart';
 import '../models/local_chat.dart';
 import '../services/local_chat_store.dart';
+import '../widgets/app_feedback.dart';
 import '../widgets/app_popup_menu.dart';
 import '../widgets/editor_context_menu.dart';
 
@@ -131,15 +132,12 @@ class _LocalChatRolesPageState extends State<LocalChatRolesPage> {
 
   void _showError(Object error) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          error
-              .toString()
-              .replaceFirst('FormatException: ', '')
-              .replaceFirst('Bad state: ', ''),
-        ),
-      ),
+    AppFeedback.error(
+      context,
+      error
+          .toString()
+          .replaceFirst('FormatException: ', '')
+          .replaceFirst('Bad state: ', ''),
     );
   }
 

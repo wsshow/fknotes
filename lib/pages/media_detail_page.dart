@@ -16,6 +16,7 @@ import '../services/ocr_service.dart';
 import '../services/speech_model_service.dart';
 import '../services/speech_transcription_service.dart';
 import '../services/speaker_diarization_model_service.dart';
+import '../widgets/app_feedback.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/editor_context_menu.dart';
 import '../widgets/fk_markdown_view.dart';
@@ -156,17 +157,13 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
     if (file == null) return;
     final result = await OpenFile.open(file.path);
     if (!mounted || result.type == ResultType.done) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(result.message)));
+    AppFeedback.error(context, result.message);
   }
 
   Future<void> _copyOcr() async {
     await Clipboard.setData(ClipboardData(text: attachment?.ocrText ?? ''));
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('识别文字已复制')));
+      AppFeedback.success(context, '识别文字已复制');
     }
   }
 
@@ -180,12 +177,9 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
     if (!mounted) return;
     if (!result.hasText) {
       setState(() => _recognizing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            result.didFail ? 'OCR 识别失败：${result.errorMessage}' : '未识别到清晰文字',
-          ),
-        ),
+      AppFeedback.error(
+        context,
+        result.didFail ? 'OCR 识别失败：${result.errorMessage}' : '未识别到清晰文字',
       );
       return;
     }
@@ -246,15 +240,11 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
       );
       if (info != null && mounted) {
         setState(() => _speechModel = info);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('离线语音识别模型已导入')));
+        AppFeedback.success(context, '离线语音识别模型已导入');
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('模型导入失败：$error')));
+        AppFeedback.error(context, '模型导入失败：$error');
       }
     } finally {
       if (mounted) {
@@ -306,21 +296,15 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
       );
       if (mounted) {
         setState(() => _speechModel = info);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('离线语音识别模型下载完成')));
+        AppFeedback.success(context, '离线语音识别模型下载完成');
       }
     } on SpeechModelDownloadCanceled {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('已暂停下载，下次会从断点继续')));
+        AppFeedback.show(context, '已暂停下载，下次会从断点继续');
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('模型下载失败：$error')));
+        AppFeedback.error(context, '模型下载失败：$error');
       }
     } finally {
       if (mounted) {
@@ -381,9 +365,7 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
 
   Future<void> _removeSpeechModel() async {
     if (_speech.jobs.any((job) => job.isRunning)) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('请先等待正在进行的转写结束')));
+      AppFeedback.show(context, '请先等待正在进行的转写结束');
       return;
     }
     final remove = await showDialog<bool>(
@@ -521,9 +503,7 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
     if (text.isEmpty) return;
     await Clipboard.setData(ClipboardData(text: text));
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('转写文字已复制')));
+      AppFeedback.success(context, '转写文字已复制');
     }
   }
 

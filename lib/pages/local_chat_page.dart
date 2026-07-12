@@ -16,6 +16,7 @@ import '../services/local_chat_store.dart';
 import '../services/local_llm/local_llm_output_filter.dart';
 import '../services/file_storage_service.dart';
 import '../services/realtime_dictation_service.dart';
+import '../widgets/app_feedback.dart';
 import '../widgets/app_popup_menu.dart';
 import '../widgets/editor_context_menu.dart';
 import '../widgets/fk_markdown_view.dart';
@@ -362,9 +363,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
     final content = _input.text.trim();
     if ((content.isEmpty && _pendingAttachments.isEmpty) || _generating) return;
     if (_pendingAttachments.isNotEmpty && !_modelCapabilities.imageInput) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('当前本地运行时仅支持文字输入；图片已经保留在输入区，请移除或等待多模态运行时')),
-      );
+      AppFeedback.error(context, '当前本地运行时仅支持文字输入；图片已经保留在输入区，请移除或等待多模态运行时');
       return;
     }
     if (!await _ensureModelInstalled()) return;
@@ -594,9 +593,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
       }
       setState(() => _pendingAttachments.addAll(imported));
       if (imported.isNotEmpty && !_modelCapabilities.imageInput) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('图片已保留在输入区；当前模型不支持图片理解，请切换到支持图片的模型')),
-        );
+        AppFeedback.show(context, '图片已保留在输入区；当前模型不支持图片理解，请切换到支持图片的模型');
       }
     } catch (error) {
       for (final attachment in imported) {
@@ -622,9 +619,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
       return;
     }
     if (_dictation.isActive) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('其他页面正在使用实时语音输入')));
+      AppFeedback.show(context, '其他页面正在使用实时语音输入');
       return;
     }
     _dictationBaseText = _input.text.trimRight();
@@ -1208,9 +1203,7 @@ class _ChatBubble extends StatelessWidget {
                           ClipboardData(text: message.content),
                         );
                         if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('已复制回答')),
-                          );
+                          AppFeedback.success(context, '已复制回答');
                         }
                       },
                       style: IconButton.styleFrom(

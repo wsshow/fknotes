@@ -10,6 +10,7 @@ import '../app.dart';
 import '../models/note_entry.dart';
 import '../services/file_storage_service.dart';
 import '../services/note_assistant_prompt_builder.dart';
+import 'app_feedback.dart';
 import 'app_popup_menu.dart';
 import 'editor_context_menu.dart';
 import 'fk_markdown_view.dart';
@@ -2534,9 +2535,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
   Future<void> _editMarkdownTable(_EditableBlock block) async {
     final table = MarkdownTableData.tryParse(block.controller.visibleTextValue);
     if (table == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('表格语法不完整，请先检查 Markdown 原文')));
+      AppFeedback.error(context, '表格语法不完整，请先检查 Markdown 原文');
       return;
     }
     final result = await showModalBottomSheet<MarkdownTableData>(

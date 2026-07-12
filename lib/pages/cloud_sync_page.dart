@@ -9,6 +9,7 @@ import '../app.dart';
 import '../models/cloud_sync.dart';
 import '../providers/note_provider.dart';
 import '../services/cloud_sync_service.dart';
+import '../widgets/app_feedback.dart';
 
 class CloudSyncPage extends StatefulWidget {
   final CloudSyncService? service;
@@ -413,12 +414,11 @@ class _CloudSyncPageState extends State<CloudSyncPage> {
   }
 
   void _message(String text, {bool error = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(text),
-        backgroundColor: error ? AppColors.coral : null,
-      ),
-    );
+    if (error) {
+      AppFeedback.error(context, text);
+    } else {
+      AppFeedback.success(context, text);
+    }
   }
 
   String _friendlyError(Object error) {

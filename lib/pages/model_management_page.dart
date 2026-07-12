@@ -6,6 +6,7 @@ import '../app.dart';
 import '../models/local_model.dart';
 import '../services/local_model_manager.dart';
 import '../services/realtime_dictation_preferences_service.dart';
+import '../widgets/app_feedback.dart';
 import '../widgets/editor_context_menu.dart';
 
 class ModelManagementPage extends StatefulWidget {
@@ -249,10 +250,9 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
       await _loadDictationPreferences();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(error.toString().replaceFirst('Bad state: ', '')),
-          ),
+        AppFeedback.error(
+          context,
+          error.toString().replaceFirst('Bad state: ', ''),
         );
       }
     }
@@ -262,17 +262,11 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
     if (model.task != LocalModelTask.liveDictation) return;
     try {
       await _manager.selectForLiveDictation(model.id);
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('已将${model.name}设为实时听写模型')));
-      }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(error.toString().replaceFirst('Bad state: ', '')),
-          ),
+        AppFeedback.error(
+          context,
+          error.toString().replaceFirst('Bad state: ', ''),
         );
       }
     }
@@ -282,17 +276,11 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
     if (model.category != LocalModelCategory.language) return;
     try {
       await _manager.selectForAssistant(model.id);
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('已将${model.name}设为本地助手模型')));
-      }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(error.toString().replaceFirst('Bad state: ', '')),
-          ),
+        AppFeedback.error(
+          context,
+          error.toString().replaceFirst('Bad state: ', ''),
         );
       }
     }
@@ -309,14 +297,11 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
     );
     if (result == null || !mounted) return;
     setState(() => _preferences = result);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          result.hotwordsEnabled
-              ? '已保存 ${result.hotwords.length} 个热词'
-              : '已关闭实时听写热词',
-        ),
-      ),
+    AppFeedback.success(
+      context,
+      result.hotwordsEnabled
+          ? '已保存 ${result.hotwords.length} 个热词'
+          : '已关闭实时听写热词',
     );
   }
 
@@ -330,14 +315,9 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
       );
       if (!mounted) return;
       setState(() => _preferences = saved);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(enabled ? '已开启听写结束精修' : '已关闭听写结束精修')),
-      );
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('设置保存失败，请检查设备存储空间')));
+        AppFeedback.error(context, '设置保存失败，请检查设备存储空间');
       }
     }
   }
@@ -352,14 +332,9 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
       );
       if (!mounted) return;
       setState(() => _preferences = saved);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(enabled ? '已开启实时听写降噪' : '已关闭实时听写降噪')),
-      );
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('设置保存失败，请检查设备存储空间')));
+        AppFeedback.error(context, '设置保存失败，请检查设备存储空间');
       }
     }
   }

@@ -9,6 +9,7 @@ import '../services/local_model_manager.dart';
 import '../services/note_read_aloud_service.dart';
 import '../services/realtime_dictation_service.dart';
 import '../services/speech_transcription_service.dart';
+import 'app_feedback.dart';
 
 class BackgroundTaskCenterButton extends StatelessWidget {
   final NoteProvider provider;
@@ -161,9 +162,7 @@ class _BackgroundTaskSheet extends StatelessWidget {
       }
     } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('任务操作失败：$error')));
+      AppFeedback.error(context, '任务操作失败：$error');
     }
   }
 }

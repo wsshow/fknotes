@@ -21,6 +21,7 @@ import '../services/realtime_dictation_service.dart';
 import '../services/streaming_speech_model_service.dart';
 import '../services/video_import_service.dart';
 import '../utils/markdown_text.dart';
+import '../widgets/app_feedback.dart';
 import '../widgets/app_popup_menu.dart';
 import '../widgets/editor_context_menu.dart';
 import '../widgets/note_assistant_sheet.dart';
@@ -262,9 +263,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       await _readAloud.speak(text);
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_readAloud.errorMessage ?? '无法朗读这篇笔记')),
-        );
+        AppFeedback.error(context, _readAloud.errorMessage ?? '无法朗读这篇笔记');
       }
     }
   }
@@ -296,9 +295,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     _recoveringDictationFailure = false;
     if (!mounted) return;
     setState(() {});
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    AppFeedback.error(context, message);
   }
 
   @override
@@ -483,9 +480,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     final anchored =
         _blockEditorKey.currentState?.prepareDictationInsertion() ?? false;
     if (!anchored) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('请先将光标放在文字区域')));
+      AppFeedback.show(context, '请先将光标放在文字区域');
       return;
     }
     _dictationAnchored = true;
@@ -498,9 +493,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       _dictationAnchored = false;
       _dictationInsertedText = '';
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_dictation.errorMessage ?? '无法开始实时听写')),
-        );
+        AppFeedback.error(context, _dictation.errorMessage ?? '无法开始实时听写');
       }
     } finally {
       _dictationOperationPending = false;
@@ -613,19 +606,13 @@ class _NoteEditorPageState extends State<NoteEditorPage>
           NoteAssistantPlacement.insertBelow => '已插入到当前段落下方',
           NoteAssistantPlacement.append => '已追加到笔记末尾',
         };
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
+        AppFeedback.success(context, message);
       } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('笔记内容已经变化，请重新发起 AI 操作')));
+        AppFeedback.show(context, '笔记内容已经变化，请重新发起 AI 操作');
       }
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('无法启动本地助手：$error')));
+      AppFeedback.error(context, '无法启动本地助手：$error');
     }
   }
 
@@ -641,9 +628,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       _dictationAnchored = false;
       _dictationInsertedText = '';
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_dictation.errorMessage ?? '实时听写没有完成')),
-        );
+        AppFeedback.error(context, _dictation.errorMessage ?? '实时听写没有完成');
       }
     } finally {
       _dictationOperationPending = false;
@@ -780,9 +765,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     } catch (error) {
       _changed = true;
       if (showError && mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('自动保存失败：$error')));
+        AppFeedback.error(context, '自动保存失败：$error');
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -917,9 +900,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       final message = error is PlatformException
           ? error.message ?? '${type.label}导入失败'
           : error.toString();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      AppFeedback.error(context, message);
     } finally {
       if (mounted) setState(() => _importing = false);
     }
@@ -2247,9 +2228,7 @@ class _DictationDiagnosticsOverlayState
                           ClipboardData(text: service.debugReport),
                         );
                         if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('诊断信息已复制')),
-                        );
+                        AppFeedback.success(context, '诊断信息已复制');
                       },
                       icon: const Icon(Icons.copy_all_rounded, size: 17),
                       label: const Text('复制全部'),

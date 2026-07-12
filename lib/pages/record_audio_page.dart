@@ -12,6 +12,7 @@ import '../app.dart';
 import '../models/note_entry.dart';
 import '../providers/note_provider.dart';
 import '../services/file_storage_service.dart';
+import '../widgets/app_feedback.dart';
 import '../widgets/editor_context_menu.dart';
 
 enum _RecorderStage { ready, recording, paused, review, saving }
@@ -112,9 +113,7 @@ class _RecordAudioPageState extends State<RecordAudioPage> {
     } catch (error) {
       if (mounted) {
         setState(() => _starting = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('无法开始录音：$error')));
+        AppFeedback.error(context, '无法开始录音：$error');
       }
     }
   }
@@ -209,9 +208,7 @@ class _RecordAudioPageState extends State<RecordAudioPage> {
       }
       if (mounted) {
         setState(() => _stage = _RecorderStage.review);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('保存失败：$error')));
+        AppFeedback.error(context, '保存失败：$error');
       }
     }
   }

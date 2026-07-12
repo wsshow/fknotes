@@ -5,6 +5,7 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../app.dart';
+import 'app_feedback.dart';
 import 'editor_context_menu.dart';
 import 'markdown_latex.dart';
 
@@ -138,9 +139,7 @@ class FkMarkdownView extends StatelessWidget {
   ) async {
     final uri = Uri.tryParse(href);
     if (uri == null || !{'http', 'https', 'mailto'}.contains(uri.scheme)) {
-      ScaffoldMessenger.maybeOf(
-        context,
-      )?.showSnackBar(const SnackBar(content: Text('这个链接地址无效或使用了不受支持的协议')));
+      AppFeedback.error(context, '这个链接地址无效或使用了不受支持的协议');
       return;
     }
     final confirmed = await showDialog<bool>(
@@ -166,15 +165,11 @@ class FkMarkdownView extends StatelessWidget {
     try {
       final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!opened && context.mounted) {
-        ScaffoldMessenger.maybeOf(
-          context,
-        )?.showSnackBar(const SnackBar(content: Text('系统中没有可以打开这个链接的应用')));
+        AppFeedback.error(context, '系统中没有可以打开这个链接的应用');
       }
     } catch (_) {
       if (context.mounted) {
-        ScaffoldMessenger.maybeOf(
-          context,
-        )?.showSnackBar(const SnackBar(content: Text('无法打开这个链接')));
+        AppFeedback.error(context, '无法打开这个链接');
       }
     }
   }

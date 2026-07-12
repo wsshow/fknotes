@@ -8,6 +8,7 @@ import '../models/local_llm.dart';
 import '../services/local_assistant_service.dart';
 import '../services/local_llm/local_llm_output_filter.dart';
 import '../services/note_assistant_prompt_builder.dart';
+import 'app_feedback.dart';
 import 'app_popup_menu.dart';
 import 'editor_context_menu.dart';
 import 'fk_markdown_view.dart';
@@ -502,9 +503,7 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
   Future<void> _copy() async {
     await Clipboard.setData(ClipboardData(text: _visibleOutput.trim()));
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('已复制生成内容')));
+      AppFeedback.success(context, '已复制生成内容');
     }
   }
 

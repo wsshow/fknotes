@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../app.dart';
 import '../providers/app_lock_controller.dart';
 import '../services/app_lock_preferences_service.dart';
+import '../widgets/app_feedback.dart';
 
 class AppLockSettingsPage extends StatefulWidget {
   const AppLockSettingsPage({super.key});
@@ -148,9 +149,7 @@ class _AppLockSettingsPageState extends State<AppLockSettingsPage> {
     if (!mounted) return;
     setState(() => _busy = false);
     if (!result.authenticated) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(result.message)));
+      AppFeedback.error(context, result.message);
     }
   }
 
@@ -160,9 +159,7 @@ class _AppLockSettingsPageState extends State<AppLockSettingsPage> {
     if (!mounted) return;
     setState(() => _busy = false);
     if (message != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      AppFeedback.error(context, message);
     }
   }
 }
