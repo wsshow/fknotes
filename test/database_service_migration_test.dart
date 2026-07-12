@@ -74,7 +74,19 @@ void main() {
       );
       expect(
         chatTables.map((row) => row['name']),
-        containsAll(['chat_sessions', 'chat_messages', 'search_fts']),
+        containsAll([
+          'chat_sessions',
+          'chat_messages',
+          'chat_personas',
+          'search_fts',
+        ]),
+      );
+      final sessionColumns = await db.rawQuery(
+        'PRAGMA table_info(chat_sessions)',
+      );
+      expect(
+        sessionColumns.map((column) => column['name']),
+        contains('persona_id'),
       );
       final searchRows = await db.query(
         'search_fts',

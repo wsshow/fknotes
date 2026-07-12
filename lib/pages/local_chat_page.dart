@@ -15,6 +15,7 @@ import '../services/local_llm/local_llm_output_filter.dart';
 import '../widgets/app_popup_menu.dart';
 import '../widgets/editor_context_menu.dart';
 import '../widgets/fk_markdown_view.dart';
+import 'local_chat_roles_page.dart';
 import 'model_management_page.dart';
 
 class LocalChatPage extends StatefulWidget {
@@ -35,6 +36,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
   final _scroll = ScrollController();
 
   List<LocalChatSession> _sessions = [];
+  List<LocalChatPersona> _personas = const [];
   late LocalChatSession _session;
   bool _loading = true;
   bool _generating = false;
@@ -62,6 +64,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
     }
     try {
       final sessions = await _store.loadSessions();
+      final personas = await _store.loadPersonas();
       final selectedId = await _models.selectedModelId();
       final model = await _models.inspect(selectedId);
       if (!mounted) return;
@@ -77,6 +80,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
       }
       setState(() {
         _sessions = sessions;
+        _personas = personas;
         _session =
             initialSession ??
             (sessions.isEmpty ? _store.createSession() : sessions.first);
@@ -136,8 +140,8 @@ class _LocalChatPageState extends State<LocalChatPage> {
           icon: const Icon(Icons.history_rounded),
         ),
         IconButton(
-          tooltip: '角色设定',
-          onPressed: _loading || _generating ? null : _editSystemPrompt,
+          tooltip: '角色管理',
+          onPressed: _loading || _generating ? null : _openPersonaManager,
           icon: const Icon(Icons.psychology_alt_outlined),
         ),
         AppAnchoredMenuButton<String>(
@@ -173,7 +177,8 @@ class _LocalChatPageState extends State<LocalChatPage> {
                 name: _modelName,
                 installed: _modelInstalled,
                 roleLabel: _roleLabel,
-                onTap: _generating ? null : _openModels,
+                onModelTap: _generating ? null : _openModels,
+                onRoleTap: _generating ? null : _showPersonaSwitcher,
               ),
               Expanded(child: _buildConversationBody()),
               if (_generationError != null)
@@ -297,10 +302,17 @@ class _LocalChatPageState extends State<LocalChatPage> {
   }
 
   String get _roleLabel {
-    final prompt = _session.systemPrompt.trim();
-    if (prompt.isEmpty) return '无系统角色';
-    if (prompt == LocalChatStore.defaultSystemPrompt) return '默认角色';
-    return '自定义角色';
+    return _currentPersona?.name ?? '通用助手';
+  }
+
+  LocalChatPersona? get _currentPersona {
+    for (final persona in _personas) {
+      if (persona.id == _session.personaId) return persona;
+    }
+    for (final persona in _personas) {
+      if (persona.id == LocalChatPersona.defaultId) return persona;
+    }
+    return _personas.firstOrNull;
   }
 
   bool get _canRetry {
@@ -502,20 +514,62 @@ class _LocalChatPageState extends State<LocalChatPage> {
     await _refreshModel();
   }
 
-  Future<void> _editSystemPrompt() async {
+  Future<void> _showPersonaSwitcher() async {
     final result = await showModalBottomSheet<String>(
       context: context,
-      isScrollControlled: true,
-      builder: (context) =>
-          _SystemPromptSheet(initialValue: _session.systemPrompt),
+      builder: (context) => _PersonaPickerSheet(
+        personas: _personas,
+        selectedId: _session.personaId,
+      ),
     );
     if (result == null || !mounted) return;
+    if (result == _PersonaPickerSheet.managePersonas) {
+      await _openPersonaManager();
+      return;
+    }
+    final selected = _personas.where((persona) => persona.id == result);
+    if (selected.isEmpty) return;
+    final persona = selected.first;
     _session = _session.copyWith(
-      systemPrompt: result.trim(),
+      personaId: persona.id,
+      systemPrompt: persona.systemPrompt,
       updatedAt: DateTime.now(),
     );
     setState(() {});
     await _persist();
+  }
+
+  Future<void> _openPersonaManager() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            LocalChatRolesPage(selectedPersonaId: _session.personaId),
+      ),
+    );
+    if (!mounted) return;
+    final personas = await _store.loadPersonas();
+    if (!mounted) return;
+    var selectedExists = false;
+    for (final persona in personas) {
+      if (persona.id == _session.personaId) {
+        selectedExists = true;
+        break;
+      }
+    }
+    setState(() => _personas = personas);
+    if (!selectedExists) {
+      final fallback = _currentPersona;
+      if (fallback != null) {
+        _session = _session.copyWith(
+          personaId: fallback.id,
+          systemPrompt: fallback.systemPrompt,
+          updatedAt: DateTime.now(),
+        );
+        setState(() {});
+        await _persist();
+      }
+    }
   }
 
   Future<void> _showHistory() async {
@@ -544,14 +598,18 @@ class _LocalChatPageState extends State<LocalChatPage> {
   }
 
   Future<void> _newConversation() async {
-    if (_session.messages.isEmpty &&
-        _session.systemPrompt == LocalChatStore.defaultSystemPrompt) {
+    if (_session.messages.isEmpty) {
       _input.clear();
       _inputFocus.requestFocus();
       return;
     }
+    final persona = _currentPersona;
     setState(() {
-      _session = _store.createSession();
+      _session = _store.createSession(
+        personaId: persona?.id ?? LocalChatPersona.defaultId,
+        systemPrompt:
+            persona?.systemPrompt ?? LocalChatPersona.defaultSystemPrompt,
+      );
       _generationError = null;
       _autoFollowOutput = true;
       _showJumpToBottom = false;
@@ -704,25 +762,26 @@ class _ModelBar extends StatelessWidget {
   final String name;
   final bool installed;
   final String roleLabel;
-  final VoidCallback? onTap;
+  final VoidCallback? onModelTap;
+  final VoidCallback? onRoleTap;
 
   const _ModelBar({
     required this.name,
     required this.installed,
     required this.roleLabel,
-    required this.onTap,
+    required this.onModelTap,
+    required this.onRoleTap,
   });
 
   @override
   Widget build(BuildContext context) => Semantics(
-    button: onTap != null,
+    button: onModelTap != null,
     label: '$name，${installed ? '已安装' : '未安装'}，$roleLabel',
-    onTap: onTap,
-    excludeSemantics: true,
+    onTap: onModelTap,
     child: Material(
       color: AppColors.surface,
       child: InkWell(
-        onTap: onTap,
+        onTap: onModelTap,
         child: Container(
           padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
           decoration: const BoxDecoration(
@@ -744,26 +803,46 @@ class _ModelBar extends StatelessWidget {
                   style: const TextStyle(fontSize: 12),
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                decoration: BoxDecoration(
-                  color: AppColors.softGreen,
+              Material(
+                color: AppColors.softGreen,
+                borderRadius: BorderRadius.circular(20),
+                child: InkWell(
+                  key: const Key('local-chat-persona-switcher'),
+                  onTap: onRoleTap,
                   borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  roleLabel,
-                  style: const TextStyle(
-                    color: AppColors.moss,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(9, 5, 5, 5),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 92),
+                          child: Text(
+                            roleLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppColors.moss,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const Icon(
+                          Icons.expand_more_rounded,
+                          size: 16,
+                          color: AppColors.moss,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(width: 3),
-              const Icon(
+              const SizedBox(width: 5),
+              Icon(
                 Icons.chevron_right_rounded,
                 size: 19,
-                color: AppColors.muted,
+                color: onModelTap == null ? AppColors.line : AppColors.muted,
               ),
             ],
           ),
@@ -1108,112 +1187,74 @@ class _LoadFailure extends StatelessWidget {
   );
 }
 
-class _SystemPromptSheet extends StatefulWidget {
-  final String initialValue;
-  const _SystemPromptSheet({required this.initialValue});
+class _PersonaPickerSheet extends StatelessWidget {
+  static const managePersonas = '__manage_personas__';
+  final List<LocalChatPersona> personas;
+  final String selectedId;
+
+  const _PersonaPickerSheet({required this.personas, required this.selectedId});
 
   @override
-  State<_SystemPromptSheet> createState() => _SystemPromptSheetState();
-}
-
-class _SystemPromptSheetState extends State<_SystemPromptSheet> {
-  late final TextEditingController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: widget.initialValue);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _dismiss([String? result]) {
-    FocusManager.instance.primaryFocus?.unfocus();
-    Navigator.pop(context, result);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
-    final availableHeight =
-        MediaQuery.sizeOf(context).height - keyboardInset - 32;
-    return Padding(
-      padding: EdgeInsets.only(bottom: keyboardInset),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-          child: SizedBox(
-            height: availableHeight.clamp(240, 520),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '角色设定',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+  Widget build(BuildContext context) => SafeArea(
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '切换角色',
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
-                const SizedBox(height: 5),
-                const Text(
-                  '系统提示词只对当前对话生效并保存在本机；留空表示不设定角色。',
-                  style: TextStyle(color: AppColors.muted, fontSize: 12),
-                ),
-                const SizedBox(height: 14),
-                Expanded(
-                  child: TextField(
-                    key: const Key('local-chat-system-prompt'),
-                    controller: _controller,
-                    contextMenuBuilder: buildAppEditableTextContextMenu,
-                    autofocus: true,
-                    minLines: null,
-                    maxLines: null,
-                    expands: true,
-                    textAlignVertical: TextAlignVertical.top,
-                    maxLength: 2000,
-                    onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(
-                      hintText: '例如：你是一位耐心的英语口语教练……',
-                      alignLabelWithHint: true,
-                    ),
+              ),
+              TextButton.icon(
+                onPressed: () => Navigator.pop(context, managePersonas),
+                icon: const Icon(Icons.settings_outlined, size: 18),
+                label: const Text('管理'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Flexible(
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: personas.length,
+              itemBuilder: (context, index) {
+                final persona = personas[index];
+                final selected = persona.id == selectedId;
+                return ListTile(
+                  key: Key('local-chat-persona-${persona.id}'),
+                  selected: selected,
+                  leading: CircleAvatar(
+                    backgroundColor: selected
+                        ? AppColors.moss
+                        : AppColors.softCoral,
+                    foregroundColor: selected ? Colors.white : AppColors.coral,
+                    child: const Icon(Icons.psychology_alt_outlined),
                   ),
-                ),
-                const SizedBox(height: 10),
-                OverflowBar(
-                  alignment: MainAxisAlignment.end,
-                  overflowAlignment: OverflowBarAlignment.end,
-                  spacing: 8,
-                  overflowSpacing: 8,
-                  children: [
-                    TextButton.icon(
-                      onPressed: () {
-                        _controller.text = LocalChatStore.defaultSystemPrompt;
-                        _controller.selection = TextSelection.collapsed(
-                          offset: _controller.text.length,
-                        );
-                        setState(() {});
-                      },
-                      icon: const Icon(Icons.restore_rounded),
-                      label: const Text('恢复默认'),
-                    ),
-                    TextButton(onPressed: _dismiss, child: const Text('取消')),
-                    FilledButton(
-                      onPressed: () => _dismiss(_controller.text),
-                      child: const Text('保存设定'),
-                    ),
-                  ],
-                ),
-              ],
+                  title: Text(persona.name),
+                  subtitle: persona.description.isEmpty
+                      ? null
+                      : Text(
+                          persona.description,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                  trailing: selected
+                      ? const Icon(Icons.check_rounded, color: AppColors.moss)
+                      : null,
+                  onTap: () => Navigator.pop(context, persona.id),
+                );
+              },
             ),
           ),
-        ),
+        ],
       ),
-    );
-  }
+    ),
+  );
 }
 
 class _ChatHistorySheet extends StatelessWidget {

@@ -2,6 +2,45 @@ enum LocalChatRole { user, assistant }
 
 enum LocalChatMessageStatus { complete, stopped }
 
+class LocalChatPersona {
+  static const defaultId = 'default';
+  static const defaultSystemPrompt =
+      '你是 FKNotes 的本地助手。请准确、清晰地回答用户问题；不确定时应明确说明，不要编造事实。';
+
+  final String id;
+  final String name;
+  final String description;
+  final String systemPrompt;
+  final bool builtIn;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  const LocalChatPersona({
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.systemPrompt,
+    required this.builtIn,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  LocalChatPersona copyWith({
+    String? name,
+    String? description,
+    String? systemPrompt,
+    DateTime? updatedAt,
+  }) => LocalChatPersona(
+    id: id,
+    name: name ?? this.name,
+    description: description ?? this.description,
+    systemPrompt: systemPrompt ?? this.systemPrompt,
+    builtIn: builtIn,
+    createdAt: createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+}
+
 class LocalChatMessage {
   final String id;
   final LocalChatRole role;
@@ -65,6 +104,7 @@ class LocalChatMessage {
 class LocalChatSession {
   final String id;
   final String title;
+  final String personaId;
   final String systemPrompt;
   final List<LocalChatMessage> messages;
   final DateTime createdAt;
@@ -73,6 +113,7 @@ class LocalChatSession {
   const LocalChatSession({
     required this.id,
     required this.title,
+    this.personaId = LocalChatPersona.defaultId,
     required this.systemPrompt,
     required this.messages,
     required this.createdAt,
@@ -81,12 +122,14 @@ class LocalChatSession {
 
   LocalChatSession copyWith({
     String? title,
+    String? personaId,
     String? systemPrompt,
     List<LocalChatMessage>? messages,
     DateTime? updatedAt,
   }) => LocalChatSession(
     id: id,
     title: title ?? this.title,
+    personaId: personaId ?? this.personaId,
     systemPrompt: systemPrompt ?? this.systemPrompt,
     messages: messages ?? this.messages,
     createdAt: createdAt,
@@ -96,6 +139,7 @@ class LocalChatSession {
   Map<String, Object> toJson() => {
     'id': id,
     'title': title,
+    'personaId': personaId,
     'systemPrompt': systemPrompt,
     'messages': messages.map((message) => message.toJson()).toList(),
     'createdAt': createdAt.toIso8601String(),
@@ -121,6 +165,7 @@ class LocalChatSession {
     return LocalChatSession(
       id: id,
       title: title,
+      personaId: json['personaId'] as String? ?? LocalChatPersona.defaultId,
       systemPrompt: systemPrompt,
       messages: messages
           .map(

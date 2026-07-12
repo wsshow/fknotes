@@ -28,7 +28,16 @@ void main() {
   });
 
   test('persists conversations, roles and messages locally', () async {
-    var session = store.createSession(systemPrompt: '你是一位旅行规划师');
+    final persona = store.createPersona(
+      name: '旅行规划师',
+      description: '规划本地旅行',
+      systemPrompt: '你是一位旅行规划师',
+    );
+    await store.savePersona(persona);
+    var session = store.createSession(
+      personaId: persona.id,
+      systemPrompt: persona.systemPrompt,
+    );
     session = session.copyWith(
       title: store.titleFrom('帮我规划杭州的周末旅行'),
       messages: [
@@ -42,8 +51,37 @@ void main() {
     final restored = await store.loadSessions();
     expect(restored, hasLength(1));
     expect(restored.single.systemPrompt, '你是一位旅行规划师');
+    expect(restored.single.personaId, persona.id);
     expect(restored.single.messages.last.content, '可以从西湖开始。');
     expect(restored.single.title, '帮我规划杭州的周末旅行');
+  });
+
+  test('manages reusable personas and safely resets deleted roles', () async {
+    final persona = store.createPersona(
+      name: '代码审查员',
+      description: '检查代码风险',
+      systemPrompt: '你是一位严格的代码审查员。',
+    );
+    await store.savePersona(persona);
+    await store.saveSession(
+      store.createSession(
+        personaId: persona.id,
+        systemPrompt: persona.systemPrompt,
+      ),
+    );
+
+    final personas = await store.loadPersonas();
+    expect(personas.first.id, LocalChatPersona.defaultId);
+    expect(personas.any((item) => item.id == persona.id), isTrue);
+
+    await store.deletePersona(persona.id);
+    final restored = (await store.loadSessions()).single;
+    expect(restored.personaId, LocalChatPersona.defaultId);
+    expect(restored.systemPrompt, LocalChatPersona.defaultSystemPrompt);
+    expect(
+      (await store.loadPersonas()).any((item) => item.id == persona.id),
+      isFalse,
+    );
   });
 
   test('deletes only the selected conversation', () async {

@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import 'file_storage_service.dart';
+import '../models/local_chat.dart';
 
 class DatabaseService {
   DatabaseService._();
@@ -17,7 +18,7 @@ class DatabaseService {
     final path = p.join(FileStorageService.instance.baseDir, 'fknotes.db');
     return openDatabase(
       path,
-      version: 6,
+      version: 7,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -100,6 +101,17 @@ class DatabaseService {
     if (oldVersion < 6) {
       await _createSearchIndex(db);
     }
+    if (oldVersion < 7) {
+      await _createChatPersonasTable(db);
+      final columns = (await db.rawQuery(
+        'PRAGMA table_info(chat_sessions)',
+      )).map((column) => column['name'] as String).toSet();
+      if (!columns.contains('persona_id')) {
+        await db.execute(
+          "ALTER TABLE chat_sessions ADD COLUMN persona_id TEXT NOT NULL DEFAULT '${LocalChatPersona.defaultId}'",
+        );
+      }
+    }
   }
 
   Future<void> _createAttachmentsTable(Database db) => db.execute('''
@@ -124,13 +136,16 @@ class DatabaseService {
   ''');
 
   Future<void> _createChatTables(Database db) async {
+    await _createChatPersonasTable(db);
     await db.execute('''
       CREATE TABLE IF NOT EXISTS chat_sessions (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
+        persona_id TEXT NOT NULL DEFAULT '${LocalChatPersona.defaultId}',
         system_prompt TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY(persona_id) REFERENCES chat_personas(id) ON DELETE SET DEFAULT
       )
     ''');
     await db.execute('''
@@ -153,6 +168,30 @@ class DatabaseService {
       'CREATE INDEX IF NOT EXISTS idx_chat_messages_session '
       'ON chat_messages(session_id, sort_order)',
     );
+  }
+
+  Future<void> _createChatPersonasTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS chat_personas (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        system_prompt TEXT NOT NULL,
+        built_in INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    final now = DateTime.now().toIso8601String();
+    await db.insert('chat_personas', {
+      'id': LocalChatPersona.defaultId,
+      'name': '通用助手',
+      'description': '准确、清晰地处理日常问题',
+      'system_prompt': LocalChatPersona.defaultSystemPrompt,
+      'built_in': 1,
+      'created_at': now,
+      'updated_at': now,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
   Future<void> _createIndexes(Database db) async {
@@ -358,6 +397,7 @@ class DatabaseService {
       'attachments',
       'chat_sessions',
       'chat_messages',
+      'chat_personas',
     };
     if (!tables.containsAll(requiredTables)) {
       throw const FormatException('备份数据库结构不完整');
