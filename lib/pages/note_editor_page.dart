@@ -1596,6 +1596,19 @@ class _EditorToolbarState extends State<_EditorToolbar> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _editLink() async {
+    final editor = widget.editorKey.currentState;
+    if (editor == null) return;
+    final result = await showModalBottomSheet<_LinkEditResult>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _LinkEditorSheet(initialValue: _activeFormat?.value.link),
+    );
+    if (result == null || !mounted) return;
+    editor.setLink(result.remove ? null : result.value);
+  }
+
   @override
   void dispose() {
     _activeType?.removeListener(_refresh);
@@ -1635,11 +1648,51 @@ class _EditorToolbarState extends State<_EditorToolbar> {
           selected: false,
           onPressed: history.canRedo ? editor?.redo : null,
         ),
+        _BlockStyleMenuButton(
+          active: active,
+          headingLevel: format.headingLevel,
+          onSelected: (value) {
+            if (editor == null) return;
+            if (value == 'paragraph') {
+              editor.setHeadingLevel(null);
+            } else if (value == 'code') {
+              editor.toggleBlock(NoteBlockType.code);
+            } else if (value.startsWith('h')) {
+              editor.setHeadingLevel(int.parse(value.substring(1)));
+            }
+          },
+        ),
         _EditorToolButton(
           tooltip: '加粗',
           icon: Icons.format_bold_rounded,
           selected: format.bold,
           onPressed: editor?.toggleBold,
+        ),
+        _EditorToolButton(
+          tooltip: '斜体',
+          icon: Icons.format_italic_rounded,
+          selected: format.italic,
+          onPressed: editor?.toggleItalic,
+        ),
+        _EditorToolButton(
+          tooltip: '删除线',
+          icon: Icons.format_strikethrough_rounded,
+          selected: format.strikethrough,
+          onPressed: editor?.toggleStrikethrough,
+        ),
+        _EditorToolButton(
+          tooltip: '行内代码',
+          icon: Icons.code_rounded,
+          selected: format.inlineCode,
+          onPressed: editor?.toggleInlineCode,
+        ),
+        _EditorToolButton(
+          tooltip: format.link == null ? '添加链接' : '编辑链接',
+          icon: format.link == null
+              ? Icons.link_rounded
+              : Icons.link_off_rounded,
+          selected: format.link != null,
+          onPressed: editor == null ? null : _editLink,
         ),
         _EditorToolButton(
           tooltip: '下划线',
@@ -1704,6 +1757,107 @@ class _EditorToolbarState extends State<_EditorToolbar> {
           onPressed: widget.onReferenceAttachment,
         ),
       ],
+    );
+  }
+}
+
+class _LinkEditResult {
+  final String? value;
+  final bool remove;
+
+  const _LinkEditResult.save(this.value) : remove = false;
+  const _LinkEditResult.remove() : value = null, remove = true;
+}
+
+class _LinkEditorSheet extends StatefulWidget {
+  final String? initialValue;
+
+  const _LinkEditorSheet({this.initialValue});
+
+  @override
+  State<_LinkEditorSheet> createState() => _LinkEditorSheetState();
+}
+
+class _LinkEditorSheetState extends State<_LinkEditorSheet> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialValue ?? '');
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final value = _controller.text.trim();
+    if (value.isEmpty) return;
+    Navigator.pop(context, _LinkEditResult.save(value));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 180),
+      padding: EdgeInsets.only(bottom: keyboardInset),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.initialValue == null ? '添加链接' : '编辑链接',
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              '链接会保存在 Markdown 中；打开前仍会由 FKNotes 进行隐私确认。',
+              style: TextStyle(color: AppColors.muted, height: 1.45),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              key: const Key('note-link-field'),
+              controller: _controller,
+              autofocus: true,
+              keyboardType: TextInputType.url,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _save(),
+              decoration: const InputDecoration(
+                labelText: '链接地址',
+                hintText: 'https://example.com',
+                prefixIcon: Icon(Icons.link_rounded),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                if (widget.initialValue != null)
+                  TextButton.icon(
+                    onPressed: () =>
+                        Navigator.pop(context, const _LinkEditResult.remove()),
+                    icon: const Icon(Icons.link_off_rounded),
+                    label: const Text('移除链接'),
+                  ),
+                const Spacer(),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('取消'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(onPressed: _save, child: const Text('完成')),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -2067,6 +2221,94 @@ class _EditorToolButton extends StatelessWidget {
     ),
     icon: Icon(icon),
   );
+}
+
+class _BlockStyleMenuButton extends StatelessWidget {
+  final NoteBlockType active;
+  final int headingLevel;
+  final ValueChanged<String> onSelected;
+
+  const _BlockStyleMenuButton({
+    required this.active,
+    required this.headingLevel,
+    required this.onSelected,
+  });
+
+  String get _label {
+    if (active == NoteBlockType.heading) return 'H$headingLevel';
+    if (active == NoteBlockType.code) return '</>';
+    return '正文';
+  }
+
+  @override
+  Widget build(BuildContext context) => PopupMenuButton<String>(
+    tooltip: '段落样式',
+    onSelected: onSelected,
+    position: PopupMenuPosition.over,
+    itemBuilder: (context) => [
+      _item('paragraph', '正文', Icons.notes_rounded),
+      for (var level = 1; level <= 6; level++)
+        _item('h$level', '标题 $level', Icons.title_rounded),
+      _item('code', '代码块', Icons.data_object_rounded),
+    ],
+    child: SizedBox(
+      width: 58,
+      height: 48,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            _label,
+            style: TextStyle(
+              color:
+                  active == NoteBlockType.heading ||
+                      active == NoteBlockType.code
+                  ? AppColors.coral
+                  : AppColors.muted,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const Icon(
+            Icons.arrow_drop_down_rounded,
+            size: 16,
+            color: AppColors.muted,
+          ),
+        ],
+      ),
+    ),
+  );
+
+  PopupMenuItem<String> _item(String value, String label, IconData icon) {
+    final selected = value == 'paragraph'
+        ? active == NoteBlockType.paragraph
+        : value == 'code'
+        ? active == NoteBlockType.code
+        : active == NoteBlockType.heading && value == 'h$headingLevel';
+    return PopupMenuItem(
+      value: value,
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            size: 19,
+            color: selected ? AppColors.coral : AppColors.muted,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+          ),
+          if (selected)
+            const Icon(Icons.check_rounded, size: 18, color: AppColors.coral),
+        ],
+      ),
+    );
+  }
 }
 
 class _FontSizeMenuButton extends StatelessWidget {

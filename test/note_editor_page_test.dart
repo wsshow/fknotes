@@ -132,6 +132,11 @@ void main() {
     expect(find.byTooltip('撤销'), findsOneWidget);
     expect(find.byTooltip('重做'), findsOneWidget);
     expect(find.byTooltip('加粗'), findsOneWidget);
+    expect(find.byTooltip('斜体'), findsOneWidget);
+    expect(find.byTooltip('删除线'), findsOneWidget);
+    expect(find.byTooltip('行内代码'), findsOneWidget);
+    expect(find.byTooltip('添加链接'), findsOneWidget);
+    expect(find.byTooltip('段落样式'), findsOneWidget);
     expect(find.byTooltip('下划线'), findsOneWidget);
     expect(find.byTooltip('字号'), findsOneWidget);
     expect(find.byTooltip('增加缩进'), findsOneWidget);
@@ -160,6 +165,8 @@ void main() {
     await tester.tap(find.text('稍后再说'));
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.byTooltip('字号'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('字号'));
     await tester.pumpAndSettle();
 
@@ -491,6 +498,8 @@ void main() {
     expect(focusNode.hasFocus, isTrue);
     expect(tester.testTextInput.isVisible, isTrue);
 
+    await tester.ensureVisible(find.byTooltip('引用'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('引用'));
     await tester.pump();
 

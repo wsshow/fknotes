@@ -192,6 +192,78 @@ print('ok');
     expect(tester.widget<TextField>(field).focusNode?.hasFocus, isTrue);
   });
 
+  testWidgets('Markdown formatting actions preserve links and heading levels', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '重要内容');
+    final editorKey = GlobalKey<NoteBlockEditorState>();
+    String? richContent;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            key: editorKey,
+            controller: controller,
+            hintText: '开始记录',
+            onRichContentChanged: (value) => richContent = value,
+          ),
+        ),
+      ),
+    );
+    final field = find.byType(TextField).first;
+    await tester.tap(field);
+    final fieldController = tester.widget<TextField>(field).controller!;
+    fieldController.selection = const TextSelection(
+      baseOffset: 1,
+      extentOffset: 5,
+    );
+
+    editorKey.currentState!.toggleItalic();
+    editorKey.currentState!.toggleStrikethrough();
+    editorKey.currentState!.setLink('https://example.com');
+    await tester.pump();
+
+    var block = NoteRichDocumentCodec.tryDecode(richContent)!.single;
+    expect(block.styles.single.attributes.italic, isTrue);
+    expect(block.styles.single.attributes.strikethrough, isTrue);
+    expect(block.styles.single.attributes.link, 'https://example.com');
+    expect(controller.text, '[*~~重要内容~~*](https://example.com)');
+
+    editorKey.currentState!.setHeadingLevel(3);
+    await tester.pump();
+    block = NoteRichDocumentCodec.tryDecode(richContent)!.single;
+    expect(block.type, NoteBlockType.heading);
+    expect(block.headingLevel, 3);
+    expect(controller.text, '### [*~~重要内容~~*](https://example.com)');
+  });
+
+  testWidgets('inline code formatting emits standard Markdown', (tester) async {
+    final controller = TextEditingController(text: 'final value');
+    final editorKey = GlobalKey<NoteBlockEditorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            key: editorKey,
+            controller: controller,
+            hintText: '开始记录',
+          ),
+        ),
+      ),
+    );
+    final field = find.byType(TextField).first;
+    await tester.tap(field);
+    tester.widget<TextField>(field).controller!.selection = const TextSelection(
+      baseOffset: 1,
+      extentOffset: 12,
+    );
+
+    editorKey.currentState!.toggleInlineCode();
+    await tester.pump();
+
+    expect(controller.text, '`final value`');
+  });
+
   testWidgets('underlined words leave whitespace undecorated', (tester) async {
     final controller = TextEditingController(text: '甲 乙');
     final richContent = NoteRichDocumentCodec.encode(const [

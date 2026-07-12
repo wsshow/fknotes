@@ -157,27 +157,52 @@ class NoteTextStyleRange {
 
 class NoteEditorFormatState {
   final bool bold;
+  final bool italic;
+  final bool strikethrough;
+  final bool inlineCode;
   final bool underline;
   final double? fontSize;
+  final String? link;
   final int indent;
+  final int headingLevel;
 
   const NoteEditorFormatState({
     this.bold = false,
+    this.italic = false,
+    this.strikethrough = false,
+    this.inlineCode = false,
     this.underline = false,
     this.fontSize = NoteTextAttributes.defaultFontSize,
+    this.link,
     this.indent = 0,
+    this.headingLevel = 0,
   });
 
   @override
   bool operator ==(Object other) =>
       other is NoteEditorFormatState &&
       bold == other.bold &&
+      italic == other.italic &&
+      strikethrough == other.strikethrough &&
+      inlineCode == other.inlineCode &&
       underline == other.underline &&
       fontSize == other.fontSize &&
-      indent == other.indent;
+      link == other.link &&
+      indent == other.indent &&
+      headingLevel == other.headingLevel;
 
   @override
-  int get hashCode => Object.hash(bold, underline, fontSize, indent);
+  int get hashCode => Object.hash(
+    bold,
+    italic,
+    strikethrough,
+    inlineCode,
+    underline,
+    fontSize,
+    link,
+    indent,
+    headingLevel,
+  );
 }
 
 class NoteHistoryState {
@@ -1368,9 +1393,14 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     block.controller.typingAttributes = attributes;
     activeFormat.value = NoteEditorFormatState(
       bold: attributes.bold,
+      italic: attributes.italic,
+      strikethrough: attributes.strikethrough,
+      inlineCode: attributes.inlineCode,
       underline: attributes.underline,
       fontSize: block.controller.uniformFontSize(selection),
+      link: attributes.link,
       indent: block.indent,
+      headingLevel: block.headingLevel,
     );
   }
 
@@ -1383,6 +1413,51 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     (attributes, enabled) => attributes.copyWith(underline: enabled),
     (attributes) => attributes.underline,
   );
+
+  void toggleItalic() => _toggleAttribute(
+    (attributes, enabled) => attributes.copyWith(italic: enabled),
+    (attributes) => attributes.italic,
+  );
+
+  void toggleStrikethrough() => _toggleAttribute(
+    (attributes, enabled) => attributes.copyWith(strikethrough: enabled),
+    (attributes) => attributes.strikethrough,
+  );
+
+  void toggleInlineCode() => _toggleAttribute(
+    (attributes, enabled) => attributes.copyWith(inlineCode: enabled),
+    (attributes) => attributes.inlineCode,
+  );
+
+  void setLink(String? value) {
+    final block = _activeEditableBlock;
+    if (block == null) return;
+    final link = value?.trim();
+    _beginDiscreteChange();
+    HapticFeedback.selectionClick();
+    final selection = block.controller.visibleSelectionValue;
+    if (selection.isCollapsed) {
+      block.controller.setTypingAttributesForSelection(
+        selection,
+        block.controller.typingAttributes.copyWith(
+          link: link?.isEmpty == true ? null : link,
+        ),
+      );
+      _refreshActiveFormat();
+      _refocus(block, selection: selection);
+      _endDiscreteChange();
+      return;
+    }
+    block.controller.applyAttributes(
+      selection,
+      (attributes) =>
+          attributes.copyWith(link: link?.isEmpty == true ? null : link),
+    );
+    _syncDocument();
+    _refreshActiveFormat();
+    _refocus(block, selection: selection);
+    _endDiscreteChange();
+  }
 
   void _toggleAttribute(
     NoteTextAttributes Function(NoteTextAttributes, bool) update,
@@ -1403,9 +1478,14 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
       );
       activeFormat.value = NoteEditorFormatState(
         bold: block.controller.typingAttributes.bold,
+        italic: block.controller.typingAttributes.italic,
+        strikethrough: block.controller.typingAttributes.strikethrough,
+        inlineCode: block.controller.typingAttributes.inlineCode,
         underline: block.controller.typingAttributes.underline,
         fontSize: block.controller.typingAttributes.fontSize,
+        link: block.controller.typingAttributes.link,
         indent: block.indent,
+        headingLevel: block.headingLevel,
       );
       _refocus(block, selection: selection);
       _endDiscreteChange();
@@ -1434,9 +1514,14 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
       );
       activeFormat.value = NoteEditorFormatState(
         bold: block.controller.typingAttributes.bold,
+        italic: block.controller.typingAttributes.italic,
+        strikethrough: block.controller.typingAttributes.strikethrough,
+        inlineCode: block.controller.typingAttributes.inlineCode,
         underline: block.controller.typingAttributes.underline,
         fontSize: fontSize,
+        link: block.controller.typingAttributes.link,
         indent: block.indent,
+        headingLevel: block.headingLevel,
       );
       _refocus(block, selection: selection);
       _endDiscreteChange();
@@ -1486,10 +1571,35 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     _endDiscreteChange();
   }
 
+  void setHeadingLevel(int? level) {
+    final block = _activeEditableBlock;
+    if (block == null) return;
+    _beginDiscreteChange();
+    HapticFeedback.selectionClick();
+    final selection = block.controller.visibleSelectionValue;
+    setState(() {
+      if (level == null) {
+        _setBlockType(block, NoteBlockType.paragraph);
+      } else {
+        _setBlockType(block, NoteBlockType.heading);
+        block.headingLevel = level.clamp(1, 6);
+      }
+      activeType.value = block.type;
+    });
+    _syncDocument();
+    _refreshActiveFormat();
+    _refocus(block, selection: selection);
+    _endDiscreteChange();
+  }
+
   void _setBlockType(_EditableBlock block, NoteBlockType type) {
     block.type = type;
     if (type != NoteBlockType.todo) block.checked = false;
-    if (type != NoteBlockType.heading) block.headingLevel = 0;
+    if (type == NoteBlockType.heading && block.headingLevel == 0) {
+      block.headingLevel = 2;
+    } else if (type != NoteBlockType.heading) {
+      block.headingLevel = 0;
+    }
     if (type != NoteBlockType.code) block.codeLanguage = null;
   }
 
