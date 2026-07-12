@@ -1,0 +1,5 @@
+MNN_RUNTIME_DIR = $(PROJECT_DIR)/../build/mnn-ios-runtime
+FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*] = $(inherited) "$(MNN_RUNTIME_DIR)/ios"
+GCC_PREPROCESSOR_DEFINITIONS[sdk=iphoneos*] = $(inherited) FKNOTES_MNN_RUNTIME=1
+CLANG_CXX_LANGUAGE_STANDARD = c++17
+OTHER_LDFLAGS[sdk=iphoneos*] = $(inherited) -framework MNN -framework Foundation -framework UIKit -framework Metal -framework CoreML -framework Accelerate -lc++ -Wl,-u,_fk_mnn_is_available -Wl,-u,_fk_mnn_runtime_version -Wl,-u,_fk_mnn_load_async -Wl,-u,_fk_mnn_generate_async -Wl,-u,_fk_mnn_cancel -Wl,-u,_fk_mnn_unload_async -Wl,-u,_fk_mnn_free

@@ -53,6 +53,7 @@ dependencies:
   local_auth: ^3.0.2
   local_auth_android: ^2.0.9
   local_auth_darwin: ^2.0.3
+  ffi: ^2.1.4
   # 1.13.4 is the first release to bundle ORT 1.27, which produces blank-only
   # Zipformer INT8 output on the affected physical arm64 device. 1.13.3 keeps
   # the same Dart API and Android build fixes while using ORT 1.24.3.

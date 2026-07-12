@@ -1,4 +1,5 @@
 import java.io.FileInputStream
+import java.io.File
 import java.util.Properties
 
 plugins {
@@ -24,6 +25,15 @@ val environmentSigningAvailable =
     ).all { !it.isNullOrBlank() }
 val releaseSigningAvailable =
     keystorePropertiesFile.exists() || environmentSigningAvailable
+
+val mnnRuntimeDirectory = layout.buildDirectory.dir("mnn-runtime").get().asFile
+val prepareMnnRuntime by tasks.registering(Exec::class) {
+    commandLine(
+        rootProject.file("../tool/prepare_mnn_runtime.sh").absolutePath,
+        mnnRuntimeDirectory.absolutePath,
+    )
+    outputs.file(File(mnnRuntimeDirectory, ".ready-3.6.0-v2"))
+}
 
 fun releaseSigningValue(
     environmentName: String,
@@ -51,6 +61,15 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        externalNativeBuild {
+            cmake {
+                arguments(
+                    "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON",
+                    "-DMNN_RUNTIME_ROOT=${File(mnnRuntimeDirectory, "android/jni/arm64-v8a").absolutePath}",
+                    "-DMNN_HEADERS_ROOT=${File(mnnRuntimeDirectory, "android/include").absolutePath}",
+                )
+            }
+        }
     }
 
     signingConfigs {
@@ -74,6 +93,19 @@ android {
             )
         }
     }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
+
+    sourceSets {
+        getByName("main") {
+            jniLibs.srcDir(File(mnnRuntimeDirectory, "android/jni"))
+        }
+    }
 }
 
 kotlin {
@@ -84,6 +116,17 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+tasks.configureEach {
+    if (
+        name == "preBuild" ||
+        name.startsWith("configureCMake") ||
+        name.startsWith("buildCMake") ||
+        (name.startsWith("merge") && name.endsWith("JniLibFolders"))
+    ) {
+        dependsOn(prepareMnnRuntime)
+    }
 }
 
 dependencies {
