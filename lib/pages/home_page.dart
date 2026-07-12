@@ -32,81 +32,48 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int _tab = 0;
-  bool _fabExpanded = true;
-
-  bool _handleScroll(ScrollNotification notification) {
-    if (notification.depth != 0 ||
-        notification.metrics.axis != Axis.vertical ||
-        _tab == 2) {
-      return false;
-    }
-    if (notification is! ScrollUpdateNotification ||
-        notification.scrollDelta == null ||
-        notification.scrollDelta == 0) {
-      return false;
-    }
-    final expanded = notification.scrollDelta! < 0;
-    if (expanded != _fabExpanded) setState(() => _fabExpanded = expanded);
-    return false;
-  }
 
   @override
   Widget build(BuildContext context) {
     return Consumer<NoteProvider>(
       builder: (context, provider, _) => Scaffold(
         extendBody: true,
-        body: NotificationListener<ScrollNotification>(
-          onNotification: _handleScroll,
-          child: IndexedStack(
-            index: _tab,
-            children: [
-              _OverviewTab(
-                provider: provider,
-                onSearch: _openSearch,
-                onOpenAssistant: _openAssistant,
-                onOpenLibrary: () => setState(() => _tab = 1),
-                onCreateText: _createTextNote,
-                onPickImage: _pickImage,
-                onRecordAudio: _openRecorder,
-                onPickDocument: _pickDocument,
-                noteBuilder: _buildCard,
-              ),
-              _LibraryTab(
-                provider: provider,
-                onSearch: _openSearch,
-                noteBuilder: _buildCard,
-              ),
-              _DataTab(
-                provider: provider,
-                onOpenLibrary: () => setState(() => _tab = 1),
-              ),
-            ],
-          ),
+        body: IndexedStack(
+          index: _tab,
+          children: [
+            _OverviewTab(
+              provider: provider,
+              onSearch: _openSearch,
+              onOpenAssistant: _openAssistant,
+              onOpenLibrary: () => setState(() => _tab = 1),
+              onCreateText: _createTextNote,
+              onPickImage: _pickImage,
+              onRecordAudio: _openRecorder,
+              onPickDocument: _pickDocument,
+              noteBuilder: _buildCard,
+            ),
+            _LibraryTab(
+              provider: provider,
+              onSearch: _openSearch,
+              noteBuilder: _buildCard,
+            ),
+            _DataTab(
+              provider: provider,
+              onOpenLibrary: () => setState(() => _tab = 1),
+            ),
+          ],
         ),
         floatingActionButton: _tab == 2
             ? null
-            : AnimatedSwitcher(
-                duration: const Duration(milliseconds: 220),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeInCubic,
-                child: _fabExpanded
-                    ? FloatingActionButton.extended(
-                        key: const ValueKey('new-expanded'),
-                        heroTag: null,
-                        onPressed: _showCaptureSheet,
-                        icon: const Icon(Icons.add_rounded),
-                        label: const Text(
-                          '新建',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                      )
-                    : FloatingActionButton(
-                        key: const ValueKey('new-compact'),
-                        heroTag: null,
-                        onPressed: _showCaptureSheet,
-                        tooltip: '新建',
-                        child: const Icon(Icons.add_rounded),
-                      ),
+            : FloatingActionButton.extended(
+                key: const ValueKey('new-note'),
+                heroTag: null,
+                onPressed: _showCaptureSheet,
+                icon: const Icon(Icons.add_rounded),
+                label: const Text(
+                  '新建',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
               ),
         bottomNavigationBar: DecoratedBox(
           decoration: const BoxDecoration(
@@ -122,7 +89,6 @@ class _HomePageState extends State<HomePage> {
               onDestinationSelected: (index) {
                 setState(() {
                   _tab = index;
-                  _fabExpanded = true;
                 });
                 if (index == 0 && provider.scope != NoteScope.active) {
                   provider.setScope(NoteScope.active);
