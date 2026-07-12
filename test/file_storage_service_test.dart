@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:fknotes/services/file_storage_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
 void main() {
@@ -48,6 +49,38 @@ void main() {
     expect(
       FileStorageService.instance.absolutePath('images/safe.jpg'),
       p.join(root.path, 'images', 'safe.jpg'),
+    );
+  });
+
+  test('normalizes assistant images to bounded JPEG files', () async {
+    final source = File(p.join(root.path, 'source.png'));
+    final image = img.Image(width: 2200, height: 100, numChannels: 4);
+    img.fill(image, color: img.ColorRgba8(220, 80, 40, 128));
+    await source.writeAsBytes(img.encodePng(image));
+
+    final relativePath = await FileStorageService.instance
+        .importAssistantImage(source);
+    final output = File(
+      FileStorageService.instance.absolutePath(relativePath),
+    );
+    final decoded = img.decodeJpg(await output.readAsBytes());
+
+    expect(relativePath, startsWith('assistant/'));
+    expect(relativePath, endsWith('.jpg'));
+    expect(decoded, isNotNull);
+    expect(decoded!.width, 2048);
+    expect(decoded.height, lessThanOrEqualTo(100));
+  });
+
+  test('rejects oversized assistant image files before decoding', () async {
+    final source = File(p.join(root.path, 'too-large.jpg'));
+    final handle = source.openSync(mode: FileMode.write);
+    handle.truncateSync(20 * 1024 * 1024 + 1);
+    handle.closeSync();
+
+    await expectLater(
+      FileStorageService.instance.importAssistantImage(source),
+      throwsFormatException,
     );
   });
 

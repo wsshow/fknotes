@@ -29,6 +29,17 @@ void main() {
     );
   });
 
+  test('declares multimodal capability only for the visual model', () {
+    expect(
+      service.capabilities(LanguageModelService.qwen35Id).imageInput,
+      isTrue,
+    );
+    expect(
+      service.capabilities(LanguageModelService.miniCpm5Id).imageInput,
+      isFalse,
+    );
+  });
+
   test('partial bytes include independently resumable files', () async {
     final download = Directory(
       p.join(

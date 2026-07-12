@@ -85,6 +85,10 @@ typedef _GenerateNative =
       Pointer<Pointer<Utf8>>,
       Pointer<Pointer<Utf8>>,
       Int32,
+      Pointer<Pointer<Utf8>>,
+      Pointer<Pointer<Utf8>>,
+      Pointer<Int32>,
+      Int32,
       Int32,
       Double,
       Double,
@@ -97,6 +101,10 @@ typedef _GenerateDart =
       int,
       Pointer<Pointer<Utf8>>,
       Pointer<Pointer<Utf8>>,
+      int,
+      Pointer<Pointer<Utf8>>,
+      Pointer<Pointer<Utf8>>,
+      Pointer<Int32>,
       int,
       int,
       double,
@@ -186,10 +194,31 @@ class FfiMnnNativeTransport implements MnnNativeTransport {
     final count = request.messages.length;
     final roles = calloc<Pointer<Utf8>>(count);
     final contents = calloc<Pointer<Utf8>>(count);
+    final attachmentCount = request.messages.fold<int>(
+      0,
+      (total, message) => total + message.attachments.length,
+    );
+    final attachmentPaths = attachmentCount == 0
+        ? nullptr
+        : calloc<Pointer<Utf8>>(attachmentCount);
+    final attachmentMimeTypes = attachmentCount == 0
+        ? nullptr
+        : calloc<Pointer<Utf8>>(attachmentCount);
+    final attachmentMessageIndexes = attachmentCount == 0
+        ? nullptr
+        : calloc<Int32>(attachmentCount);
     try {
+      var attachmentIndex = 0;
       for (var index = 0; index < count; index++) {
         roles[index] = request.messages[index].role.name.toNativeUtf8();
         contents[index] = request.messages[index].content.toNativeUtf8();
+        for (final attachment in request.messages[index].attachments) {
+          attachmentPaths[attachmentIndex] = attachment.path.toNativeUtf8();
+          attachmentMimeTypes[attachmentIndex] = attachment.mimeType
+              .toNativeUtf8();
+          attachmentMessageIndexes[attachmentIndex] = index;
+          attachmentIndex++;
+        }
       }
       final options = request.options;
       return bindings.generate(
@@ -197,6 +226,10 @@ class FfiMnnNativeTransport implements MnnNativeTransport {
             roles,
             contents,
             count,
+            attachmentPaths,
+            attachmentMimeTypes,
+            attachmentMessageIndexes,
+            attachmentCount,
             options.maxNewTokens,
             options.temperature,
             options.topP,
@@ -210,8 +243,17 @@ class FfiMnnNativeTransport implements MnnNativeTransport {
         calloc.free(roles[index]);
         calloc.free(contents[index]);
       }
+      for (var index = 0; index < attachmentCount; index++) {
+        calloc.free(attachmentPaths[index]);
+        calloc.free(attachmentMimeTypes[index]);
+      }
       calloc.free(roles);
       calloc.free(contents);
+      if (attachmentCount > 0) {
+        calloc.free(attachmentPaths);
+        calloc.free(attachmentMimeTypes);
+        calloc.free(attachmentMessageIndexes);
+      }
     }
   }
 

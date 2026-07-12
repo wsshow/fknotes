@@ -34,7 +34,16 @@ class LocalLlmAttachment {
   final String mimeType;
 
   const LocalLlmAttachment({required this.path, required this.mimeType});
+
+  LocalLlmAttachmentKind get kind {
+    final normalized = mimeType.trim().toLowerCase();
+    if (normalized.startsWith('image/')) return LocalLlmAttachmentKind.image;
+    if (normalized.startsWith('audio/')) return LocalLlmAttachmentKind.audio;
+    return LocalLlmAttachmentKind.unsupported;
+  }
 }
+
+enum LocalLlmAttachmentKind { image, audio, unsupported }
 
 class LocalLlmCapabilities {
   final bool textGeneration;
@@ -162,6 +171,10 @@ class LocalLlmGenerationMetrics {
   final Duration loadTime;
   final Duration prefillTime;
   final Duration decodeTime;
+  final Duration visionTime;
+  final Duration audioTime;
+  final double imageMegapixels;
+  final double audioInputSeconds;
 
   const LocalLlmGenerationMetrics({
     this.promptTokens = 0,
@@ -169,6 +182,10 @@ class LocalLlmGenerationMetrics {
     this.loadTime = Duration.zero,
     this.prefillTime = Duration.zero,
     this.decodeTime = Duration.zero,
+    this.visionTime = Duration.zero,
+    this.audioTime = Duration.zero,
+    this.imageMegapixels = 0,
+    this.audioInputSeconds = 0,
   });
 
   double get prefillTokensPerSecond => _rate(promptTokens, prefillTime);

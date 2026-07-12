@@ -135,7 +135,11 @@ class LanguageModelService {
       revision: '35781816d7b6a9dcb273a6765ac9563401951c3c',
       nativeContextTokens: 262144,
       minimumMemoryBytes: 6 * 1024 * 1024 * 1024,
-      capabilities: LocalLlmCapabilities(thinking: true, toolCalling: true),
+      capabilities: LocalLlmCapabilities(
+        thinking: true,
+        toolCalling: true,
+        imageInput: true,
+      ),
       files: [
         _LanguageModelFile(
           'config.json',

@@ -6,12 +6,23 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../../models/local_llm.dart';
+import '../file_storage_service.dart';
 import 'local_llm_engine.dart';
 import 'mnn_native_transport.dart';
+
+class MnnMultimodalLimits {
+  static const maxImages = 4;
+  static const maxAudioFiles = 1;
+  static const maxImageBytes = 20 * 1024 * 1024;
+  static const maxAudioBytes = 100 * 1024 * 1024;
+
+  const MnnMultimodalLimits._();
+}
 
 class MnnLocalLlmEngine implements LocalLlmEngine {
   final MnnNativeTransport _transport;
   final Future<Directory> Function() _supportDirectoryProvider;
+  final String Function(String relativePath) _attachmentPathResolver;
   int _nextRequestId = 1;
   LocalLlmEngineState _state = LocalLlmEngineState.idle;
   LocalLlmModelDescriptor? _loadedModel;
@@ -21,9 +32,12 @@ class MnnLocalLlmEngine implements LocalLlmEngine {
   MnnLocalLlmEngine({
     MnnNativeTransport? transport,
     Future<Directory> Function()? supportDirectoryProvider,
+    String Function(String relativePath)? attachmentPathResolver,
   }) : _transport = transport ?? FfiMnnNativeTransport(),
        _supportDirectoryProvider =
-           supportDirectoryProvider ?? getApplicationSupportDirectory;
+           supportDirectoryProvider ?? getApplicationSupportDirectory,
+       _attachmentPathResolver =
+           attachmentPathResolver ?? FileStorageService.instance.absolutePath;
 
   @override
   String get id => 'mnn';
@@ -45,6 +59,8 @@ class MnnLocalLlmEngine implements LocalLlmEngine {
       capabilities: LocalLlmCapabilities(
         thinking: true,
         toolCalling: true,
+        imageInput: true,
+        audioInput: true,
         backends: Platform.isAndroid
             ? const {
                 LocalLlmBackend.cpu,
@@ -126,10 +142,11 @@ class MnnLocalLlmEngine implements LocalLlmEngine {
         await controller.close();
         return;
       }
-      if (request.messages.any((message) => message.attachments.isNotEmpty)) {
-        controller.addError(
-          const LocalLlmException('当前 MNN 运行时尚未启用图片输入，请切换支持多模态的运行时'),
-        );
+      late final LocalLlmGenerationRequest preparedRequest;
+      try {
+        preparedRequest = await _prepareRequest(request, _loadedModel!);
+      } on Object catch (error, stackTrace) {
+        controller.addError(error, stackTrace);
         await controller.close();
         return;
       }
@@ -174,7 +191,10 @@ class MnnLocalLlmEngine implements LocalLlmEngine {
                 break;
             }
           });
-      if (!_transport.generate(requestId: requestId, request: request)) {
+      if (!_transport.generate(
+        requestId: requestId,
+        request: preparedRequest,
+      )) {
         controller.addError(const LocalLlmException('MNN 当前无法开始新的生成任务'));
         await _finishGeneration(controller, subscription, done);
       }
@@ -287,6 +307,15 @@ class MnnLocalLlmEngine implements LocalLlmEngine {
           decodeTime: Duration(
             microseconds: (json['decodeUs'] as num?)?.toInt() ?? 0,
           ),
+          visionTime: Duration(
+            microseconds: (json['visionUs'] as num?)?.toInt() ?? 0,
+          ),
+          audioTime: Duration(
+            microseconds: (json['audioUs'] as num?)?.toInt() ?? 0,
+          ),
+          imageMegapixels: (json['imageMegapixels'] as num?)?.toDouble() ?? 0,
+          audioInputSeconds:
+              (json['audioInputSeconds'] as num?)?.toDouble() ?? 0,
         ),
       );
     } catch (_) {
@@ -295,6 +324,97 @@ class MnnLocalLlmEngine implements LocalLlmEngine {
       );
     }
   }
+
+  Future<LocalLlmGenerationRequest> _prepareRequest(
+    LocalLlmGenerationRequest request,
+    LocalLlmModelDescriptor model,
+  ) async {
+    var imageCount = 0;
+    var audioCount = 0;
+    final messages = <LocalLlmMessage>[];
+    for (final message in request.messages) {
+      if (message.attachments.isNotEmpty && message.role != LocalLlmRole.user) {
+        throw const LocalLlmException('多模态附件只能附加在用户消息中');
+      }
+      final attachments = <LocalLlmAttachment>[];
+      for (final attachment in message.attachments) {
+        final kind = attachment.kind;
+        switch (kind) {
+          case LocalLlmAttachmentKind.image:
+            if (!model.capabilities.imageInput) {
+              throw LocalLlmException('${model.name} 不支持图片输入');
+            }
+            imageCount++;
+            if (imageCount > MnnMultimodalLimits.maxImages) {
+              throw const LocalLlmException('每次最多可以发送 4 张图片');
+            }
+          case LocalLlmAttachmentKind.audio:
+            if (!model.capabilities.audioInput) {
+              throw LocalLlmException('${model.name} 不支持音频理解');
+            }
+            audioCount++;
+            if (audioCount > MnnMultimodalLimits.maxAudioFiles) {
+              throw const LocalLlmException('每次最多可以发送 1 个音频文件');
+            }
+          case LocalLlmAttachmentKind.unsupported:
+            throw LocalLlmException('不支持的多模态附件类型：${attachment.mimeType}');
+        }
+        final mimeType = attachment.mimeType.trim().toLowerCase();
+        if (kind == LocalLlmAttachmentKind.image &&
+            !_supportedImageMimeTypes.contains(mimeType)) {
+          throw LocalLlmException('暂不支持这种图片格式：${attachment.mimeType}');
+        }
+        if (kind == LocalLlmAttachmentKind.audio &&
+            !_supportedAudioMimeTypes.contains(mimeType)) {
+          throw const LocalLlmException('音频理解目前仅支持 WAV 文件');
+        }
+        late final String absolutePath;
+        try {
+          absolutePath = _attachmentPathResolver(attachment.path);
+        } on FormatException catch (error) {
+          throw LocalLlmException('多模态附件路径不安全', cause: error);
+        }
+        final file = File(absolutePath);
+        if (await FileSystemEntity.type(absolutePath, followLinks: false) !=
+            FileSystemEntityType.file) {
+          throw const LocalLlmException('多模态附件不存在或不是普通文件');
+        }
+        final length = await file.length();
+        final limit = kind == LocalLlmAttachmentKind.image
+            ? MnnMultimodalLimits.maxImageBytes
+            : MnnMultimodalLimits.maxAudioBytes;
+        if (length <= 0 || length > limit) {
+          throw LocalLlmException(
+            kind == LocalLlmAttachmentKind.image
+                ? '图片文件为空或超过 20 MB'
+                : '音频文件为空或超过 100 MB',
+          );
+        }
+        attachments.add(
+          LocalLlmAttachment(path: absolutePath, mimeType: mimeType),
+        );
+      }
+      messages.add(
+        LocalLlmMessage(
+          role: message.role,
+          content: message.content,
+          attachments: attachments,
+        ),
+      );
+    }
+    return LocalLlmGenerationRequest(
+      messages: messages,
+      options: request.options,
+    );
+  }
+
+  static const _supportedImageMimeTypes = {
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/bmp',
+  };
+  static const _supportedAudioMimeTypes = {'audio/wav', 'audio/x-wav'};
 
   int _newRequestId() => _nextRequestId++;
 

@@ -81,7 +81,7 @@ void main() {
     ]);
   });
 
-  test('preserves image inputs for a future multimodal runtime', () {
+  test('preserves image inputs for the multimodal runtime', () {
     final request = LocalChatPromptBuilder.build(
       systemPrompt: '',
       messages: [
@@ -110,5 +110,47 @@ void main() {
       'assistant/example.jpg',
     );
     expect(request.messages.last.attachments.single.mimeType, 'image/jpeg');
+  });
+
+  test('keeps only the four newest multimodal attachments', () {
+    LocalChatAttachment attachment(String id) => LocalChatAttachment(
+      id: id,
+      type: LocalChatAttachmentType.image,
+      filePath: 'assistant/$id.jpg',
+      fileName: '$id.jpg',
+      mimeType: 'image/jpeg',
+      createdAt: DateTime(2026),
+    );
+
+    final request = LocalChatPromptBuilder.build(
+      systemPrompt: '',
+      messages: [
+        LocalChatMessage(
+          id: 'old',
+          role: LocalChatRole.user,
+          content: '旧图片',
+          createdAt: DateTime(2026),
+          attachments: [attachment('1'), attachment('2')],
+        ),
+        LocalChatMessage(
+          id: 'new',
+          role: LocalChatRole.user,
+          content: '新图片',
+          createdAt: DateTime(2026),
+          attachments: [attachment('3'), attachment('4'), attachment('5')],
+        ),
+      ],
+    );
+
+    final attachments = request.messages
+        .expand((message) => message.attachments)
+        .map((attachment) => attachment.path)
+        .toList();
+    expect(attachments, [
+      'assistant/1.jpg',
+      'assistant/3.jpg',
+      'assistant/4.jpg',
+      'assistant/5.jpg',
+    ]);
   });
 }

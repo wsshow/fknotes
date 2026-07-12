@@ -122,7 +122,6 @@ class LocalModelManager extends ChangeNotifier {
   static const speakerDiarizationId = SpeakerDiarizationModelService.modelId;
   static const kokoroTtsId = KokoroTtsModelService.modelId;
   static const mlKitChineseOcrId = 'mlkit-text-recognition-chinese';
-  static const imageUnderstandingId = 'image-understanding-local';
   static const miniCpm5Id = LanguageModelService.miniCpm5Id;
   static const qwen35Id = LanguageModelService.qwen35Id;
 
@@ -145,13 +144,13 @@ class LocalModelManager extends ChangeNotifier {
     LocalModelDefinition(
       id: qwen35Id,
       name: 'Qwen3.5 2B INT4',
-      summary: '质量与资源均衡的本地笔记助手',
-      description: '推荐用于中文写作、复杂摘要、中英文整理与笔记问答；当前先开放文字能力。',
+      summary: '支持图片理解的本地笔记助手',
+      description: '推荐用于中文写作、复杂摘要、中英文整理、笔记问答和本地图片理解。',
       category: LocalModelCategory.language,
       availability: LocalModelAvailability.downloadable,
-      task: LocalModelTask.textGeneration,
+      task: LocalModelTask.imageUnderstanding,
       downloadSizeBytes: LanguageModelService.qwen35DownloadSizeBytes,
-      languages: ['中文', '英语', '多语言'],
+      languages: ['中文', '英语', '多语言', '图片'],
       engine: 'MNN 3.6 · INT4',
       version: 'Qwen3.5 2B · 2026-03',
       source: 'Qwen / taobao-mnn · Hugging Face 国内镜像优先',
@@ -283,19 +282,6 @@ class LocalModelManager extends ChangeNotifier {
       version: '内置组件',
       source: '随应用提供',
       license: 'Google ML Kit Terms',
-    ),
-    LocalModelDefinition(
-      id: imageUnderstandingId,
-      name: '本地图片理解',
-      summary: '图片描述、内容分类与检索',
-      description: '为后续本地图片理解能力预留，目前尚未选择正式模型。',
-      category: LocalModelCategory.vision,
-      availability: LocalModelAvailability.planned,
-      task: LocalModelTask.imageUnderstanding,
-      engine: '待定',
-      version: '规划中',
-      source: '待评估',
-      license: '待评估',
     ),
   ];
 

@@ -154,6 +154,31 @@ class FileStorageService {
     return generated ? relativePath : '';
   }
 
+  /// Validates and normalizes an image before it enters the local multimodal
+  /// pipeline. The bounded JPEG keeps EXIF orientation, alpha compositing and
+  /// very large camera files from becoming native decoder surprises.
+  Future<String> importAssistantImage(File sourceFile) async {
+    if (!await sourceFile.exists()) {
+      throw const FormatException('选择的图片不存在');
+    }
+    final sourceBytes = await sourceFile.length();
+    if (sourceBytes <= 0 || sourceBytes > 20 * 1024 * 1024) {
+      throw const FormatException('图片文件为空或超过 20 MB');
+    }
+    final relativePath = 'assistant/${_uuid.v4()}.jpg';
+    final outputPath = absolutePath(relativePath);
+    try {
+      await Isolate.run(
+        () => _normalizeAssistantImageFile(sourceFile.path, outputPath),
+      );
+      return relativePath;
+    } catch (_) {
+      final output = File(outputPath);
+      if (await output.exists()) await output.delete();
+      rethrow;
+    }
+  }
+
   /// Delete a stored file by relative path
   Future<void> deleteFile(String? relativePath) async {
     if (relativePath == null || relativePath.isEmpty) return;
@@ -312,4 +337,37 @@ bool _generateThumbnailFile(String sourcePath, String outputPath) {
   } catch (_) {
     return false;
   }
+}
+
+void _normalizeAssistantImageFile(String sourcePath, String outputPath) {
+  final bytes = File(sourcePath).readAsBytesSync();
+  final decoder = img.findDecoderForData(bytes);
+  final info = decoder?.startDecode(bytes);
+  if (decoder == null || info == null || info.width <= 0 || info.height <= 0) {
+    throw const FormatException('暂不支持这种图片格式');
+  }
+  const maxPixels = 40 * 1000 * 1000;
+  if (info.width * info.height > maxPixels ||
+      info.width > 16384 ||
+      info.height > 16384) {
+    throw const FormatException('图片分辨率过高，请选择不超过 4000 万像素的图片');
+  }
+  final decoded = decoder.decodeFrame(0);
+  if (decoded == null) throw const FormatException('图片解码失败');
+  var normalized = img.bakeOrientation(decoded);
+  const maxLongEdge = 2048;
+  if (normalized.width > maxLongEdge || normalized.height > maxLongEdge) {
+    normalized = normalized.width >= normalized.height
+        ? img.copyResize(normalized, width: maxLongEdge)
+        : img.copyResize(normalized, height: maxLongEdge);
+  }
+  if (normalized.hasAlpha) {
+    final background = img.Image(
+      width: normalized.width,
+      height: normalized.height,
+    );
+    img.fill(background, color: img.ColorRgb8(255, 255, 255));
+    normalized = img.compositeImage(background, normalized);
+  }
+  File(outputPath).writeAsBytesSync(img.encodeJpg(normalized, quality: 88));
 }

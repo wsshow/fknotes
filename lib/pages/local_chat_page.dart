@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import 'package:mime/mime.dart';
 
 import '../app.dart';
 import '../models/local_chat.dart';
@@ -578,12 +577,12 @@ class _LocalChatPageState extends State<LocalChatPage> {
       for (final image in selected.take(remaining)) {
         final source = File(image.path);
         if (!await source.exists()) continue;
-        final filePath = await _storage.copyFile(source, 'assistant');
+        final filePath = await _storage.importAssistantImage(source);
         imported.add(
           _store.createImageAttachment(
             filePath: filePath,
-            fileName: image.name,
-            mimeType: lookupMimeType(image.path) ?? 'image/*',
+            fileName: '${image.name.replaceFirst(RegExp(r'\.[^.]+$'), '')}.jpg',
+            mimeType: 'image/jpeg',
           ),
         );
       }
@@ -596,7 +595,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
       setState(() => _pendingAttachments.addAll(imported));
       if (imported.isNotEmpty && !_modelCapabilities.imageInput) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('图片输入界面已准备好；当前 MNN 文字运行时暂时不能读取图片内容')),
+          const SnackBar(content: Text('图片已保留在输入区；当前模型不支持图片理解，请切换到支持图片的模型')),
         );
       }
     } catch (error) {

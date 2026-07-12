@@ -1,9 +1,12 @@
 #include "fknotes_mnn_bridge.h"
 
 #include <atomic>
+#include <algorithm>
 #include <chrono>
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <memory>
 #include <mutex>
 #include <sstream>
@@ -95,6 +98,87 @@ using MNN::Transformer::ChatMessages;
 using MNN::Transformer::Llm;
 using MNN::Transformer::LlmContext;
 using MNN::Transformer::LlmStatus;
+using MNN::Transformer::MultimodalPrompt;
+
+struct MultimodalAttachment {
+    int32_t message_index;
+    std::string path;
+    std::string mime_type;
+};
+
+void replace_all(std::string& value, const std::string& from, const std::string& to) {
+    std::size_t position = 0;
+    while ((position = value.find(from, position)) != std::string::npos) {
+        value.replace(position, from.size(), to);
+        position += to.size();
+    }
+}
+
+void escape_multimodal_tags(std::string& value) {
+    replace_all(value, "<img>", "&lt;img&gt;");
+    replace_all(value, "</img>", "&lt;/img&gt;");
+    replace_all(value, "<audio>", "&lt;audio&gt;");
+    replace_all(value, "</audio>", "&lt;/audio&gt;");
+}
+
+bool is_image_mime(const std::string& mime_type) {
+    return mime_type == "image/jpeg" || mime_type == "image/png" ||
+           mime_type == "image/webp" || mime_type == "image/bmp";
+}
+
+bool is_audio_mime(const std::string& mime_type) {
+    return mime_type == "audio/wav" || mime_type == "audio/x-wav";
+}
+
+bool prepare_multimodal_messages(
+    ChatMessages& messages,
+    const std::vector<MultimodalAttachment>& attachments,
+    std::string& error) {
+    if (attachments.empty()) {
+        return true;
+    }
+    for (auto& message : messages) {
+        escape_multimodal_tags(message.second);
+    }
+    std::vector<std::string> prefixes(messages.size());
+    for (const auto& attachment : attachments) {
+        if (attachment.message_index < 0 ||
+            static_cast<std::size_t>(attachment.message_index) >= messages.size()) {
+            error = "多模态附件关联的消息无效";
+            return false;
+        }
+        auto& message = messages[static_cast<std::size_t>(attachment.message_index)];
+        if (message.first != "user") {
+            error = "多模态附件只能附加在用户消息中";
+            return false;
+        }
+        if (attachment.path.empty() || attachment.path.find('<') != std::string::npos ||
+            attachment.path.find('>') != std::string::npos) {
+            error = "多模态附件路径无效";
+            return false;
+        }
+        std::ifstream input(attachment.path, std::ios::binary);
+        if (!input.good()) {
+            error = "无法读取多模态附件";
+            return false;
+        }
+        auto& prefix = prefixes[static_cast<std::size_t>(attachment.message_index)];
+        if (is_image_mime(attachment.mime_type)) {
+            prefix += "<img>" + attachment.path + "</img>\n";
+        } else if (is_audio_mime(attachment.mime_type)) {
+            prefix += "<audio>" + attachment.path + "</audio>\n";
+        } else {
+            error = "MNN 原生层不支持这种多模态附件格式";
+            return false;
+        }
+    }
+    for (std::size_t index = 0; index < messages.size(); ++index) {
+        if (!prefixes[index].empty()) {
+            messages[index].second = prefixes[index] + messages[index].second;
+        }
+    }
+    return true;
+}
 
 class Runtime {
 public:
@@ -166,6 +250,7 @@ public:
     bool generate_async(
         int64_t request_id,
         ChatMessages messages,
+        std::vector<MultimodalAttachment> attachments,
         int max_new_tokens,
         double temperature,
         double top_p,
@@ -185,12 +270,13 @@ public:
             this,
             request_id,
             messages = std::move(messages),
+            attachments = std::move(attachments),
             max_new_tokens,
             temperature,
             top_p,
             top_k,
             timeout_milliseconds,
-            callback]() {
+            callback]() mutable {
             Llm* llm = nullptr;
             {
                 std::lock_guard<std::mutex> lock(mutex_);
@@ -205,7 +291,66 @@ public:
                      << ",\"topP\":" << top_p << ",\"topK\":" << top_k
                      << ",\"timeout_ms\":" << timeout_milliseconds << "}";
             llm->set_config(sampling.str());
-            llm->response(messages, nullptr, nullptr, 0);
+            std::string preparation_error;
+            if (!prepare_multimodal_messages(messages, attachments, preparation_error)) {
+                finish_generation(callback, request_id, FK_MNN_EVENT_ERROR, preparation_error);
+                return;
+            }
+
+            int64_t request_vision_us = 0;
+            int64_t request_audio_us = 0;
+            float request_pixels_mp = 0.0f;
+            float request_audio_input_s = 0.0f;
+            if (attachments.empty()) {
+                llm->response(messages, nullptr, nullptr, 0);
+            } else {
+                bool has_image = false;
+                bool has_audio = false;
+                for (const auto& attachment : attachments) {
+                    has_image = has_image || is_image_mime(attachment.mime_type);
+                    has_audio = has_audio || is_audio_mime(attachment.mime_type);
+                }
+                // MNN's text ChatMessages path owns prompt-cache prefix
+                // reconciliation. The multimodal token path bypasses it, so
+                // explicitly discard stale KV state before prefilling the full
+                // templated conversation.
+                llm->reset();
+                const LlmContext* before = llm->getContext();
+                const int64_t vision_before = before ? before->vision_us : 0;
+                const int64_t audio_before = before ? before->audio_us : 0;
+                const float pixels_before = before ? before->pixels_mp : 0.0f;
+                const float audio_input_before = before ? before->audio_input_s : 0.0f;
+
+                MultimodalPrompt multimodal_prompt;
+                multimodal_prompt.prompt_template = llm->apply_chat_template(messages);
+                auto input_ids = llm->tokenizer_encode(multimodal_prompt);
+                const LlmContext* processed = llm->getContext();
+                request_vision_us = processed ? processed->vision_us - vision_before : 0;
+                request_audio_us = processed ? processed->audio_us - audio_before : 0;
+                request_pixels_mp = processed ? processed->pixels_mp - pixels_before : 0.0f;
+                request_audio_input_s = processed ? processed->audio_input_s - audio_input_before : 0.0f;
+                if (has_image && request_pixels_mp <= 0.0f) {
+                    finish_generation(
+                        callback,
+                        request_id,
+                        FK_MNN_EVENT_ERROR,
+                        "当前模型没有成功处理图片，请确认视觉模型文件完整且模型支持图片理解");
+                    return;
+                }
+                if (has_audio && request_audio_input_s <= 0.0f) {
+                    finish_generation(
+                        callback,
+                        request_id,
+                        FK_MNN_EVENT_ERROR,
+                        "当前模型没有成功处理音频，请确认音频模型文件完整且模型支持音频理解");
+                    return;
+                }
+                if (input_ids.empty()) {
+                    finish_generation(callback, request_id, FK_MNN_EVENT_ERROR, "多模态提示词编码失败");
+                    return;
+                }
+                llm->response(input_ids, nullptr, nullptr, 0);
+            }
 
             std::size_t emitted_bytes = 0;
             int generated_steps = 0;
@@ -270,6 +415,10 @@ public:
                     << ",\"loadUs\":" << load_microseconds_
                     << ",\"prefillUs\":" << (context ? context->prefill_us : 0)
                     << ",\"decodeUs\":" << (context ? context->decode_us : 0)
+                    << ",\"visionUs\":" << request_vision_us
+                    << ",\"audioUs\":" << request_audio_us
+                    << ",\"imageMegapixels\":" << request_pixels_mp
+                    << ",\"audioInputSeconds\":" << request_audio_input_s
                     << "}";
             finish_generation(callback, request_id, FK_MNN_EVENT_COMPLETED, metrics.str());
         }).detach();
@@ -400,6 +549,10 @@ int32_t fk_mnn_generate_async(
     const char* const* roles,
     const char* const* contents,
     int32_t message_count,
+    const char* const* attachment_paths,
+    const char* const* attachment_mime_types,
+    const int32_t* attachment_message_indexes,
+    int32_t attachment_count,
     int32_t max_new_tokens,
     double temperature,
     double top_p,
@@ -408,6 +561,10 @@ int32_t fk_mnn_generate_async(
     FkMnnEventCallback callback) {
 #if defined(FKNOTES_MNN_RUNTIME)
     if (roles == nullptr || contents == nullptr || message_count <= 0 ||
+        attachment_count < 0 ||
+        (attachment_count > 0 &&
+         (attachment_paths == nullptr || attachment_mime_types == nullptr ||
+          attachment_message_indexes == nullptr)) ||
         max_new_tokens <= 0 || callback == nullptr) {
         return 0;
     }
@@ -419,9 +576,28 @@ int32_t fk_mnn_generate_async(
         }
         messages.emplace_back(roles[index], contents[index]);
     }
+    std::vector<MultimodalAttachment> attachments;
+    attachments.reserve(static_cast<std::size_t>(attachment_count));
+    for (int32_t index = 0; index < attachment_count; index++) {
+        if (attachment_paths[index] == nullptr || attachment_mime_types[index] == nullptr) {
+            return 0;
+        }
+        std::string mime_type(attachment_mime_types[index]);
+        std::transform(
+            mime_type.begin(),
+            mime_type.end(),
+            mime_type.begin(),
+            [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
+        attachments.push_back({
+            attachment_message_indexes[index],
+            attachment_paths[index],
+            std::move(mime_type),
+        });
+    }
     return runtime().generate_async(
         request_id,
         std::move(messages),
+        std::move(attachments),
         max_new_tokens,
         temperature,
         top_p,
@@ -430,6 +606,8 @@ int32_t fk_mnn_generate_async(
         callback) ? 1 : 0;
 #else
     (void)request_id; (void)roles; (void)contents; (void)message_count;
+    (void)attachment_paths; (void)attachment_mime_types;
+    (void)attachment_message_indexes; (void)attachment_count;
     (void)max_new_tokens; (void)temperature; (void)top_p; (void)top_k;
     (void)timeout_milliseconds; (void)callback;
     return 0;

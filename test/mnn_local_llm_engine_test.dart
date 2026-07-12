@@ -22,11 +22,14 @@ void main() {
     }
   });
 
-  LocalLlmModelDescriptor model() => LocalLlmModelDescriptor(
+  LocalLlmModelDescriptor model({
+    LocalLlmCapabilities capabilities = const LocalLlmCapabilities(),
+  }) => LocalLlmModelDescriptor(
     id: 'test-model',
     name: 'Test Model',
     configPath: configFile.path,
     nativeContextTokens: 8192,
+    capabilities: capabilities,
   );
 
   test('loads model and maps native generation metrics', () async {
@@ -54,6 +57,10 @@ void main() {
     expect(completed.metrics.promptTokens, 12);
     expect(completed.metrics.generatedTokens, 2);
     expect(completed.metrics.decodeTokensPerSecond, 10);
+    expect(completed.metrics.visionTime, const Duration(milliseconds: 40));
+    expect(completed.metrics.audioTime, const Duration(milliseconds: 30));
+    expect(completed.metrics.imageMegapixels, 1.5);
+    expect(completed.metrics.audioInputSeconds, 2.25);
   });
 
   test('cancel waits for native terminal event', () async {
@@ -100,45 +107,117 @@ void main() {
     );
   });
 
-  test(
-    'rejects image input until the native multimodal bridge is enabled',
-    () async {
-      final engine = MnnLocalLlmEngine(
-        transport: _FakeMnnTransport(),
-        supportDirectoryProvider: () async => temporaryDirectory,
-      );
-      await engine.loadModel(model());
+  test('resolves and forwards supported image input', () async {
+    final imageFile = File('${temporaryDirectory.path}/image.jpg');
+    await imageFile.writeAsBytes([0xff, 0xd8, 0xff, 0xd9]);
+    final transport = _FakeMnnTransport();
+    final engine = MnnLocalLlmEngine(
+      transport: transport,
+      supportDirectoryProvider: () async => temporaryDirectory,
+      attachmentPathResolver: (path) => '${temporaryDirectory.path}/$path',
+    );
+    await engine.loadModel(
+      model(capabilities: const LocalLlmCapabilities(imageInput: true)),
+    );
 
-      await expectLater(
-        engine
-            .generate(
-              LocalLlmGenerationRequest(
-                messages: const [
-                  LocalLlmMessage(
-                    role: LocalLlmRole.user,
-                    content: '分析图片',
-                    attachments: [
-                      LocalLlmAttachment(
-                        path: 'assistant/image.jpg',
-                        mimeType: 'image/jpeg',
-                      ),
-                    ],
-                  ),
+    await engine
+        .generate(
+          LocalLlmGenerationRequest(
+            messages: const [
+              LocalLlmMessage(
+                role: LocalLlmRole.user,
+                content: '分析图片',
+                attachments: [
+                  LocalLlmAttachment(path: 'image.jpg', mimeType: 'IMAGE/JPEG'),
                 ],
               ),
-            )
-            .toList(),
-        throwsA(
-          isA<LocalLlmException>().having(
-            (error) => error.message,
-            'message',
-            contains('尚未启用图片输入'),
+            ],
           ),
+        )
+        .toList();
+
+    final attachment =
+        transport.lastRequest!.messages.single.attachments.single;
+    expect(attachment.path, imageFile.path);
+    expect(attachment.mimeType, 'image/jpeg');
+    expect(engine.state, LocalLlmEngineState.ready);
+  });
+
+  test('rejects image input for a text-only model', () async {
+    final engine = MnnLocalLlmEngine(
+      transport: _FakeMnnTransport(),
+      supportDirectoryProvider: () async => temporaryDirectory,
+    );
+    await engine.loadModel(model());
+
+    await expectLater(
+      engine
+          .generate(
+            LocalLlmGenerationRequest(
+              messages: const [
+                LocalLlmMessage(
+                  role: LocalLlmRole.user,
+                  content: '分析图片',
+                  attachments: [
+                    LocalLlmAttachment(
+                      path: 'assistant/image.jpg',
+                      mimeType: 'image/jpeg',
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          )
+          .toList(),
+      throwsA(
+        isA<LocalLlmException>().having(
+          (error) => error.message,
+          'message',
+          contains('不支持图片输入'),
         ),
-      );
-      expect(engine.state, LocalLlmEngineState.ready);
-    },
-  );
+      ),
+    );
+    expect(engine.state, LocalLlmEngineState.ready);
+  });
+
+  test('rejects missing and unsafe multimodal files', () async {
+    final engine = MnnLocalLlmEngine(
+      transport: _FakeMnnTransport(),
+      supportDirectoryProvider: () async => temporaryDirectory,
+      attachmentPathResolver: (path) => '${temporaryDirectory.path}/$path',
+    );
+    await engine.loadModel(
+      model(capabilities: const LocalLlmCapabilities(imageInput: true)),
+    );
+
+    await expectLater(
+      engine
+          .generate(
+            LocalLlmGenerationRequest(
+              messages: const [
+                LocalLlmMessage(
+                  role: LocalLlmRole.user,
+                  content: '分析图片',
+                  attachments: [
+                    LocalLlmAttachment(
+                      path: 'missing.jpg',
+                      mimeType: 'image/jpeg',
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          )
+          .toList(),
+      throwsA(
+        isA<LocalLlmException>().having(
+          (error) => error.message,
+          'message',
+          contains('不存在'),
+        ),
+      ),
+    );
+  });
 }
 
 class _FakeMnnTransport implements MnnNativeTransport {
@@ -146,6 +225,7 @@ class _FakeMnnTransport implements MnnNativeTransport {
   final _events = StreamController<MnnNativeEvent>.broadcast();
   final generationStarted = Completer<void>();
   int? canceledRequestId;
+  LocalLlmGenerationRequest? lastRequest;
 
   _FakeMnnTransport({this.blockGeneration = false});
 
@@ -178,6 +258,7 @@ class _FakeMnnTransport implements MnnNativeTransport {
     required int requestId,
     required LocalLlmGenerationRequest request,
   }) {
+    lastRequest = request;
     if (!generationStarted.isCompleted) generationStarted.complete();
     scheduleMicrotask(() {
       _events.add(
@@ -223,7 +304,9 @@ class _FakeMnnTransport implements MnnNativeTransport {
         data:
             '{"reason":"completed","promptTokens":12,'
             '"generatedTokens":2,"loadUs":1000,'
-            '"prefillUs":100000,"decodeUs":200000}',
+            '"prefillUs":100000,"decodeUs":200000,'
+            '"visionUs":40000,"audioUs":30000,'
+            '"imageMegapixels":1.5,"audioInputSeconds":2.25}',
       ),
     );
   }
