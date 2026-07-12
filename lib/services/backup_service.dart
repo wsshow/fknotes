@@ -21,6 +21,7 @@ class BackupService {
     'documents',
     'thumbnails',
     'exports',
+    'assistant',
     'fknotes.db',
     'fknotes.db-journal',
     'fknotes.db-shm',

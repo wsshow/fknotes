@@ -1093,7 +1093,7 @@ class _DataTabState extends State<_DataTab> {
   }
 
   Future<void> _refreshSize() async {
-    final size = await FileStorageService.instance.storageSize();
+    final size = await FileStorageService.instance.userDataSize();
     if (mounted) setState(() => _actualSize = size);
   }
 
@@ -1191,7 +1191,7 @@ class _DataTabState extends State<_DataTab> {
                       _formatBytes(
                         _actualSize ?? widget.provider.totalFileSize,
                       ),
-                      '占用',
+                      '资料占用',
                     ),
                   ],
                 ),
@@ -1211,7 +1211,7 @@ class _DataTabState extends State<_DataTab> {
               _SettingRow(
                 icon: Icons.folder_rounded,
                 title: '应用私有存储',
-                subtitle: '数据库、附件和缩略图均安全保存在本机',
+                subtitle: '笔记、聊天、附件和缩略图均安全保存在本机',
                 showChevron: false,
               ),
               const Divider(height: 1),

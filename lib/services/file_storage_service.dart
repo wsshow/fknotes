@@ -29,6 +29,7 @@ class FileStorageService {
       p.join(_baseDir, 'documents'),
       p.join(_baseDir, 'thumbnails'),
       p.join(_baseDir, 'exports'),
+      p.join(_baseDir, 'assistant'),
       p.join(_baseDir, 'models', 'asr'),
       p.join(_baseDir, 'transcription_temp'),
     ];
@@ -180,6 +181,51 @@ class FileStorageService {
         } on FileSystemException {
           // A file can be removed while the storage scan is in progress.
         }
+      }
+    }
+    return total;
+  }
+
+  /// Size of content that belongs to the user, excluding downloaded models,
+  /// inference caches, application settings and temporary working files.
+  Future<int> userDataSize() async {
+    const directoryNames = {
+      'images',
+      'audio',
+      'video',
+      'documents',
+      'thumbnails',
+      'exports',
+      'assistant',
+    };
+    const fileNames = {
+      'fknotes.db',
+      'fknotes.db-journal',
+      'fknotes.db-shm',
+      'fknotes.db-wal',
+    };
+    var total = 0;
+    for (final name in directoryNames) {
+      final directory = Directory(p.join(_baseDir, name));
+      if (!await directory.exists()) continue;
+      await for (final entity in directory.list(
+        recursive: true,
+        followLinks: false,
+      )) {
+        if (entity is! File) continue;
+        try {
+          total += await entity.length();
+        } on FileSystemException {
+          // Content may be removed while the data page refreshes.
+        }
+      }
+    }
+    for (final name in fileNames) {
+      final file = File(p.join(_baseDir, name));
+      try {
+        if (await file.exists()) total += await file.length();
+      } on FileSystemException {
+        // Database sidecar files can disappear after a checkpoint.
       }
     }
     return total;
