@@ -21,6 +21,7 @@ class BackupService {
   static const _maxArchiveFiles = 100000;
   static const _maxExpandedBytes = 128 * 1024 * 1024 * 1024;
   static const _appLockPath = 'settings/app-lock.json';
+  static const _recoveryRoot = 'recovery';
 
   static const _managedRoots = {
     'images',
@@ -31,6 +32,7 @@ class BackupService {
     'exports',
     'assistant',
     'settings',
+    _recoveryRoot,
     'fknotes.db',
     'fknotes.db-journal',
     'fknotes.db-shm',
@@ -283,7 +285,9 @@ class BackupService {
   }
 
   bool _isIncludedBackupPath(String relativePath) =>
-      relativePath != _appLockPath && _isManagedPath(relativePath);
+      relativePath != _appLockPath &&
+      p.posix.split(relativePath).firstOrNull != _recoveryRoot &&
+      _isManagedPath(relativePath);
 
   Future<void> _moveManagedData(Directory source, Directory target) async {
     await target.create(recursive: true);

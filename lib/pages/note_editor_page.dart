@@ -11,6 +11,7 @@ import '../app.dart';
 import '../models/note_entry.dart';
 import '../providers/note_provider.dart';
 import '../services/file_storage_service.dart';
+import '../services/editor_draft_recovery_service.dart';
 import '../services/language_model_service.dart';
 import '../services/local_model_manager.dart';
 import '../services/kokoro_tts_model_service.dart';
@@ -51,22 +52,26 @@ class _NoteEditorPageState extends State<NoteEditorPage>
   String? _richContent;
   late String _lastTitleText;
   late String _lastContentText;
-  final _blockEditorKey = GlobalKey<NoteBlockEditorState>();
+  GlobalKey<NoteBlockEditorState> _blockEditorKey =
+      GlobalKey<NoteBlockEditorState>();
   late List<String> _tags;
   late bool _favorite;
   late bool _pinned;
   late List<NoteAttachment> _attachments;
   final List<NoteAttachment> _removedAttachments = [];
   final _storage = FileStorageService.instance;
+  final _draftRecovery = EditorDraftRecoveryService.instance;
   final _dictation = RealtimeDictationService.instance;
   final _readAloud = NoteReadAloudService.instance;
   late final Set<String> _importJobIds;
   NoteProvider? _provider;
   NoteEntry? _entry;
   Timer? _autosave;
+  Timer? _recoverySave;
   bool _changed = false;
   bool _saving = false;
   bool _saveAgain = false;
+  bool _disposing = false;
   bool _importing = false;
   bool _dictationAnchored = false;
   String _dictationInsertedText = '';
@@ -104,6 +109,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     _content.addListener(_onContentChanged);
     _dictation.addListener(_handleDictationChanged);
     _readAloud.addListener(_handleReadAloudChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkRecoveryDraft());
   }
 
   @override
@@ -150,12 +156,17 @@ class _NoteEditorPageState extends State<NoteEditorPage>
   }
 
   void _markChanged() {
+    if (_disposing) {
+      _changed = true;
+      return;
+    }
     if (!_changed && mounted) {
       setState(() => _changed = true);
     } else {
       _changed = true;
     }
     _scheduleAutosave();
+    _queueRecoveryDraft();
   }
 
   void _scheduleAutosave() {
@@ -165,7 +176,10 @@ class _NoteEditorPageState extends State<NoteEditorPage>
 
   @override
   void dispose() {
+    _disposing = true;
     _autosave?.cancel();
+    _recoverySave?.cancel();
+    if (_changed) _queueRecoveryDraft(flushEditor: true);
     WidgetsBinding.instance.removeObserver(this);
     _provider?.removeListener(_handleProviderChanged);
     _dictation.removeListener(_handleDictationChanged);
@@ -291,6 +305,133 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     if (state == AppLifecycleState.paused &&
         _dictation.status == RealtimeDictationStatus.listening) {
       unawaited(_cancelDictation());
+    }
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      unawaited(_saveBeforeBackground());
+    }
+  }
+
+  Future<void> _checkRecoveryDraft() async {
+    final noteId = widget.existingEntry?.id;
+    final draft = await _draftRecovery.load(noteId);
+    if (!mounted) return;
+    if (draft == null) return;
+    final entry = widget.existingEntry;
+    final stale =
+        entry != null &&
+        (draft.matchesEntry(entry) || !draft.savedAt.isAfter(entry.updatedAt));
+    if (stale || (entry == null && draft.isBlank)) {
+      await _draftRecovery.clear(noteId);
+      return;
+    }
+    final restore = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('发现未保存的草稿'),
+        content: const Text('上次编辑可能意外中断。要恢复尚未写入笔记的内容吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('放弃草稿'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('恢复'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (restore == true) {
+      _applyRecoveryDraft(draft);
+      _queueRecoveryDraft();
+    } else {
+      await _draftRecovery.clear(noteId);
+    }
+  }
+
+  void _applyRecoveryDraft(EditorRecoveryDraft draft) {
+    _title.removeListener(_onTitleChanged);
+    _content.removeListener(_onContentChanged);
+    _title.text = draft.title;
+    _content.text = draft.content;
+    _lastTitleText = draft.title;
+    _lastContentText = draft.content;
+    _title.addListener(_onTitleChanged);
+    _content.addListener(_onContentChanged);
+    setState(() {
+      _richContent = draft.richContent;
+      _tags = [...draft.tags];
+      _favorite = draft.isFavorite;
+      _pinned = draft.isPinned;
+      _attachments = [...draft.attachments];
+      _removedAttachments
+        ..clear()
+        ..addAll(draft.removedAttachments);
+      _blockEditorKey = GlobalKey<NoteBlockEditorState>();
+      _changed = true;
+    });
+    _scheduleAutosave();
+  }
+
+  EditorRecoveryDraft _recoverySnapshot() => EditorRecoveryDraft(
+    noteId: _entry?.id,
+    baseUpdatedAt: _entry?.updatedAt,
+    savedAt: DateTime.now(),
+    title: _title.text,
+    content: _content.text,
+    richContent: _richContent,
+    tags: [..._tags],
+    isFavorite: _favorite,
+    isPinned: _pinned,
+    attachments: _orderedAttachments,
+    removedAttachments: [..._removedAttachments],
+  );
+
+  void _queueRecoveryDraft({bool flushEditor = false}) {
+    if (!_changed) return;
+    _recoverySave?.cancel();
+    if (!flushEditor) {
+      _recoverySave = Timer(
+        const Duration(milliseconds: 180),
+        () => _writeRecoveryDraft(flushEditor: false),
+      );
+      return;
+    }
+    _writeRecoveryDraft(flushEditor: true);
+  }
+
+  void _writeRecoveryDraft({required bool flushEditor}) {
+    _recoverySave = null;
+    if (!_changed) return;
+    if (flushEditor) {
+      _richContent =
+          _blockEditorKey.currentState?.flushPendingChanges() ?? _richContent;
+    }
+    final draft = _recoverySnapshot();
+    unawaited(
+      _draftRecovery.save(draft).catchError((Object error) {
+        debugPrint('无法写入编辑器恢复草稿：$error');
+      }),
+    );
+  }
+
+  Future<void> _saveBeforeBackground() async {
+    if (!_changed || !mounted) return;
+    _autosave?.cancel();
+    _recoverySave?.cancel();
+    _recoverySave = null;
+    _richContent =
+        _blockEditorKey.currentState?.flushPendingChanges() ?? _richContent;
+    final draft = _recoverySnapshot();
+    try {
+      await _draftRecovery.save(draft);
+      if (mounted) await _persist(showError: false);
+    } catch (error) {
+      debugPrint('应用进入后台时无法保存编辑器草稿：$error');
     }
   }
 
@@ -530,7 +671,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     }
   }
 
-  Future<bool> _persist() async {
+  Future<bool> _persist({bool showError = true}) async {
     if (_saving) {
       _saveAgain = true;
       return false;
@@ -539,11 +680,16 @@ class _NoteEditorPageState extends State<NoteEditorPage>
         _blockEditorKey.currentState?.flushPendingChanges() ?? _richContent;
     final title = _title.text.trim();
     final content = _content.text;
-    if (title.isEmpty && content.trim().isEmpty && _attachments.isEmpty) {
+    if (_entry == null &&
+        title.isEmpty &&
+        content.trim().isEmpty &&
+        _attachments.isEmpty) {
+      _changed = false;
+      await _clearRecoveryDrafts();
       return true;
     }
     if (mounted) setState(() => _saving = true);
-    final provider = context.read<NoteProvider>();
+    final provider = _provider ?? context.read<NoteProvider>();
     final now = DateTime.now();
     var success = false;
     try {
@@ -583,10 +729,11 @@ class _NoteEditorPageState extends State<NoteEditorPage>
         await _storage.deleteFile(attachment.thumbnailPath);
       }
       _removedAttachments.clear();
+      await _clearRecoveryDrafts();
       success = true;
     } catch (error) {
       _changed = true;
-      if (mounted) {
+      if (showError && mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('自动保存失败：$error')));
@@ -596,9 +743,18 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     }
     if (_saveAgain) {
       _saveAgain = false;
-      return _persist();
+      return _persist(showError: showError);
     }
     return success;
+  }
+
+  Future<void> _clearRecoveryDrafts() async {
+    final persistedId = _entry?.id;
+    if (widget.existingEntry?.id == null && persistedId != null) {
+      await _draftRecovery.clearAfterCreation(persistedId);
+    } else {
+      await _draftRecovery.clear(persistedId ?? widget.existingEntry?.id);
+    }
   }
 
   List<NoteAttachment> get _orderedAttachments => [
@@ -751,6 +907,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       _changed = true;
     });
     _scheduleAutosave();
+    _queueRecoveryDraft();
   }
 
   void _moveAttachment(int index, int offset) {
@@ -762,6 +919,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       _changed = true;
     });
     _scheduleAutosave();
+    _queueRecoveryDraft();
   }
 
   void _removeAttachment(int index) {
@@ -770,6 +928,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       _changed = true;
     });
     _scheduleAutosave();
+    _queueRecoveryDraft();
   }
 
   Future<void> _openAttachment(NoteAttachment attachment) async {
@@ -816,6 +975,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
         _changed = true;
       });
       _scheduleAutosave();
+      _queueRecoveryDraft();
     }
   }
 
@@ -929,6 +1089,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                   _changed = true;
                 });
                 _scheduleAutosave();
+                _queueRecoveryDraft();
               },
               itemBuilder: (_) => [
                 AppPopupMenuItem.action(
@@ -1001,6 +1162,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                                           _changed = true;
                                         });
                                         _scheduleAutosave();
+                                        _queueRecoveryDraft();
                                       },
                                     ),
                                   ActionChip(

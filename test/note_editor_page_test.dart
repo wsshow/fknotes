@@ -10,6 +10,7 @@ import 'package:fknotes/providers/app_lock_controller.dart';
 import 'package:fknotes/providers/note_provider.dart';
 import 'package:fknotes/services/app_lock_preferences_service.dart';
 import 'package:fknotes/services/device_authentication_service.dart';
+import 'package:fknotes/services/editor_draft_recovery_service.dart';
 import 'package:fknotes/services/file_storage_service.dart';
 import 'package:fknotes/services/video_import_service.dart';
 import 'package:fknotes/widgets/note_block_editor.dart';
@@ -26,9 +27,12 @@ void main() {
       'fknotes_widget_test_',
     );
     await FileStorageService.instance.init(baseDir: storageDirectory.path);
+    EditorDraftRecoveryService.instance.bypassForTesting = true;
   });
 
   tearDownAll(() async {
+    EditorDraftRecoveryService.instance.bypassForTesting = false;
+    await EditorDraftRecoveryService.instance.clearAll();
     await storageDirectory.delete(recursive: true);
   });
 
