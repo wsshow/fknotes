@@ -206,6 +206,7 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
         content: Text(
           '${model.name}\n还需下载约 ${_formatBytes(remaining)}，建议使用 Wi-Fi。\n\n'
           '下载中可离开此页面；中断后会保留进度。'
+          '${model.recommendedMemoryBytes > 0 ? '\n\n建议设备至少具备 ${_formatMemory(model.recommendedMemoryBytes)} 运行内存；内存不足可能加载失败或被系统终止。' : ''}'
           '${model.task == LocalModelTask.textToSpeech ? '\n\n解压安装时请预留约 600 MB 可用空间。' : ''}',
         ),
         actions: [
@@ -278,7 +279,7 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
   }
 
   Future<void> _selectForAssistant(LocalModelDefinition model) async {
-    if (model.task != LocalModelTask.textGeneration) return;
+    if (model.category != LocalModelCategory.language) return;
     try {
       await _manager.selectForAssistant(model.id);
       if (mounted) {
@@ -383,6 +384,11 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
               if (model.languages.isNotEmpty)
                 _DetailRow('语言', model.languages.join('、')),
               if (model.version.isNotEmpty) _DetailRow('版本', model.version),
+              if (model.recommendedMemoryBytes > 0)
+                _DetailRow(
+                  '建议内存',
+                  '${_formatMemory(model.recommendedMemoryBytes)} 及以上',
+                ),
               if (model.source.isNotEmpty) _DetailRow('来源', model.source),
               if (model.license.isNotEmpty) _DetailRow('许可', model.license),
             ],
@@ -896,8 +902,8 @@ class _ModelCard extends StatelessWidget {
                         ],
                         if (selectedForAssistant &&
                             installation.installed &&
-                            definition.task ==
-                                LocalModelTask.textGeneration) ...[
+                            definition.category ==
+                                LocalModelCategory.language) ...[
                           const SizedBox(width: 7),
                           const _StatusBadge(label: '当前助手', installed: true),
                         ],
@@ -926,6 +932,11 @@ class _ModelCard extends StatelessWidget {
               _MetaChip(label: definition.engine),
               if (definition.downloadSizeBytes > 0)
                 _MetaChip(label: _formatBytes(definition.downloadSizeBytes)),
+              if (definition.recommendedMemoryBytes > 0)
+                _MetaChip(
+                  label:
+                      '${_formatMemory(definition.recommendedMemoryBytes)}+ 内存',
+                ),
               if (definition.languages.isNotEmpty)
                 _MetaChip(label: definition.languages.take(2).join(' / ')),
             ],
@@ -1004,7 +1015,7 @@ class _ModelCard extends StatelessWidget {
               icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
               label: const Text('用于听写'),
             ),
-          if (definition.task == LocalModelTask.textGeneration &&
+          if (definition.category == LocalModelCategory.language &&
               !selectedForAssistant)
             TextButton.icon(
               onPressed: onSelect,
@@ -1132,3 +1143,5 @@ String _formatBytes(int bytes) => bytes < 1024
     : bytes < 1073741824
     ? '${(bytes / 1048576).toStringAsFixed(1)} MB'
     : '${(bytes / 1073741824).toStringAsFixed(1)} GB';
+
+String _formatMemory(int bytes) => '${(bytes / 1073741824).round()} GB';

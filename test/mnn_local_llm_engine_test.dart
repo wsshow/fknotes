@@ -24,12 +24,15 @@ void main() {
 
   LocalLlmModelDescriptor model({
     LocalLlmCapabilities capabilities = const LocalLlmCapabilities(),
+    LocalLlmGenerationOptions generationOptions =
+        const LocalLlmGenerationOptions(),
   }) => LocalLlmModelDescriptor(
     id: 'test-model',
     name: 'Test Model',
     configPath: configFile.path,
     nativeContextTokens: 8192,
     capabilities: capabilities,
+    generationOptions: generationOptions,
   );
 
   test('loads model and maps native generation metrics', () async {
@@ -90,6 +93,43 @@ void main() {
       LocalLlmFinishReason.canceled,
     );
     expect(engine.state, LocalLlmEngineState.ready);
+  });
+
+  test('uses the selected model sampling profile', () async {
+    final transport = _FakeMnnTransport();
+    final engine = MnnLocalLlmEngine(
+      transport: transport,
+      supportDirectoryProvider: () async => temporaryDirectory,
+    );
+    await engine.loadModel(
+      model(
+        generationOptions: const LocalLlmGenerationOptions(
+          temperature: 1,
+          topP: 0.8,
+          topK: 20,
+        ),
+      ),
+    );
+
+    await engine
+        .generate(
+          LocalLlmGenerationRequest(
+            messages: const [
+              LocalLlmMessage(role: LocalLlmRole.user, content: '继续'),
+            ],
+            options: const LocalLlmGenerationOptions(
+              maxNewTokens: 96,
+              timeout: Duration(seconds: 10),
+            ),
+          ),
+        )
+        .toList();
+
+    expect(transport.lastRequest!.options.maxNewTokens, 96);
+    expect(transport.lastRequest!.options.timeout, const Duration(seconds: 10));
+    expect(transport.lastRequest!.options.temperature, 1);
+    expect(transport.lastRequest!.options.topP, 0.8);
+    expect(transport.lastRequest!.options.topK, 20);
   });
 
   test('rejects context larger than model capability', () async {

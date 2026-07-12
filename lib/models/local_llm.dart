@@ -87,6 +87,7 @@ class LocalLlmModelDescriptor {
   final int recommendedContextTokens;
   final int minimumMemoryBytes;
   final LocalLlmCapabilities capabilities;
+  final LocalLlmGenerationOptions generationOptions;
 
   const LocalLlmModelDescriptor({
     required this.id,
@@ -96,6 +97,7 @@ class LocalLlmModelDescriptor {
     this.recommendedContextTokens = 4096,
     this.minimumMemoryBytes = 0,
     this.capabilities = const LocalLlmCapabilities(),
+    this.generationOptions = const LocalLlmGenerationOptions(),
   }) : assert(nativeContextTokens > 0),
        assert(recommendedContextTokens > 0),
        assert(recommendedContextTokens <= nativeContextTokens);

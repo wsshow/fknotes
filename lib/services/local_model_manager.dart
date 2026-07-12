@@ -124,6 +124,11 @@ class LocalModelManager extends ChangeNotifier {
   static const mlKitChineseOcrId = 'mlkit-text-recognition-chinese';
   static const miniCpm5Id = LanguageModelService.miniCpm5Id;
   static const qwen35Id = LanguageModelService.qwen35Id;
+  static const qwen3Vl4BId = LanguageModelService.qwen3Vl4BId;
+  static const qwen3Vl8BId = LanguageModelService.qwen3Vl8BId;
+  static const miniCpmV4Id = LanguageModelService.miniCpmV4Id;
+  static const gemma4E2BId = LanguageModelService.gemma4E2BId;
+  static const gemma4E4BId = LanguageModelService.gemma4E4BId;
 
   static const catalog = <LocalModelDefinition>[
     LocalModelDefinition(
@@ -140,22 +145,105 @@ class LocalModelManager extends ChangeNotifier {
       version: 'MiniCPM5 1B · 2026-05',
       source: 'OpenBMB / taobao-mnn · Hugging Face 国内镜像优先',
       license: 'Apache-2.0',
+      recommendedMemoryBytes: 4 * 1024 * 1024 * 1024,
     ),
     LocalModelDefinition(
       id: qwen35Id,
       name: 'Qwen3.5 2B INT4',
-      summary: '支持图片理解的本地笔记助手',
-      description: '推荐用于中文写作、复杂摘要、中英文整理、笔记问答和本地图片理解。',
+      summary: '轻量通用图文助手（图片能力实验性）',
+      description: '适合中文写作、复杂摘要、中英文整理和笔记问答；可处理图片，但精细视觉任务建议改用专用视觉模型。',
       category: LocalModelCategory.language,
       availability: LocalModelAvailability.downloadable,
-      task: LocalModelTask.imageUnderstanding,
+      task: LocalModelTask.textGeneration,
       downloadSizeBytes: LanguageModelService.qwen35DownloadSizeBytes,
       languages: ['中文', '英语', '多语言', '图片'],
       engine: 'MNN 3.6 · INT4',
       version: 'Qwen3.5 2B · 2026-03',
       source: 'Qwen / taobao-mnn · Hugging Face 国内镜像优先',
       license: 'Apache-2.0',
+      recommendedMemoryBytes: 6 * 1024 * 1024 * 1024,
+    ),
+    LocalModelDefinition(
+      id: qwen3Vl4BId,
+      name: 'Qwen3-VL 4B Instruct INT4',
+      summary: '均衡的多语言图文理解模型',
+      description: '适合图片问答、中文 OCR、文档与图表理解，以及质量要求更高的写作和知识整理。',
+      category: LocalModelCategory.language,
+      availability: LocalModelAvailability.downloadable,
+      task: LocalModelTask.textGeneration,
+      downloadSizeBytes: LanguageModelService.qwen3Vl4BDownloadSizeBytes,
+      languages: ['中文', '英语', '多语言', '图片'],
+      engine: 'MNN 3.6 · INT4',
+      version: 'Qwen3-VL 4B Instruct',
+      source: 'Qwen / taobao-mnn · Hugging Face 国内镜像优先',
+      license: 'Apache-2.0',
       recommended: true,
+      recommendedMemoryBytes: 8 * 1024 * 1024 * 1024,
+    ),
+    LocalModelDefinition(
+      id: qwen3Vl8BId,
+      name: 'Qwen3-VL 8B Instruct INT4',
+      summary: '更强的多语言图文理解模型',
+      description: '面向复杂图片、长文档、图表、OCR 和高质量内容生成；模型较大，适合高内存旗舰设备。',
+      category: LocalModelCategory.language,
+      availability: LocalModelAvailability.downloadable,
+      task: LocalModelTask.textGeneration,
+      downloadSizeBytes: LanguageModelService.qwen3Vl8BDownloadSizeBytes,
+      languages: ['中文', '英语', '多语言', '图片'],
+      engine: 'MNN 3.6 · INT4',
+      version: 'Qwen3-VL 8B Instruct',
+      source: 'Qwen / taobao-mnn · Hugging Face 国内镜像优先',
+      license: 'Apache-2.0',
+      recommendedMemoryBytes: 12 * 1024 * 1024 * 1024,
+    ),
+    LocalModelDefinition(
+      id: miniCpmV4Id,
+      name: 'MiniCPM-V 4 INT4',
+      summary: '移动端优化的中文视觉模型',
+      description: '偏重中文 OCR、截图、文档和高分辨率图片理解，在模型体积与视觉能力之间取得平衡。',
+      category: LocalModelCategory.language,
+      availability: LocalModelAvailability.downloadable,
+      task: LocalModelTask.textGeneration,
+      downloadSizeBytes: LanguageModelService.miniCpmV4DownloadSizeBytes,
+      languages: ['中文', '英语', '图片'],
+      engine: 'MNN 3.6 · INT4',
+      version: 'MiniCPM-V 4',
+      source: 'OpenBMB / taobao-mnn · Hugging Face 国内镜像优先',
+      license: 'Apache-2.0',
+      recommended: true,
+      recommendedMemoryBytes: 8 * 1024 * 1024 * 1024,
+    ),
+    LocalModelDefinition(
+      id: gemma4E2BId,
+      name: 'Gemma 4 E2B IT INT4',
+      summary: '支持图像与音频的端侧推理模型',
+      description: '支持推理、图片理解和 WAV 音频理解，兼顾多语言、代码与内容生成，适合较新的高端设备。',
+      category: LocalModelCategory.language,
+      availability: LocalModelAvailability.downloadable,
+      task: LocalModelTask.textGeneration,
+      downloadSizeBytes: LanguageModelService.gemma4E2BDownloadSizeBytes,
+      languages: ['多语言', '图片', '音频'],
+      engine: 'MNN 3.6 · INT4 · PLE',
+      version: 'Gemma 4 E2B IT',
+      source: 'Google / taobao-mnn · Hugging Face 国内镜像优先',
+      license: 'Apache-2.0',
+      recommendedMemoryBytes: 8 * 1024 * 1024 * 1024,
+    ),
+    LocalModelDefinition(
+      id: gemma4E4BId,
+      name: 'Gemma 4 E4B IT INT4',
+      summary: '更强的图像、音频与推理模型',
+      description: '面向更复杂的推理、代码、多语言图文和音频理解；资源占用较高，适合 12 GB 以上内存设备。',
+      category: LocalModelCategory.language,
+      availability: LocalModelAvailability.downloadable,
+      task: LocalModelTask.textGeneration,
+      downloadSizeBytes: LanguageModelService.gemma4E4BDownloadSizeBytes,
+      languages: ['多语言', '图片', '音频'],
+      engine: 'MNN 3.6 · INT4 · PLE',
+      version: 'Gemma 4 E4B IT',
+      source: 'Google / taobao-mnn · Hugging Face 国内镜像优先',
+      license: 'Apache-2.0',
+      recommendedMemoryBytes: 12 * 1024 * 1024 * 1024,
     ),
     LocalModelDefinition(
       id: senseVoiceId,
@@ -348,10 +436,13 @@ class LocalModelManager extends ChangeNotifier {
       _speakerDiarizationModels.partialDownloadBytes(),
       _kokoroTtsModels.inspect(),
       _kokoroTtsModels.partialDownloadBytes(),
-      _languageModels.inspect(miniCpm5Id),
-      _languageModels.partialDownloadBytes(miniCpm5Id),
-      _languageModels.inspect(qwen35Id),
-      _languageModels.partialDownloadBytes(qwen35Id),
+      Future.wait<List<Object>>([
+        for (final id in LanguageModelService.supportedModelIds)
+          Future.wait<Object>([
+            _languageModels.inspect(id),
+            _languageModels.partialDownloadBytes(id),
+          ]),
+      ]),
       _languageModels.selectedModelId(),
     ]);
     final speech = results[0] as SpeechModelInfo;
@@ -369,11 +460,8 @@ class LocalModelManager extends ChangeNotifier {
     final speakerDiarizationPartial = results[12] as int;
     final kokoroTts = results[13] as KokoroTtsModelInfo;
     final kokoroTtsPartial = results[14] as int;
-    final miniCpm5 = results[15] as LanguageModelInfo;
-    final miniCpm5Partial = results[16] as int;
-    final qwen35 = results[17] as LanguageModelInfo;
-    final qwen35Partial = results[18] as int;
-    final selectedAssistantModelId = results[19] as String;
+    final languageResults = results[15] as List<List<Object>>;
+    final selectedAssistantModelId = results[16] as String;
     if (generation != _initializationGeneration) return;
     _selectedLiveDictationModelId = selectedLiveDictationModelId;
     _selectedAssistantModelId = selectedAssistantModelId;
@@ -412,16 +500,16 @@ class LocalModelManager extends ChangeNotifier {
       installedSizeBytes: kokoroTts.sizeBytes,
       partialSizeBytes: kokoroTtsPartial,
     );
-    _installations[miniCpm5Id] = LocalModelInstallation(
-      installed: miniCpm5.installed,
-      installedSizeBytes: miniCpm5.sizeBytes,
-      partialSizeBytes: miniCpm5Partial,
-    );
-    _installations[qwen35Id] = LocalModelInstallation(
-      installed: qwen35.installed,
-      installedSizeBytes: qwen35.sizeBytes,
-      partialSizeBytes: qwen35Partial,
-    );
+    for (var index = 0; index < languageResults.length; index++) {
+      final id = LanguageModelService.supportedModelIds[index];
+      final info = languageResults[index][0] as LanguageModelInfo;
+      final partialBytes = languageResults[index][1] as int;
+      _installations[id] = LocalModelInstallation(
+        installed: info.installed,
+        installedSizeBytes: info.sizeBytes,
+        partialSizeBytes: partialBytes,
+      );
+    }
     _installations[mlKitChineseOcrId] = const LocalModelInstallation(
       installed: true,
     );
@@ -695,7 +783,7 @@ class LocalModelManager extends ChangeNotifier {
 
   Future<void> selectForAssistant(String modelId) async {
     final definition = _definition(modelId);
-    if (definition.task != LocalModelTask.textGeneration) return;
+    if (definition.category != LocalModelCategory.language) return;
     await _languageModels.selectModel(modelId);
     _selectedAssistantModelId = modelId;
     notifyListeners();

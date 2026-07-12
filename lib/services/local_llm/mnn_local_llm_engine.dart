@@ -404,7 +404,13 @@ class MnnLocalLlmEngine implements LocalLlmEngine {
     }
     return LocalLlmGenerationRequest(
       messages: messages,
-      options: request.options,
+      options: LocalLlmGenerationOptions(
+        maxNewTokens: request.options.maxNewTokens,
+        temperature: model.generationOptions.temperature,
+        topP: model.generationOptions.topP,
+        topK: model.generationOptions.topK,
+        timeout: request.options.timeout,
+      ),
     );
   }
 

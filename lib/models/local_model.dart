@@ -29,6 +29,7 @@ class LocalModelDefinition {
   final String source;
   final String license;
   final bool recommended;
+  final int recommendedMemoryBytes;
 
   const LocalModelDefinition({
     required this.id,
@@ -45,6 +46,7 @@ class LocalModelDefinition {
     this.source = '',
     this.license = '',
     this.recommended = false,
+    this.recommendedMemoryBytes = 0,
   });
 }
 

@@ -19,17 +19,30 @@ void main() {
   });
 
   test('pinned download sizes match the model catalog', () {
-    expect(
-      service.downloadSizeBytes(LanguageModelService.miniCpm5Id),
-      LanguageModelService.miniCpm5DownloadSizeBytes,
-    );
-    expect(
-      service.downloadSizeBytes(LanguageModelService.qwen35Id),
-      LanguageModelService.qwen35DownloadSizeBytes,
-    );
+    const expected = {
+      LanguageModelService.miniCpm5Id:
+          LanguageModelService.miniCpm5DownloadSizeBytes,
+      LanguageModelService.qwen35Id:
+          LanguageModelService.qwen35DownloadSizeBytes,
+      LanguageModelService.qwen3Vl4BId:
+          LanguageModelService.qwen3Vl4BDownloadSizeBytes,
+      LanguageModelService.qwen3Vl8BId:
+          LanguageModelService.qwen3Vl8BDownloadSizeBytes,
+      LanguageModelService.miniCpmV4Id:
+          LanguageModelService.miniCpmV4DownloadSizeBytes,
+      LanguageModelService.gemma4E2BId:
+          LanguageModelService.gemma4E2BDownloadSizeBytes,
+      LanguageModelService.gemma4E4BId:
+          LanguageModelService.gemma4E4BDownloadSizeBytes,
+    };
+
+    expect(LanguageModelService.supportedModelIds, expected.keys);
+    for (final entry in expected.entries) {
+      expect(service.downloadSizeBytes(entry.key), entry.value);
+    }
   });
 
-  test('declares multimodal capability only for the visual model', () {
+  test('declares each pinned model multimodal capability', () {
     expect(
       service.capabilities(LanguageModelService.qwen35Id).imageInput,
       isTrue,
@@ -37,6 +50,23 @@ void main() {
     expect(
       service.capabilities(LanguageModelService.miniCpm5Id).imageInput,
       isFalse,
+    );
+    for (final id in const [
+      LanguageModelService.qwen3Vl4BId,
+      LanguageModelService.qwen3Vl8BId,
+      LanguageModelService.miniCpmV4Id,
+      LanguageModelService.gemma4E2BId,
+      LanguageModelService.gemma4E4BId,
+    ]) {
+      expect(service.capabilities(id).imageInput, isTrue, reason: id);
+    }
+    expect(
+      service.capabilities(LanguageModelService.gemma4E2BId).audioInput,
+      isTrue,
+    );
+    expect(
+      service.capabilities(LanguageModelService.gemma4E4BId).audioInput,
+      isTrue,
     );
   });
 
