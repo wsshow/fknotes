@@ -18,6 +18,29 @@ class NoteService {
     return _hydrate(db, maps);
   }
 
+  Future<Set<String>> referencedAttachmentPaths() async {
+    final db = await _db;
+    final paths = <String>{};
+    for (final row in await db.rawQuery(
+      'SELECT file_path, thumbnail_path FROM attachments',
+    )) {
+      final filePath = row['file_path'] as String?;
+      final thumbnailPath = row['thumbnail_path'] as String?;
+      if (filePath?.isNotEmpty == true) paths.add(filePath!);
+      if (thumbnailPath?.isNotEmpty == true) paths.add(thumbnailPath!);
+    }
+    for (final row in await db.rawQuery(
+      'SELECT file_path, thumbnail_path FROM entries '
+      'WHERE file_path IS NOT NULL OR thumbnail_path IS NOT NULL',
+    )) {
+      final filePath = row['file_path'] as String?;
+      final thumbnailPath = row['thumbnail_path'] as String?;
+      if (filePath?.isNotEmpty == true) paths.add(filePath!);
+      if (thumbnailPath?.isNotEmpty == true) paths.add(thumbnailPath!);
+    }
+    return paths;
+  }
+
   Future<NoteEntry?> getEntry(int id) async {
     final db = await _db;
     final maps = await db.query('entries', where: 'id = ?', whereArgs: [id]);

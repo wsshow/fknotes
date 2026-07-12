@@ -50,4 +50,44 @@ void main() {
       p.join(root.path, 'images', 'safe.jpg'),
     );
   });
+
+  test(
+    'orphan cleanup preserves referenced, protected and recent files',
+    () async {
+      Future<File> write(String relativePath, {bool old = true}) async {
+        final file = File(p.join(root.path, relativePath));
+        await file.parent.create(recursive: true);
+        await file.writeAsBytes(List.filled(7, 1));
+        if (old) {
+          await file.setLastModified(
+            DateTime.now().subtract(const Duration(days: 2)),
+          );
+        }
+        return file;
+      }
+
+      final referenced = await write('images/referenced.jpg');
+      final protected = await write('audio/importing.m4a');
+      final recent = await write('documents/recent.pdf', old: false);
+      final orphan = await write('video/orphan.mp4');
+      final orphanThumbnail = await write('thumbnails/orphan_thumb.jpg');
+      final partial = await write('video/active.mp4.part');
+
+      final result = await FileStorageService.instance
+          .cleanupOrphanedAttachments(
+            referencedPaths: {'images/referenced.jpg'},
+            protectedPaths: {'audio/importing.m4a'},
+            minimumAge: const Duration(hours: 24),
+          );
+
+      expect(await referenced.exists(), isTrue);
+      expect(await protected.exists(), isTrue);
+      expect(await recent.exists(), isTrue);
+      expect(await partial.exists(), isTrue);
+      expect(await orphan.exists(), isFalse);
+      expect(await orphanThumbnail.exists(), isFalse);
+      expect(result.deletedFiles, 2);
+      expect(result.reclaimedBytes, 14);
+    },
+  );
 }

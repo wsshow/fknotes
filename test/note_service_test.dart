@@ -91,6 +91,9 @@ void main() {
         'images/a.jpg',
         'images/c.jpg',
       ]);
+      final referencedPaths = await notes.referencedAttachmentPaths();
+      expect(referencedPaths, containsAll(['images/a.jpg', 'images/c.jpg']));
+      expect(referencedPaths, isNot(contains('images/b.jpg')));
     },
   );
 

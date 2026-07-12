@@ -115,7 +115,23 @@ class NoteProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     try {
+      await _attachmentImports.restoreJobs();
+      _importDrafts.addAll(
+        _attachmentImports.jobs
+            .where(
+              (job) =>
+                  job.ownsNoteDraft && !job.committed && job.noteId != null,
+            )
+            .map((job) => job.noteId!),
+      );
       _entries = [...await _notes.getAllEntries()];
+      _scheduleCompletedImportJobs();
+      await _importFinalization;
+      final referencedPaths = await _notes.referencedAttachmentPaths();
+      await _storage.cleanupOrphanedAttachments(
+        referencedPaths: referencedPaths,
+        protectedPaths: _attachmentImports.protectedFilePaths,
+      );
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -214,7 +230,11 @@ class NoteProvider extends ChangeNotifier {
         );
     if (noteId == null) _importDrafts.add(targetNoteId);
     for (final job in started) {
-      _attachmentImports.assignToNote(job.id, targetNoteId);
+      _attachmentImports.assignToNote(
+        job.id,
+        targetNoteId,
+        ownsNoteDraft: noteId == null,
+      );
     }
     _scheduleCompletedImportJobs();
     return started
@@ -292,8 +312,14 @@ class NoteProvider extends ChangeNotifier {
       if (noteId == null || filePath == null) return;
       var entry = getEntryById(noteId);
       entry ??= await _notes.getEntry(noteId);
-      if (entry == null) return;
+      if (entry == null) {
+        await _storage.deleteFile(job.filePath);
+        await _storage.deleteFile(job.thumbnailPath);
+        _attachmentImports.dismiss(job.id);
+        return;
+      }
       if (entry.allAttachments.any((item) => item.filePath == filePath)) {
+        _importDrafts.remove(noteId);
         _attachmentImports.markCommitted(job.id);
         return;
       }

@@ -15,6 +15,7 @@ import android.media.MediaFormat
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.os.StatFs
 import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
 import androidx.exifinterface.media.ExifInterface
@@ -25,6 +26,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.io.IOException
 import java.io.RandomAccessFile
 import java.nio.ByteOrder
 import java.util.Locale
@@ -43,6 +45,8 @@ class MainActivity : FlutterFragmentActivity() {
         const val PROGRESS_INTERVAL_MS = 80L
         const val THUMBNAIL_WIDTH = 300
         const val THUMBNAIL_DECODE_BOUND = 900
+        const val IMPORT_MINIMUM_HEADROOM = 32L * 1024 * 1024
+        const val UNKNOWN_SIZE_MINIMUM_SPACE = 64L * 1024 * 1024
     }
 
     private val preparationExecutor = Executors.newSingleThreadExecutor()
@@ -90,6 +94,9 @@ class MainActivity : FlutterFragmentActivity() {
                         task.canceled.set(true)
                         result.success(true)
                     }
+                }
+                "availableStorageBytes" -> {
+                    result.success(StatFs(filesDir.absolutePath).availableBytes)
                 }
                 else -> result.notImplemented()
             }
@@ -330,6 +337,7 @@ class MainActivity : FlutterFragmentActivity() {
                 val metadata = readMetadata(uri, request)
                 createTask(request, metadata, sourceUri = uri)
             }
+            ensureImportCapacity(tasks)
             startPreparedTasks(tasks, result)
         } catch (error: Exception) {
             completePreparationError(result, error)
@@ -358,6 +366,7 @@ class MainActivity : FlutterFragmentActivity() {
                         sourceFile = source,
                     )
                 }
+                ensureImportCapacity(tasks)
                 startPreparedTasks(tasks, result, clearPicker = false)
             } catch (error: Exception) {
                 completePreparationError(result, error, clearPicker = false)
@@ -432,6 +441,7 @@ class MainActivity : FlutterFragmentActivity() {
                         }
                     }
                     output.flush()
+                    output.fd.sync()
                 }
             }
             if (task.canceled.get()) throw ImportCanceledException()
@@ -486,6 +496,26 @@ class MainActivity : FlutterFragmentActivity() {
         task.sourceFile != null -> FileInputStream(task.sourceFile)
         else -> error("附件来源无效")
     }
+
+    private fun ensureImportCapacity(tasks: List<ImportTask>) {
+        val knownBytes = tasks.sumOf { task -> maxOf(0L, task.metadata.totalBytes) }
+        val containsUnknownSize = tasks.any { task -> task.metadata.totalBytes < 0 }
+        val headroom = maxOf(IMPORT_MINIMUM_HEADROOM, knownBytes / 10)
+        val requiredBytes = maxOf(
+            knownBytes + headroom,
+            if (containsUnknownSize) UNKNOWN_SIZE_MINIMUM_SPACE else 0L,
+        )
+        val availableBytes = StatFs(filesDir.absolutePath).availableBytes
+        if (availableBytes < requiredBytes) {
+            throw IOException(
+                "存储空间不足：导入至少需要 ${formatMegabytes(requiredBytes)}，" +
+                    "当前可用 ${formatMegabytes(availableBytes)}",
+            )
+        }
+    }
+
+    private fun formatMegabytes(bytes: Long): String =
+        String.format(Locale.US, "%.1f MB", bytes.toDouble() / (1024 * 1024))
 
     private fun createThumbnail(image: File, jobId: String): File? = try {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -562,6 +592,11 @@ class MainActivity : FlutterFragmentActivity() {
                 if (nameIndex >= 0 && !cursor.isNull(nameIndex)) displayName = cursor.getString(nameIndex)
                 if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) totalBytes = cursor.getLong(sizeIndex)
             }
+        }
+        if (totalBytes < 0) {
+            totalBytes = contentResolver.openAssetFileDescriptor(uri, "r")?.use { descriptor ->
+                descriptor.length
+            } ?: -1L
         }
         val mimeType = contentResolver.getType(uri)?.takeIf { it.isNotBlank() }
             ?: mimeTypeForName(displayName, request.mimeType)

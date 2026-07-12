@@ -241,6 +241,63 @@ class FileStorageService {
     }
     return total;
   }
+
+  Future<OrphanCleanupResult> cleanupOrphanedAttachments({
+    required Set<String> referencedPaths,
+    Set<String> protectedPaths = const {},
+    Duration minimumAge = const Duration(hours: 24),
+  }) async {
+    const folders = ['images', 'audio', 'video', 'documents', 'thumbnails'];
+    final retained = {
+      ...referencedPaths.map(_normalizeRelativePath),
+      ...protectedPaths.map(_normalizeRelativePath),
+    };
+    final cutoff = DateTime.now().subtract(minimumAge);
+    var deletedFiles = 0;
+    var reclaimedBytes = 0;
+    for (final folder in folders) {
+      final directory = Directory(p.join(_baseDir, folder));
+      if (!await directory.exists()) continue;
+      await for (final entity in directory.list(
+        recursive: true,
+        followLinks: false,
+      )) {
+        if (entity is! File || entity.path.endsWith('.part')) continue;
+        final relative = _normalizeRelativePath(
+          p.relative(entity.path, from: _baseDir),
+        );
+        if (retained.contains(relative)) continue;
+        try {
+          final stat = await entity.stat();
+          if (stat.modified.isAfter(cutoff)) continue;
+          final bytes = stat.size;
+          await entity.delete();
+          deletedFiles++;
+          reclaimedBytes += bytes;
+        } on FileSystemException {
+          // A file may still be open or may have been removed concurrently.
+        }
+      }
+    }
+    return OrphanCleanupResult(
+      deletedFiles: deletedFiles,
+      reclaimedBytes: reclaimedBytes,
+    );
+  }
+
+  String _normalizeRelativePath(String value) => p.posix.normalize(
+    value.replaceAll(p.separator, '/').replaceAll('\\', '/'),
+  );
+}
+
+class OrphanCleanupResult {
+  final int deletedFiles;
+  final int reclaimedBytes;
+
+  const OrphanCleanupResult({
+    required this.deletedFiles,
+    required this.reclaimedBytes,
+  });
 }
 
 bool _generateThumbnailFile(String sourcePath, String outputPath) {
