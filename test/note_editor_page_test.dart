@@ -267,6 +267,34 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('editor chrome renders in English without overflow', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => NoteProvider(),
+        child: const MaterialApp(
+          locale: Locale('en'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: NoteEditorPage(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('New note'), findsOneWidget);
+    expect(
+      find.textContaining('Saved on device · 0 characters'),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('Live voice input'), findsOneWidget);
+    expect(find.byTooltip('Read note aloud'), findsOneWidget);
+    expect(find.byTooltip('Paragraph style'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Markdown content stays in the live structured editor', (
     tester,
   ) async {

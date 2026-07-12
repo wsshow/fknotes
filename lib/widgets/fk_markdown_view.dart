@@ -5,6 +5,7 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../app.dart';
+import '../l10n/l10n.dart';
 import 'app_feedback.dart';
 import 'editor_context_menu.dart';
 import 'markdown_latex.dart';
@@ -139,24 +140,24 @@ class FkMarkdownView extends StatelessWidget {
   ) async {
     final uri = Uri.tryParse(href);
     if (uri == null || !{'http', 'https', 'mailto'}.contains(uri.scheme)) {
-      AppFeedback.error(context, '这个链接地址无效或使用了不受支持的协议');
+      AppFeedback.error(context, context.l10n.invalidExternalLink);
       return;
     }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('打开外部链接？'),
+        title: Text(context.l10n.openExternalLinkQuestion),
         content: Text(
-          '${uri.host.isEmpty ? href : uri.host}\n\n链接将交给系统中的其他应用处理，可能离开 FKNotes。',
+          context.l10n.externalLinkWarning(uri.host.isEmpty ? href : uri.host),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('取消'),
+            child: Text(context.l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('继续打开'),
+            child: Text(context.l10n.continueOpening),
           ),
         ],
       ),
@@ -165,11 +166,11 @@ class FkMarkdownView extends StatelessWidget {
     try {
       final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!opened && context.mounted) {
-        AppFeedback.error(context, '系统中没有可以打开这个链接的应用');
+        AppFeedback.error(context, context.l10n.noExternalLinkHandler);
       }
     } catch (_) {
       if (context.mounted) {
-        AppFeedback.error(context, '无法打开这个链接');
+        AppFeedback.error(context, context.l10n.externalLinkOpenFailed);
       }
     }
   }
@@ -195,7 +196,7 @@ class _BlockedMarkdownImage extends StatelessWidget {
         const SizedBox(width: 9),
         Expanded(
           child: Text(
-            '未加载外部图片：$label',
+            context.l10n.remoteImageBlocked(label),
             style: const TextStyle(color: AppColors.muted, fontSize: 12),
           ),
         ),

@@ -4,9 +4,38 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../app.dart';
+import '../l10n/l10n.dart';
 import '../models/note_entry.dart';
 import '../services/file_storage_service.dart';
 import 'app_popup_menu.dart';
+
+String _localizedNoteType(BuildContext context, NoteType type) =>
+    switch (type) {
+      NoteType.text => context.l10n.note,
+      NoteType.image => context.l10n.image,
+      NoteType.audio => context.l10n.audio,
+      NoteType.video => context.l10n.video,
+      NoteType.document => context.l10n.file,
+    };
+
+String _localizedMetadata(BuildContext context, NoteEntry entry) {
+  final items = entry.allAttachments;
+  if (items.isEmpty) {
+    final count = entry.plainTextContent.replaceAll('\n', '').runes.length;
+    return '${context.l10n.note} · ${context.l10n.characterCount(count)}';
+  }
+  final types = items.map((item) => item.type).toSet();
+  if (types.length > 1 || (entry.content?.trim().isNotEmpty ?? false)) {
+    return context.l10n.mixedAttachmentMetadata(items.length);
+  }
+  return switch (types.first) {
+    NoteType.image => context.l10n.imageAttachmentMetadata(items.length),
+    NoteType.audio => context.l10n.audioAttachmentMetadata(items.length),
+    NoteType.video => context.l10n.videoAttachmentMetadata(items.length),
+    NoteType.document => context.l10n.fileAttachmentMetadata(items.length),
+    NoteType.text => context.l10n.note,
+  };
+}
 
 class NoteCard extends StatelessWidget {
   final NoteEntry entry;
@@ -61,7 +90,7 @@ class NoteCard extends StatelessWidget {
         thumbnail: thumbnail,
         accent: accent,
         onTap: onTap,
-        friendlyTime: _friendlyTime(entry.updatedAt),
+        friendlyTime: _friendlyTime(context, entry.updatedAt),
       );
     }
 
@@ -105,7 +134,7 @@ class NoteCard extends StatelessWidget {
                             Expanded(
                               child: Text(
                                 entry.title.trim().isEmpty
-                                    ? '无标题'
+                                    ? context.l10n.untitled
                                     : entry.title,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
@@ -175,13 +204,16 @@ class NoteCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           _TypePill(
-                            label: entry.attachmentSummary.split(' · ').first,
+                            label: _localizedNoteType(
+                              context,
+                              entry.primaryType,
+                            ),
                             color: accent,
                           ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              _friendlyTime(entry.updatedAt),
+                              _friendlyTime(context, entry.updatedAt),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
@@ -223,15 +255,17 @@ class NoteCard extends StatelessWidget {
     return file.existsSync() ? file : null;
   }
 
-  String _friendlyTime(DateTime date) {
+  String _friendlyTime(BuildContext context, DateTime date) {
     final now = DateTime.now();
     if (DateUtils.isSameDay(now, date)) {
-      return '今天 ${DateFormat('HH:mm').format(date)}';
+      return context.l10n.todayAt(DateFormat('HH:mm').format(date));
     }
     if (DateUtils.isSameDay(now.subtract(const Duration(days: 1)), date)) {
-      return '昨天 ${DateFormat('HH:mm').format(date)}';
+      return context.l10n.yesterdayAt(DateFormat('HH:mm').format(date));
     }
-    return DateFormat('MM月dd日').format(date);
+    return DateFormat.MMMd(
+      Localizations.localeOf(context).toLanguageTag(),
+    ).format(date);
   }
 }
 
@@ -278,7 +312,9 @@ class _RecentNoteRow extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      entry.title.trim().isEmpty ? '无标题' : entry.title,
+                      entry.title.trim().isEmpty
+                          ? context.l10n.untitled
+                          : entry.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleMedium?.copyWith(
@@ -312,7 +348,7 @@ class _RecentNoteRow extends StatelessWidget {
                         const SizedBox(width: 5),
                         Expanded(
                           child: Text(
-                            _metadataText(entry),
+                            _localizedMetadata(context, entry),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -352,8 +388,6 @@ class _RecentNoteRow extends StatelessWidget {
     NoteType.video => Icons.play_circle_outline_rounded,
     NoteType.document => Icons.description_outlined,
   };
-
-  static String _metadataText(NoteEntry entry) => entry.attachmentSummary;
 }
 
 class _EditorialPreviewTile extends StatelessWidget {
@@ -413,21 +447,21 @@ class _EditorialPreviewTile extends StatelessWidget {
           color: AppColors.softAmber,
           borderRadius: BorderRadius.circular(10),
         ),
-        child: const Column(
+        child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              '随\n笔',
+              context.l10n.quickNoteTile,
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 color: AppColors.ink,
                 fontFamily: 'serif',
                 fontSize: 15,
                 height: 1.25,
               ),
             ),
-            SizedBox(height: 5),
-            DecoratedBox(
+            const SizedBox(height: 5),
+            const DecoratedBox(
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.fromBorderSide(
@@ -496,7 +530,7 @@ class _MoreMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AppAnchoredMenuButton<_Action>(
-    tooltip: '更多',
+    tooltip: context.l10n.more,
     icon: const Icon(Icons.more_horiz_rounded, size: 21),
     onSelected: (action) {
       switch (action) {
@@ -516,10 +550,10 @@ class _MoreMenu extends StatelessWidget {
     },
     actions: [
       if (card.onRestore != null)
-        const AppMenuAction(
+        AppMenuAction(
           value: _Action.restore,
           icon: Icons.restore_rounded,
-          label: '恢复',
+          label: context.l10n.restore,
         ),
       if (card.onFavorite != null)
         AppMenuAction(
@@ -527,34 +561,40 @@ class _MoreMenu extends StatelessWidget {
           icon: card.entry.isFavorite
               ? Icons.star_outline_rounded
               : Icons.star_rounded,
-          label: card.entry.isFavorite ? '取消收藏' : '收藏',
+          label: card.entry.isFavorite
+              ? context.l10n.removeFavorite
+              : context.l10n.addFavorite,
           selected: card.entry.isFavorite,
         ),
       if (card.onPin != null)
         AppMenuAction(
           value: _Action.pin,
           icon: Icons.vertical_align_top_rounded,
-          label: card.entry.isPinned ? '取消置顶' : '置顶',
+          label: card.entry.isPinned ? context.l10n.unpin : context.l10n.pin,
           selected: card.entry.isPinned,
         ),
       if (card.onArchive != null)
         AppMenuAction(
           value: _Action.archive,
           icon: Icons.archive_outlined,
-          label: card.entry.isArchived ? '移出归档' : '归档',
+          label: card.entry.isArchived
+              ? context.l10n.removeFromArchive
+              : context.l10n.archive,
           selected: card.entry.isArchived,
         ),
       if (card.onEdit != null)
-        const AppMenuAction(
+        AppMenuAction(
           value: _Action.edit,
           icon: Icons.edit_outlined,
-          label: '编辑',
+          label: context.l10n.edit,
         ),
       if (card.onDelete != null)
         AppMenuAction(
           value: _Action.delete,
           icon: Icons.delete_outline_rounded,
-          label: card.entry.isDeleted ? '永久删除' : '移到回收站',
+          label: card.entry.isDeleted
+              ? context.l10n.deletePermanently
+              : context.l10n.moveToTrash,
           destructive: true,
         ),
     ],

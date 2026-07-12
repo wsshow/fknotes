@@ -3,6 +3,8 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:markdown/markdown.dart' as md;
 
+import '../l10n/l10n.dart';
+
 const markdownInlineMathTag = 'fk-math-inline';
 const markdownBlockMathTag = 'fk-math-block';
 
@@ -136,11 +138,14 @@ class FkLatexElementBuilder extends MarkdownElementBuilder {
       ),
     );
     if (!displayMode) {
-      return Semantics(label: '数学公式：$latex', child: math);
+      return Semantics(
+        label: context.l10n.mathFormulaSemantics(latex),
+        child: math,
+      );
     }
 
     return Semantics(
-      label: '数学公式：$latex',
+      label: context.l10n.mathFormulaSemantics(latex),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: SingleChildScrollView(

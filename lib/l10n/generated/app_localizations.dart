@@ -1693,6 +1693,1074 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'上次同步：{date}'**
   String lastSyncedAt(String date);
+
+  /// No description provided for @cut.
+  ///
+  /// In zh, this message translates to:
+  /// **'剪切'**
+  String get cut;
+
+  /// No description provided for @copy.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制'**
+  String get copy;
+
+  /// No description provided for @paste.
+  ///
+  /// In zh, this message translates to:
+  /// **'粘贴'**
+  String get paste;
+
+  /// No description provided for @selectAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全选'**
+  String get selectAll;
+
+  /// No description provided for @share.
+  ///
+  /// In zh, this message translates to:
+  /// **'分享'**
+  String get share;
+
+  /// No description provided for @invalidExternalLink.
+  ///
+  /// In zh, this message translates to:
+  /// **'这个链接地址无效或使用了不受支持的协议'**
+  String get invalidExternalLink;
+
+  /// No description provided for @openExternalLinkQuestion.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开外部链接？'**
+  String get openExternalLinkQuestion;
+
+  /// No description provided for @externalLinkWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'{destination}\n\n链接将交给系统中的其他应用处理，可能离开 FKNotes。'**
+  String externalLinkWarning(String destination);
+
+  /// No description provided for @continueOpening.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续打开'**
+  String get continueOpening;
+
+  /// No description provided for @noExternalLinkHandler.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统中没有可以打开这个链接的应用'**
+  String get noExternalLinkHandler;
+
+  /// No description provided for @externalLinkOpenFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法打开这个链接'**
+  String get externalLinkOpenFailed;
+
+  /// No description provided for @remoteImageBlocked.
+  ///
+  /// In zh, this message translates to:
+  /// **'未加载外部图片：{label}'**
+  String remoteImageBlocked(String label);
+
+  /// No description provided for @mathFormulaSemantics.
+  ///
+  /// In zh, this message translates to:
+  /// **'数学公式：{formula}'**
+  String mathFormulaSemantics(String formula);
+
+  /// No description provided for @assistantPrivacyDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'直接告诉 AI 你想做什么。笔记内容只在设备上处理。'**
+  String get assistantPrivacyDescription;
+
+  /// No description provided for @processingScope.
+  ///
+  /// In zh, this message translates to:
+  /// **'处理范围'**
+  String get processingScope;
+
+  /// No description provided for @scopeSelection.
+  ///
+  /// In zh, this message translates to:
+  /// **'选中文字'**
+  String get scopeSelection;
+
+  /// No description provided for @scopeCurrentBlock.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前段落'**
+  String get scopeCurrentBlock;
+
+  /// No description provided for @scopeFullNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'整篇笔记'**
+  String get scopeFullNote;
+
+  /// No description provided for @assistantCustomHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'例如：把这些想法整理成一封简洁的英文邮件…'**
+  String get assistantCustomHint;
+
+  /// No description provided for @startGenerating.
+  ///
+  /// In zh, this message translates to:
+  /// **'开始生成'**
+  String get startGenerating;
+
+  /// No description provided for @quickActions.
+  ///
+  /// In zh, this message translates to:
+  /// **'快捷操作'**
+  String get quickActions;
+
+  /// No description provided for @assistantSummarize.
+  ///
+  /// In zh, this message translates to:
+  /// **'总结笔记'**
+  String get assistantSummarize;
+
+  /// No description provided for @assistantSummarizeDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'提炼核心结论与关键要点'**
+  String get assistantSummarizeDescription;
+
+  /// No description provided for @assistantExtractTodos.
+  ///
+  /// In zh, this message translates to:
+  /// **'提取待办'**
+  String get assistantExtractTodos;
+
+  /// No description provided for @assistantExtractTodosDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'找出明确、可执行的事项'**
+  String get assistantExtractTodosDescription;
+
+  /// No description provided for @assistantPolish.
+  ///
+  /// In zh, this message translates to:
+  /// **'润色内容'**
+  String get assistantPolish;
+
+  /// No description provided for @assistantPolishDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'保留事实与结构，改善表达'**
+  String get assistantPolishDescription;
+
+  /// No description provided for @assistantCustomAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'自定义指令'**
+  String get assistantCustomAction;
+
+  /// No description provided for @assistantNoOutput.
+  ///
+  /// In zh, this message translates to:
+  /// **'模型没有生成内容'**
+  String get assistantNoOutput;
+
+  /// No description provided for @stopGenerating.
+  ///
+  /// In zh, this message translates to:
+  /// **'停止生成'**
+  String get stopGenerating;
+
+  /// No description provided for @regenerate.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新生成'**
+  String get regenerate;
+
+  /// No description provided for @chooseGeneratedContentPlacement.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择如何使用生成内容'**
+  String get chooseGeneratedContentPlacement;
+
+  /// No description provided for @placementReplace.
+  ///
+  /// In zh, this message translates to:
+  /// **'替换原内容'**
+  String get placementReplace;
+
+  /// No description provided for @placementInsertBelow.
+  ///
+  /// In zh, this message translates to:
+  /// **'插入到段落下方'**
+  String get placementInsertBelow;
+
+  /// No description provided for @placementAppend.
+  ///
+  /// In zh, this message translates to:
+  /// **'追加到笔记末尾'**
+  String get placementAppend;
+
+  /// No description provided for @useCurrentContent.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用当前内容'**
+  String get useCurrentContent;
+
+  /// No description provided for @useGeneratedContent.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用生成内容'**
+  String get useGeneratedContent;
+
+  /// No description provided for @generatedContentCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'已复制生成内容'**
+  String get generatedContentCopied;
+
+  /// No description provided for @loadingLocalModel.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在加载本地模型…'**
+  String get loadingLocalModel;
+
+  /// No description provided for @generatingOnDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在设备上生成…'**
+  String get generatingOnDevice;
+
+  /// No description provided for @generationCompleted.
+  ///
+  /// In zh, this message translates to:
+  /// **'生成完成，请检查后使用'**
+  String get generationCompleted;
+
+  /// No description provided for @generationLimitReached.
+  ///
+  /// In zh, this message translates to:
+  /// **'已达到输出上限，请检查结果'**
+  String get generationLimitReached;
+
+  /// No description provided for @generationStoppedUsable.
+  ///
+  /// In zh, this message translates to:
+  /// **'生成已停止，可复制或插入当前内容'**
+  String get generationStoppedUsable;
+
+  /// No description provided for @generationTimedOutUsable.
+  ///
+  /// In zh, this message translates to:
+  /// **'生成超时，可重试或复制当前内容'**
+  String get generationTimedOutUsable;
+
+  /// No description provided for @generationIncomplete.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地生成未完成'**
+  String get generationIncomplete;
+
+  /// No description provided for @retry.
+  ///
+  /// In zh, this message translates to:
+  /// **'重试'**
+  String get retry;
+
+  /// No description provided for @maybeLater.
+  ///
+  /// In zh, this message translates to:
+  /// **'稍后再说'**
+  String get maybeLater;
+
+  /// No description provided for @readNoteAloud.
+  ///
+  /// In zh, this message translates to:
+  /// **'朗读笔记'**
+  String get readNoteAloud;
+
+  /// No description provided for @offlineReadAloudModelRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要离线朗读模型'**
+  String get offlineReadAloudModelRequired;
+
+  /// No description provided for @readAloudModelDownloadDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'Kokoro 中英双语 INT8 首次使用需下载约 140.2 MB。下载后，笔记朗读全程断网可用。'**
+  String get readAloudModelDownloadDescription;
+
+  /// No description provided for @manageModels.
+  ///
+  /// In zh, this message translates to:
+  /// **'管理模型'**
+  String get manageModels;
+
+  /// No description provided for @noteReadAloudFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法朗读这篇笔记'**
+  String get noteReadAloudFailed;
+
+  /// No description provided for @liveDictationIncomplete.
+  ///
+  /// In zh, this message translates to:
+  /// **'实时听写没有完成'**
+  String get liveDictationIncomplete;
+
+  /// No description provided for @unsavedDraftFound.
+  ///
+  /// In zh, this message translates to:
+  /// **'发现未保存的草稿'**
+  String get unsavedDraftFound;
+
+  /// No description provided for @unsavedDraftDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'上次编辑可能意外中断。要恢复尚未写入笔记的内容吗？'**
+  String get unsavedDraftDescription;
+
+  /// No description provided for @discardDraft.
+  ///
+  /// In zh, this message translates to:
+  /// **'放弃草稿'**
+  String get discardDraft;
+
+  /// No description provided for @restore.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复'**
+  String get restore;
+
+  /// No description provided for @liveSpeechModelRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要实时语音模型'**
+  String get liveSpeechModelRequired;
+
+  /// No description provided for @liveSpeechModelDownloadDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前选择的是{model}，首次使用需下载约 {size}。下载完成后，听写全程断网可用。'**
+  String liveSpeechModelDownloadDescription(String model, String size);
+
+  /// No description provided for @placeCursorInText.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先将光标放在文字区域'**
+  String get placeCursorInText;
+
+  /// No description provided for @liveDictationStartFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法开始实时听写'**
+  String get liveDictationStartFailed;
+
+  /// No description provided for @localLanguageModelRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要本地语言模型'**
+  String get localLanguageModelRequired;
+
+  /// No description provided for @localLanguageModelDownloadDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前选择的是 {model}，首次使用需下载约 {size}。下载完成后，笔记内容只在本机处理。'**
+  String localLanguageModelDownloadDescription(String model, String size);
+
+  /// No description provided for @assistantReplacedContent.
+  ///
+  /// In zh, this message translates to:
+  /// **'已替换原内容'**
+  String get assistantReplacedContent;
+
+  /// No description provided for @assistantInsertedBelow.
+  ///
+  /// In zh, this message translates to:
+  /// **'已插入到当前段落下方'**
+  String get assistantInsertedBelow;
+
+  /// No description provided for @assistantAppended.
+  ///
+  /// In zh, this message translates to:
+  /// **'已追加到笔记末尾'**
+  String get assistantAppended;
+
+  /// No description provided for @noteChangedRetryAssistant.
+  ///
+  /// In zh, this message translates to:
+  /// **'笔记内容已经变化，请重新发起 AI 操作'**
+  String get noteChangedRetryAssistant;
+
+  /// No description provided for @assistantLaunchFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法启动本地助手：{error}'**
+  String assistantLaunchFailed(String error);
+
+  /// No description provided for @autosaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动保存失败：{error}'**
+  String autosaveFailed(String error);
+
+  /// No description provided for @addToNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加到笔记'**
+  String get addToNote;
+
+  /// No description provided for @camera.
+  ///
+  /// In zh, this message translates to:
+  /// **'拍照'**
+  String get camera;
+
+  /// No description provided for @attachmentImportTypeFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'{type}导入失败'**
+  String attachmentImportTypeFailed(String type);
+
+  /// No description provided for @editNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑笔记'**
+  String get editNote;
+
+  /// No description provided for @newNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'新笔记'**
+  String get newNote;
+
+  /// No description provided for @savingEllipsis.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在保存…'**
+  String get savingEllipsis;
+
+  /// No description provided for @localDraft.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地草稿'**
+  String get localDraft;
+
+  /// No description provided for @savedLocally.
+  ///
+  /// In zh, this message translates to:
+  /// **'已保存在本机'**
+  String get savedLocally;
+
+  /// No description provided for @characterCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 字'**
+  String characterCount(int count);
+
+  /// No description provided for @stopReadAloud.
+  ///
+  /// In zh, this message translates to:
+  /// **'停止朗读'**
+  String get stopReadAloud;
+
+  /// No description provided for @moreNoteActions.
+  ///
+  /// In zh, this message translates to:
+  /// **'更多笔记操作'**
+  String get moreNoteActions;
+
+  /// No description provided for @removeFavorite.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消收藏'**
+  String get removeFavorite;
+
+  /// No description provided for @addFavorite.
+  ///
+  /// In zh, this message translates to:
+  /// **'收藏'**
+  String get addFavorite;
+
+  /// No description provided for @unpin.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消置顶'**
+  String get unpin;
+
+  /// No description provided for @pin.
+  ///
+  /// In zh, this message translates to:
+  /// **'置顶'**
+  String get pin;
+
+  /// No description provided for @addTags.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加标签'**
+  String get addTags;
+
+  /// No description provided for @tags.
+  ///
+  /// In zh, this message translates to:
+  /// **'标签'**
+  String get tags;
+
+  /// No description provided for @noteContent.
+  ///
+  /// In zh, this message translates to:
+  /// **'笔记内容'**
+  String get noteContent;
+
+  /// No description provided for @attachmentItemCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 项附件'**
+  String attachmentItemCount(int count);
+
+  /// No description provided for @noteDescriptionHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加说明、想法或摘要…'**
+  String get noteDescriptionHint;
+
+  /// No description provided for @noteStartHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'开始记录…'**
+  String get noteStartHint;
+
+  /// No description provided for @addMediaOrFile.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加图片、录音或文件'**
+  String get addMediaOrFile;
+
+  /// No description provided for @editTags.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑标签'**
+  String get editTags;
+
+  /// No description provided for @tagsDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用逗号分隔多个标签，重复标签会自动合并。'**
+  String get tagsDescription;
+
+  /// No description provided for @tagsHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'例如：工作, 灵感, 稍后阅读'**
+  String get tagsHint;
+
+  /// No description provided for @stopLiveDictation.
+  ///
+  /// In zh, this message translates to:
+  /// **'停止实时听写'**
+  String get stopLiveDictation;
+
+  /// No description provided for @liveVoiceInput.
+  ///
+  /// In zh, this message translates to:
+  /// **'实时语音输入'**
+  String get liveVoiceInput;
+
+  /// No description provided for @redo.
+  ///
+  /// In zh, this message translates to:
+  /// **'重做'**
+  String get redo;
+
+  /// No description provided for @bold.
+  ///
+  /// In zh, this message translates to:
+  /// **'加粗'**
+  String get bold;
+
+  /// No description provided for @italic.
+  ///
+  /// In zh, this message translates to:
+  /// **'斜体'**
+  String get italic;
+
+  /// No description provided for @underline.
+  ///
+  /// In zh, this message translates to:
+  /// **'下划线'**
+  String get underline;
+
+  /// No description provided for @addLink.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加链接'**
+  String get addLink;
+
+  /// No description provided for @editLink.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑链接'**
+  String get editLink;
+
+  /// No description provided for @linkPrivacyDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'链接会保存在 Markdown 中；打开前仍会由 FKNotes 进行隐私确认。'**
+  String get linkPrivacyDescription;
+
+  /// No description provided for @linkAddress.
+  ///
+  /// In zh, this message translates to:
+  /// **'链接地址'**
+  String get linkAddress;
+
+  /// No description provided for @removeLink.
+  ///
+  /// In zh, this message translates to:
+  /// **'移除链接'**
+  String get removeLink;
+
+  /// No description provided for @organizingLastSentence.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在整理最后一句…'**
+  String get organizingLastSentence;
+
+  /// No description provided for @liveDictationFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'实时听写失败'**
+  String get liveDictationFailed;
+
+  /// No description provided for @listening.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在聆听…'**
+  String get listening;
+
+  /// No description provided for @liveDictationElapsed.
+  ///
+  /// In zh, this message translates to:
+  /// **'实时听写  {time}'**
+  String liveDictationElapsed(String time);
+
+  /// No description provided for @localVoiceInput.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地语音输入'**
+  String get localVoiceInput;
+
+  /// No description provided for @cancelDictation.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消听写'**
+  String get cancelDictation;
+
+  /// No description provided for @finishDictation.
+  ///
+  /// In zh, this message translates to:
+  /// **'完成听写'**
+  String get finishDictation;
+
+  /// No description provided for @paragraph.
+  ///
+  /// In zh, this message translates to:
+  /// **'正文'**
+  String get paragraph;
+
+  /// No description provided for @paragraphStyle.
+  ///
+  /// In zh, this message translates to:
+  /// **'段落样式'**
+  String get paragraphStyle;
+
+  /// No description provided for @headingLevel.
+  ///
+  /// In zh, this message translates to:
+  /// **'标题 {level}'**
+  String headingLevel(int level);
+
+  /// No description provided for @quote.
+  ///
+  /// In zh, this message translates to:
+  /// **'引用'**
+  String get quote;
+
+  /// No description provided for @codeBlock.
+  ///
+  /// In zh, this message translates to:
+  /// **'代码块'**
+  String get codeBlock;
+
+  /// No description provided for @divider.
+  ///
+  /// In zh, this message translates to:
+  /// **'分割线'**
+  String get divider;
+
+  /// No description provided for @listsAndIndentation.
+  ///
+  /// In zh, this message translates to:
+  /// **'列表与缩进'**
+  String get listsAndIndentation;
+
+  /// No description provided for @todoItem.
+  ///
+  /// In zh, this message translates to:
+  /// **'待办事项'**
+  String get todoItem;
+
+  /// No description provided for @bulletList.
+  ///
+  /// In zh, this message translates to:
+  /// **'无序列表'**
+  String get bulletList;
+
+  /// No description provided for @numberedList.
+  ///
+  /// In zh, this message translates to:
+  /// **'有序列表'**
+  String get numberedList;
+
+  /// No description provided for @decreaseIndent.
+  ///
+  /// In zh, this message translates to:
+  /// **'减少缩进'**
+  String get decreaseIndent;
+
+  /// No description provided for @increaseIndent.
+  ///
+  /// In zh, this message translates to:
+  /// **'增加缩进'**
+  String get increaseIndent;
+
+  /// No description provided for @moreFormatting.
+  ///
+  /// In zh, this message translates to:
+  /// **'更多格式'**
+  String get moreFormatting;
+
+  /// No description provided for @strikethrough.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除线'**
+  String get strikethrough;
+
+  /// No description provided for @inlineCode.
+  ///
+  /// In zh, this message translates to:
+  /// **'行内代码'**
+  String get inlineCode;
+
+  /// No description provided for @generatingThumbnail.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在生成缩略图…'**
+  String get generatingThumbnail;
+
+  /// No description provided for @importingBytes.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在导入 · {bytes}'**
+  String importingBytes(String bytes);
+
+  /// No description provided for @importingPercent.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在导入 {percent}% · {bytes}'**
+  String importingPercent(int percent, String bytes);
+
+  /// No description provided for @importCompleteSaving.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入完成，正在保存到笔记…'**
+  String get importCompleteSaving;
+
+  /// No description provided for @importFailedRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入失败，请重试'**
+  String get importFailedRetry;
+
+  /// No description provided for @importCanceled.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入已取消'**
+  String get importCanceled;
+
+  /// No description provided for @cancelImport.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消导入'**
+  String get cancelImport;
+
+  /// No description provided for @chooseTypeAgain.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新选择{type}'**
+  String chooseTypeAgain(String type);
+
+  /// No description provided for @adjustAttachment.
+  ///
+  /// In zh, this message translates to:
+  /// **'调整附件'**
+  String get adjustAttachment;
+
+  /// No description provided for @moveUp.
+  ///
+  /// In zh, this message translates to:
+  /// **'上移'**
+  String get moveUp;
+
+  /// No description provided for @moveDown.
+  ///
+  /// In zh, this message translates to:
+  /// **'下移'**
+  String get moveDown;
+
+  /// No description provided for @referenceInBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'引用到正文'**
+  String get referenceInBody;
+
+  /// No description provided for @importFailedDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入失败 · {error}'**
+  String importFailedDetail(String error);
+
+  /// No description provided for @assistantSummaryHeading.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地助手摘要'**
+  String get assistantSummaryHeading;
+
+  /// No description provided for @assistantTodosHeading.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地助手待办'**
+  String get assistantTodosHeading;
+
+  /// No description provided for @assistantPolishedHeading.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地助手润色稿'**
+  String get assistantPolishedHeading;
+
+  /// No description provided for @assistantGeneratedHeading.
+  ///
+  /// In zh, this message translates to:
+  /// **'AI 生成内容'**
+  String get assistantGeneratedHeading;
+
+  /// No description provided for @attachmentReference.
+  ///
+  /// In zh, this message translates to:
+  /// **'附件引用：{path}'**
+  String attachmentReference(String path);
+
+  /// No description provided for @markdownTable.
+  ///
+  /// In zh, this message translates to:
+  /// **'Markdown 表格'**
+  String get markdownTable;
+
+  /// No description provided for @tableDimensions.
+  ///
+  /// In zh, this message translates to:
+  /// **'{columns} 列 · {rows} 行'**
+  String tableDimensions(int columns, int rows);
+
+  /// No description provided for @deleteTable.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除表格'**
+  String get deleteTable;
+
+  /// No description provided for @editTable.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑表格'**
+  String get editTable;
+
+  /// No description provided for @invalidMarkdownTable.
+  ///
+  /// In zh, this message translates to:
+  /// **'表格语法不完整，请先检查 Markdown 原文'**
+  String get invalidMarkdownTable;
+
+  /// No description provided for @attachmentRemoved.
+  ///
+  /// In zh, this message translates to:
+  /// **'附件已移除'**
+  String get attachmentRemoved;
+
+  /// No description provided for @brokenAttachmentReference.
+  ///
+  /// In zh, this message translates to:
+  /// **'这个引用已失效，可以移除引用'**
+  String get brokenAttachmentReference;
+
+  /// No description provided for @attachmentReferenceDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'{type} · {size} · 点击预览'**
+  String attachmentReferenceDescription(String type, String size);
+
+  /// No description provided for @removeReference.
+  ///
+  /// In zh, this message translates to:
+  /// **'移除引用'**
+  String get removeReference;
+
+  /// No description provided for @tableEditorDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'{columns} 列 · {rows} 行 · 左右滑动查看全部列'**
+  String tableEditorDescription(int columns, int rows);
+
+  /// No description provided for @addColumn.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加列'**
+  String get addColumn;
+
+  /// No description provided for @addRow.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加行'**
+  String get addRow;
+
+  /// No description provided for @deleteRow.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除第 {row} 行'**
+  String deleteRow(int row);
+
+  /// No description provided for @saveTable.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存表格'**
+  String get saveTable;
+
+  /// No description provided for @tableHeader.
+  ///
+  /// In zh, this message translates to:
+  /// **'表头'**
+  String get tableHeader;
+
+  /// No description provided for @deleteColumn.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除列'**
+  String get deleteColumn;
+
+  /// No description provided for @cellAlignment.
+  ///
+  /// In zh, this message translates to:
+  /// **'单元格对齐方式'**
+  String get cellAlignment;
+
+  /// No description provided for @alignLeft.
+  ///
+  /// In zh, this message translates to:
+  /// **'左对齐'**
+  String get alignLeft;
+
+  /// No description provided for @alignCenter.
+  ///
+  /// In zh, this message translates to:
+  /// **'居中'**
+  String get alignCenter;
+
+  /// No description provided for @alignRight.
+  ///
+  /// In zh, this message translates to:
+  /// **'右对齐'**
+  String get alignRight;
+
+  /// No description provided for @content.
+  ///
+  /// In zh, this message translates to:
+  /// **'内容'**
+  String get content;
+
+  /// No description provided for @untitled.
+  ///
+  /// In zh, this message translates to:
+  /// **'无标题'**
+  String get untitled;
+
+  /// No description provided for @todayAt.
+  ///
+  /// In zh, this message translates to:
+  /// **'今天 {time}'**
+  String todayAt(String time);
+
+  /// No description provided for @yesterdayAt.
+  ///
+  /// In zh, this message translates to:
+  /// **'昨天 {time}'**
+  String yesterdayAt(String time);
+
+  /// No description provided for @quickNoteTile.
+  ///
+  /// In zh, this message translates to:
+  /// **'随\n笔'**
+  String get quickNoteTile;
+
+  /// No description provided for @removeFromArchive.
+  ///
+  /// In zh, this message translates to:
+  /// **'移出归档'**
+  String get removeFromArchive;
+
+  /// No description provided for @edit.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑'**
+  String get edit;
+
+  /// No description provided for @moveToTrash.
+  ///
+  /// In zh, this message translates to:
+  /// **'移到回收站'**
+  String get moveToTrash;
+
+  /// No description provided for @mixedAttachmentMetadata.
+  ///
+  /// In zh, this message translates to:
+  /// **'混合 · {count} 项'**
+  String mixedAttachmentMetadata(int count);
+
+  /// No description provided for @imageAttachmentMetadata.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片 · {count} 张'**
+  String imageAttachmentMetadata(int count);
+
+  /// No description provided for @audioAttachmentMetadata.
+  ///
+  /// In zh, this message translates to:
+  /// **'录音 · {count} 段'**
+  String audioAttachmentMetadata(int count);
+
+  /// No description provided for @videoAttachmentMetadata.
+  ///
+  /// In zh, this message translates to:
+  /// **'视频 · {count} 个'**
+  String videoAttachmentMetadata(int count);
+
+  /// No description provided for @fileAttachmentMetadata.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件 · {count} 个'**
+  String fileAttachmentMetadata(int count);
 }
 
 class _AppLocalizationsDelegate

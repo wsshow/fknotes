@@ -878,4 +878,596 @@ class AppLocalizationsZh extends AppLocalizations {
   String lastSyncedAt(String date) {
     return '上次同步：$date';
   }
+
+  @override
+  String get cut => '剪切';
+
+  @override
+  String get copy => '复制';
+
+  @override
+  String get paste => '粘贴';
+
+  @override
+  String get selectAll => '全选';
+
+  @override
+  String get share => '分享';
+
+  @override
+  String get invalidExternalLink => '这个链接地址无效或使用了不受支持的协议';
+
+  @override
+  String get openExternalLinkQuestion => '打开外部链接？';
+
+  @override
+  String externalLinkWarning(String destination) {
+    return '$destination\n\n链接将交给系统中的其他应用处理，可能离开 FKNotes。';
+  }
+
+  @override
+  String get continueOpening => '继续打开';
+
+  @override
+  String get noExternalLinkHandler => '系统中没有可以打开这个链接的应用';
+
+  @override
+  String get externalLinkOpenFailed => '无法打开这个链接';
+
+  @override
+  String remoteImageBlocked(String label) {
+    return '未加载外部图片：$label';
+  }
+
+  @override
+  String mathFormulaSemantics(String formula) {
+    return '数学公式：$formula';
+  }
+
+  @override
+  String get assistantPrivacyDescription => '直接告诉 AI 你想做什么。笔记内容只在设备上处理。';
+
+  @override
+  String get processingScope => '处理范围';
+
+  @override
+  String get scopeSelection => '选中文字';
+
+  @override
+  String get scopeCurrentBlock => '当前段落';
+
+  @override
+  String get scopeFullNote => '整篇笔记';
+
+  @override
+  String get assistantCustomHint => '例如：把这些想法整理成一封简洁的英文邮件…';
+
+  @override
+  String get startGenerating => '开始生成';
+
+  @override
+  String get quickActions => '快捷操作';
+
+  @override
+  String get assistantSummarize => '总结笔记';
+
+  @override
+  String get assistantSummarizeDescription => '提炼核心结论与关键要点';
+
+  @override
+  String get assistantExtractTodos => '提取待办';
+
+  @override
+  String get assistantExtractTodosDescription => '找出明确、可执行的事项';
+
+  @override
+  String get assistantPolish => '润色内容';
+
+  @override
+  String get assistantPolishDescription => '保留事实与结构，改善表达';
+
+  @override
+  String get assistantCustomAction => '自定义指令';
+
+  @override
+  String get assistantNoOutput => '模型没有生成内容';
+
+  @override
+  String get stopGenerating => '停止生成';
+
+  @override
+  String get regenerate => '重新生成';
+
+  @override
+  String get chooseGeneratedContentPlacement => '选择如何使用生成内容';
+
+  @override
+  String get placementReplace => '替换原内容';
+
+  @override
+  String get placementInsertBelow => '插入到段落下方';
+
+  @override
+  String get placementAppend => '追加到笔记末尾';
+
+  @override
+  String get useCurrentContent => '使用当前内容';
+
+  @override
+  String get useGeneratedContent => '使用生成内容';
+
+  @override
+  String get generatedContentCopied => '已复制生成内容';
+
+  @override
+  String get loadingLocalModel => '正在加载本地模型…';
+
+  @override
+  String get generatingOnDevice => '正在设备上生成…';
+
+  @override
+  String get generationCompleted => '生成完成，请检查后使用';
+
+  @override
+  String get generationLimitReached => '已达到输出上限，请检查结果';
+
+  @override
+  String get generationStoppedUsable => '生成已停止，可复制或插入当前内容';
+
+  @override
+  String get generationTimedOutUsable => '生成超时，可重试或复制当前内容';
+
+  @override
+  String get generationIncomplete => '本地生成未完成';
+
+  @override
+  String get retry => '重试';
+
+  @override
+  String get maybeLater => '稍后再说';
+
+  @override
+  String get readNoteAloud => '朗读笔记';
+
+  @override
+  String get offlineReadAloudModelRequired => '需要离线朗读模型';
+
+  @override
+  String get readAloudModelDownloadDescription =>
+      'Kokoro 中英双语 INT8 首次使用需下载约 140.2 MB。下载后，笔记朗读全程断网可用。';
+
+  @override
+  String get manageModels => '管理模型';
+
+  @override
+  String get noteReadAloudFailed => '无法朗读这篇笔记';
+
+  @override
+  String get liveDictationIncomplete => '实时听写没有完成';
+
+  @override
+  String get unsavedDraftFound => '发现未保存的草稿';
+
+  @override
+  String get unsavedDraftDescription => '上次编辑可能意外中断。要恢复尚未写入笔记的内容吗？';
+
+  @override
+  String get discardDraft => '放弃草稿';
+
+  @override
+  String get restore => '恢复';
+
+  @override
+  String get liveSpeechModelRequired => '需要实时语音模型';
+
+  @override
+  String liveSpeechModelDownloadDescription(String model, String size) {
+    return '当前选择的是$model，首次使用需下载约 $size。下载完成后，听写全程断网可用。';
+  }
+
+  @override
+  String get placeCursorInText => '请先将光标放在文字区域';
+
+  @override
+  String get liveDictationStartFailed => '无法开始实时听写';
+
+  @override
+  String get localLanguageModelRequired => '需要本地语言模型';
+
+  @override
+  String localLanguageModelDownloadDescription(String model, String size) {
+    return '当前选择的是 $model，首次使用需下载约 $size。下载完成后，笔记内容只在本机处理。';
+  }
+
+  @override
+  String get assistantReplacedContent => '已替换原内容';
+
+  @override
+  String get assistantInsertedBelow => '已插入到当前段落下方';
+
+  @override
+  String get assistantAppended => '已追加到笔记末尾';
+
+  @override
+  String get noteChangedRetryAssistant => '笔记内容已经变化，请重新发起 AI 操作';
+
+  @override
+  String assistantLaunchFailed(String error) {
+    return '无法启动本地助手：$error';
+  }
+
+  @override
+  String autosaveFailed(String error) {
+    return '自动保存失败：$error';
+  }
+
+  @override
+  String get addToNote => '添加到笔记';
+
+  @override
+  String get camera => '拍照';
+
+  @override
+  String attachmentImportTypeFailed(String type) {
+    return '$type导入失败';
+  }
+
+  @override
+  String get editNote => '编辑笔记';
+
+  @override
+  String get newNote => '新笔记';
+
+  @override
+  String get savingEllipsis => '正在保存…';
+
+  @override
+  String get localDraft => '本地草稿';
+
+  @override
+  String get savedLocally => '已保存在本机';
+
+  @override
+  String characterCount(int count) {
+    return '$count 字';
+  }
+
+  @override
+  String get stopReadAloud => '停止朗读';
+
+  @override
+  String get moreNoteActions => '更多笔记操作';
+
+  @override
+  String get removeFavorite => '取消收藏';
+
+  @override
+  String get addFavorite => '收藏';
+
+  @override
+  String get unpin => '取消置顶';
+
+  @override
+  String get pin => '置顶';
+
+  @override
+  String get addTags => '添加标签';
+
+  @override
+  String get tags => '标签';
+
+  @override
+  String get noteContent => '笔记内容';
+
+  @override
+  String attachmentItemCount(int count) {
+    return '$count 项附件';
+  }
+
+  @override
+  String get noteDescriptionHint => '添加说明、想法或摘要…';
+
+  @override
+  String get noteStartHint => '开始记录…';
+
+  @override
+  String get addMediaOrFile => '添加图片、录音或文件';
+
+  @override
+  String get editTags => '编辑标签';
+
+  @override
+  String get tagsDescription => '使用逗号分隔多个标签，重复标签会自动合并。';
+
+  @override
+  String get tagsHint => '例如：工作, 灵感, 稍后阅读';
+
+  @override
+  String get stopLiveDictation => '停止实时听写';
+
+  @override
+  String get liveVoiceInput => '实时语音输入';
+
+  @override
+  String get redo => '重做';
+
+  @override
+  String get bold => '加粗';
+
+  @override
+  String get italic => '斜体';
+
+  @override
+  String get underline => '下划线';
+
+  @override
+  String get addLink => '添加链接';
+
+  @override
+  String get editLink => '编辑链接';
+
+  @override
+  String get linkPrivacyDescription =>
+      '链接会保存在 Markdown 中；打开前仍会由 FKNotes 进行隐私确认。';
+
+  @override
+  String get linkAddress => '链接地址';
+
+  @override
+  String get removeLink => '移除链接';
+
+  @override
+  String get organizingLastSentence => '正在整理最后一句…';
+
+  @override
+  String get liveDictationFailed => '实时听写失败';
+
+  @override
+  String get listening => '正在聆听…';
+
+  @override
+  String liveDictationElapsed(String time) {
+    return '实时听写  $time';
+  }
+
+  @override
+  String get localVoiceInput => '本地语音输入';
+
+  @override
+  String get cancelDictation => '取消听写';
+
+  @override
+  String get finishDictation => '完成听写';
+
+  @override
+  String get paragraph => '正文';
+
+  @override
+  String get paragraphStyle => '段落样式';
+
+  @override
+  String headingLevel(int level) {
+    return '标题 $level';
+  }
+
+  @override
+  String get quote => '引用';
+
+  @override
+  String get codeBlock => '代码块';
+
+  @override
+  String get divider => '分割线';
+
+  @override
+  String get listsAndIndentation => '列表与缩进';
+
+  @override
+  String get todoItem => '待办事项';
+
+  @override
+  String get bulletList => '无序列表';
+
+  @override
+  String get numberedList => '有序列表';
+
+  @override
+  String get decreaseIndent => '减少缩进';
+
+  @override
+  String get increaseIndent => '增加缩进';
+
+  @override
+  String get moreFormatting => '更多格式';
+
+  @override
+  String get strikethrough => '删除线';
+
+  @override
+  String get inlineCode => '行内代码';
+
+  @override
+  String get generatingThumbnail => '正在生成缩略图…';
+
+  @override
+  String importingBytes(String bytes) {
+    return '正在导入 · $bytes';
+  }
+
+  @override
+  String importingPercent(int percent, String bytes) {
+    return '正在导入 $percent% · $bytes';
+  }
+
+  @override
+  String get importCompleteSaving => '导入完成，正在保存到笔记…';
+
+  @override
+  String get importFailedRetry => '导入失败，请重试';
+
+  @override
+  String get importCanceled => '导入已取消';
+
+  @override
+  String get cancelImport => '取消导入';
+
+  @override
+  String chooseTypeAgain(String type) {
+    return '重新选择$type';
+  }
+
+  @override
+  String get adjustAttachment => '调整附件';
+
+  @override
+  String get moveUp => '上移';
+
+  @override
+  String get moveDown => '下移';
+
+  @override
+  String get referenceInBody => '引用到正文';
+
+  @override
+  String importFailedDetail(String error) {
+    return '导入失败 · $error';
+  }
+
+  @override
+  String get assistantSummaryHeading => '本地助手摘要';
+
+  @override
+  String get assistantTodosHeading => '本地助手待办';
+
+  @override
+  String get assistantPolishedHeading => '本地助手润色稿';
+
+  @override
+  String get assistantGeneratedHeading => 'AI 生成内容';
+
+  @override
+  String attachmentReference(String path) {
+    return '附件引用：$path';
+  }
+
+  @override
+  String get markdownTable => 'Markdown 表格';
+
+  @override
+  String tableDimensions(int columns, int rows) {
+    return '$columns 列 · $rows 行';
+  }
+
+  @override
+  String get deleteTable => '删除表格';
+
+  @override
+  String get editTable => '编辑表格';
+
+  @override
+  String get invalidMarkdownTable => '表格语法不完整，请先检查 Markdown 原文';
+
+  @override
+  String get attachmentRemoved => '附件已移除';
+
+  @override
+  String get brokenAttachmentReference => '这个引用已失效，可以移除引用';
+
+  @override
+  String attachmentReferenceDescription(String type, String size) {
+    return '$type · $size · 点击预览';
+  }
+
+  @override
+  String get removeReference => '移除引用';
+
+  @override
+  String tableEditorDescription(int columns, int rows) {
+    return '$columns 列 · $rows 行 · 左右滑动查看全部列';
+  }
+
+  @override
+  String get addColumn => '添加列';
+
+  @override
+  String get addRow => '添加行';
+
+  @override
+  String deleteRow(int row) {
+    return '删除第 $row 行';
+  }
+
+  @override
+  String get saveTable => '保存表格';
+
+  @override
+  String get tableHeader => '表头';
+
+  @override
+  String get deleteColumn => '删除列';
+
+  @override
+  String get cellAlignment => '单元格对齐方式';
+
+  @override
+  String get alignLeft => '左对齐';
+
+  @override
+  String get alignCenter => '居中';
+
+  @override
+  String get alignRight => '右对齐';
+
+  @override
+  String get content => '内容';
+
+  @override
+  String get untitled => '无标题';
+
+  @override
+  String todayAt(String time) {
+    return '今天 $time';
+  }
+
+  @override
+  String yesterdayAt(String time) {
+    return '昨天 $time';
+  }
+
+  @override
+  String get quickNoteTile => '随\n笔';
+
+  @override
+  String get removeFromArchive => '移出归档';
+
+  @override
+  String get edit => '编辑';
+
+  @override
+  String get moveToTrash => '移到回收站';
+
+  @override
+  String mixedAttachmentMetadata(int count) {
+    return '混合 · $count 项';
+  }
+
+  @override
+  String imageAttachmentMetadata(int count) {
+    return '图片 · $count 张';
+  }
+
+  @override
+  String audioAttachmentMetadata(int count) {
+    return '录音 · $count 段';
+  }
+
+  @override
+  String videoAttachmentMetadata(int count) {
+    return '视频 · $count 个';
+  }
+
+  @override
+  String fileAttachmentMetadata(int count) {
+    return '文件 · $count 个';
+  }
 }

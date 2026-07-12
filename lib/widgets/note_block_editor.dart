@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:markdown/markdown.dart' as md;
 
 import '../app.dart';
+import '../l10n/l10n.dart';
 import '../models/note_entry.dart';
 import '../services/file_storage_service.dart';
 import '../services/note_assistant_prompt_builder.dart';
@@ -28,6 +29,15 @@ enum NoteBlockType {
   divider,
   attachment,
 }
+
+String _localizedNoteType(BuildContext context, NoteType type) =>
+    switch (type) {
+      NoteType.text => context.l10n.note,
+      NoteType.image => context.l10n.image,
+      NoteType.audio => context.l10n.audio,
+      NoteType.video => context.l10n.video,
+      NoteType.document => context.l10n.file,
+    };
 
 class NoteBlockData {
   final NoteBlockType type;
@@ -1433,7 +1443,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
             if (block.type != NoteBlockType.attachment) return block;
             return NoteBlockData(
               NoteBlockType.paragraph,
-              '附件引用：${block.attachmentPath ?? ''}',
+              context.l10n.attachmentReference(block.attachmentPath ?? ''),
             );
           })
           .toList(growable: false);
@@ -1467,7 +1477,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
       if (item.type != NoteBlockType.attachment) return item;
       return NoteBlockData(
         NoteBlockType.paragraph,
-        '附件引用：${item.attachmentPath ?? ''}',
+        context.l10n.attachmentReference(item.attachmentPath ?? ''),
       );
     }).toList();
     if (parsed.isEmpty) return false;
@@ -2277,7 +2287,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     }
     if (block.type == NoteBlockType.divider) {
       return Semantics(
-        label: '分割线',
+        label: context.l10n.divider,
         child: InkWell(
           onTap: () {
             _activeIndex = index;
@@ -2452,13 +2462,13 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
                   color: AppColors.coral,
                 ),
                 const SizedBox(width: 8),
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Markdown 表格',
-                        style: TextStyle(
+                        context.l10n.markdownTable,
+                        style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                         ),
@@ -2468,19 +2478,22 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
                 ),
                 if (table != null)
                   Text(
-                    '${table.headers.length} 列 · ${table.rows.length} 行',
+                    context.l10n.tableDimensions(
+                      table.headers.length,
+                      table.rows.length,
+                    ),
                     style: const TextStyle(
                       color: AppColors.muted,
                       fontSize: 11,
                     ),
                   ),
                 IconButton(
-                  tooltip: '删除表格',
+                  tooltip: context.l10n.deleteTable,
                   onPressed: () => _removeNonTextBlock(block),
                   icon: const Icon(Icons.delete_outline_rounded, size: 19),
                 ),
                 IconButton(
-                  tooltip: '编辑表格',
+                  tooltip: context.l10n.editTable,
                   onPressed: () => _editMarkdownTable(block),
                   icon: const Icon(Icons.edit_outlined, size: 19),
                 ),
@@ -2535,7 +2548,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
   Future<void> _editMarkdownTable(_EditableBlock block) async {
     final table = MarkdownTableData.tryParse(block.controller.visibleTextValue);
     if (table == null) {
-      AppFeedback.error(context, '表格语法不完整，请先检查 Markdown 原文');
+      AppFeedback.error(context, context.l10n.invalidMarkdownTable);
       return;
     }
     final result = await showModalBottomSheet<MarkdownTableData>(
@@ -2614,7 +2627,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        resolved?.fileName ?? '附件已移除',
+                        resolved?.fileName ?? context.l10n.attachmentRemoved,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -2625,8 +2638,11 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
                       const SizedBox(height: 3),
                       Text(
                         resolved == null
-                            ? '这个引用已失效，可以移除引用'
-                            : '${resolved.type.label} · ${_formatSize(resolved.fileSize)} · 点击预览',
+                            ? context.l10n.brokenAttachmentReference
+                            : context.l10n.attachmentReferenceDescription(
+                                _localizedNoteType(context, resolved.type),
+                                _formatSize(resolved.fileSize),
+                              ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -2638,7 +2654,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
                   ),
                 ),
                 IconButton(
-                  tooltip: '移除引用',
+                  tooltip: context.l10n.removeReference,
                   onPressed: () => _removeNonTextBlock(block),
                   icon: const Icon(Icons.close_rounded, size: 19),
                   color: AppColors.muted,
@@ -2826,16 +2842,19 @@ class _MarkdownTableEditorSheetState extends State<_MarkdownTableEditorSheet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          '编辑表格',
-                          style: TextStyle(
+                        Text(
+                          context.l10n.editTable,
+                          style: const TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          '${_cells.first.length} 列 · ${_cells.length - 1} 行 · 左右滑动查看全部列',
+                          context.l10n.tableEditorDescription(
+                            _cells.first.length,
+                            _cells.length - 1,
+                          ),
                           style: const TextStyle(
                             color: AppColors.muted,
                             fontSize: 12,
@@ -2845,13 +2864,13 @@ class _MarkdownTableEditorSheetState extends State<_MarkdownTableEditorSheet> {
                     ),
                   ),
                   IconButton(
-                    tooltip: '添加列',
+                    tooltip: context.l10n.addColumn,
                     onPressed: _addColumn,
                     icon: const Icon(Icons.view_column_outlined),
                   ),
                   IconButton(
                     key: const Key('markdown-table-add-row'),
-                    tooltip: '添加行',
+                    tooltip: context.l10n.addRow,
                     onPressed: _addRow,
                     icon: const Icon(Icons.table_rows_outlined),
                   ),
@@ -2930,7 +2949,7 @@ class _MarkdownTableEditorSheetState extends State<_MarkdownTableEditorSheet> {
                                     verticalAlignment:
                                         TableCellVerticalAlignment.middle,
                                     child: IconButton(
-                                      tooltip: '删除第 $row 行',
+                                      tooltip: context.l10n.deleteRow(row),
                                       onPressed: () => _removeRow(row),
                                       icon: const Icon(
                                         Icons.remove_circle_outline_rounded,
@@ -2959,16 +2978,16 @@ class _MarkdownTableEditorSheetState extends State<_MarkdownTableEditorSheet> {
                   OutlinedButton.icon(
                     onPressed: _addRow,
                     icon: const Icon(Icons.add_rounded),
-                    label: const Text('添加一行'),
+                    label: Text(context.l10n.addRow),
                   ),
                   TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: const Text('取消'),
+                    child: Text(context.l10n.cancel),
                   ),
                   FilledButton(
                     key: const Key('markdown-table-save'),
                     onPressed: _finish,
-                    child: const Text('保存表格'),
+                    child: Text(context.l10n.saveTable),
                   ),
                 ],
               ),
@@ -3006,14 +3025,14 @@ class _TableHeaderCell extends StatelessWidget {
               child: TextField(
                 controller: controller,
                 contextMenuBuilder: buildAppEditableTextContextMenu,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   isDense: true,
-                  hintText: '表头',
+                  hintText: context.l10n.tableHeader,
                   filled: false,
                   border: InputBorder.none,
                   enabledBorder: InputBorder.none,
                   focusedBorder: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(
+                  contentPadding: const EdgeInsets.symmetric(
                     horizontal: 8,
                     vertical: 10,
                   ),
@@ -3022,7 +3041,7 @@ class _TableHeaderCell extends StatelessWidget {
             ),
             if (canRemove)
               IconButton(
-                tooltip: '删除列',
+                tooltip: context.l10n.deleteColumn,
                 onPressed: onRemove,
                 icon: const Icon(Icons.close_rounded, size: 18),
               ),
@@ -3030,25 +3049,25 @@ class _TableHeaderCell extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         AppAnchoredMenuButton<MarkdownTableAlignment>(
-          tooltip: '单元格对齐方式',
+          tooltip: context.l10n.cellAlignment,
           onSelected: onAlignmentChanged,
           actions: [
             AppMenuAction(
               value: MarkdownTableAlignment.left,
               icon: Icons.format_align_left_rounded,
-              label: '左对齐',
+              label: context.l10n.alignLeft,
               selected: alignment == MarkdownTableAlignment.left,
             ),
             AppMenuAction(
               value: MarkdownTableAlignment.center,
               icon: Icons.format_align_center_rounded,
-              label: '居中',
+              label: context.l10n.alignCenter,
               selected: alignment == MarkdownTableAlignment.center,
             ),
             AppMenuAction(
               value: MarkdownTableAlignment.right,
               icon: Icons.format_align_right_rounded,
-              label: '右对齐',
+              label: context.l10n.alignRight,
               selected: alignment == MarkdownTableAlignment.right,
             ),
           ],
@@ -3061,9 +3080,10 @@ class _TableHeaderCell extends StatelessWidget {
                   Expanded(
                     child: Text(
                       switch (alignment) {
-                        MarkdownTableAlignment.left => '左对齐',
-                        MarkdownTableAlignment.center => '居中',
-                        MarkdownTableAlignment.right => '右对齐',
+                        MarkdownTableAlignment.left => context.l10n.alignLeft,
+                        MarkdownTableAlignment.center =>
+                          context.l10n.alignCenter,
+                        MarkdownTableAlignment.right => context.l10n.alignRight,
                       },
                       style: const TextStyle(
                         fontSize: 12,
@@ -3096,14 +3116,17 @@ class _TableBodyCell extends StatelessWidget {
       minLines: 1,
       maxLines: 6,
       textAlignVertical: TextAlignVertical.top,
-      decoration: const InputDecoration(
+      decoration: InputDecoration(
         isDense: true,
-        hintText: '内容',
+        hintText: context.l10n.content,
         filled: false,
         border: InputBorder.none,
         enabledBorder: InputBorder.none,
         focusedBorder: InputBorder.none,
-        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: 11,
+        ),
       ),
     ),
   );

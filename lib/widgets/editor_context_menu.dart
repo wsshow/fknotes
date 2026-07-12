@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app.dart';
+import '../l10n/l10n.dart';
 
 /// The block editor keeps this zero-width boundary inside block fields so
 /// mobile keyboards can report backspace at the start of an otherwise empty
@@ -128,15 +129,15 @@ class _AppContextMenuButton extends StatelessWidget {
       textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
     ),
     icon: Icon(_icon, size: 18),
-    label: Text(_label),
+    label: Text(_label(context)),
   );
 
-  String get _label => switch (type) {
-    ContextMenuButtonType.cut => '剪切',
-    ContextMenuButtonType.copy => '复制',
-    ContextMenuButtonType.paste => '粘贴',
-    ContextMenuButtonType.selectAll => '全选',
-    ContextMenuButtonType.share => '分享',
+  String _label(BuildContext context) => switch (type) {
+    ContextMenuButtonType.cut => context.l10n.cut,
+    ContextMenuButtonType.copy => context.l10n.copy,
+    ContextMenuButtonType.paste => context.l10n.paste,
+    ContextMenuButtonType.selectAll => context.l10n.selectAll,
+    ContextMenuButtonType.share => context.l10n.share,
     _ => '',
   };
 

@@ -78,7 +78,17 @@ class NoteAssistantPromptBuilder {
     required String title,
     required String content,
     NoteAssistantScope scope = NoteAssistantScope.fullNote,
+    String languageCode = 'zh',
   }) {
+    final useEnglish = languageCode.toLowerCase().startsWith('en');
+    if (useEnglish) {
+      return _buildEnglish(
+        action: action,
+        title: title,
+        content: content,
+        scope: scope,
+      );
+    }
     final target = switch (scope) {
       NoteAssistantScope.selection => '选中的文字',
       NoteAssistantScope.currentBlock => '当前段落',
@@ -128,6 +138,80 @@ class NoteAssistantPromptBuilder {
             ? 768
             : 512,
       ),
+    );
+  }
+
+  static LocalLlmGenerationRequest _buildEnglish({
+    required NoteAssistantAction action,
+    required String title,
+    required String content,
+    required NoteAssistantScope scope,
+  }) {
+    final target = switch (scope) {
+      NoteAssistantScope.selection => 'the selected text',
+      NoteAssistantScope.currentBlock => 'the current paragraph',
+      NoteAssistantScope.fullNote => 'this note',
+    };
+    final rawInstruction = switch (action.task) {
+      NoteAssistantTask.summarize =>
+        'Summarize $target concisely. Start with one key conclusion, then list no more than five key points. '
+            'Do not add facts that are absent from the source or reveal your reasoning process.',
+      NoteAssistantTask.extractTodos =>
+        'Extract explicit, actionable tasks from $target. Start every item with “☐ ”. '
+            'Do not invent tasks. If there are none, answer “No explicit tasks found.” Do not reveal your reasoning process.',
+      NoteAssistantTask.polish =>
+        'Improve the writing of $target without changing facts, numbers, proper nouns, or meaning in either language. '
+            'Preserve the paragraph structure and return only the revised text.',
+      null => action.instruction!,
+    };
+    final instruction = _fitText(
+      rawInstruction,
+      maxInputCharacters,
+      '\n\n[Middle of instruction omitted to fit the mobile context window]\n\n',
+    );
+    final note = _boundedEnglishNote(
+      title: title,
+      content: content,
+      maxCharacters: maxInputCharacters - instruction.length,
+    );
+    final noteSection = note.isEmpty
+        ? 'The note is empty. Respond directly to the user instruction.'
+        : '--- NOTE START ---\n$note\n--- NOTE END ---';
+    return LocalLlmGenerationRequest(
+      messages: [
+        const LocalLlmMessage(
+          role: LocalLlmRole.system,
+          content:
+              'You are FKNotes’ on-device note assistant. All content stays on the device. '
+              'Follow the user instruction and return a directly usable result without revealing reasoning. '
+              'Never present an inference as a fact already contained in the note.',
+        ),
+        LocalLlmMessage(
+          role: LocalLlmRole.user,
+          content: 'User instruction:\n$instruction\n\n$noteSection',
+        ),
+      ],
+      options: LocalLlmGenerationOptions(
+        maxNewTokens: action.isCustom || action.task == NoteAssistantTask.polish
+            ? 768
+            : 512,
+      ),
+    );
+  }
+
+  static String _boundedEnglishNote({
+    required String title,
+    required String content,
+    required int maxCharacters,
+  }) {
+    final source = [
+      if (title.trim().isNotEmpty) 'Title: ${title.trim()}',
+      if (content.trim().isNotEmpty) 'Content:\n${content.trim()}',
+    ].join('\n\n');
+    return _fitText(
+      source,
+      maxCharacters,
+      '\n\n[Middle of note omitted to fit the mobile context window]\n\n',
     );
   }
 

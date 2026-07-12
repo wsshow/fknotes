@@ -958,4 +958,624 @@ class AppLocalizationsEn extends AppLocalizations {
   String lastSyncedAt(String date) {
     return 'Last synced: $date';
   }
+
+  @override
+  String get cut => 'Cut';
+
+  @override
+  String get copy => 'Copy';
+
+  @override
+  String get paste => 'Paste';
+
+  @override
+  String get selectAll => 'Select all';
+
+  @override
+  String get share => 'Share';
+
+  @override
+  String get invalidExternalLink =>
+      'This link is invalid or uses an unsupported protocol.';
+
+  @override
+  String get openExternalLinkQuestion => 'Open external link?';
+
+  @override
+  String externalLinkWarning(String destination) {
+    return '$destination\n\nThis link will be handled by another app and may take you away from FKNotes.';
+  }
+
+  @override
+  String get continueOpening => 'Continue';
+
+  @override
+  String get noExternalLinkHandler =>
+      'No app on this device can open this link.';
+
+  @override
+  String get externalLinkOpenFailed => 'Couldn\'t open this link.';
+
+  @override
+  String remoteImageBlocked(String label) {
+    return 'External image not loaded: $label';
+  }
+
+  @override
+  String mathFormulaSemantics(String formula) {
+    return 'Math formula: $formula';
+  }
+
+  @override
+  String get assistantPrivacyDescription =>
+      'Tell AI what you want to do. Note content is processed only on this device.';
+
+  @override
+  String get processingScope => 'Scope';
+
+  @override
+  String get scopeSelection => 'Selected text';
+
+  @override
+  String get scopeCurrentBlock => 'Current paragraph';
+
+  @override
+  String get scopeFullNote => 'Entire note';
+
+  @override
+  String get assistantCustomHint =>
+      'For example: Turn these ideas into a concise email…';
+
+  @override
+  String get startGenerating => 'Generate';
+
+  @override
+  String get quickActions => 'Quick actions';
+
+  @override
+  String get assistantSummarize => 'Summarize note';
+
+  @override
+  String get assistantSummarizeDescription =>
+      'Extract the main conclusion and key points';
+
+  @override
+  String get assistantExtractTodos => 'Extract tasks';
+
+  @override
+  String get assistantExtractTodosDescription => 'Find clear, actionable tasks';
+
+  @override
+  String get assistantPolish => 'Improve writing';
+
+  @override
+  String get assistantPolishDescription =>
+      'Improve clarity while preserving facts and structure';
+
+  @override
+  String get assistantCustomAction => 'Custom instruction';
+
+  @override
+  String get assistantNoOutput => 'The model didn\'t generate any content.';
+
+  @override
+  String get stopGenerating => 'Stop';
+
+  @override
+  String get regenerate => 'Generate again';
+
+  @override
+  String get chooseGeneratedContentPlacement =>
+      'Choose how to use the generated content';
+
+  @override
+  String get placementReplace => 'Replace original';
+
+  @override
+  String get placementInsertBelow => 'Insert below paragraph';
+
+  @override
+  String get placementAppend => 'Append to note';
+
+  @override
+  String get useCurrentContent => 'Use current content';
+
+  @override
+  String get useGeneratedContent => 'Use generated content';
+
+  @override
+  String get generatedContentCopied => 'Generated content copied';
+
+  @override
+  String get loadingLocalModel => 'Loading local model…';
+
+  @override
+  String get generatingOnDevice => 'Generating on device…';
+
+  @override
+  String get generationCompleted => 'Generation complete. Review before using.';
+
+  @override
+  String get generationLimitReached =>
+      'Output limit reached. Review the result.';
+
+  @override
+  String get generationStoppedUsable =>
+      'Generation stopped. You can copy or insert the current result.';
+
+  @override
+  String get generationTimedOutUsable =>
+      'Generation timed out. Retry or copy the current result.';
+
+  @override
+  String get generationIncomplete => 'Local generation didn\'t finish.';
+
+  @override
+  String get retry => 'Retry';
+
+  @override
+  String get maybeLater => 'Maybe later';
+
+  @override
+  String get readNoteAloud => 'Read note aloud';
+
+  @override
+  String get offlineReadAloudModelRequired =>
+      'Offline read-aloud model required';
+
+  @override
+  String get readAloudModelDownloadDescription =>
+      'Kokoro Chinese-English INT8 requires an initial 140.2 MB download. Afterward, note read-aloud works entirely offline.';
+
+  @override
+  String get manageModels => 'Manage models';
+
+  @override
+  String get noteReadAloudFailed => 'Couldn\'t read this note aloud.';
+
+  @override
+  String get liveDictationIncomplete => 'Live dictation didn\'t finish.';
+
+  @override
+  String get unsavedDraftFound => 'Unsaved draft found';
+
+  @override
+  String get unsavedDraftDescription =>
+      'The last editing session may have ended unexpectedly. Restore content that wasn\'t saved to the note?';
+
+  @override
+  String get discardDraft => 'Discard';
+
+  @override
+  String get restore => 'Restore';
+
+  @override
+  String get liveSpeechModelRequired => 'Live speech model required';
+
+  @override
+  String liveSpeechModelDownloadDescription(String model, String size) {
+    return 'The selected model is $model. Its first use requires about $size. After downloading, dictation works entirely offline.';
+  }
+
+  @override
+  String get placeCursorInText => 'Place the cursor in a text area first.';
+
+  @override
+  String get liveDictationStartFailed => 'Couldn\'t start live dictation.';
+
+  @override
+  String get localLanguageModelRequired => 'Local language model required';
+
+  @override
+  String localLanguageModelDownloadDescription(String model, String size) {
+    return 'The selected model is $model. Its first use requires about $size. After downloading, note content is processed only on this device.';
+  }
+
+  @override
+  String get assistantReplacedContent => 'Original content replaced';
+
+  @override
+  String get assistantInsertedBelow => 'Inserted below the current paragraph';
+
+  @override
+  String get assistantAppended => 'Appended to the end of the note';
+
+  @override
+  String get noteChangedRetryAssistant =>
+      'The note changed. Start the AI action again.';
+
+  @override
+  String assistantLaunchFailed(String error) {
+    return 'Couldn\'t start the local assistant: $error';
+  }
+
+  @override
+  String autosaveFailed(String error) {
+    return 'Autosave failed: $error';
+  }
+
+  @override
+  String get addToNote => 'Add to note';
+
+  @override
+  String get camera => 'Camera';
+
+  @override
+  String attachmentImportTypeFailed(String type) {
+    return 'Couldn\'t import $type.';
+  }
+
+  @override
+  String get editNote => 'Edit note';
+
+  @override
+  String get newNote => 'New note';
+
+  @override
+  String get savingEllipsis => 'Saving…';
+
+  @override
+  String get localDraft => 'Local draft';
+
+  @override
+  String get savedLocally => 'Saved on device';
+
+  @override
+  String characterCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count characters',
+      one: '1 character',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get stopReadAloud => 'Stop read-aloud';
+
+  @override
+  String get moreNoteActions => 'More note actions';
+
+  @override
+  String get removeFavorite => 'Remove from favorites';
+
+  @override
+  String get addFavorite => 'Add to favorites';
+
+  @override
+  String get unpin => 'Unpin';
+
+  @override
+  String get pin => 'Pin';
+
+  @override
+  String get addTags => 'Add tags';
+
+  @override
+  String get tags => 'Tags';
+
+  @override
+  String get noteContent => 'Note content';
+
+  @override
+  String attachmentItemCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count attachments',
+      one: '1 attachment',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noteDescriptionHint => 'Add context, ideas, or a summary…';
+
+  @override
+  String get noteStartHint => 'Start writing…';
+
+  @override
+  String get addMediaOrFile => 'Add an image, recording, or file';
+
+  @override
+  String get editTags => 'Edit tags';
+
+  @override
+  String get tagsDescription =>
+      'Separate tags with commas. Duplicates are merged automatically.';
+
+  @override
+  String get tagsHint => 'For example: Work, Ideas, Read later';
+
+  @override
+  String get stopLiveDictation => 'Stop live dictation';
+
+  @override
+  String get liveVoiceInput => 'Live voice input';
+
+  @override
+  String get redo => 'Redo';
+
+  @override
+  String get bold => 'Bold';
+
+  @override
+  String get italic => 'Italic';
+
+  @override
+  String get underline => 'Underline';
+
+  @override
+  String get addLink => 'Add link';
+
+  @override
+  String get editLink => 'Edit link';
+
+  @override
+  String get linkPrivacyDescription =>
+      'The link is saved in Markdown. FKNotes will still ask before opening it.';
+
+  @override
+  String get linkAddress => 'Link address';
+
+  @override
+  String get removeLink => 'Remove link';
+
+  @override
+  String get organizingLastSentence => 'Finishing the last sentence…';
+
+  @override
+  String get liveDictationFailed => 'Live dictation failed.';
+
+  @override
+  String get listening => 'Listening…';
+
+  @override
+  String liveDictationElapsed(String time) {
+    return 'Live dictation  $time';
+  }
+
+  @override
+  String get localVoiceInput => 'On-device voice input';
+
+  @override
+  String get cancelDictation => 'Cancel dictation';
+
+  @override
+  String get finishDictation => 'Finish dictation';
+
+  @override
+  String get paragraph => 'Paragraph';
+
+  @override
+  String get paragraphStyle => 'Paragraph style';
+
+  @override
+  String headingLevel(int level) {
+    return 'Heading $level';
+  }
+
+  @override
+  String get quote => 'Quote';
+
+  @override
+  String get codeBlock => 'Code block';
+
+  @override
+  String get divider => 'Divider';
+
+  @override
+  String get listsAndIndentation => 'Lists and indentation';
+
+  @override
+  String get todoItem => 'To-do item';
+
+  @override
+  String get bulletList => 'Bulleted list';
+
+  @override
+  String get numberedList => 'Numbered list';
+
+  @override
+  String get decreaseIndent => 'Decrease indent';
+
+  @override
+  String get increaseIndent => 'Increase indent';
+
+  @override
+  String get moreFormatting => 'More formatting';
+
+  @override
+  String get strikethrough => 'Strikethrough';
+
+  @override
+  String get inlineCode => 'Inline code';
+
+  @override
+  String get generatingThumbnail => 'Generating thumbnail…';
+
+  @override
+  String importingBytes(String bytes) {
+    return 'Importing · $bytes';
+  }
+
+  @override
+  String importingPercent(int percent, String bytes) {
+    return 'Importing $percent% · $bytes';
+  }
+
+  @override
+  String get importCompleteSaving => 'Import complete. Saving to note…';
+
+  @override
+  String get importFailedRetry => 'Import failed. Try again.';
+
+  @override
+  String get importCanceled => 'Import canceled';
+
+  @override
+  String get cancelImport => 'Cancel import';
+
+  @override
+  String chooseTypeAgain(String type) {
+    return 'Choose $type again';
+  }
+
+  @override
+  String get adjustAttachment => 'Reorder attachment';
+
+  @override
+  String get moveUp => 'Move up';
+
+  @override
+  String get moveDown => 'Move down';
+
+  @override
+  String get referenceInBody => 'Reference in note';
+
+  @override
+  String importFailedDetail(String error) {
+    return 'Import failed · $error';
+  }
+
+  @override
+  String get assistantSummaryHeading => 'Local assistant summary';
+
+  @override
+  String get assistantTodosHeading => 'Local assistant tasks';
+
+  @override
+  String get assistantPolishedHeading => 'Local assistant revision';
+
+  @override
+  String get assistantGeneratedHeading => 'AI-generated content';
+
+  @override
+  String attachmentReference(String path) {
+    return 'Attachment reference: $path';
+  }
+
+  @override
+  String get markdownTable => 'Markdown table';
+
+  @override
+  String tableDimensions(int columns, int rows) {
+    return '$columns columns · $rows rows';
+  }
+
+  @override
+  String get deleteTable => 'Delete table';
+
+  @override
+  String get editTable => 'Edit table';
+
+  @override
+  String get invalidMarkdownTable =>
+      'The table syntax is incomplete. Check the Markdown source first.';
+
+  @override
+  String get attachmentRemoved => 'Attachment removed';
+
+  @override
+  String get brokenAttachmentReference =>
+      'This reference is no longer valid. You can remove it.';
+
+  @override
+  String attachmentReferenceDescription(String type, String size) {
+    return '$type · $size · Tap to preview';
+  }
+
+  @override
+  String get removeReference => 'Remove reference';
+
+  @override
+  String tableEditorDescription(int columns, int rows) {
+    return '$columns columns · $rows rows · Swipe horizontally to view all columns';
+  }
+
+  @override
+  String get addColumn => 'Add column';
+
+  @override
+  String get addRow => 'Add row';
+
+  @override
+  String deleteRow(int row) {
+    return 'Delete row $row';
+  }
+
+  @override
+  String get saveTable => 'Save table';
+
+  @override
+  String get tableHeader => 'Header';
+
+  @override
+  String get deleteColumn => 'Delete column';
+
+  @override
+  String get cellAlignment => 'Cell alignment';
+
+  @override
+  String get alignLeft => 'Align left';
+
+  @override
+  String get alignCenter => 'Center';
+
+  @override
+  String get alignRight => 'Align right';
+
+  @override
+  String get content => 'Content';
+
+  @override
+  String get untitled => 'Untitled';
+
+  @override
+  String todayAt(String time) {
+    return 'Today $time';
+  }
+
+  @override
+  String yesterdayAt(String time) {
+    return 'Yesterday $time';
+  }
+
+  @override
+  String get quickNoteTile => 'Quick\nnote';
+
+  @override
+  String get removeFromArchive => 'Remove from archive';
+
+  @override
+  String get edit => 'Edit';
+
+  @override
+  String get moveToTrash => 'Move to trash';
+
+  @override
+  String mixedAttachmentMetadata(int count) {
+    return 'Mixed · $count items';
+  }
+
+  @override
+  String imageAttachmentMetadata(int count) {
+    return 'Images · $count';
+  }
+
+  @override
+  String audioAttachmentMetadata(int count) {
+    return 'Recordings · $count';
+  }
+
+  @override
+  String videoAttachmentMetadata(int count) {
+    return 'Videos · $count';
+  }
+
+  @override
+  String fileAttachmentMetadata(int count) {
+    return 'Files · $count';
+  }
 }

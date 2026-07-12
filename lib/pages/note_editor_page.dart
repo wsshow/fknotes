@@ -8,6 +8,8 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../app.dart';
+import '../l10n/l10n.dart';
+import '../l10n/local_model_l10n.dart';
 import '../models/note_entry.dart';
 import '../providers/note_provider.dart';
 import '../services/file_storage_service.dart';
@@ -226,19 +228,16 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       final openModels = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('需要离线朗读模型'),
-          content: const Text(
-            'Kokoro 中英双语 INT8 首次使用需下载约 140.2 MB。'
-            '下载后，笔记朗读全程断网可用。',
-          ),
+          title: Text(context.l10n.offlineReadAloudModelRequired),
+          content: Text(context.l10n.readAloudModelDownloadDescription),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('稍后再说'),
+              child: Text(context.l10n.maybeLater),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('管理模型'),
+              child: Text(context.l10n.manageModels),
             ),
           ],
         ),
@@ -263,7 +262,10 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       await _readAloud.speak(text);
     } catch (_) {
       if (mounted) {
-        AppFeedback.error(context, _readAloud.errorMessage ?? '无法朗读这篇笔记');
+        AppFeedback.error(
+          context,
+          _readAloud.errorMessage ?? context.l10n.noteReadAloudFailed,
+        );
       }
     }
   }
@@ -288,7 +290,8 @@ class _NoteEditorPageState extends State<NoteEditorPage>
   }
 
   Future<void> _recoverFromDictationFailure() async {
-    final message = _dictation.errorMessage ?? '实时听写没有完成';
+    final message =
+        _dictation.errorMessage ?? context.l10n.liveDictationIncomplete;
     _dictationAnchored = false;
     _dictationInsertedText = '';
     await _dictation.cancel();
@@ -328,16 +331,16 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('发现未保存的草稿'),
-        content: const Text('上次编辑可能意外中断。要恢复尚未写入笔记的内容吗？'),
+        title: Text(context.l10n.unsavedDraftFound),
+        content: Text(context.l10n.unsavedDraftDescription),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('放弃草稿'),
+            child: Text(context.l10n.discardDraft),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('恢复'),
+            child: Text(context.l10n.restore),
           ),
         ],
       ),
@@ -448,19 +451,21 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       final openModels = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('需要实时语音模型'),
+          title: Text(context.l10n.liveSpeechModelRequired),
           content: Text(
-            '当前选择的是${definition.name}，首次使用需下载约 $downloadSize。'
-            '下载完成后，听写全程断网可用。',
+            context.l10n.liveSpeechModelDownloadDescription(
+              localizedModelName(context.l10n, definition),
+              downloadSize,
+            ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('稍后再说'),
+              child: Text(context.l10n.maybeLater),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('管理模型'),
+              child: Text(context.l10n.manageModels),
             ),
           ],
         ),
@@ -480,7 +485,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     final anchored =
         _blockEditorKey.currentState?.prepareDictationInsertion() ?? false;
     if (!anchored) {
-      AppFeedback.show(context, '请先将光标放在文字区域');
+      AppFeedback.show(context, context.l10n.placeCursorInText);
       return;
     }
     _dictationAnchored = true;
@@ -493,7 +498,10 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       _dictationAnchored = false;
       _dictationInsertedText = '';
       if (mounted) {
-        AppFeedback.error(context, _dictation.errorMessage ?? '无法开始实时听写');
+        AppFeedback.error(
+          context,
+          _dictation.errorMessage ?? context.l10n.liveDictationStartFailed,
+        );
       }
     } finally {
       _dictationOperationPending = false;
@@ -535,19 +543,24 @@ class _NoteEditorPageState extends State<NoteEditorPage>
         final openModels = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('需要本地语言模型'),
+            title: Text(context.l10n.localLanguageModelRequired),
             content: Text(
-              '当前选择的是 ${models.displayName(selectedId)}，首次使用需下载约 '
-              '$downloadSize。下载完成后，笔记内容只在本机处理。',
+              context.l10n.localLanguageModelDownloadDescription(
+                localizedModelName(
+                  context.l10n,
+                  LocalModelManager.instance.modelOf(selectedId),
+                ),
+                downloadSize,
+              ),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
-                child: const Text('稍后再说'),
+                child: Text(context.l10n.maybeLater),
               ),
               FilledButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('管理模型'),
+                child: Text(context.l10n.manageModels),
               ),
             ],
           ),
@@ -587,6 +600,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
           scope: invocation.scope,
           title: _title.text,
           content: sourceContent,
+          languageCode: Localizations.localeOf(context).languageCode,
           placements: placements,
         ),
       );
@@ -596,23 +610,28 @@ class _NoteEditorPageState extends State<NoteEditorPage>
             anchor: anchor,
             scope: invocation.scope,
             placement: generated.placement,
-            heading: invocation.action.resultHeading,
+            heading: _assistantResultHeading(context, invocation.action),
             text: generated.text,
           ) ??
           false;
       if (inserted) {
         final message = switch (generated.placement) {
-          NoteAssistantPlacement.replace => '已替换原内容',
-          NoteAssistantPlacement.insertBelow => '已插入到当前段落下方',
-          NoteAssistantPlacement.append => '已追加到笔记末尾',
+          NoteAssistantPlacement.replace =>
+            context.l10n.assistantReplacedContent,
+          NoteAssistantPlacement.insertBelow =>
+            context.l10n.assistantInsertedBelow,
+          NoteAssistantPlacement.append => context.l10n.assistantAppended,
         };
         AppFeedback.success(context, message);
       } else {
-        AppFeedback.show(context, '笔记内容已经变化，请重新发起 AI 操作');
+        AppFeedback.show(context, context.l10n.noteChangedRetryAssistant);
       }
     } catch (error) {
       if (!mounted) return;
-      AppFeedback.error(context, '无法启动本地助手：$error');
+      AppFeedback.error(
+        context,
+        context.l10n.assistantLaunchFailed(error.toString()),
+      );
     }
   }
 
@@ -628,7 +647,10 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       _dictationAnchored = false;
       _dictationInsertedText = '';
       if (mounted) {
-        AppFeedback.error(context, _dictation.errorMessage ?? '实时听写没有完成');
+        AppFeedback.error(
+          context,
+          _dictation.errorMessage ?? context.l10n.liveDictationIncomplete,
+        );
       }
     } finally {
       _dictationOperationPending = false;
@@ -765,7 +787,10 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     } catch (error) {
       _changed = true;
       if (showError && mounted) {
-        AppFeedback.error(context, '自动保存失败：$error');
+        AppFeedback.error(
+          context,
+          context.l10n.autosaveFailed(error.toString()),
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -803,7 +828,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '添加到笔记',
+                context.l10n.addToNote,
                 style: Theme.of(
                   context,
                 ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
@@ -819,32 +844,32 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                 children: [
                   _AddContentAction(
                     icon: Icons.photo_library_outlined,
-                    label: '图片',
+                    label: context.l10n.image,
                     onTap: () => _runAfterSheet(sheetContext, _pickImages),
                   ),
                   _AddContentAction(
                     icon: Icons.camera_alt_outlined,
-                    label: '拍照',
+                    label: context.l10n.camera,
                     onTap: () => _runAfterSheet(sheetContext, _takePhoto),
                   ),
                   _AddContentAction(
                     icon: Icons.mic_none_rounded,
-                    label: '录音',
+                    label: context.l10n.record,
                     onTap: () => _runAfterSheet(sheetContext, _recordAudio),
                   ),
                   _AddContentAction(
                     icon: Icons.audio_file_outlined,
-                    label: '音频',
+                    label: context.l10n.audio,
                     onTap: () => _runAfterSheet(sheetContext, _pickAudio),
                   ),
                   _AddContentAction(
                     icon: Icons.video_file_outlined,
-                    label: '视频',
+                    label: context.l10n.video,
                     onTap: () => _runAfterSheet(sheetContext, _pickVideo),
                   ),
                   _AddContentAction(
                     icon: Icons.attach_file_rounded,
-                    label: '文件',
+                    label: context.l10n.file,
                     onTap: () => _runAfterSheet(sheetContext, _pickDocument),
                   ),
                 ],
@@ -898,7 +923,10 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     } catch (error) {
       if (!mounted) return;
       final message = error is PlatformException
-          ? error.message ?? '${type.label}导入失败'
+          ? error.message ??
+                context.l10n.attachmentImportTypeFailed(
+                  _noteTypeLabel(context, type),
+                )
           : error.toString();
       AppFeedback.error(context, message);
     } finally {
@@ -1058,7 +1086,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _isEditing ? '编辑笔记' : '新笔记',
+                      _isEditing ? context.l10n.editNote : context.l10n.newNote,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -1070,11 +1098,11 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                       valueListenable: _content,
                       builder: (context, value, child) => Text(
                         '${_saving
-                            ? '正在保存…'
+                            ? context.l10n.savingEllipsis
                             : _changed
-                            ? '本地草稿'
-                            : '已保存在本机'} · '
-                        '${NoteBlockCodec.visibleCharacterCount(value.text)} 字',
+                            ? context.l10n.localDraft
+                            : context.l10n.savedLocally} · '
+                        '${context.l10n.characterCount(NoteBlockCodec.visibleCharacterCount(value.text))}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -1092,7 +1120,9 @@ class _NoteEditorPageState extends State<NoteEditorPage>
           actions: [
             IconButton(
               key: const Key('note-read-aloud'),
-              tooltip: _readAloud.isActive ? '停止朗读' : '朗读笔记',
+              tooltip: _readAloud.isActive
+                  ? context.l10n.stopReadAloud
+                  : context.l10n.readNoteAloud,
               onPressed: _toggleReadAloud,
               icon: _readAloud.status == ReadAloudStatus.generating
                   ? const SizedBox(
@@ -1107,7 +1137,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                     ),
             ),
             AppAnchoredMenuButton<String>(
-              tooltip: '更多笔记操作',
+              tooltip: context.l10n.moreNoteActions,
               icon: const Icon(Icons.more_vert_rounded),
               onSelected: (value) {
                 HapticFeedback.selectionClick();
@@ -1125,13 +1155,15 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                   icon: _favorite
                       ? Icons.star_rounded
                       : Icons.star_outline_rounded,
-                  label: _favorite ? '取消收藏' : '收藏',
+                  label: _favorite
+                      ? context.l10n.removeFavorite
+                      : context.l10n.addFavorite,
                   selected: _favorite,
                 ),
                 AppMenuAction(
                   value: 'pin',
                   icon: Icons.vertical_align_top_rounded,
-                  label: _pinned ? '取消置顶' : '置顶',
+                  label: _pinned ? context.l10n.unpin : context.l10n.pin,
                   selected: _pinned,
                 ),
               ],
@@ -1170,8 +1202,8 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                                   fontWeight: FontWeight.w700,
                                   letterSpacing: -.5,
                                 ),
-                                decoration: const InputDecoration(
-                                  hintText: '标题',
+                                decoration: InputDecoration(
+                                  hintText: context.l10n.title,
                                   filled: false,
                                   border: InputBorder.none,
                                   enabledBorder: InputBorder.none,
@@ -1201,7 +1233,11 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                                       Icons.add_rounded,
                                       size: 17,
                                     ),
-                                    label: Text(_tags.isEmpty ? '添加标签' : '标签'),
+                                    label: Text(
+                                      _tags.isEmpty
+                                          ? context.l10n.addTags
+                                          : context.l10n.tags,
+                                    ),
                                     onPressed: _editTags,
                                   ),
                                 ],
@@ -1210,10 +1246,10 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                                 const SizedBox(height: 20),
                                 Row(
                                   children: [
-                                    const Expanded(
+                                    Expanded(
                                       child: Text(
-                                        '笔记内容',
-                                        style: TextStyle(
+                                        context.l10n.noteContent,
+                                        style: const TextStyle(
                                           fontSize: 13,
                                           color: AppColors.muted,
                                           fontWeight: FontWeight.w700,
@@ -1221,7 +1257,9 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                                       ),
                                     ),
                                     Text(
-                                      '${_attachments.length + importJobs.length} 项附件',
+                                      context.l10n.attachmentItemCount(
+                                        _attachments.length + importJobs.length,
+                                      ),
                                       style: const TextStyle(
                                         fontSize: 12,
                                         color: AppColors.muted,
@@ -1289,8 +1327,8 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                                 onOpenAttachment: _openAttachment,
                                 minLines: hasAttachmentContent ? 10 : 16,
                                 hintText: hasAttachmentContent
-                                    ? '添加说明、想法或摘要…'
-                                    : '开始记录…',
+                                    ? context.l10n.noteDescriptionHint
+                                    : context.l10n.noteStartHint,
                               ),
                             ],
                           ),
@@ -1331,7 +1369,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                             Row(
                               children: [
                                 IconButton.filled(
-                                  tooltip: '添加图片、录音或文件',
+                                  tooltip: context.l10n.addMediaOrFile,
                                   onPressed: _importing || _dictation.isActive
                                       ? null
                                       : _showAddContentSheet,
@@ -1581,7 +1619,7 @@ class _TagEditorSheetState extends State<_TagEditorSheet> {
                 children: [
                   Expanded(
                     child: Text(
-                      '编辑标签',
+                      context.l10n.editTags,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
@@ -1597,9 +1635,9 @@ class _TagEditorSheetState extends State<_TagEditorSheet> {
                 ],
               ),
               const SizedBox(height: 6),
-              const Text(
-                '使用逗号分隔多个标签，重复标签会自动合并。',
-                style: TextStyle(color: AppColors.muted, height: 1.45),
+              Text(
+                context.l10n.tagsDescription,
+                style: const TextStyle(color: AppColors.muted, height: 1.45),
               ),
               const SizedBox(height: 16),
               TextField(
@@ -1610,9 +1648,9 @@ class _TagEditorSheetState extends State<_TagEditorSheet> {
                 textInputAction: TextInputAction.done,
                 onChanged: _changed,
                 onSubmitted: (_) => _finish(),
-                decoration: const InputDecoration(
-                  labelText: '标签',
-                  hintText: '例如：工作, 灵感, 稍后阅读',
+                decoration: InputDecoration(
+                  labelText: context.l10n.tags,
+                  hintText: context.l10n.tagsHint,
                 ),
               ),
               if (_tags.isNotEmpty) ...[
@@ -1635,7 +1673,7 @@ class _TagEditorSheetState extends State<_TagEditorSheet> {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('取消'),
+                      child: Text(context.l10n.cancel),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -1643,7 +1681,7 @@ class _TagEditorSheetState extends State<_TagEditorSheet> {
                     child: FilledButton(
                       key: const Key('save-note-tags'),
                       onPressed: _finish,
-                      child: const Text('完成'),
+                      child: Text(context.l10n.completed),
                     ),
                   ),
                 ],
@@ -1745,37 +1783,39 @@ class _EditorToolbarState extends State<_EditorToolbar> {
           onPressed: widget.onAssistant,
         ),
         _EditorToolButton(
-          tooltip: dictating ? '停止实时听写' : '实时语音输入',
+          tooltip: dictating
+              ? context.l10n.stopLiveDictation
+              : context.l10n.liveVoiceInput,
           icon: dictating ? Icons.stop_circle_rounded : Icons.mic_none_rounded,
           selected: dictating,
           onPressed: dictationBusy ? null : widget.onDictation,
         ),
         _EditorToolButton(
-          tooltip: '撤销',
+          tooltip: context.l10n.undo,
           icon: Icons.undo_rounded,
           selected: false,
           onPressed: history.canUndo ? editor?.undo : null,
         ),
         _EditorToolButton(
-          tooltip: '重做',
+          tooltip: context.l10n.redo,
           icon: Icons.redo_rounded,
           selected: false,
           onPressed: history.canRedo ? editor?.redo : null,
         ),
         _EditorToolButton(
-          tooltip: '加粗',
+          tooltip: context.l10n.bold,
           icon: Icons.format_bold_rounded,
           selected: format.bold,
           onPressed: editor?.toggleBold,
         ),
         _EditorToolButton(
-          tooltip: '斜体',
+          tooltip: context.l10n.italic,
           icon: Icons.format_italic_rounded,
           selected: format.italic,
           onPressed: editor?.toggleItalic,
         ),
         _EditorToolButton(
-          tooltip: '下划线',
+          tooltip: context.l10n.underline,
           icon: Icons.format_underlined_rounded,
           selected: format.underline,
           onPressed: editor?.toggleUnderline,
@@ -1890,15 +1930,17 @@ class _LinkEditorSheetState extends State<_LinkEditorSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              widget.initialValue == null ? '添加链接' : '编辑链接',
+              widget.initialValue == null
+                  ? context.l10n.addLink
+                  : context.l10n.editLink,
               style: Theme.of(
                 context,
               ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 6),
-            const Text(
-              '链接会保存在 Markdown 中；打开前仍会由 FKNotes 进行隐私确认。',
-              style: TextStyle(color: AppColors.muted, height: 1.45),
+            Text(
+              context.l10n.linkPrivacyDescription,
+              style: const TextStyle(color: AppColors.muted, height: 1.45),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -1909,10 +1951,10 @@ class _LinkEditorSheetState extends State<_LinkEditorSheet> {
               keyboardType: TextInputType.url,
               textInputAction: TextInputAction.done,
               onSubmitted: (_) => _save(),
-              decoration: const InputDecoration(
-                labelText: '链接地址',
+              decoration: InputDecoration(
+                labelText: context.l10n.linkAddress,
                 hintText: 'https://example.com',
-                prefixIcon: Icon(Icons.link_rounded),
+                prefixIcon: const Icon(Icons.link_rounded),
               ),
             ),
             const SizedBox(height: 20),
@@ -1927,13 +1969,16 @@ class _LinkEditorSheetState extends State<_LinkEditorSheet> {
                     onPressed: () =>
                         Navigator.pop(context, const _LinkEditResult.remove()),
                     icon: const Icon(Icons.link_off_rounded),
-                    label: const Text('移除链接'),
+                    label: Text(context.l10n.removeLink),
                   ),
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('取消'),
+                  child: Text(context.l10n.cancel),
                 ),
-                FilledButton(onPressed: _save, child: const Text('完成')),
+                FilledButton(
+                  onPressed: _save,
+                  child: Text(context.l10n.completed),
+                ),
               ],
             ),
           ],
@@ -1963,10 +2008,14 @@ class _LiveDictationBar extends StatelessWidget {
         '${(seconds ~/ 60).toString().padLeft(2, '0')}:'
         '${(seconds % 60).toString().padLeft(2, '0')}';
     final label = switch (service.status) {
-      RealtimeDictationStatus.preparing => '正在加载本地模型…',
-      RealtimeDictationStatus.stopping => '正在整理最后一句…',
-      RealtimeDictationStatus.failed => service.errorMessage ?? '实时听写失败',
-      _ => service.partialText.isEmpty ? '正在聆听…' : service.partialText,
+      RealtimeDictationStatus.preparing => context.l10n.loadingLocalModel,
+      RealtimeDictationStatus.stopping => context.l10n.organizingLastSentence,
+      RealtimeDictationStatus.failed =>
+        service.errorMessage ?? context.l10n.liveDictationFailed,
+      _ =>
+        service.partialText.isEmpty
+            ? context.l10n.listening
+            : service.partialText,
     };
     final useCompactFinish =
         MediaQuery.sizeOf(context).width < 380 ||
@@ -1988,8 +2037,8 @@ class _LiveDictationBar extends StatelessWidget {
               children: [
                 Text(
                   service.status == RealtimeDictationStatus.listening
-                      ? '实时听写  $time'
-                      : '本地语音输入',
+                      ? context.l10n.liveDictationElapsed(time)
+                      : context.l10n.localVoiceInput,
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
@@ -2013,14 +2062,14 @@ class _LiveDictationBar extends StatelessWidget {
               icon: const Icon(Icons.bug_report_outlined, size: 20),
             ),
           IconButton(
-            tooltip: '取消听写',
+            tooltip: context.l10n.cancelDictation,
             onPressed: onCancel,
             icon: const Icon(Icons.close_rounded, size: 20),
           ),
           if (onFinish != null)
             if (useCompactFinish)
               IconButton.filled(
-                tooltip: '完成听写',
+                tooltip: context.l10n.finishDictation,
                 onPressed: onFinish,
                 icon: const Icon(Icons.check_rounded, size: 20),
               )
@@ -2031,7 +2080,7 @@ class _LiveDictationBar extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   minimumSize: const Size(0, 38),
                 ),
-                child: const Text('完成'),
+                child: Text(context.l10n.completed),
               ),
         ],
       ),
@@ -2320,7 +2369,7 @@ class _EditorAiButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => IconButton(
-    tooltip: '本地助手',
+    tooltip: context.l10n.localAssistant,
     onPressed: onPressed,
     style: IconButton.styleFrom(
       backgroundColor: Colors.transparent,
@@ -2351,24 +2400,28 @@ class _BlockStyleMenuButton extends StatelessWidget {
     required this.onSelected,
   });
 
-  String get _label {
+  String _label(BuildContext context) {
     if (active == NoteBlockType.heading) return 'H$headingLevel';
     if (active == NoteBlockType.code) return '</>';
-    return '正文';
+    return '¶';
   }
 
   @override
   Widget build(BuildContext context) => AppAnchoredMenuButton<String>(
-    tooltip: '段落样式',
+    tooltip: context.l10n.paragraphStyle,
     enabled: enabled,
     onSelected: onSelected,
     actions: [
-      _action('paragraph', '正文', Icons.notes_rounded),
+      _action('paragraph', context.l10n.paragraph, Icons.notes_rounded),
       for (var level = 1; level <= 6; level++)
-        _action('h$level', '标题 $level', Icons.title_rounded),
-      _action('quote', '引用', Icons.format_quote_rounded),
-      _action('code', '代码块', Icons.data_object_rounded),
-      _action('divider', '分割线', Icons.horizontal_rule_rounded),
+        _action(
+          'h$level',
+          context.l10n.headingLevel(level),
+          Icons.title_rounded,
+        ),
+      _action('quote', context.l10n.quote, Icons.format_quote_rounded),
+      _action('code', context.l10n.codeBlock, Icons.data_object_rounded),
+      _action('divider', context.l10n.divider, Icons.horizontal_rule_rounded),
     ],
     child: SizedBox(
       width: 58,
@@ -2377,7 +2430,7 @@ class _BlockStyleMenuButton extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
-            _label,
+            _label(context),
             style: TextStyle(
               color:
                   active == NoteBlockType.heading ||
@@ -2434,37 +2487,37 @@ class _ListStyleMenuButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AppAnchoredMenuButton<String>(
-    tooltip: '列表与缩进',
+    tooltip: context.l10n.listsAndIndentation,
     enabled: enabled,
     onSelected: onSelected,
     actions: [
       AppMenuAction(
         value: 'todo',
-        label: '待办事项',
+        label: context.l10n.todoItem,
         icon: Icons.check_box_outlined,
         selected: _isSelected(NoteBlockType.todo),
       ),
       AppMenuAction(
         value: 'bullet',
-        label: '无序列表',
+        label: context.l10n.bulletList,
         icon: Icons.format_list_bulleted_rounded,
         selected: _isSelected(NoteBlockType.bullet),
       ),
       AppMenuAction(
         value: 'ordered',
-        label: '有序列表',
+        label: context.l10n.numberedList,
         icon: Icons.format_list_numbered_rounded,
         selected: _isSelected(NoteBlockType.ordered),
       ),
       AppMenuAction(
         value: 'outdent',
-        label: '减少缩进',
+        label: context.l10n.decreaseIndent,
         icon: Icons.format_indent_decrease_rounded,
         enabled: indent > 0,
       ),
       AppMenuAction(
         value: 'indent',
-        label: '增加缩进',
+        label: context.l10n.increaseIndent,
         icon: Icons.format_indent_increase_rounded,
         enabled: indent < 3,
       ),
@@ -2497,25 +2550,27 @@ class _MoreFormattingMenuButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AppAnchoredMenuButton<String>(
-    tooltip: '更多格式',
+    tooltip: context.l10n.moreFormatting,
     enabled: enabled,
     onSelected: onSelected,
     actions: [
       AppMenuAction(
         value: 'strikethrough',
-        label: '删除线',
+        label: context.l10n.strikethrough,
         icon: Icons.strikethrough_s_rounded,
         selected: format.strikethrough,
       ),
       AppMenuAction(
         value: 'inline-code',
-        label: '行内代码',
+        label: context.l10n.inlineCode,
         icon: Icons.code_rounded,
         selected: format.inlineCode,
       ),
       AppMenuAction(
         value: 'link',
-        label: format.link == null ? '添加链接' : '编辑链接',
+        label: format.link == null
+            ? context.l10n.addLink
+            : context.l10n.editLink,
         icon: Icons.link_rounded,
         selected: format.link != null,
       ),
@@ -2609,17 +2664,19 @@ class _AttachmentImportTile extends StatelessWidget {
     final statusText = switch (job.status) {
       AttachmentImportStatus.importing =>
         job.type == NoteType.image && progress == 1
-            ? '正在生成缩略图…'
+            ? context.l10n.generatingThumbnail
             : progress == null
-            ? '正在导入 · ${_formatBytes(job.copiedBytes)}'
-            : '正在导入 ${(progress * 100).round()}% · '
-                  '${_formatBytes(job.copiedBytes)} / ${_formatBytes(job.totalBytes)}',
-      AttachmentImportStatus.completed => '导入完成，正在保存到笔记…',
+            ? context.l10n.importingBytes(_formatBytes(job.copiedBytes))
+            : context.l10n.importingPercent(
+                (progress * 100).round(),
+                '${_formatBytes(job.copiedBytes)} / ${_formatBytes(job.totalBytes)}',
+              ),
+      AttachmentImportStatus.completed => context.l10n.importCompleteSaving,
       AttachmentImportStatus.failed =>
         job.errorMessage?.trim().isNotEmpty == true
-            ? '导入失败 · ${job.errorMessage}'
-            : '导入失败，请重试',
-      AttachmentImportStatus.canceled => '导入已取消',
+            ? context.l10n.importFailedDetail(job.errorMessage!)
+            : context.l10n.importFailedRetry,
+      AttachmentImportStatus.canceled => context.l10n.importCanceled,
     };
     return Material(
       color: color.withValues(alpha: .07),
@@ -2680,18 +2737,20 @@ class _AttachmentImportTile extends StatelessWidget {
             ),
             if (job.status == AttachmentImportStatus.importing)
               IconButton(
-                tooltip: '取消导入',
+                tooltip: context.l10n.cancelImport,
                 onPressed: onCancel,
                 icon: const Icon(Icons.close_rounded),
               )
             else if (job.status == AttachmentImportStatus.failed) ...[
               IconButton(
-                tooltip: '重新选择${job.type.label}',
+                tooltip: context.l10n.chooseTypeAgain(
+                  _noteTypeLabel(context, job.type),
+                ),
                 onPressed: onRetry,
                 icon: const Icon(Icons.refresh_rounded),
               ),
               IconButton(
-                tooltip: '移除',
+                tooltip: context.l10n.remove,
                 onPressed: onRemove,
                 icon: const Icon(Icons.close_rounded),
               ),
@@ -2779,7 +2838,7 @@ class _AttachmentEditorTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 5),
                     Text(
-                      '${attachment.type.label} · ${_formatSize(attachment.fileSize)}${attachment.ocrText?.trim().isNotEmpty == true ? ' · OCR' : ''}',
+                      '${_noteTypeLabel(context, attachment.type)} · ${_formatSize(attachment.fileSize)}${attachment.ocrText?.trim().isNotEmpty == true ? ' · OCR' : ''}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -2791,7 +2850,7 @@ class _AttachmentEditorTile extends StatelessWidget {
                 ),
               ),
               AppAnchoredMenuButton<String>(
-                tooltip: '调整附件',
+                tooltip: context.l10n.adjustAttachment,
                 icon: const Icon(Icons.more_vert_rounded),
                 onSelected: (value) {
                   switch (value) {
@@ -2810,23 +2869,23 @@ class _AttachmentEditorTile extends StatelessWidget {
                     value: 'up',
                     enabled: canMoveUp,
                     icon: Icons.arrow_upward_rounded,
-                    label: '上移',
+                    label: context.l10n.moveUp,
                   ),
                   AppMenuAction(
                     value: 'down',
                     enabled: canMoveDown,
                     icon: Icons.arrow_downward_rounded,
-                    label: '下移',
+                    label: context.l10n.moveDown,
                   ),
-                  const AppMenuAction(
+                  AppMenuAction(
                     value: 'reference',
                     icon: Icons.add_link_rounded,
-                    label: '引用到正文',
+                    label: context.l10n.referenceInBody,
                   ),
-                  const AppMenuAction(
+                  AppMenuAction(
                     value: 'remove',
                     icon: Icons.remove_circle_outline_rounded,
-                    label: '移除',
+                    label: context.l10n.remove,
                     destructive: true,
                   ),
                 ],
@@ -2844,3 +2903,21 @@ class _AttachmentEditorTile extends StatelessWidget {
       ? '${(bytes / 1024).toStringAsFixed(1)} KB'
       : '${(bytes / 1048576).toStringAsFixed(1)} MB';
 }
+
+String _noteTypeLabel(BuildContext context, NoteType type) => switch (type) {
+  NoteType.text => context.l10n.note,
+  NoteType.image => context.l10n.image,
+  NoteType.audio => context.l10n.audio,
+  NoteType.video => context.l10n.video,
+  NoteType.document => context.l10n.file,
+};
+
+String _assistantResultHeading(
+  BuildContext context,
+  NoteAssistantAction action,
+) => switch (action.task) {
+  NoteAssistantTask.summarize => context.l10n.assistantSummaryHeading,
+  NoteAssistantTask.extractTodos => context.l10n.assistantTodosHeading,
+  NoteAssistantTask.polish => context.l10n.assistantPolishedHeading,
+  null => context.l10n.assistantGeneratedHeading,
+};

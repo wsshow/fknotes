@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app.dart';
+import '../l10n/l10n.dart';
 import '../models/local_llm.dart';
 import '../services/local_assistant_service.dart';
 import '../services/local_llm/local_llm_output_filter.dart';
@@ -99,20 +100,23 @@ class _NoteAssistantTaskSheetState extends State<_NoteAssistantTaskSheet> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '本地助手',
+                context.l10n.localAssistant,
                 style: Theme.of(
                   context,
                 ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 4),
-              const Text(
-                '直接告诉 AI 你想做什么。笔记内容只在设备上处理。',
-                style: TextStyle(color: AppColors.muted),
+              Text(
+                context.l10n.assistantPrivacyDescription,
+                style: const TextStyle(color: AppColors.muted),
               ),
               const SizedBox(height: 14),
-              const Text(
-                '处理范围',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+              Text(
+                context.l10n.processingScope,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const SizedBox(height: 8),
               Wrap(
@@ -123,7 +127,7 @@ class _NoteAssistantTaskSheetState extends State<_NoteAssistantTaskSheet> {
                     if (widget.availableScopes.contains(scope))
                       ChoiceChip(
                         key: Key('note-assistant-scope-${scope.name}'),
-                        label: Text(scope.label),
+                        label: Text(_scopeLabel(context, scope)),
                         selected: _scope == scope,
                         onSelected: (_) => setState(() => _scope = scope),
                       ),
@@ -138,8 +142,8 @@ class _NoteAssistantTaskSheetState extends State<_NoteAssistantTaskSheet> {
                 maxLines: 5,
                 textInputAction: TextInputAction.newline,
                 onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  hintText: '例如：把这些想法整理成一封简洁的英文邮件…',
+                decoration: InputDecoration(
+                  hintText: context.l10n.assistantCustomHint,
                   alignLabelWithHint: true,
                 ),
               ),
@@ -152,18 +156,18 @@ class _NoteAssistantTaskSheetState extends State<_NoteAssistantTaskSheet> {
                       ? null
                       : _submitCustomInstruction,
                   icon: const Icon(Icons.arrow_upward_rounded),
-                  label: const Text('开始生成'),
+                  label: Text(context.l10n.startGenerating),
                 ),
               ),
               const SizedBox(height: 18),
-              const Row(
+              Row(
                 children: [
                   Expanded(child: Divider()),
                   Padding(
                     padding: EdgeInsets.symmetric(horizontal: 12),
                     child: Text(
-                      '快捷操作',
-                      style: TextStyle(
+                      context.l10n.quickActions,
+                      style: const TextStyle(
                         color: AppColors.muted,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -177,19 +181,19 @@ class _NoteAssistantTaskSheetState extends State<_NoteAssistantTaskSheet> {
                 task: NoteAssistantTask.summarize,
                 scope: _scope,
                 icon: Icons.summarize_outlined,
-                subtitle: '提炼核心结论与关键要点',
+                subtitle: context.l10n.assistantSummarizeDescription,
               ),
               _TaskTile(
                 task: NoteAssistantTask.extractTodos,
                 scope: _scope,
                 icon: Icons.checklist_rounded,
-                subtitle: '找出明确、可执行的事项',
+                subtitle: context.l10n.assistantExtractTodosDescription,
               ),
               _TaskTile(
                 task: NoteAssistantTask.polish,
                 scope: _scope,
                 icon: Icons.auto_fix_high_rounded,
-                subtitle: '保留事实与结构，改善表达',
+                subtitle: context.l10n.assistantPolishDescription,
               ),
             ],
           ),
@@ -225,7 +229,7 @@ class _TaskTile extends StatelessWidget {
       child: Icon(icon, color: AppColors.moss),
     ),
     title: Text(
-      task.label,
+      _taskLabel(context, task),
       style: const TextStyle(fontWeight: FontWeight.w700),
     ),
     subtitle: Text(subtitle),
@@ -245,6 +249,7 @@ class NoteAssistantResultSheet extends StatefulWidget {
   final NoteAssistantScope scope;
   final String title;
   final String content;
+  final String languageCode;
   final Set<NoteAssistantPlacement> placements;
 
   const NoteAssistantResultSheet({
@@ -253,6 +258,7 @@ class NoteAssistantResultSheet extends StatefulWidget {
     required this.scope,
     required this.title,
     required this.content,
+    this.languageCode = 'zh',
     required this.placements,
   }) : assert(placements.length > 0);
 
@@ -290,6 +296,7 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
         title: widget.title,
         content: widget.content,
         scope: widget.scope,
+        languageCode: widget.languageCode,
       );
       await for (final event in _assistant.generate(request)) {
         if (!mounted) return;
@@ -359,7 +366,7 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          widget.action.label,
+                          _actionLabel(context, widget.action),
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
@@ -368,7 +375,7 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
                         Semantics(
                           liveRegion: true,
                           child: Text(
-                            _statusText,
+                            _statusText(context),
                             style: const TextStyle(
                               color: AppColors.muted,
                               fontSize: 12,
@@ -379,7 +386,9 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
                     ),
                   ),
                   IconButton(
-                    tooltip: '关闭',
+                    tooltip: MaterialLocalizations.of(
+                      context,
+                    ).closeButtonTooltip,
                     onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.close_rounded),
                   ),
@@ -401,9 +410,11 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
                       ? Center(
                           child: busy
                               ? const CircularProgressIndicator(strokeWidth: 2)
-                              : const Text(
-                                  '模型没有生成内容',
-                                  style: TextStyle(color: AppColors.muted),
+                              : Text(
+                                  context.l10n.assistantNoOutput,
+                                  style: const TextStyle(
+                                    color: AppColors.muted,
+                                  ),
                                 ),
                         )
                       : SingleChildScrollView(
@@ -430,19 +441,19 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
                     TextButton.icon(
                       onPressed: _cancel,
                       icon: const Icon(Icons.stop_circle_outlined),
-                      label: const Text('停止生成'),
+                      label: Text(context.l10n.stopGenerating),
                     )
                   else
                     TextButton.icon(
                       onPressed: _visibleOutput.trim().isEmpty ? null : _copy,
                       icon: const Icon(Icons.copy_rounded),
-                      label: const Text('复制'),
+                      label: Text(context.l10n.copy),
                     ),
                   if (!_generating &&
                       (_finishReason == LocalLlmFinishReason.canceled ||
                           _finishReason == LocalLlmFinishReason.timeout))
                     IconButton(
-                      tooltip: '重新生成',
+                      tooltip: context.l10n.regenerate,
                       onPressed: _retry,
                       icon: const Icon(Icons.refresh_rounded),
                     ),
@@ -452,7 +463,7 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
                       output: _visibleOutput,
                       finishReason: _finishReason,
                     ),
-                    tooltip: '选择如何使用生成内容',
+                    tooltip: context.l10n.chooseGeneratedContentPlacement,
                     onSelected: (placement) => Navigator.pop(
                       context,
                       NoteAssistantResult(
@@ -466,7 +477,7 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
                           AppMenuAction(
                             value: placement,
                             icon: _placementIcon(placement),
-                            label: placement.label,
+                            label: _placementLabel(context, placement),
                           ),
                     ],
                     child: IgnorePointer(
@@ -481,8 +492,8 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
                         icon: const Icon(Icons.check_rounded),
                         label: Text(
                           _finishReason == LocalLlmFinishReason.canceled
-                              ? '使用当前内容'
-                              : '使用生成内容',
+                              ? context.l10n.useCurrentContent
+                              : context.l10n.useGeneratedContent,
                         ),
                       ),
                     ),
@@ -503,7 +514,7 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
   Future<void> _copy() async {
     await Clipboard.setData(ClipboardData(text: _visibleOutput.trim()));
     if (mounted) {
-      AppFeedback.success(context, '已复制生成内容');
+      AppFeedback.success(context, context.l10n.generatedContentCopied);
     }
   }
 
@@ -519,15 +530,15 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
     unawaited(_run());
   }
 
-  String get _statusText {
-    if (_loadingModel) return '正在加载本地模型…';
-    if (_generating) return '正在设备上生成…';
+  String _statusText(BuildContext context) {
+    if (_loadingModel) return context.l10n.loadingLocalModel;
+    if (_generating) return context.l10n.generatingOnDevice;
     return switch (_finishReason) {
-      LocalLlmFinishReason.completed => '生成完成，请检查后使用',
-      LocalLlmFinishReason.maxTokens => '已达到输出上限，请检查结果',
-      LocalLlmFinishReason.canceled => '生成已停止，可复制或插入当前内容',
-      LocalLlmFinishReason.timeout => '生成超时，可重试或复制当前内容',
-      null => '本地生成未完成',
+      LocalLlmFinishReason.completed => context.l10n.generationCompleted,
+      LocalLlmFinishReason.maxTokens => context.l10n.generationLimitReached,
+      LocalLlmFinishReason.canceled => context.l10n.generationStoppedUsable,
+      LocalLlmFinishReason.timeout => context.l10n.generationTimedOutUsable,
+      null => context.l10n.generationIncomplete,
     };
   }
 
@@ -554,8 +565,36 @@ class _ErrorContent extends StatelessWidget {
         const SizedBox(height: 10),
         Text(message, textAlign: TextAlign.center),
         const SizedBox(height: 12),
-        OutlinedButton(onPressed: onRetry, child: const Text('重试')),
+        OutlinedButton(onPressed: onRetry, child: Text(context.l10n.retry)),
       ],
     ),
   );
 }
+
+String _scopeLabel(BuildContext context, NoteAssistantScope scope) =>
+    switch (scope) {
+      NoteAssistantScope.selection => context.l10n.scopeSelection,
+      NoteAssistantScope.currentBlock => context.l10n.scopeCurrentBlock,
+      NoteAssistantScope.fullNote => context.l10n.scopeFullNote,
+    };
+
+String _taskLabel(BuildContext context, NoteAssistantTask task) =>
+    switch (task) {
+      NoteAssistantTask.summarize => context.l10n.assistantSummarize,
+      NoteAssistantTask.extractTodos => context.l10n.assistantExtractTodos,
+      NoteAssistantTask.polish => context.l10n.assistantPolish,
+    };
+
+String _actionLabel(BuildContext context, NoteAssistantAction action) =>
+    action.task == null
+    ? context.l10n.assistantCustomAction
+    : _taskLabel(context, action.task!);
+
+String _placementLabel(
+  BuildContext context,
+  NoteAssistantPlacement placement,
+) => switch (placement) {
+  NoteAssistantPlacement.replace => context.l10n.placementReplace,
+  NoteAssistantPlacement.insertBelow => context.l10n.placementInsertBelow,
+  NoteAssistantPlacement.append => context.l10n.placementAppend,
+};

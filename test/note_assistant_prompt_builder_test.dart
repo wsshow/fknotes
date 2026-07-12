@@ -66,6 +66,23 @@ void main() {
     expect(request.options.maxNewTokens, 768);
   });
 
+  test('English locale produces an English on-device prompt', () {
+    final request = NoteAssistantPromptBuilder.build(
+      action: const NoteAssistantAction.preset(NoteAssistantTask.summarize),
+      title: 'Release plan',
+      content: 'Ship version 2.0 next week.',
+      languageCode: 'en',
+    );
+
+    expect(
+      request.messages.first.content,
+      contains('on-device note assistant'),
+    );
+    expect(request.messages.last.content, contains('Title: Release plan'));
+    expect(request.messages.last.content, contains('Summarize this note'));
+    expect(request.messages.last.content, isNot(contains('请用简洁的中文')));
+  });
+
   test('reasoning blocks never reach assistant output', () {
     expect(
       LocalLlmOutputFilter.visibleText(
