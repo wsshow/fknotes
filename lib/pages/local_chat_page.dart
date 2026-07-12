@@ -218,6 +218,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
                 dictationPreparing:
                     _chatDictating &&
                     _dictation.status == RealtimeDictationStatus.preparing,
+                onTakePhoto: _takeChatPhoto,
                 onPickImages: _pickChatImages,
                 onRemoveAttachment: _removePendingAttachment,
                 onToggleDictation: _toggleDictation,
@@ -552,14 +553,27 @@ class _LocalChatPageState extends State<LocalChatPage> {
     });
   }
 
-  Future<void> _pickChatImages() async {
-    if (_generating || _pickingImages || _pendingAttachments.length >= 4) {
+  Future<void> _pickChatImages() =>
+      _importChatImages(() => _imagePicker.pickMultiImage());
+
+  Future<void> _takeChatPhoto() => _importChatImages(() async {
+    final image = await _imagePicker.pickImage(source: ImageSource.camera);
+    return image == null ? const <XFile>[] : [image];
+  });
+
+  Future<void> _importChatImages(
+    Future<List<XFile>> Function() selectImages,
+  ) async {
+    if (_generating ||
+        _chatDictating ||
+        _pickingImages ||
+        _pendingAttachments.length >= 4) {
       return;
     }
     setState(() => _pickingImages = true);
     final imported = <LocalChatAttachment>[];
     try {
-      final selected = await _imagePicker.pickMultiImage();
+      final selected = await selectImages();
       final remaining = 4 - _pendingAttachments.length;
       for (final image in selected.take(remaining)) {
         final source = File(image.path);
@@ -1230,6 +1244,7 @@ class LocalChatComposer extends StatelessWidget {
   final bool pickingImages;
   final bool dictating;
   final bool dictationPreparing;
+  final VoidCallback onTakePhoto;
   final VoidCallback onPickImages;
   final ValueChanged<LocalChatAttachment> onRemoveAttachment;
   final VoidCallback onToggleDictation;
@@ -1246,6 +1261,7 @@ class LocalChatComposer extends StatelessWidget {
     required this.pickingImages,
     required this.dictating,
     required this.dictationPreparing,
+    required this.onTakePhoto,
     required this.onPickImages,
     required this.onRemoveAttachment,
     required this.onToggleDictation,
@@ -1256,138 +1272,242 @@ class LocalChatComposer extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SafeArea(
     top: false,
-    child: Container(
-      padding: const EdgeInsets.fromLTRB(12, 9, 12, 10),
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.line)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (pendingAttachments.isNotEmpty) ...[
-            SizedBox(
-              height: 76,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: pendingAttachments.length,
-                separatorBuilder: (_, _) => const SizedBox(width: 8),
-                itemBuilder: (context, index) {
-                  final attachment = pendingAttachments[index];
-                  return _PendingImage(
-                    attachment: attachment,
-                    onRemove: () => onRemoveAttachment(attachment),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 7),
-            if (!imageInputAvailable)
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  '当前运行时暂不支持图片理解',
-                  style: TextStyle(color: AppColors.coral, fontSize: 10),
+    child: Material(
+      color: AppColors.canvas,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (pendingAttachments.isNotEmpty) ...[
+              SizedBox(
+                height: 76,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: pendingAttachments.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 8),
+                  itemBuilder: (context, index) {
+                    final attachment = pendingAttachments[index];
+                    return _PendingImage(
+                      attachment: attachment,
+                      onRemove: () => onRemoveAttachment(attachment),
+                    );
+                  },
                 ),
               ),
-            const SizedBox(height: 5),
-          ],
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              IconButton(
-                key: const Key('local-chat-add-image'),
-                tooltip: imageInputAvailable ? '添加图片' : '添加图片（等待多模态支持）',
-                onPressed: generating || pickingImages ? null : onPickImages,
-                icon: pickingImages
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.add_photo_alternate_outlined),
-              ),
-              IconButton(
-                key: const Key('local-chat-voice-input'),
-                tooltip: dictating ? '完成语音输入' : '语音输入',
-                onPressed: generating ? null : onToggleDictation,
-                color: dictating ? AppColors.coral : AppColors.muted,
-                icon: dictationPreparing
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Icon(
-                        dictating
-                            ? Icons.stop_circle_outlined
-                            : Icons.mic_none_rounded,
-                      ),
-              ),
-              const SizedBox(width: 3),
-              Expanded(
-                child: TextField(
-                  key: const Key('local-chat-input'),
-                  controller: controller,
-                  focusNode: focusNode,
-                  contextMenuBuilder: buildAppEditableTextContextMenu,
-                  enabled: !generating && !dictating,
-                  minLines: 1,
-                  maxLines: 6,
-                  maxLength: 4000,
-                  buildCounter:
-                      (
-                        _, {
-                        required currentLength,
-                        required isFocused,
-                        maxLength,
-                      }) => null,
-                  textCapitalization: TextCapitalization.sentences,
-                  decoration: InputDecoration(
-                    hintText: dictating ? '正在听写…' : '输入消息…',
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 15,
-                      vertical: 11,
-                    ),
+              const SizedBox(height: 7),
+              if (!imageInputAvailable)
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '当前运行时暂不支持图片理解',
+                    style: TextStyle(color: AppColors.coral, fontSize: 10),
                   ),
                 ),
-              ),
-              const SizedBox(width: 9),
-              IconButton.filled(
-                key: Key(generating ? 'stop-local-chat' : 'send-local-chat'),
-                tooltip: generating ? '停止生成' : '发送',
-                onPressed: generating ? onStop : onSend,
-                style: IconButton.styleFrom(
-                  backgroundColor: AppColors.moss,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(46, 46),
-                ),
-                icon: Icon(
-                  generating ? Icons.stop_rounded : Icons.arrow_upward_rounded,
-                ),
+              const SizedBox(height: 5),
+            ],
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: controller,
+              builder: (context, value, _) {
+                final hasContent =
+                    value.text.trim().isNotEmpty ||
+                    pendingAttachments.isNotEmpty;
+                return Container(
+                  padding: const EdgeInsets.fromLTRB(5, 4, 5, 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(28),
+                    border: Border.all(color: AppColors.line),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.ink.withValues(alpha: .08),
+                        blurRadius: 14,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      IconButton(
+                        key: const Key('local-chat-take-photo'),
+                        tooltip: imageInputAvailable ? '拍照' : '拍照（等待多模态支持）',
+                        onPressed:
+                            generating ||
+                                dictating ||
+                                pickingImages ||
+                                pendingAttachments.length >= 4
+                            ? null
+                            : onTakePhoto,
+                        style: IconButton.styleFrom(
+                          fixedSize: const Size(44, 44),
+                          foregroundColor: AppColors.ink,
+                        ),
+                        icon: pickingImages
+                            ? const SizedBox(
+                                width: 19,
+                                height: 19,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.photo_camera_outlined, size: 25),
+                      ),
+                      Expanded(
+                        child: TextField(
+                          key: const Key('local-chat-input'),
+                          controller: controller,
+                          focusNode: focusNode,
+                          contextMenuBuilder: buildAppEditableTextContextMenu,
+                          enabled: !generating && !dictating,
+                          minLines: 1,
+                          maxLines: 6,
+                          maxLength: 4000,
+                          buildCounter:
+                              (
+                                _, {
+                                required currentLength,
+                                required isFocused,
+                                maxLength,
+                              }) => null,
+                          textCapitalization: TextCapitalization.sentences,
+                          decoration: InputDecoration(
+                            hintText: dictating ? '正在听写…' : '发消息或使用语音…',
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            disabledBorder: InputBorder.none,
+                            filled: false,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 12,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      if (generating)
+                        _ChatComposerAction(
+                          key: const Key('stop-local-chat'),
+                          tooltip: '停止生成',
+                          onPressed: onStop,
+                          filled: true,
+                          icon: Icons.stop_rounded,
+                        )
+                      else if (dictating || dictationPreparing)
+                        _ChatComposerAction(
+                          key: const Key('local-chat-voice-input'),
+                          tooltip: '完成语音输入',
+                          onPressed: onToggleDictation,
+                          active: true,
+                          icon: dictationPreparing ? null : Icons.stop_rounded,
+                          loading: dictationPreparing,
+                        )
+                      else if (hasContent)
+                        _ChatComposerAction(
+                          key: const Key('send-local-chat'),
+                          tooltip: '发送',
+                          onPressed: onSend,
+                          filled: true,
+                          icon: Icons.arrow_upward_rounded,
+                        )
+                      else ...[
+                        _ChatComposerAction(
+                          key: const Key('local-chat-voice-input'),
+                          tooltip: '语音输入',
+                          onPressed: onToggleDictation,
+                          icon: Icons.graphic_eq_rounded,
+                        ),
+                        const SizedBox(width: 5),
+                        _ChatComposerAction(
+                          key: const Key('local-chat-add-image'),
+                          tooltip: imageInputAvailable
+                              ? '添加图片'
+                              : '添加图片（等待多模态支持）',
+                          onPressed:
+                              pickingImages || pendingAttachments.length >= 4
+                              ? null
+                              : onPickImages,
+                          icon: Icons.add_rounded,
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              },
+            ),
+            if (dictating) ...[
+              const SizedBox(height: 5),
+              Row(
+                children: [
+                  const SizedBox(width: 52),
+                  Expanded(
+                    child: Text(
+                      dictationPreparing ? '正在准备离线语音识别…' : '正在听写，点击麦克风完成',
+                      style: const TextStyle(
+                        color: AppColors.coral,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
-          ),
-          if (dictating) ...[
-            const SizedBox(height: 5),
-            Row(
-              children: [
-                const SizedBox(width: 96),
-                Expanded(
-                  child: Text(
-                    dictationPreparing ? '正在准备离线语音识别…' : '正在听写，点击麦克风完成',
-                    style: const TextStyle(
-                      color: AppColors.coral,
-                      fontSize: 10,
-                    ),
-                  ),
-                ),
-              ],
-            ),
           ],
-        ],
+        ),
       ),
     ),
+  );
+}
+
+class _ChatComposerAction extends StatelessWidget {
+  final String tooltip;
+  final VoidCallback? onPressed;
+  final IconData? icon;
+  final bool filled;
+  final bool active;
+  final bool loading;
+
+  const _ChatComposerAction({
+    super.key,
+    required this.tooltip,
+    required this.onPressed,
+    required this.icon,
+    this.filled = false,
+    this.active = false,
+    this.loading = false,
+  });
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    tooltip: tooltip,
+    onPressed: onPressed,
+    style: IconButton.styleFrom(
+      fixedSize: const Size(44, 44),
+      padding: EdgeInsets.zero,
+      backgroundColor: filled
+          ? AppColors.moss
+          : active
+          ? AppColors.softCoral
+          : AppColors.surface,
+      foregroundColor: filled
+          ? Colors.white
+          : active
+          ? AppColors.coral
+          : AppColors.ink,
+      disabledBackgroundColor: AppColors.softBlue,
+      disabledForegroundColor: AppColors.muted,
+      side: filled
+          ? BorderSide.none
+          : BorderSide(color: active ? AppColors.coral : AppColors.line),
+    ),
+    icon: loading
+        ? const SizedBox(
+            width: 19,
+            height: 19,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        : Icon(icon, size: 24),
   );
 }
 

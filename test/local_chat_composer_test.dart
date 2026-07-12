@@ -12,6 +12,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final controller = TextEditingController();
     final focusNode = FocusNode();
+    var sendCount = 0;
     addTearDown(controller.dispose);
     addTearDown(focusNode.dispose);
 
@@ -27,20 +28,35 @@ void main() {
             pickingImages: false,
             dictating: false,
             dictationPreparing: false,
+            onTakePhoto: () {},
             onPickImages: () {},
             onRemoveAttachment: (_) {},
             onToggleDictation: () {},
-            onSend: () {},
+            onSend: () => sendCount++,
             onStop: () {},
           ),
         ),
       ),
     );
 
+    expect(find.byKey(const Key('local-chat-take-photo')), findsOneWidget);
     expect(find.byKey(const Key('local-chat-add-image')), findsOneWidget);
     expect(find.byKey(const Key('local-chat-voice-input')), findsOneWidget);
     expect(find.byKey(const Key('local-chat-input')), findsOneWidget);
+    expect(find.byKey(const Key('send-local-chat')), findsNothing);
+
+    await tester.enterText(
+      find.byKey(const Key('local-chat-input')),
+      '帮我整理这段内容',
+    );
+    await tester.pump();
+
     expect(find.byKey(const Key('send-local-chat')), findsOneWidget);
+    expect(find.byKey(const Key('local-chat-voice-input')), findsNothing);
+    expect(find.byKey(const Key('local-chat-add-image')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('send-local-chat')));
+    expect(sendCount, 1);
     expect(tester.takeException(), isNull);
   });
 }
