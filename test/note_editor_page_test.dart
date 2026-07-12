@@ -83,6 +83,30 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('background tasks keep a single home-level entry', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    await _pumpHomePage(tester);
+
+    final taskButton = find
+        .byKey(const Key('open-background-tasks'))
+        .hitTestable();
+    expect(taskButton, findsOneWidget);
+
+    await tester.tap(find.text('资料库'));
+    await tester.pumpAndSettle();
+    expect(taskButton, findsNothing);
+
+    await tester.tap(find.text('数据'));
+    await tester.pumpAndSettle();
+    expect(taskButton, findsNothing);
+
+    await tester.tap(find.text('主页'));
+    await tester.pumpAndSettle();
+    expect(taskButton, findsOneWidget);
+  });
+
   testWidgets('data tab shows the installed version and build metadata', (
     tester,
   ) async {

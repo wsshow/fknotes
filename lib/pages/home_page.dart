@@ -906,7 +906,6 @@ class _LibraryTab extends StatelessWidget {
                   icon: const Icon(Icons.search_rounded),
                   tooltip: '搜索',
                 ),
-                BackgroundTaskCenterButton(provider: provider),
                 if (provider.scope == NoteScope.trash &&
                     provider.trashCount > 0)
                   IconButton(
@@ -1182,19 +1181,12 @@ class _DataTabState extends State<_DataTab> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 140),
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '本地数据',
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -.4,
-                  ),
-                ),
-              ),
-              BackgroundTaskCenterButton(provider: widget.provider),
-            ],
+          Text(
+            '本地数据',
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+              letterSpacing: -.4,
+            ),
           ),
           const SizedBox(height: 6),
           const Text(
