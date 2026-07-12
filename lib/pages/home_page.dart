@@ -3,8 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../app.dart';
+import '../l10n/generated/app_localizations.dart';
+import '../l10n/l10n.dart';
 import '../models/note_entry.dart';
 import '../providers/app_lock_controller.dart';
+import '../providers/app_locale_controller.dart';
 import '../providers/note_provider.dart';
 import '../services/app_build_metadata.dart';
 import '../services/backup_service.dart';
@@ -1172,6 +1175,8 @@ class _DataTabState extends State<_DataTab> {
   @override
   Widget build(BuildContext context) {
     final appLock = context.watch<AppLockController>();
+    final localeController = context.watch<AppLocaleController>();
+    final l10n = context.l10n;
     return SafeArea(
       bottom: false,
       child: ListView(
@@ -1251,6 +1256,24 @@ class _DataTabState extends State<_DataTab> {
                 ),
               ],
             ),
+          ),
+          const SizedBox(height: 22),
+          Text(
+            l10n.language,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 12),
+          _SettingCard(
+            children: [
+              _SettingRow(
+                icon: Icons.language_rounded,
+                title: l10n.language,
+                subtitle: _appLanguageTitle(l10n, localeController.language),
+                onTap: () => _chooseLanguage(localeController),
+              ),
+            ],
           ),
           const SizedBox(height: 22),
           Text(
@@ -1398,6 +1421,51 @@ class _DataTabState extends State<_DataTab> {
     );
   }
 
+  Future<void> _chooseLanguage(AppLocaleController controller) async {
+    final selected = await showModalBottomSheet<AppLanguage>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (sheetContext) {
+        final l10n = sheetContext.l10n;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l10n.chooseLanguage,
+                style: Theme.of(
+                  sheetContext,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              for (final language in AppLanguage.values)
+                ListTile(
+                  key: Key('app-language-${language.name}'),
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(_appLanguageIcon(language)),
+                  title: Text(_appLanguageTitle(l10n, language)),
+                  subtitle: Text(_appLanguageDescription(l10n, language)),
+                  trailing: controller.language == language
+                      ? const Icon(Icons.check_circle_rounded)
+                      : null,
+                  onTap: () => Navigator.pop(sheetContext, language),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+    if (selected == null || !mounted) return;
+    try {
+      await controller.setLanguage(selected);
+    } catch (_) {
+      if (mounted) AppFeedback.error(context, context.l10n.languageSaveFailed);
+    }
+  }
+
   Future<void> _exportBackup() async {
     setState(() => _backupBusy = true);
     try {
@@ -1479,6 +1547,27 @@ class _DataTabState extends State<_DataTab> {
     return '${(bytes / 1024 / 1024 / 1024).toStringAsFixed(1)} GB';
   }
 }
+
+String _appLanguageTitle(AppLocalizations l10n, AppLanguage language) =>
+    switch (language) {
+      AppLanguage.system => l10n.languageSystem,
+      AppLanguage.simplifiedChinese => l10n.languageSimplifiedChinese,
+      AppLanguage.english => l10n.languageEnglish,
+    };
+
+String _appLanguageDescription(AppLocalizations l10n, AppLanguage language) =>
+    switch (language) {
+      AppLanguage.system => l10n.languageSystemDescription,
+      AppLanguage.simplifiedChinese =>
+        l10n.languageSimplifiedChineseDescription,
+      AppLanguage.english => l10n.languageEnglishDescription,
+    };
+
+IconData _appLanguageIcon(AppLanguage language) => switch (language) {
+  AppLanguage.system => Icons.settings_suggest_outlined,
+  AppLanguage.simplifiedChinese => Icons.translate_rounded,
+  AppLanguage.english => Icons.language_rounded,
+};
 
 class _DataStat extends StatelessWidget {
   final String value;

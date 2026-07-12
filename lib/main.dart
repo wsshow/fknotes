@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'providers/app_locale_controller.dart';
 import 'services/file_storage_service.dart';
 import 'services/model_download_source_policy.dart';
 import 'widgets/brand_mark.dart';
@@ -23,6 +24,7 @@ Future<void> main() async {
     // native splash remains visible, so there is no second loading screen.
     await FileStorageService.instance.init();
     await ModelDownloadSourcePolicy.instance.load();
+    await AppLocaleController.instance.initialize();
   } catch (_) {
     runApp(const _InitializationFailureApp());
     return;

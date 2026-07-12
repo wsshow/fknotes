@@ -13,9 +13,12 @@ import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.LocaleList
 import android.os.StatFs
+import android.app.LocaleManager
 import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
 import androidx.exifinterface.media.ExifInterface
@@ -40,6 +43,7 @@ class MainActivity : FlutterFragmentActivity() {
     private companion object {
         const val IMPORT_CHANNEL = "fknotes/attachment_import"
         const val AUDIO_DECODE_CHANNEL = "fknotes/audio_decode"
+        const val APP_LOCALE_CHANNEL = "fknotes/app_locale"
         const val PICK_REQUEST = 7301
         const val COPY_BUFFER_SIZE = 256 * 1024
         const val PROGRESS_INTERVAL_MS = 80L
@@ -54,6 +58,7 @@ class MainActivity : FlutterFragmentActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private lateinit var importChannel: MethodChannel
     private lateinit var audioDecodeChannel: MethodChannel
+    private lateinit var appLocaleChannel: MethodChannel
     private var pendingResult: MethodChannel.Result? = null
     private var pendingRequest: ImportRequest? = null
     private val importTasks = ConcurrentHashMap<String, ImportTask>()
@@ -130,6 +135,27 @@ class MainActivity : FlutterFragmentActivity() {
                         )
                     }
                 }
+            }
+        }
+        appLocaleChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            APP_LOCALE_CHANNEL,
+        )
+        appLocaleChannel.setMethodCallHandler { call, result ->
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                result.success(null)
+                return@setMethodCallHandler
+            }
+            val localeManager = getSystemService(LocaleManager::class.java)
+            when (call.method) {
+                "getApplicationLocale" ->
+                    result.success(localeManager.applicationLocales.toLanguageTags())
+                "setApplicationLocale" -> {
+                    val languageTag = call.arguments as? String ?: ""
+                    localeManager.applicationLocales = LocaleList.forLanguageTags(languageTag)
+                    result.success(null)
+                }
+                else -> result.notImplemented()
             }
         }
     }

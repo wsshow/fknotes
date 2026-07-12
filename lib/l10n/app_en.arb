@@ -1,0 +1,16 @@
+{
+  "@@locale": "en",
+  "appTitle": "FKNotes",
+  "appBrandName": "FKNotes",
+  "appTagline": "Local first · Private by design",
+  "language": "Language",
+  "languageDescription": "Follow the device language or choose one for FKNotes",
+  "languageSystem": "System default",
+  "languageSimplifiedChinese": "简体中文",
+  "languageEnglish": "English",
+  "chooseLanguage": "Choose language",
+  "languageSystemDescription": "Use the language selected for FKNotes on this device",
+  "languageSimplifiedChineseDescription": "使用简体中文界面",
+  "languageEnglishDescription": "Use the English interface",
+  "languageSaveFailed": "Couldn't save the language setting"
+}

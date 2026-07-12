@@ -7,6 +7,7 @@ import 'package:fknotes/pages/media_detail_page.dart';
 import 'package:fknotes/pages/note_editor_page.dart';
 import 'package:fknotes/pages/transcript_editor_page.dart';
 import 'package:fknotes/providers/app_lock_controller.dart';
+import 'package:fknotes/providers/app_locale_controller.dart';
 import 'package:fknotes/providers/note_provider.dart';
 import 'package:fknotes/services/app_lock_preferences_service.dart';
 import 'package:fknotes/services/device_authentication_service.dart';
@@ -674,6 +675,13 @@ Future<void> _pumpHomePage(
     MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: appLock),
+        ChangeNotifierProvider(
+          create: (_) => AppLocaleController(
+            platformLocaleReader: () async => null,
+            platformLocaleWriter: (_) async {},
+            observePlatform: false,
+          ),
+        ),
         ChangeNotifierProvider(create: (_) => NoteProvider()),
       ],
       child: MaterialApp(

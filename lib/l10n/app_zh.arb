@@ -1,0 +1,16 @@
+{
+  "@@locale": "zh",
+  "appTitle": "非空笔记",
+  "appBrandName": "FKNotes",
+  "appTagline": "本地优先 · 私密可靠",
+  "language": "语言",
+  "languageDescription": "界面语言，可跟随系统或单独设置",
+  "languageSystem": "跟随系统",
+  "languageSimplifiedChinese": "简体中文",
+  "languageEnglish": "English",
+  "chooseLanguage": "选择语言",
+  "languageSystemDescription": "使用设备为 FKNotes 选择的语言",
+  "languageSimplifiedChineseDescription": "使用简体中文界面",
+  "languageEnglishDescription": "Use the English interface",
+  "languageSaveFailed": "语言设置保存失败"
+}
