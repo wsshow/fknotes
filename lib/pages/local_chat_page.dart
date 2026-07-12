@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 
 import '../app.dart';
 import '../models/local_chat.dart';
@@ -43,6 +44,8 @@ class _LocalChatPageState extends State<LocalChatPage> {
   String? _generationError;
   String? _draftMessageId;
   bool _closed = false;
+  bool _autoFollowOutput = true;
+  bool _showJumpToBottom = false;
 
   @override
   void initState() {
@@ -81,6 +84,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
         _modelInstalled = model.installed;
         _loading = false;
       });
+      _scrollToEnd(force: true);
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -171,27 +175,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
                 roleLabel: _roleLabel,
                 onTap: _generating ? null : _openModels,
               ),
-              Expanded(
-                child: _loadError != null
-                    ? _LoadFailure(message: _loadError!, onRetry: _initialize)
-                    : _session.messages.isEmpty && !_generating
-                    ? _EmptyChat(onSuggestion: _useSuggestion)
-                    : ListView.builder(
-                        controller: _scroll,
-                        padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
-                        keyboardDismissBehavior:
-                            ScrollViewKeyboardDismissBehavior.onDrag,
-                        itemCount: _session.messages.length,
-                        itemBuilder: (context, index) {
-                          final message = _session.messages[index];
-                          return _ChatBubble(
-                            message: message,
-                            generating:
-                                _generating && message.id == _draftMessageId,
-                          );
-                        },
-                      ),
-              ),
+              Expanded(child: _buildConversationBody()),
               if (_generationError != null)
                 _GenerationError(
                   message: _generationError!,
@@ -208,6 +192,109 @@ class _LocalChatPageState extends State<LocalChatPage> {
             ],
           ),
   );
+
+  Widget _buildConversationBody() {
+    if (_loadError != null) {
+      return _LoadFailure(message: _loadError!, onRetry: _initialize);
+    }
+    if (_session.messages.isEmpty && !_generating) {
+      return _EmptyChat(onSuggestion: _useSuggestion);
+    }
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: NotificationListener<ScrollNotification>(
+            onNotification: _handleTimelineScroll,
+            child: ListView.builder(
+              controller: _scroll,
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 80),
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              itemCount: _session.messages.length,
+              itemBuilder: (context, index) {
+                final message = _session.messages[index];
+                final previous = index == 0
+                    ? null
+                    : _session.messages[index - 1];
+                final startsNewDay =
+                    previous == null ||
+                    !LocalChatTimeLabel.isSameDay(
+                      previous.createdAt,
+                      message.createdAt,
+                    );
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (startsNewDay)
+                      _ChatDateDivider(createdAt: message.createdAt),
+                    _ChatBubble(
+                      message: message,
+                      generating: _generating && message.id == _draftMessageId,
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+        Positioned(
+          right: 16,
+          bottom: 14,
+          child: AnimatedScale(
+            scale: _showJumpToBottom ? 1 : 0,
+            duration: const Duration(milliseconds: 160),
+            curve: Curves.easeOutBack,
+            child: AnimatedOpacity(
+              opacity: _showJumpToBottom ? 1 : 0,
+              duration: const Duration(milliseconds: 120),
+              child: IgnorePointer(
+                ignoring: !_showJumpToBottom,
+                child: FloatingActionButton.small(
+                  key: const Key('local-chat-jump-to-bottom'),
+                  tooltip: '回到底部',
+                  onPressed: _jumpToBottom,
+                  backgroundColor: AppColors.surface,
+                  foregroundColor: AppColors.moss,
+                  shape: const CircleBorder(
+                    side: BorderSide(color: AppColors.line),
+                  ),
+                  child: const Icon(Icons.keyboard_arrow_down_rounded),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  bool _handleTimelineScroll(ScrollNotification notification) {
+    final userDriven =
+        notification is UserScrollNotification ||
+        (notification is ScrollUpdateNotification &&
+            notification.dragDetails != null) ||
+        (notification is OverscrollNotification &&
+            notification.dragDetails != null);
+    if (!userDriven) return false;
+    final followsOutput = LocalChatScrollFollowPolicy.shouldFollow(
+      notification.metrics.extentAfter,
+    );
+    if (followsOutput != _autoFollowOutput ||
+        _showJumpToBottom == followsOutput) {
+      setState(() {
+        _autoFollowOutput = followsOutput;
+        _showJumpToBottom = !followsOutput;
+      });
+    }
+    return false;
+  }
+
+  void _jumpToBottom() {
+    setState(() {
+      _autoFollowOutput = true;
+      _showJumpToBottom = false;
+    });
+    _scrollToEnd(force: true);
+  }
 
   String get _roleLabel {
     final prompt = _session.systemPrompt.trim();
@@ -277,7 +364,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
         _generating = true;
         _draftMessageId = draft.id;
       });
-      _scrollToEnd();
+      _scrollToEnd(force: true);
     }
 
     var finishStatus = LocalChatMessageStatus.stopped;
@@ -450,8 +537,10 @@ class _LocalChatPageState extends State<LocalChatPage> {
     setState(() {
       _session = selected.first;
       _generationError = null;
+      _autoFollowOutput = true;
+      _showJumpToBottom = false;
     });
-    _scrollToEnd();
+    _scrollToEnd(force: true);
   }
 
   Future<void> _newConversation() async {
@@ -464,6 +553,8 @@ class _LocalChatPageState extends State<LocalChatPage> {
     setState(() {
       _session = _store.createSession();
       _generationError = null;
+      _autoFollowOutput = true;
+      _showJumpToBottom = false;
     });
     _input.clear();
     _inputFocus.requestFocus();
@@ -500,6 +591,8 @@ class _LocalChatPageState extends State<LocalChatPage> {
       _sessions = sessions;
       _session = sessions.isEmpty ? _store.createSession() : sessions.first;
       _generationError = null;
+      _autoFollowOutput = true;
+      _showJumpToBottom = false;
     });
   }
 
@@ -525,9 +618,11 @@ class _LocalChatPageState extends State<LocalChatPage> {
     _inputFocus.requestFocus();
   }
 
-  void _scrollToEnd() {
+  void _scrollToEnd({bool force = false}) {
+    if (!force && !_autoFollowOutput) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scroll.hasClients) return;
+      if (!force && !_autoFollowOutput) return;
       _scroll.animateTo(
         _scroll.position.maxScrollExtent,
         duration: const Duration(milliseconds: 180),
@@ -544,6 +639,65 @@ class _LocalChatPageState extends State<LocalChatPage> {
   static String _formatModelSize(int bytes) => bytes >= 1073741824
       ? '${(bytes / 1073741824).toStringAsFixed(1)} GB'
       : '${(bytes / 1048576).toStringAsFixed(0)} MB';
+}
+
+class LocalChatTimeLabel {
+  const LocalChatTimeLabel._();
+
+  static bool isSameDay(DateTime first, DateTime second) =>
+      first.year == second.year &&
+      first.month == second.month &&
+      first.day == second.day;
+
+  static String date(DateTime value, {DateTime? now}) {
+    final today = now ?? DateTime.now();
+    if (isSameDay(value, today)) return '今天';
+    if (isSameDay(value, today.subtract(const Duration(days: 1)))) {
+      return '昨天';
+    }
+    return value.year == today.year
+        ? DateFormat('M月d日').format(value)
+        : DateFormat('yyyy年M月d日').format(value);
+  }
+
+  static String time(DateTime value) => DateFormat('HH:mm').format(value);
+}
+
+class LocalChatScrollFollowPolicy {
+  const LocalChatScrollFollowPolicy._();
+
+  static const bottomThreshold = 72.0;
+
+  static bool shouldFollow(double extentAfter) =>
+      extentAfter <= bottomThreshold;
+}
+
+class _ChatDateDivider extends StatelessWidget {
+  final DateTime createdAt;
+
+  const _ChatDateDivider({required this.createdAt});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 3, bottom: 15),
+    child: Row(
+      children: [
+        const Expanded(child: Divider()),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Text(
+            LocalChatTimeLabel.date(createdAt),
+            style: const TextStyle(
+              color: AppColors.muted,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        const Expanded(child: Divider()),
+      ],
+    ),
+  );
 }
 
 class _ModelBar extends StatelessWidget {
@@ -735,11 +889,31 @@ class _ChatBubble extends StatelessWidget {
                 )
               else
                 FkMarkdownView(data: message.content, compact: true),
+              if (user && message.content.isNotEmpty) ...[
+                const SizedBox(height: 5),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    LocalChatTimeLabel.time(message.createdAt),
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: .72),
+                      fontSize: 10,
+                    ),
+                  ),
+                ),
+              ],
               if (!user && message.content.isNotEmpty) ...[
                 const SizedBox(height: 7),
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    Text(
+                      LocalChatTimeLabel.time(message.createdAt),
+                      style: const TextStyle(
+                        color: AppColors.muted,
+                        fontSize: 10,
+                      ),
+                    ),
                     if (message.status == LocalChatMessageStatus.stopped)
                       const Padding(
                         padding: EdgeInsets.only(right: 8),
