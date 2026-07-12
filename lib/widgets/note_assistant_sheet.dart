@@ -10,54 +10,127 @@ import '../services/local_llm/local_llm_output_filter.dart';
 import '../services/note_assistant_prompt_builder.dart';
 import 'fk_markdown_view.dart';
 
-Future<NoteAssistantTask?> showNoteAssistantTaskSheet(BuildContext context) =>
-    showModalBottomSheet<NoteAssistantTask>(
+Future<NoteAssistantAction?> showNoteAssistantTaskSheet(BuildContext context) =>
+    showModalBottomSheet<NoteAssistantAction>(
       context: context,
+      isScrollControlled: true,
       builder: (context) => const _NoteAssistantTaskSheet(),
     );
 
-class _NoteAssistantTaskSheet extends StatelessWidget {
+class _NoteAssistantTaskSheet extends StatefulWidget {
   const _NoteAssistantTaskSheet();
 
   @override
-  Widget build(BuildContext context) => SafeArea(
-    child: Padding(
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '本地助手',
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+  State<_NoteAssistantTaskSheet> createState() =>
+      _NoteAssistantTaskSheetState();
+}
+
+class _NoteAssistantTaskSheetState extends State<_NoteAssistantTaskSheet> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submitCustomInstruction() {
+    final instruction = _controller.text.trim();
+    if (instruction.isEmpty) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    Navigator.pop(context, NoteAssistantAction.custom(instruction));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      padding: EdgeInsets.only(bottom: keyboardInset),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '本地助手',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                '直接告诉 AI 你想做什么。笔记内容只在设备上处理。',
+                style: TextStyle(color: AppColors.muted),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                key: const Key('note-assistant-custom-instruction'),
+                controller: _controller,
+                minLines: 2,
+                maxLines: 5,
+                textInputAction: TextInputAction.newline,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  hintText: '例如：把这些想法整理成一封简洁的英文邮件…',
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.icon(
+                  key: const Key('note-assistant-submit-custom'),
+                  onPressed: _controller.text.trim().isEmpty
+                      ? null
+                      : _submitCustomInstruction,
+                  icon: const Icon(Icons.arrow_upward_rounded),
+                  label: const Text('开始生成'),
+                ),
+              ),
+              const SizedBox(height: 18),
+              const Row(
+                children: [
+                  Expanded(child: Divider()),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(
+                      '快捷操作',
+                      style: TextStyle(
+                        color: AppColors.muted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  Expanded(child: Divider()),
+                ],
+              ),
+              _TaskTile(
+                task: NoteAssistantTask.summarize,
+                icon: Icons.summarize_outlined,
+                subtitle: '提炼核心结论与关键要点',
+              ),
+              _TaskTile(
+                task: NoteAssistantTask.extractTodos,
+                icon: Icons.checklist_rounded,
+                subtitle: '找出明确、可执行的事项',
+              ),
+              _TaskTile(
+                task: NoteAssistantTask.polish,
+                icon: Icons.auto_fix_high_rounded,
+                subtitle: '保留事实与结构，改善表达',
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
-          const Text(
-            '笔记内容只在设备上处理，生成结果会先预览。',
-            style: TextStyle(color: AppColors.muted),
-          ),
-          const SizedBox(height: 14),
-          _TaskTile(
-            task: NoteAssistantTask.summarize,
-            icon: Icons.summarize_outlined,
-            subtitle: '提炼核心结论与关键要点',
-          ),
-          _TaskTile(
-            task: NoteAssistantTask.extractTodos,
-            icon: Icons.checklist_rounded,
-            subtitle: '找出明确、可执行的事项',
-          ),
-          _TaskTile(
-            task: NoteAssistantTask.polish,
-            icon: Icons.auto_fix_high_rounded,
-            subtitle: '保留事实与结构，改善表达',
-          ),
-        ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _TaskTile extends StatelessWidget {
@@ -89,18 +162,18 @@ class _TaskTile extends StatelessWidget {
     ),
     subtitle: Text(subtitle),
     trailing: const Icon(Icons.chevron_right_rounded),
-    onTap: () => Navigator.pop(context, task),
+    onTap: () => Navigator.pop(context, NoteAssistantAction.preset(task)),
   );
 }
 
 class NoteAssistantResultSheet extends StatefulWidget {
-  final NoteAssistantTask task;
+  final NoteAssistantAction action;
   final String title;
   final String content;
 
   const NoteAssistantResultSheet({
     super.key,
-    required this.task,
+    required this.action,
     required this.title,
     required this.content,
   });
@@ -136,7 +209,7 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
         _generating = true;
       });
       final request = NoteAssistantPromptBuilder.build(
-        task: widget.task,
+        action: widget.action,
         title: widget.title,
         content: widget.content,
       );
@@ -211,7 +284,7 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          widget.task.label,
+                          widget.action.label,
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,

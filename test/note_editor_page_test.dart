@@ -237,17 +237,10 @@ void main() {
 
   testWidgets('editor exposes the local assistant action', (tester) async {
     _usePhoneViewport(tester);
-    final entry = NoteEntry(
-      type: NoteType.text,
-      title: '助手测试',
-      content: '需要总结的笔记',
-      createdAt: DateTime(2026),
-      updatedAt: DateTime(2026),
-    );
     await tester.pumpWidget(
       ChangeNotifierProvider(
         create: (_) => NoteProvider(),
-        child: MaterialApp(home: NoteEditorPage(existingEntry: entry)),
+        child: const MaterialApp(home: NoteEditorPage()),
       ),
     );
 
@@ -258,6 +251,14 @@ void main() {
     );
     final onAssistant = tester.widget<IconButton>(assistantButton).onPressed;
     expect(onAssistant, isNotNull);
+    await tester.tap(assistantButton);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('note-assistant-custom-instruction')),
+      findsOneWidget,
+    );
+    tester.state<NavigatorState>(find.byType(Navigator)).pop();
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('更多笔记操作'));
     await tester.pumpAndSettle();

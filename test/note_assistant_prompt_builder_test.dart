@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('summary prompt preserves title and note content', () {
     final request = NoteAssistantPromptBuilder.build(
-      task: NoteAssistantTask.summarize,
+      action: const NoteAssistantAction.preset(NoteAssistantTask.summarize),
       title: '周会',
       content: '下周发布 1.0 版本。',
     );
@@ -19,7 +19,7 @@ void main() {
 
   test('todo prompt requires parseable unchecked todo lines', () {
     final request = NoteAssistantPromptBuilder.build(
-      task: NoteAssistantTask.extractTodos,
+      action: const NoteAssistantAction.preset(NoteAssistantTask.extractTodos),
       title: '',
       content: '明天提交报告',
     );
@@ -30,7 +30,7 @@ void main() {
   test('long notes keep both ends within the mobile context budget', () {
     final content = '开' * 4000 + '中' * 4000 + '尾' * 4000;
     final request = NoteAssistantPromptBuilder.build(
-      task: NoteAssistantTask.polish,
+      action: const NoteAssistantAction.preset(NoteAssistantTask.polish),
       title: '',
       content: content,
     );
@@ -39,6 +39,18 @@ void main() {
     expect(prompt, contains('中间内容因移动端上下文限制已省略'));
     expect(prompt, contains('开' * 100));
     expect(prompt, contains('尾' * 100));
+    expect(request.options.maxNewTokens, 768);
+  });
+
+  test('custom instructions are preserved and work without note content', () {
+    final request = NoteAssistantPromptBuilder.build(
+      action: NoteAssistantAction.custom('写一份周末露营清单，用 Markdown 表格组织'),
+      title: '',
+      content: '',
+    );
+
+    expect(request.messages.last.content, contains('写一份周末露营清单'));
+    expect(request.messages.last.content, contains('当前笔记为空'));
     expect(request.options.maxNewTokens, 768);
   });
 

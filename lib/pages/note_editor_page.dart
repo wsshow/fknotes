@@ -15,7 +15,6 @@ import '../services/language_model_service.dart';
 import '../services/local_model_manager.dart';
 import '../services/kokoro_tts_model_service.dart';
 import '../services/note_read_aloud_service.dart';
-import '../services/note_assistant_prompt_builder.dart';
 import '../services/realtime_dictation_service.dart';
 import '../services/streaming_speech_model_service.dart';
 import '../services/video_import_service.dart';
@@ -367,14 +366,10 @@ class _NoteEditorPageState extends State<NoteEditorPage>
   }
 
   Future<void> _openLocalAssistant() async {
-    if (_title.text.trim().isEmpty && _content.text.trim().isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('请先写下一些笔记内容')));
-      return;
-    }
-
     try {
+      final action = await showNoteAssistantTaskSheet(context);
+      if (action == null || !mounted) return;
+
       final models = LanguageModelService.instance;
       final selectedId = await models.selectedModelId();
       final installed = await models.inspect(selectedId);
@@ -409,17 +404,20 @@ class _NoteEditorPageState extends State<NoteEditorPage>
               builder: (_) => ModelManagementPage(focusModelId: selectedId),
             ),
           );
+          if (!mounted) return;
+          final currentModelId = await models.selectedModelId();
+          final currentModel = await models.inspect(currentModelId);
+          if (!mounted || !currentModel.installed) return;
+        } else {
+          return;
         }
-        return;
       }
 
-      final task = await showNoteAssistantTaskSheet(context);
-      if (task == null || !mounted) return;
       final generated = await showModalBottomSheet<String>(
         context: context,
         isScrollControlled: true,
         builder: (context) => NoteAssistantResultSheet(
-          task: task,
+          action: action,
           title: _title.text,
           content: _content.text,
         ),
@@ -427,7 +425,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       if (generated == null || !mounted) return;
       final inserted =
           _blockEditorKey.currentState?.appendAssistantText(
-            heading: task.resultHeading,
+            heading: action.resultHeading,
             text: generated,
           ) ??
           false;
