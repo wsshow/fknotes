@@ -31,6 +31,7 @@ class NoteBlockData {
   final bool checked;
   final String? attachmentPath;
   final int indent;
+  final int quoteDepth;
   final int headingLevel;
   final String? codeLanguage;
   final List<NoteTextStyleRange> styles;
@@ -41,6 +42,7 @@ class NoteBlockData {
     this.checked = false,
     this.attachmentPath,
     this.indent = 0,
+    this.quoteDepth = 0,
     this.headingLevel = 0,
     this.codeLanguage,
     this.styles = const [],
@@ -55,6 +57,7 @@ class NoteTextAttributes {
   final bool italic;
   final bool strikethrough;
   final bool inlineCode;
+  final bool image;
   final bool underline;
   final double fontSize;
   final String? link;
@@ -66,6 +69,7 @@ class NoteTextAttributes {
     this.italic = false,
     this.strikethrough = false,
     this.inlineCode = false,
+    this.image = false,
     this.underline = false,
     this.fontSize = defaultFontSize,
     this.link,
@@ -76,6 +80,7 @@ class NoteTextAttributes {
     bool? italic,
     bool? strikethrough,
     bool? inlineCode,
+    bool? image,
     bool? underline,
     double? fontSize,
     Object? link = _keepLink,
@@ -84,6 +89,7 @@ class NoteTextAttributes {
     italic: italic ?? this.italic,
     strikethrough: strikethrough ?? this.strikethrough,
     inlineCode: inlineCode ?? this.inlineCode,
+    image: image ?? this.image,
     underline: underline ?? this.underline,
     fontSize: fontSize ?? this.fontSize,
     link: identical(link, _keepLink) ? this.link : link as String?,
@@ -94,6 +100,7 @@ class NoteTextAttributes {
     if (italic) 'italic': true,
     if (strikethrough) 'strikethrough': true,
     if (inlineCode) 'inlineCode': true,
+    if (image) 'image': true,
     if (underline) 'underline': true,
     if (fontSize != defaultFontSize) 'fontSize': fontSize,
     'link': ?link,
@@ -105,6 +112,7 @@ class NoteTextAttributes {
         italic: map['italic'] == true,
         strikethrough: map['strikethrough'] == true,
         inlineCode: map['inlineCode'] == true,
+        image: map['image'] == true,
         underline: map['underline'] == true,
         fontSize: ((map['fontSize'] as num?)?.toDouble() ?? defaultFontSize)
             .clamp(12, 36),
@@ -118,6 +126,7 @@ class NoteTextAttributes {
       italic == other.italic &&
       strikethrough == other.strikethrough &&
       inlineCode == other.inlineCode &&
+      image == other.image &&
       underline == other.underline &&
       fontSize == other.fontSize &&
       link == other.link;
@@ -128,6 +137,7 @@ class NoteTextAttributes {
     italic,
     strikethrough,
     inlineCode,
+    image,
     underline,
     fontSize,
     link,
@@ -247,6 +257,7 @@ class NoteRichDocumentCodec {
           if (block.attachmentPath != null)
             'attachmentPath': block.attachmentPath,
           if (block.indent > 0) 'indent': block.indent,
+          if (block.quoteDepth > 0) 'quoteDepth': block.quoteDepth,
           if (block.headingLevel > 0) 'headingLevel': block.headingLevel,
           if (block.codeLanguage?.isNotEmpty == true)
             'codeLanguage': block.codeLanguage,
@@ -288,6 +299,7 @@ class NoteRichDocumentCodec {
           checked: map['checked'] == true,
           attachmentPath: map['attachmentPath'] as String?,
           indent: (map['indent'] as int? ?? 0).clamp(0, 3),
+          quoteDepth: (map['quoteDepth'] as int? ?? 0).clamp(0, 3),
           headingLevel: (map['headingLevel'] as int? ?? 0).clamp(0, 6),
           codeLanguage: map['codeLanguage'] as String?,
           styles: ranges,
@@ -356,7 +368,7 @@ class NoteBlockCodec {
     List<NoteBlockData> blocks,
     md.Node node, {
     int indent = 0,
-    bool quoted = false,
+    int quoteDepth = 0,
   }) {
     if (node is md.Text) {
       if (node.text.trim().isNotEmpty) {
@@ -370,9 +382,10 @@ class NoteBlockCodec {
       final inline = _inlineData(node.children);
       blocks.add(
         NoteBlockData(
-          quoted ? NoteBlockType.quote : NoteBlockType.heading,
+          NoteBlockType.heading,
           inline.text,
           indent: indent,
+          quoteDepth: quoteDepth,
           headingLevel: int.parse(tag.substring(1)),
           styles: inline.styles,
         ),
@@ -384,9 +397,10 @@ class NoteBlockCodec {
         final inline = _inlineData(node.children);
         blocks.add(
           NoteBlockData(
-            quoted ? NoteBlockType.quote : NoteBlockType.paragraph,
+            quoteDepth > 0 ? NoteBlockType.quote : NoteBlockType.paragraph,
             inline.text,
             indent: indent,
+            quoteDepth: quoteDepth,
             styles: inline.styles,
           ),
         );
@@ -398,7 +412,7 @@ class NoteBlockCodec {
           node,
           ordered: tag == 'ol',
           indent: indent,
-          quoted: quoted,
+          quoteDepth: quoteDepth,
         );
         break;
       case 'blockquote':
@@ -406,8 +420,8 @@ class NoteBlockCodec {
           _appendNode(
             blocks,
             child,
-            indent: quoted ? (indent + 1).clamp(0, 3) : indent,
-            quoted: true,
+            indent: indent,
+            quoteDepth: (quoteDepth + 1).clamp(1, 3),
           );
         }
         break;
@@ -423,6 +437,7 @@ class NoteBlockCodec {
           NoteBlockData(
             NoteBlockType.code,
             code.textContent.replaceFirst(RegExp(r'\n$'), ''),
+            quoteDepth: quoteDepth,
             codeLanguage: className.startsWith('language-')
                 ? className.substring('language-'.length)
                 : null,
@@ -434,7 +449,11 @@ class NoteBlockCodec {
         break;
       case 'table':
         blocks.add(
-          NoteBlockData(NoteBlockType.rawMarkdown, _tableToMarkdown(node)),
+          NoteBlockData(
+            NoteBlockType.rawMarkdown,
+            _tableToMarkdown(node),
+            quoteDepth: quoteDepth,
+          ),
         );
         break;
       default:
@@ -442,9 +461,10 @@ class NoteBlockCodec {
         if (inline.text.trim().isNotEmpty) {
           blocks.add(
             NoteBlockData(
-              quoted ? NoteBlockType.quote : NoteBlockType.paragraph,
+              quoteDepth > 0 ? NoteBlockType.quote : NoteBlockType.paragraph,
               inline.text,
               indent: indent,
+              quoteDepth: quoteDepth,
               styles: inline.styles,
             ),
           );
@@ -458,7 +478,7 @@ class NoteBlockCodec {
     md.Element list, {
     required bool ordered,
     required int indent,
-    required bool quoted,
+    required int quoteDepth,
   }) {
     final listChildren = list.children;
     if (listChildren == null) return;
@@ -468,9 +488,7 @@ class NoteBlockCodec {
       final inline = _inlineData(item.children, skipBlockLists: true);
       blocks.add(
         NoteBlockData(
-          quoted
-              ? NoteBlockType.quote
-              : input != null
+          input != null
               ? NoteBlockType.todo
               : ordered
               ? NoteBlockType.ordered
@@ -478,6 +496,7 @@ class NoteBlockCodec {
           inline.text.trimRight(),
           checked: input?.attributes['checked'] == 'true',
           indent: indent,
+          quoteDepth: quoteDepth,
           styles: inline.styles,
         ),
       );
@@ -489,7 +508,7 @@ class NoteBlockCodec {
             child,
             ordered: child.tag == 'ol',
             indent: (indent + 1).clamp(0, 3),
-            quoted: quoted,
+            quoteDepth: quoteDepth,
           );
         }
       }
@@ -541,7 +560,10 @@ class NoteBlockCodec {
           break;
         case 'img':
           final alt = node.attributes['alt'] ?? node.textContent;
-          output.write(alt, next.copyWith(link: node.attributes['src']));
+          output.write(
+            alt,
+            next.copyWith(link: node.attributes['src'], image: true),
+          );
           return;
         default:
           break;
@@ -630,7 +652,7 @@ class NoteBlockCodec {
         orderedNumber = 0;
       }
       final text = _encodeInline(block);
-      final markdown = switch (block.type) {
+      var markdown = switch (block.type) {
         NoteBlockType.paragraph => text,
         NoteBlockType.heading =>
           '${'#' * block.headingLevel.clamp(1, 6)} $text',
@@ -638,13 +660,22 @@ class NoteBlockCodec {
         NoteBlockType.ordered => '${'  ' * block.indent}$orderedNumber. $text',
         NoteBlockType.todo =>
           '${'  ' * block.indent}- [${block.checked ? 'x' : ' '}] $text',
-        NoteBlockType.quote =>
-          '${List.filled(block.indent + 1, '>').join()} $text',
+        NoteBlockType.quote => text,
         NoteBlockType.code => _encodeCodeBlock(block),
         NoteBlockType.rawMarkdown => block.text,
         NoteBlockType.divider => '---',
         NoteBlockType.attachment => '[[附件:${block.attachmentPath ?? ''}]]',
       };
+      final quoteDepth = block.type == NoteBlockType.quote
+          ? block.quoteDepth.clamp(1, 3)
+          : block.quoteDepth.clamp(0, 3);
+      if (quoteDepth > 0) {
+        final prefix = '${'>' * quoteDepth} ';
+        markdown = markdown
+            .split('\n')
+            .map((line) => '$prefix$line')
+            .join('\n');
+      }
       sections.add((block: block, markdown: markdown));
       previous = block.type;
     }
@@ -711,7 +742,7 @@ class NoteBlockCodec {
     final link = attributes.link;
     if (link != null && link.isNotEmpty) {
       final target = link.replaceAll('\\', r'\\').replaceAll(')', r'\)');
-      encoded = '[$encoded]($target)';
+      encoded = '${attributes.image ? '!' : ''}[$encoded]($target)';
     }
     return encoded;
   }
@@ -753,6 +784,7 @@ class NoteBlockCodec {
           left.checked != right.checked ||
           left.attachmentPath != right.attachmentPath ||
           left.indent != right.indent ||
+          left.quoteDepth != right.quoteDepth ||
           left.headingLevel != right.headingLevel ||
           left.codeLanguage != right.codeLanguage) {
         return false;
@@ -968,6 +1000,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
       checked: data.checked,
       attachmentPath: data.attachmentPath,
       indent: data.indent,
+      quoteDepth: data.quoteDepth,
       headingLevel: data.headingLevel,
       codeLanguage: data.codeLanguage,
       controller: _BlockTextEditingController(
@@ -1018,6 +1051,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
         checked: block.checked,
         attachmentPath: block.attachmentPath,
         indent: block.indent,
+        quoteDepth: block.quoteDepth,
         headingLevel: block.headingLevel,
         codeLanguage: block.codeLanguage,
         styles: block.controller.styleRanges,
@@ -1343,6 +1377,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
           beforeText,
           checked: block.checked,
           indent: block.indent,
+          quoteDepth: block.quoteDepth,
           headingLevel: block.headingLevel,
           codeLanguage: block.codeLanguage,
           styles: block.controller.styleRangesFor(0, start),
@@ -1738,6 +1773,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
 
   void _setBlockType(_EditableBlock block, NoteBlockType type) {
     block.type = type;
+    block.quoteDepth = type == NoteBlockType.quote ? 1 : 0;
     if (type != NoteBlockType.todo) block.checked = false;
     if (type == NoteBlockType.heading && block.headingLevel == 0) {
       block.headingLevel = 2;
@@ -1900,7 +1936,13 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
       _ => NoteBlockType.paragraph,
     };
     final next = _makeBlock(
-      NoteBlockData(nextType, after, indent: block.indent, styles: afterStyles),
+      NoteBlockData(
+        nextType,
+        after,
+        indent: block.indent,
+        quoteDepth: block.quoteDepth,
+        styles: afterStyles,
+      ),
     );
     _syncing = true;
     block.controller.replaceVisibleText(before, beforeStyles);
@@ -2092,27 +2134,34 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
       );
     }
 
-    final quote = block.type == NoteBlockType.quote;
+    final plainQuote = block.type == NoteBlockType.quote;
+    final quote = plainQuote || block.quoteDepth > 0;
     final code = block.type == NoteBlockType.code;
     final rawMarkdown = block.type == NoteBlockType.rawMarkdown;
     final heading = block.type == NoteBlockType.heading;
     final connectsPreviousQuote =
         quote &&
         index > 0 &&
-        _blocks[index - 1].type == NoteBlockType.quote &&
+        (_blocks[index - 1].type == NoteBlockType.quote ||
+            _blocks[index - 1].quoteDepth > 0) &&
+        _blocks[index - 1].quoteDepth == block.quoteDepth &&
         _blocks[index - 1].indent == block.indent;
     final connectsNextQuote =
         quote &&
         index + 1 < _blocks.length &&
-        _blocks[index + 1].type == NoteBlockType.quote &&
+        (_blocks[index + 1].type == NoteBlockType.quote ||
+            _blocks[index + 1].quoteDepth > 0) &&
+        _blocks[index + 1].quoteDepth == block.quoteDepth &&
         _blocks[index + 1].indent == block.indent;
     return Container(
       margin: EdgeInsets.only(
-        left: quote ? block.indent * 18 : 0,
+        left: quote ? (block.quoteDepth.clamp(1, 3) - 1) * 18 : 0,
         top: connectsPreviousQuote ? 0 : 1,
         bottom: connectsNextQuote ? 0 : 1,
       ),
-      padding: EdgeInsets.only(left: quote ? 10 : block.indent * 18),
+      padding: EdgeInsets.only(
+        left: quote ? 10 + block.indent * 18 : block.indent * 18,
+      ),
       decoration: BoxDecoration(
         color: code || rawMarkdown
             ? AppColors.softBlue.withValues(alpha: .52)
@@ -2131,7 +2180,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
           SizedBox(
             width:
                 block.type == NoteBlockType.paragraph ||
-                    quote ||
+                    plainQuote ||
                     heading ||
                     code ||
                     rawMarkdown
@@ -2172,8 +2221,10 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
                             }
                           : 17,
                       height: code || rawMarkdown ? 1.48 : 1.62,
-                      color: quote ? AppColors.muted : AppColors.ink,
-                      fontStyle: quote ? FontStyle.italic : FontStyle.normal,
+                      color: plainQuote ? AppColors.muted : AppColors.ink,
+                      fontStyle: plainQuote
+                          ? FontStyle.italic
+                          : FontStyle.normal,
                       fontWeight: heading ? FontWeight.w800 : null,
                       fontFamily: code || rawMarkdown ? 'monospace' : null,
                       decoration:
@@ -2950,6 +3001,7 @@ class _BlockTextEditingController extends TextEditingController {
       italic: selected.every((attributes) => attributes.italic),
       strikethrough: selected.every((attributes) => attributes.strikethrough),
       inlineCode: selected.every((attributes) => attributes.inlineCode),
+      image: selected.every((attributes) => attributes.image),
       underline: selected.every((attributes) => attributes.underline),
       fontSize:
           selected.every((attributes) => attributes.fontSize == first.fontSize)
@@ -3138,6 +3190,7 @@ class _EditableBlock {
   NoteBlockType type;
   bool checked;
   int indent;
+  int quoteDepth;
   int headingLevel;
   String? codeLanguage;
   final String? attachmentPath;
@@ -3148,6 +3201,7 @@ class _EditableBlock {
     required this.type,
     required this.checked,
     required this.indent,
+    required this.quoteDepth,
     required this.headingLevel,
     this.codeLanguage,
     this.attachmentPath,

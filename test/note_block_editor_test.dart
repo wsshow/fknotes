@@ -86,6 +86,57 @@ print('ok');
     );
   });
 
+  test('images and nested blockquotes survive an AST round trip', () {
+    const source = '''![架构图](https://example.com/private.png)
+
+> ## 引用标题
+>
+> - 第一项
+>   - 子项
+>
+> ```dart
+> print('quoted');
+> ```
+''';
+
+    final blocks = NoteBlockCodec.decode(source);
+    final image = blocks.first;
+    expect(image.text, '架构图');
+    expect(image.styles.single.attributes.image, isTrue);
+    expect(
+      image.styles.single.attributes.link,
+      'https://example.com/private.png',
+    );
+    expect(blocks[1].type, NoteBlockType.heading);
+    expect(blocks[1].quoteDepth, 1);
+    expect(blocks[2].type, NoteBlockType.bullet);
+    expect(blocks[2].quoteDepth, 1);
+    expect(blocks[3].indent, 1);
+    expect(blocks[3].quoteDepth, 1);
+    expect(blocks[4].type, NoteBlockType.code);
+    expect(blocks[4].quoteDepth, 1);
+
+    final encoded = NoteBlockCodec.encode(blocks);
+    expect(encoded, contains('![架构图](https://example.com/private.png)'));
+    expect(encoded, contains('> - 第一项'));
+    expect(encoded, contains("> print('quoted');"));
+    expect(NoteBlockCodec.structurallyMatches(blocks, encoded), isTrue);
+  });
+
+  test('literal Markdown punctuation and long code fences remain intact', () {
+    const blocks = [
+      NoteBlockData(NoteBlockType.paragraph, r'*不是强调* [不是链接]'),
+      NoteBlockData(NoteBlockType.code, '```nested```', codeLanguage: 'text'),
+    ];
+
+    final encoded = NoteBlockCodec.encode(blocks);
+    expect(encoded, startsWith(r'\*不是强调\* \[不是链接\]'));
+    expect(encoded, contains('````text\n```nested```\n````'));
+    final decoded = NoteBlockCodec.decode(encoded);
+    expect(decoded.first.text, blocks.first.text);
+    expect(decoded.last.text, blocks.last.text);
+  });
+
   test('standard GFM markers reopen as semantic block types', () {
     final blocks = NoteBlockCodec.decode('- 条目\n\n1. 顺序\n\n- [ ] 待办\n\n> 引用');
 
@@ -360,7 +411,7 @@ print('ok');
     const blocks = [
       NoteBlockData(NoteBlockType.quote, '第一行'),
       NoteBlockData(NoteBlockType.quote, '第二行'),
-      NoteBlockData(NoteBlockType.quote, '缩进引用', indent: 1),
+      NoteBlockData(NoteBlockType.quote, '缩进引用', quoteDepth: 2),
       NoteBlockData(NoteBlockType.paragraph, '普通段落'),
     ];
     final controller = TextEditingController(
