@@ -2122,21 +2122,14 @@ class _EditorAiButton extends StatelessWidget {
       backgroundColor: Colors.transparent,
       foregroundColor: AppColors.muted,
     ),
-    icon: const Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          'AI',
-          style: TextStyle(
-            color: AppColors.muted,
-            fontSize: 15,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -.4,
-          ),
-        ),
-        SizedBox(width: 1),
-        Icon(Icons.auto_awesome_rounded, size: 11),
-      ],
+    icon: const Text(
+      'AI',
+      style: TextStyle(
+        color: AppColors.muted,
+        fontSize: 16,
+        fontWeight: FontWeight.w800,
+        letterSpacing: -.4,
+      ),
     ),
   );
 }
