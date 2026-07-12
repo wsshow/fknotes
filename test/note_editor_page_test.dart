@@ -146,17 +146,27 @@ void main() {
     expect(find.textContaining('已保存在本机 · 0 字'), findsOneWidget);
     expect(find.byTooltip('撤销'), findsOneWidget);
     expect(find.byTooltip('重做'), findsOneWidget);
+    expect(find.byTooltip('本地助手'), findsOneWidget);
     expect(find.byTooltip('加粗'), findsOneWidget);
     expect(find.byTooltip('斜体'), findsOneWidget);
-    expect(find.byTooltip('删除线'), findsOneWidget);
-    expect(find.byTooltip('行内代码'), findsOneWidget);
-    expect(find.byTooltip('添加链接'), findsOneWidget);
     expect(find.byTooltip('段落样式'), findsOneWidget);
     expect(find.byTooltip('下划线'), findsOneWidget);
     expect(find.byTooltip('字号'), findsOneWidget);
-    expect(find.byTooltip('增加缩进'), findsOneWidget);
+    expect(find.byTooltip('列表与缩进'), findsOneWidget);
+    expect(find.byTooltip('更多格式'), findsOneWidget);
     expect(find.byTooltip('实时语音输入'), findsOneWidget);
     expect(find.byTooltip('朗读笔记'), findsOneWidget);
+    expect(find.byTooltip('预览排版'), findsNothing);
+
+    await tester.ensureVisible(find.byTooltip('更多格式'));
+    await tester.tap(find.byTooltip('更多格式'));
+    await tester.pumpAndSettle();
+    expect(find.text('删除线'), findsOneWidget);
+    expect(find.byIcon(Icons.strikethrough_s_rounded), findsOneWidget);
+    expect(find.text('行内代码'), findsOneWidget);
+    expect(find.text('添加链接'), findsOneWidget);
+    await tester.tap(find.text('删除线'));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('朗读笔记'));
     await tester.runAsync(
@@ -170,6 +180,8 @@ void main() {
     await tester.tap(find.text('稍后再说'));
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.byTooltip('实时语音输入'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('实时语音输入'));
     await tester.pumpAndSettle();
 
@@ -194,7 +206,7 @@ void main() {
     expect(find.text('24'), findsOneWidget);
   });
 
-  testWidgets('Markdown preview renders the note and restores editing', (
+  testWidgets('Markdown content stays in the live structured editor', (
     tester,
   ) async {
     _usePhoneViewport(tester);
@@ -213,41 +225,57 @@ void main() {
     );
 
     expect(find.byType(NoteBlockEditor), findsOneWidget);
-    await tester.tap(find.byTooltip('预览排版'));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('note-markdown-preview-body')), findsOneWidget);
-    expect(find.byType(NoteBlockEditor), findsNothing);
-    expect(find.text('重点'), findsOneWidget);
+    expect(find.byKey(const Key('note-markdown-preview-body')), findsNothing);
+    expect(find.byTooltip('预览排版'), findsNothing);
     expect(find.text('**重点**'), findsNothing);
-    expect(find.text('项目'), findsOneWidget);
-    expect(find.byTooltip('继续编辑'), findsOneWidget);
-
-    await tester.tap(find.byTooltip('继续编辑'));
-    await tester.pumpAndSettle();
-    expect(find.byType(NoteBlockEditor), findsOneWidget);
+    final editorFields = tester.widgetList<TextField>(
+      find.descendant(
+        of: find.byType(NoteBlockEditor),
+        matching: find.byType(TextField),
+      ),
+    );
+    final visibleText = editorFields
+        .map((field) => field.controller?.text ?? '')
+        .join('\n');
+    expect(visibleText, contains('标题'));
+    expect(visibleText, contains('重点'));
+    expect(visibleText, contains('项目'));
+    expect(visibleText, contains('状态'));
   });
 
   testWidgets('editor exposes the local assistant action', (tester) async {
     _usePhoneViewport(tester);
+    final entry = NoteEntry(
+      type: NoteType.text,
+      title: '助手测试',
+      content: '需要总结的笔记',
+      createdAt: DateTime(2026),
+      updatedAt: DateTime(2026),
+    );
     await tester.pumpWidget(
       ChangeNotifierProvider(
         create: (_) => NoteProvider(),
-        child: const MaterialApp(home: NoteEditorPage()),
+        child: MaterialApp(home: NoteEditorPage(existingEntry: entry)),
       ),
     );
 
-    await tester.enterText(find.byType(TextField).first, '需要总结的笔记');
+    expect(find.byTooltip('本地助手'), findsOneWidget);
+    final assistantButton = find.descendant(
+      of: find.byKey(const Key('note-editor-assistant')),
+      matching: find.byType(IconButton),
+    );
+    final onAssistant = tester.widget<IconButton>(assistantButton).onPressed;
+    expect(onAssistant, isNotNull);
+
     await tester.tap(find.byTooltip('更多笔记操作'));
     await tester.pumpAndSettle();
-    expect(find.text('本地助手'), findsOneWidget);
-
     final assistantItem = find.byWidgetPredicate(
       (widget) =>
           widget is PopupMenuItem<String> && widget.value == 'assistant',
     );
-    expect(assistantItem, findsOneWidget);
-    await tester.pumpWidget(const SizedBox.shrink());
+    expect(assistantItem, findsNothing);
+    await tester.tap(find.text('收藏'));
+    await tester.pumpAndSettle();
   });
 
   testWidgets('tag editor uses a bottom sheet and saves unique tags', (
@@ -547,9 +575,11 @@ void main() {
     expect(focusNode.hasFocus, isTrue);
     expect(tester.testTextInput.isVisible, isTrue);
 
-    await tester.ensureVisible(find.byTooltip('引用'));
+    await tester.ensureVisible(find.byTooltip('段落样式'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('引用'));
+    await tester.tap(find.byTooltip('段落样式'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('引用'));
     await tester.pump();
 
     expect(focusNode.hasFocus, isTrue);

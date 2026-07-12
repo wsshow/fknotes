@@ -22,7 +22,6 @@ import '../services/video_import_service.dart';
 import '../utils/markdown_text.dart';
 import '../widgets/app_popup_menu.dart';
 import '../widgets/editor_context_menu.dart';
-import '../widgets/fk_markdown_view.dart';
 import '../widgets/note_assistant_sheet.dart';
 import '../widgets/note_block_editor.dart';
 import '../widgets/note_card.dart';
@@ -75,7 +74,6 @@ class _NoteEditorPageState extends State<NoteEditorPage>
   bool _recoveringDictationFailure = false;
   bool _dictationOperationPending = false;
   bool _showDictationDiagnostics = false;
-  bool _previewingMarkdown = false;
   bool _dictationDiagnosticsCollapsed = false;
   double _dictationDiagnosticsTop = 72;
   double _dictationDiagnosticsLeft = 12;
@@ -83,19 +81,6 @@ class _NoteEditorPageState extends State<NoteEditorPage>
   double _dictationDiagnosticsHeight = 380;
 
   bool get _isEditing => _entry != null;
-
-  void _toggleMarkdownPreview() {
-    if (_dictation.isActive) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('请先完成或取消实时听写')));
-      return;
-    }
-    _richContent =
-        _blockEditorKey.currentState?.flushPendingChanges() ?? _richContent;
-    FocusManager.instance.primaryFocus?.unfocus();
-    setState(() => _previewingMarkdown = !_previewingMarkdown);
-  }
 
   @override
   void initState() {
@@ -688,85 +673,6 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     );
   }
 
-  Future<void> _showAttachmentReferenceSheet() async {
-    if (_attachments.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('请先为笔记添加图片、录音或文件')));
-      return;
-    }
-    final selected = await showModalBottomSheet<NoteAttachment>(
-      context: context,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '引用附件',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                '引用块与原附件保持联动，不会复制文件',
-                style: TextStyle(fontSize: 12, color: AppColors.muted),
-              ),
-              const SizedBox(height: 14),
-              Flexible(
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: _attachments.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 7),
-                  itemBuilder: (_, index) {
-                    final attachment = _attachments[index];
-                    final color = NoteCard.colorForType(attachment.type);
-                    return ListTile(
-                      onTap: () => Navigator.pop(sheetContext, attachment),
-                      tileColor: color.withValues(alpha: .07),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      leading: Container(
-                        width: 42,
-                        height: 42,
-                        decoration: BoxDecoration(
-                          color: color.withValues(alpha: .1),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(
-                          NoteCard.iconForType(attachment.type),
-                          color: color,
-                          size: 21,
-                        ),
-                      ),
-                      title: Text(
-                        attachment.fileName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      subtitle: Text('${attachment.type.label} · 插入正文'),
-                      trailing: const Icon(Icons.add_link_rounded),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (selected != null && mounted) {
-      _blockEditorKey.currentState?.insertAttachmentReference(
-        selected.filePath,
-      );
-    }
-  }
-
   void _runAfterSheet(BuildContext sheetContext, Future<void> Function() task) {
     Navigator.pop(sheetContext);
     Future<void>.delayed(const Duration(milliseconds: 220), task);
@@ -1000,16 +906,6 @@ class _NoteEditorPageState extends State<NoteEditorPage>
           ),
           actions: [
             IconButton(
-              key: const Key('note-markdown-preview'),
-              tooltip: _previewingMarkdown ? '继续编辑' : '预览排版',
-              onPressed: _toggleMarkdownPreview,
-              icon: Icon(
-                _previewingMarkdown
-                    ? Icons.edit_rounded
-                    : Icons.visibility_outlined,
-              ),
-            ),
-            IconButton(
               key: const Key('note-read-aloud'),
               tooltip: _readAloud.isActive ? '停止朗读' : '朗读笔记',
               onPressed: _toggleReadAloud,
@@ -1029,10 +925,6 @@ class _NoteEditorPageState extends State<NoteEditorPage>
               tooltip: '更多笔记操作',
               onSelected: (value) {
                 HapticFeedback.selectionClick();
-                if (value == 'assistant') {
-                  unawaited(_openLocalAssistant());
-                  return;
-                }
                 setState(() {
                   if (value == 'favorite') _favorite = !_favorite;
                   if (value == 'pin') _pinned = !_pinned;
@@ -1041,11 +933,6 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                 _scheduleAutosave();
               },
               itemBuilder: (_) => [
-                AppPopupMenuItem.action(
-                  value: 'assistant',
-                  icon: Icons.auto_awesome_rounded,
-                  label: '本地助手',
-                ),
                 AppPopupMenuItem.action(
                   value: 'favorite',
                   icon: _favorite
@@ -1074,9 +961,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                       child: GestureDetector(
                         key: const Key('note-editor-scroll-surface'),
                         behavior: HitTestBehavior.translucent,
-                        onTap: _previewingMarkdown
-                            ? null
-                            : () => _blockEditorKey.currentState?.focusAtEnd(),
+                        onTap: () => _blockEditorKey.currentState?.focusAtEnd(),
                         child: SingleChildScrollView(
                           padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
                           child: Column(
@@ -1204,111 +1089,87 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                                 padding: EdgeInsets.symmetric(vertical: 18),
                                 child: Divider(),
                               ),
-                              if (_previewingMarkdown)
-                                ConstrainedBox(
-                                  key: const Key('note-markdown-preview-body'),
-                                  constraints: BoxConstraints(
-                                    minHeight:
-                                        (hasAttachmentContent ? 10 : 16) * 27,
-                                  ),
-                                  child: _content.text.trim().isEmpty
-                                      ? const Align(
-                                          alignment: Alignment.topLeft,
-                                          child: Text(
-                                            '还没有可预览的内容',
-                                            style: TextStyle(
-                                              color: AppColors.muted,
-                                            ),
-                                          ),
-                                        )
-                                      : FkMarkdownView(data: _content.text),
-                                )
-                              else
-                                NoteBlockEditor(
-                                  key: _blockEditorKey,
-                                  controller: _content,
-                                  initialRichContent: _richContent,
-                                  onRichContentChanged: _onRichContentChanged,
-                                  attachments: _attachments,
-                                  onOpenAttachment: _openAttachment,
-                                  minLines: hasAttachmentContent ? 10 : 16,
-                                  hintText: hasAttachmentContent
-                                      ? '添加说明、想法或摘要…'
-                                      : '开始记录…',
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (!_previewingMarkdown)
-                      Container(
-                        decoration: const BoxDecoration(
-                          color: AppColors.surface,
-                          border: Border(
-                            top: BorderSide(color: AppColors.line),
-                          ),
-                        ),
-                        padding: const EdgeInsets.fromLTRB(12, 9, 12, 10),
-                        child: TextFieldTapRegion(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (_dictation.isActive ||
-                                  _dictation.status ==
-                                      RealtimeDictationStatus.failed)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 8),
-                                  child: _LiveDictationBar(
-                                    service: _dictation,
-                                    onCancel: _cancelDictation,
-                                    onShowDiagnostics: kDebugMode
-                                        ? () => setState(
-                                            () => _showDictationDiagnostics =
-                                                true,
-                                          )
-                                        : null,
-                                    onFinish:
-                                        _dictation.status ==
-                                            RealtimeDictationStatus.listening
-                                        ? _stopDictation
-                                        : null,
-                                  ),
-                                ),
-                              Row(
-                                children: [
-                                  IconButton.filled(
-                                    tooltip: '添加图片、录音或文件',
-                                    onPressed: _importing || _dictation.isActive
-                                        ? null
-                                        : _showAddContentSheet,
-                                    icon: _importing
-                                        ? const SizedBox.square(
-                                            dimension: 18,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                            ),
-                                          )
-                                        : const Icon(Icons.add_rounded),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: _ScrollableEditorToolbar(
-                                      child: _EditorToolbar(
-                                        editorKey: _blockEditorKey,
-                                        onReferenceAttachment:
-                                            _showAttachmentReferenceSheet,
-                                        onDictation: _toggleDictation,
-                                        dictationStatus: _dictation.status,
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                              NoteBlockEditor(
+                                key: _blockEditorKey,
+                                controller: _content,
+                                initialRichContent: _richContent,
+                                onRichContentChanged: _onRichContentChanged,
+                                attachments: _attachments,
+                                onOpenAttachment: _openAttachment,
+                                minLines: hasAttachmentContent ? 10 : 16,
+                                hintText: hasAttachmentContent
+                                    ? '添加说明、想法或摘要…'
+                                    : '开始记录…',
                               ),
                             ],
                           ),
                         ),
                       ),
+                    ),
+                    Container(
+                      decoration: const BoxDecoration(
+                        color: AppColors.surface,
+                        border: Border(top: BorderSide(color: AppColors.line)),
+                      ),
+                      padding: const EdgeInsets.fromLTRB(12, 9, 12, 10),
+                      child: TextFieldTapRegion(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_dictation.isActive ||
+                                _dictation.status ==
+                                    RealtimeDictationStatus.failed)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: _LiveDictationBar(
+                                  service: _dictation,
+                                  onCancel: _cancelDictation,
+                                  onShowDiagnostics: kDebugMode
+                                      ? () => setState(
+                                          () =>
+                                              _showDictationDiagnostics = true,
+                                        )
+                                      : null,
+                                  onFinish:
+                                      _dictation.status ==
+                                          RealtimeDictationStatus.listening
+                                      ? _stopDictation
+                                      : null,
+                                ),
+                              ),
+                            Row(
+                              children: [
+                                IconButton.filled(
+                                  tooltip: '添加图片、录音或文件',
+                                  onPressed: _importing || _dictation.isActive
+                                      ? null
+                                      : _showAddContentSheet,
+                                  icon: _importing
+                                      ? const SizedBox.square(
+                                          dimension: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Icon(Icons.add_rounded),
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: _ScrollableEditorToolbar(
+                                    child: _EditorToolbar(
+                                      editorKey: _blockEditorKey,
+                                      onAssistant: _openLocalAssistant,
+                                      onDictation: _toggleDictation,
+                                      dictationStatus: _dictation.status,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1605,13 +1466,13 @@ class _TagEditorSheetState extends State<_TagEditorSheet> {
 
 class _EditorToolbar extends StatefulWidget {
   final GlobalKey<NoteBlockEditorState> editorKey;
-  final VoidCallback onReferenceAttachment;
+  final VoidCallback onAssistant;
   final VoidCallback onDictation;
   final RealtimeDictationStatus dictationStatus;
 
   const _EditorToolbar({
     required this.editorKey,
-    required this.onReferenceAttachment,
+    required this.onAssistant,
     required this.onDictation,
     required this.dictationStatus,
   });
@@ -1688,6 +1549,14 @@ class _EditorToolbarState extends State<_EditorToolbar> {
     return Row(
       children: [
         _EditorToolButton(
+          key: const Key('note-editor-assistant'),
+          tooltip: '本地助手',
+          icon: Icons.auto_awesome_rounded,
+          selected: false,
+          prominent: true,
+          onPressed: widget.onAssistant,
+        ),
+        _EditorToolButton(
           tooltip: dictating ? '停止实时听写' : '实时语音输入',
           icon: dictating ? Icons.stop_circle_rounded : Icons.mic_none_rounded,
           selected: dictating,
@@ -1705,20 +1574,6 @@ class _EditorToolbarState extends State<_EditorToolbar> {
           selected: false,
           onPressed: history.canRedo ? editor?.redo : null,
         ),
-        _BlockStyleMenuButton(
-          active: active,
-          headingLevel: format.headingLevel,
-          onSelected: (value) {
-            if (editor == null) return;
-            if (value == 'paragraph') {
-              editor.setHeadingLevel(null);
-            } else if (value == 'code') {
-              editor.toggleBlock(NoteBlockType.code);
-            } else if (value.startsWith('h')) {
-              editor.setHeadingLevel(int.parse(value.substring(1)));
-            }
-          },
-        ),
         _EditorToolButton(
           tooltip: '加粗',
           icon: Icons.format_bold_rounded,
@@ -1732,26 +1587,6 @@ class _EditorToolbarState extends State<_EditorToolbar> {
           onPressed: editor?.toggleItalic,
         ),
         _EditorToolButton(
-          tooltip: '删除线',
-          icon: Icons.format_strikethrough_rounded,
-          selected: format.strikethrough,
-          onPressed: editor?.toggleStrikethrough,
-        ),
-        _EditorToolButton(
-          tooltip: '行内代码',
-          icon: Icons.code_rounded,
-          selected: format.inlineCode,
-          onPressed: editor?.toggleInlineCode,
-        ),
-        _EditorToolButton(
-          tooltip: format.link == null ? '添加链接' : '编辑链接',
-          icon: format.link == null
-              ? Icons.link_rounded
-              : Icons.link_off_rounded,
-          selected: format.link != null,
-          onPressed: editor == null ? null : _editLink,
-        ),
-        _EditorToolButton(
           tooltip: '下划线',
           icon: Icons.format_underlined_rounded,
           selected: format.underline,
@@ -1761,57 +1596,59 @@ class _EditorToolbarState extends State<_EditorToolbar> {
           value: format.fontSize,
           onSelected: editor?.setFontSize,
         ),
-        _EditorToolButton(
-          tooltip: '减少缩进',
-          icon: Icons.format_indent_decrease_rounded,
-          selected: false,
-          onPressed: editor == null || format.indent == 0
-              ? null
-              : () => editor.changeIndent(-1),
+        _BlockStyleMenuButton(
+          active: active,
+          headingLevel: format.headingLevel,
+          enabled: editor != null,
+          onSelected: (value) {
+            if (editor == null) return;
+            if (value == 'paragraph') {
+              editor.setHeadingLevel(null);
+            } else if (value == 'code') {
+              editor.toggleBlock(NoteBlockType.code);
+            } else if (value == 'quote') {
+              editor.toggleBlock(NoteBlockType.quote);
+            } else if (value == 'divider') {
+              editor.insertDivider();
+            } else if (value.startsWith('h')) {
+              editor.setHeadingLevel(int.parse(value.substring(1)));
+            }
+          },
         ),
-        _EditorToolButton(
-          tooltip: '增加缩进',
-          icon: Icons.format_indent_increase_rounded,
-          selected: false,
-          onPressed: editor == null || format.indent == 3
-              ? null
-              : () => editor.changeIndent(1),
+        _ListStyleMenuButton(
+          active: active,
+          indent: format.indent,
+          enabled: editor != null,
+          onSelected: (value) {
+            if (editor == null) return;
+            switch (value) {
+              case 'todo':
+                editor.toggleBlock(NoteBlockType.todo);
+              case 'bullet':
+                editor.toggleBlock(NoteBlockType.bullet);
+              case 'ordered':
+                editor.toggleBlock(NoteBlockType.ordered);
+              case 'outdent':
+                editor.changeIndent(-1);
+              case 'indent':
+                editor.changeIndent(1);
+            }
+          },
         ),
-        _EditorToolButton(
-          tooltip: '待办事项',
-          icon: Icons.check_box_outlined,
-          selected: active == NoteBlockType.todo,
-          onPressed: () => editor?.toggleBlock(NoteBlockType.todo),
-        ),
-        _EditorToolButton(
-          tooltip: '无序列表',
-          icon: Icons.format_list_bulleted_rounded,
-          selected: active == NoteBlockType.bullet,
-          onPressed: () => editor?.toggleBlock(NoteBlockType.bullet),
-        ),
-        _EditorToolButton(
-          tooltip: '有序列表',
-          icon: Icons.format_list_numbered_rounded,
-          selected: active == NoteBlockType.ordered,
-          onPressed: () => editor?.toggleBlock(NoteBlockType.ordered),
-        ),
-        _EditorToolButton(
-          tooltip: '引用',
-          icon: Icons.format_quote_rounded,
-          selected: active == NoteBlockType.quote,
-          onPressed: () => editor?.toggleBlock(NoteBlockType.quote),
-        ),
-        _EditorToolButton(
-          tooltip: '分割线',
-          icon: Icons.horizontal_rule_rounded,
-          selected: active == NoteBlockType.divider,
-          onPressed: editor?.insertDivider ?? () {},
-        ),
-        _EditorToolButton(
-          tooltip: '引用附件',
-          icon: Icons.add_link_rounded,
-          selected: active == NoteBlockType.attachment,
-          onPressed: widget.onReferenceAttachment,
+        _MoreFormattingMenuButton(
+          format: format,
+          enabled: editor != null,
+          onSelected: (value) {
+            if (editor == null) return;
+            switch (value) {
+              case 'strikethrough':
+                editor.toggleStrikethrough();
+              case 'inline-code':
+                editor.toggleInlineCode();
+              case 'link':
+                unawaited(_editLink());
+            }
+          },
         ),
       ],
     );
@@ -2259,12 +2096,15 @@ class _EditorToolButton extends StatelessWidget {
   final String tooltip;
   final IconData icon;
   final bool selected;
+  final bool prominent;
   final VoidCallback? onPressed;
 
   const _EditorToolButton({
+    super.key,
     required this.tooltip,
     required this.icon,
     required this.selected,
+    this.prominent = false,
     required this.onPressed,
   });
 
@@ -2273,8 +2113,14 @@ class _EditorToolButton extends StatelessWidget {
     tooltip: tooltip,
     onPressed: onPressed,
     style: IconButton.styleFrom(
-      backgroundColor: selected ? AppColors.softGreen : Colors.transparent,
-      foregroundColor: selected ? AppColors.coral : AppColors.muted,
+      backgroundColor: selected
+          ? AppColors.softGreen
+          : prominent
+          ? AppColors.softAmber
+          : Colors.transparent,
+      foregroundColor: selected || prominent
+          ? AppColors.coral
+          : AppColors.muted,
     ),
     icon: Icon(icon),
   );
@@ -2283,11 +2129,13 @@ class _EditorToolButton extends StatelessWidget {
 class _BlockStyleMenuButton extends StatelessWidget {
   final NoteBlockType active;
   final int headingLevel;
+  final bool enabled;
   final ValueChanged<String> onSelected;
 
   const _BlockStyleMenuButton({
     required this.active,
     required this.headingLevel,
+    required this.enabled,
     required this.onSelected,
   });
 
@@ -2300,13 +2148,16 @@ class _BlockStyleMenuButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => PopupMenuButton<String>(
     tooltip: '段落样式',
+    enabled: enabled,
     onSelected: onSelected,
     position: PopupMenuPosition.over,
     itemBuilder: (context) => [
       _item('paragraph', '正文', Icons.notes_rounded),
       for (var level = 1; level <= 6; level++)
         _item('h$level', '标题 $level', Icons.title_rounded),
+      _item('quote', '引用', Icons.format_quote_rounded),
       _item('code', '代码块', Icons.data_object_rounded),
+      _item('divider', '分割线', Icons.horizontal_rule_rounded),
     ],
     child: SizedBox(
       width: 58,
@@ -2341,6 +2192,10 @@ class _BlockStyleMenuButton extends StatelessWidget {
         ? active == NoteBlockType.paragraph
         : value == 'code'
         ? active == NoteBlockType.code
+        : value == 'quote'
+        ? active == NoteBlockType.quote
+        : value == 'divider'
+        ? active == NoteBlockType.divider
         : active == NoteBlockType.heading && value == 'h$headingLevel';
     return PopupMenuItem(
       value: value,
@@ -2366,6 +2221,197 @@ class _BlockStyleMenuButton extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ListStyleMenuButton extends StatelessWidget {
+  final NoteBlockType active;
+  final int indent;
+  final bool enabled;
+  final ValueChanged<String> onSelected;
+
+  const _ListStyleMenuButton({
+    required this.active,
+    required this.indent,
+    required this.enabled,
+    required this.onSelected,
+  });
+
+  bool _isSelected(NoteBlockType type) => active == type;
+
+  @override
+  Widget build(BuildContext context) => PopupMenuButton<String>(
+    tooltip: '列表与缩进',
+    enabled: enabled,
+    onSelected: onSelected,
+    position: PopupMenuPosition.over,
+    itemBuilder: (context) => [
+      _item(
+        'todo',
+        '待办事项',
+        Icons.check_box_outlined,
+        _isSelected(NoteBlockType.todo),
+      ),
+      _item(
+        'bullet',
+        '无序列表',
+        Icons.format_list_bulleted_rounded,
+        _isSelected(NoteBlockType.bullet),
+      ),
+      _item(
+        'ordered',
+        '有序列表',
+        Icons.format_list_numbered_rounded,
+        _isSelected(NoteBlockType.ordered),
+      ),
+      const PopupMenuDivider(),
+      _item(
+        'outdent',
+        '减少缩进',
+        Icons.format_indent_decrease_rounded,
+        false,
+        itemEnabled: indent > 0,
+      ),
+      _item(
+        'indent',
+        '增加缩进',
+        Icons.format_indent_increase_rounded,
+        false,
+        itemEnabled: indent < 3,
+      ),
+    ],
+    child: _ToolbarMenuIcon(
+      icon: switch (active) {
+        NoteBlockType.todo => Icons.check_box_outlined,
+        NoteBlockType.ordered => Icons.format_list_numbered_rounded,
+        _ => Icons.format_list_bulleted_rounded,
+      },
+      selected:
+          active == NoteBlockType.todo ||
+          active == NoteBlockType.bullet ||
+          active == NoteBlockType.ordered ||
+          indent > 0,
+    ),
+  );
+
+  PopupMenuItem<String> _item(
+    String value,
+    String label,
+    IconData icon,
+    bool selected, {
+    bool itemEnabled = true,
+  }) => PopupMenuItem(
+    value: value,
+    enabled: itemEnabled,
+    child: _ToolbarMenuRow(icon: icon, label: label, selected: selected),
+  );
+}
+
+class _MoreFormattingMenuButton extends StatelessWidget {
+  final NoteEditorFormatState format;
+  final bool enabled;
+  final ValueChanged<String> onSelected;
+
+  const _MoreFormattingMenuButton({
+    required this.format,
+    required this.enabled,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) => PopupMenuButton<String>(
+    tooltip: '更多格式',
+    enabled: enabled,
+    onSelected: onSelected,
+    position: PopupMenuPosition.over,
+    itemBuilder: (context) => [
+      _item(
+        'strikethrough',
+        '删除线',
+        Icons.strikethrough_s_rounded,
+        format.strikethrough,
+      ),
+      _item('inline-code', '行内代码', Icons.code_rounded, format.inlineCode),
+      _item(
+        'link',
+        format.link == null ? '添加链接' : '编辑链接',
+        Icons.link_rounded,
+        format.link != null,
+      ),
+    ],
+    child: _ToolbarMenuIcon(
+      icon: Icons.text_format_rounded,
+      selected:
+          format.strikethrough || format.inlineCode || format.link != null,
+    ),
+  );
+
+  PopupMenuItem<String> _item(
+    String value,
+    String label,
+    IconData icon,
+    bool selected,
+  ) => PopupMenuItem(
+    value: value,
+    child: _ToolbarMenuRow(icon: icon, label: label, selected: selected),
+  );
+}
+
+class _ToolbarMenuIcon extends StatelessWidget {
+  final IconData icon;
+  final bool selected;
+
+  const _ToolbarMenuIcon({required this.icon, required this.selected});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 48,
+    height: 48,
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          icon,
+          size: 21,
+          color: selected ? AppColors.coral : AppColors.muted,
+        ),
+        const Icon(
+          Icons.arrow_drop_down_rounded,
+          size: 14,
+          color: AppColors.muted,
+        ),
+      ],
+    ),
+  );
+}
+
+class _ToolbarMenuRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool selected;
+
+  const _ToolbarMenuRow({
+    required this.icon,
+    required this.label,
+    required this.selected,
+  });
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Icon(icon, size: 19, color: selected ? AppColors.coral : AppColors.muted),
+      const SizedBox(width: 12),
+      Expanded(
+        child: Text(
+          label,
+          style: TextStyle(
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
+      ),
+      if (selected)
+        const Icon(Icons.check_rounded, size: 18, color: AppColors.coral),
+    ],
+  );
 }
 
 class _FontSizeMenuButton extends StatelessWidget {
