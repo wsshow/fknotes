@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:record/record.dart';
 
 import '../app.dart';
+import '../l10n/l10n.dart';
 import '../models/note_entry.dart';
 import '../providers/note_provider.dart';
 import '../services/file_storage_service.dart';
@@ -55,16 +56,16 @@ class _RecordAudioPageState extends State<RecordAudioPage> {
     final openSettings = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('需要麦克风权限'),
-        content: const Text('录音只会保存在本机。请允许麦克风权限后再开始。'),
+        title: Text(context.l10n.microphonePermissionRequired),
+        content: Text(context.l10n.microphonePermissionDescription),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('稍后再说'),
+            child: Text(context.l10n.maybeLater),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('前往设置'),
+            child: Text(context.l10n.openSettings),
           ),
         ],
       ),
@@ -113,7 +114,10 @@ class _RecordAudioPageState extends State<RecordAudioPage> {
     } catch (error) {
       if (mounted) {
         setState(() => _starting = false);
-        AppFeedback.error(context, '无法开始录音：$error');
+        AppFeedback.error(
+          context,
+          context.l10n.recordingStartFailed(error.toString()),
+        );
       }
     }
   }
@@ -130,6 +134,8 @@ class _RecordAudioPageState extends State<RecordAudioPage> {
   }
 
   Future<void> _stop() async {
+    final l10n = context.l10n;
+    final material = MaterialLocalizations.of(context);
     final path = await _recorder.stop();
     _timer?.cancel();
     if (path == null || !await File(path).exists()) {
@@ -140,8 +146,10 @@ class _RecordAudioPageState extends State<RecordAudioPage> {
     _player = AudioPlayer();
     await _player!.setFilePath(path);
     final now = DateTime.now();
-    _title.text =
-        '语音笔记 ${now.month}月${now.day}日 ${now.hour}:${now.minute.toString().padLeft(2, '0')}';
+    _title.text = l10n.voiceNoteDefaultTitle(
+      material.formatShortDate(now),
+      material.formatTimeOfDay(TimeOfDay.fromDateTime(now)),
+    );
     HapticFeedback.mediumImpact();
     if (mounted) setState(() => _stage = _RecorderStage.review);
   }
@@ -168,6 +176,7 @@ class _RecordAudioPageState extends State<RecordAudioPage> {
   }
 
   Future<void> _save() async {
+    final l10n = context.l10n;
     final provider = context.read<NoteProvider>();
     final path = _temporaryPath;
     if (path == null || _stage == _RecorderStage.saving) return;
@@ -194,7 +203,9 @@ class _RecordAudioPageState extends State<RecordAudioPage> {
       await provider.addEntry(
         NoteEntry(
           type: NoteType.audio,
-          title: _title.text.trim().isEmpty ? '语音笔记' : _title.text.trim(),
+          title: _title.text.trim().isEmpty
+              ? l10n.voiceNote
+              : _title.text.trim(),
           attachments: [attachment],
           createdAt: now,
           updatedAt: now,
@@ -208,7 +219,7 @@ class _RecordAudioPageState extends State<RecordAudioPage> {
       }
       if (mounted) {
         setState(() => _stage = _RecorderStage.review);
-        AppFeedback.error(context, '保存失败：$error');
+        AppFeedback.error(context, l10n.recordingSaveFailed(error.toString()));
       }
     }
   }
@@ -218,16 +229,16 @@ class _RecordAudioPageState extends State<RecordAudioPage> {
     final discard = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('放弃这段录音？'),
-        content: const Text('还没有保存的录音将被删除。'),
+        title: Text(context.l10n.discardRecordingQuestion),
+        content: Text(context.l10n.discardRecordingDescription),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('继续编辑'),
+            child: Text(context.l10n.continueEditing),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('放弃'),
+            child: Text(context.l10n.discard),
           ),
         ],
       ),
@@ -252,9 +263,9 @@ class _RecordAudioPageState extends State<RecordAudioPage> {
             onPressed: _close,
             icon: const Icon(Icons.close_rounded),
           ),
-          title: const Text(
-            '语音笔记',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          title: Text(
+            context.l10n.voiceNote,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
           ),
           actions: [
             Container(
@@ -264,17 +275,17 @@ class _RecordAudioPageState extends State<RecordAudioPage> {
                 color: AppColors.softGreen,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.lock_outline_rounded,
                     size: 14,
                     color: AppColors.moss,
                   ),
-                  SizedBox(width: 4),
+                  const SizedBox(width: 4),
                   Text(
-                    '仅本机',
-                    style: TextStyle(
+                    context.l10n.deviceOnly,
+                    style: const TextStyle(
                       fontSize: 11,
                       color: AppColors.moss,
                       fontWeight: FontWeight.w600,
@@ -317,9 +328,9 @@ class _RecordAudioPageState extends State<RecordAudioPage> {
           child: const Icon(Icons.mic_rounded, size: 42, color: AppColors.moss),
         ),
         const SizedBox(height: 24),
-        const Text(
-          '记录一段想法',
-          style: TextStyle(
+        Text(
+          context.l10n.recordIdea,
+          style: const TextStyle(
             fontFamily: 'serif',
             fontSize: 23,
             fontWeight: FontWeight.w700,
@@ -327,10 +338,10 @@ class _RecordAudioPageState extends State<RecordAudioPage> {
           ),
         ),
         const SizedBox(height: 9),
-        const Text(
-          '录音默认只保存在本机；仅手动云同步时才会上传。保存后可以继续添加标签和说明。',
+        Text(
+          context.l10n.recordingPrivacyDescription,
           textAlign: TextAlign.center,
-          style: TextStyle(color: AppColors.muted, height: 1.55),
+          style: const TextStyle(color: AppColors.muted, height: 1.55),
         ),
         const Spacer(),
         SizedBox(
@@ -346,7 +357,9 @@ class _RecordAudioPageState extends State<RecordAudioPage> {
                   )
                 : const Icon(Icons.mic_rounded),
             label: Text(
-              _starting ? '正在准备麦克风…' : '开始录音',
+              _starting
+                  ? context.l10n.preparingMicrophone
+                  : context.l10n.startRecording,
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
           ),
@@ -373,7 +386,9 @@ class _RecordAudioPageState extends State<RecordAudioPage> {
         ),
         const SizedBox(height: 8),
         Text(
-          _stage == _RecorderStage.paused ? '已暂停' : '正在录音',
+          _stage == _RecorderStage.paused
+              ? context.l10n.paused
+              : context.l10n.recording,
           style: const TextStyle(
             color: AppColors.muted,
             fontWeight: FontWeight.w600,
@@ -387,13 +402,15 @@ class _RecordAudioPageState extends State<RecordAudioPage> {
               icon: _stage == _RecorderStage.paused
                   ? Icons.play_arrow_rounded
                   : Icons.pause_rounded,
-              label: _stage == _RecorderStage.paused ? '继续' : '暂停',
+              label: _stage == _RecorderStage.paused
+                  ? context.l10n.resume
+                  : context.l10n.pause,
               onTap: _pauseOrResume,
             ),
             const SizedBox(width: 28),
             _RoundAction(
               icon: Icons.stop_rounded,
-              label: '完成',
+              label: context.l10n.completed,
               color: AppColors.coral,
               foreground: Colors.white,
               large: true,
@@ -417,9 +434,9 @@ class _RecordAudioPageState extends State<RecordAudioPage> {
           fontSize: 25,
           fontWeight: FontWeight.w700,
         ),
-        decoration: const InputDecoration(
-          labelText: '标题',
-          prefixIcon: Icon(Icons.edit_note_rounded),
+        decoration: InputDecoration(
+          labelText: context.l10n.title,
+          prefixIcon: const Icon(Icons.edit_note_rounded),
         ),
       ),
       const SizedBox(height: 22),
@@ -466,7 +483,7 @@ class _RecordAudioPageState extends State<RecordAudioPage> {
             child: OutlinedButton.icon(
               onPressed: _stage == _RecorderStage.saving ? null : _discard,
               icon: const Icon(Icons.replay_rounded),
-              label: const Text('重录'),
+              label: Text(context.l10n.recordAgain),
             ),
           ),
           const SizedBox(width: 12),
@@ -481,7 +498,7 @@ class _RecordAudioPageState extends State<RecordAudioPage> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.check_rounded),
-              label: const Text('保存语音笔记'),
+              label: Text(context.l10n.saveVoiceNote),
             ),
           ),
         ],

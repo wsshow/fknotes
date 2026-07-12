@@ -6,6 +6,7 @@ import 'package:fknotes/pages/home_page.dart';
 import 'package:fknotes/pages/local_chat_page.dart';
 import 'package:fknotes/pages/media_detail_page.dart';
 import 'package:fknotes/pages/note_editor_page.dart';
+import 'package:fknotes/pages/record_audio_page.dart';
 import 'package:fknotes/pages/transcript_editor_page.dart';
 import 'package:fknotes/providers/app_lock_controller.dart';
 import 'package:fknotes/providers/app_locale_controller.dart';
@@ -550,6 +551,66 @@ void main() {
     await tester.tap(find.byKey(const Key('cancel-transcript-edit')));
     await tester.pumpAndSettle();
     expect(find.byType(TranscriptEditorPage), findsNothing);
+  });
+
+  testWidgets('media detail and recorder render in English', (tester) async {
+    _usePhoneViewport(tester);
+    final now = DateTime(2026, 7, 12);
+    final attachment = NoteAttachment(
+      type: NoteType.image,
+      filePath: 'files/images/missing.jpg',
+      fileName: 'missing.jpg',
+      fileSize: 2048,
+      mimeType: 'image/jpeg',
+      createdAt: now,
+    );
+    final entry = NoteEntry(
+      type: NoteType.image,
+      title: 'Reference image',
+      attachments: [attachment],
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => NoteProvider(),
+        child: MaterialApp(
+          locale: const Locale('en'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: MediaDetailPage(entry: entry, attachment: attachment),
+        ),
+      ),
+    );
+
+    expect(find.widgetWithText(Tab, 'Preview'), findsOneWidget);
+    expect(find.widgetWithText(Tab, 'Recognized text'), findsOneWidget);
+    expect(find.widgetWithText(Tab, 'Information'), findsOneWidget);
+    await tester.tap(find.widgetWithText(Tab, 'Recognized text'));
+    await tester.pumpAndSettle();
+    expect(find.text('No recognized text'), findsOneWidget);
+    expect(find.text('Recognize text'), findsWidgets);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => NoteProvider(),
+        child: const MaterialApp(
+          locale: Locale('en'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: RecordAudioPage(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Voice note'), findsOneWidget);
+    expect(find.text('On device'), findsOneWidget);
+    expect(find.text('Record an idea'), findsOneWidget);
+    expect(find.text('Start recording'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('video import card reports progress without blocking editing', (

@@ -1,4 +1,5 @@
 import 'package:fknotes/pages/transcript_editor_page.dart';
+import 'package:fknotes/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -63,5 +64,31 @@ void main() {
 
     expect(find.byType(TranscriptEditorPage), findsNothing);
     expect(result, '修改后的转写');
+  });
+
+  testWidgets('transcript editor renders in English', (tester) async {
+    tester.view.devicePixelRatio = 3;
+    tester.view.physicalSize = const Size(1080, 2400);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        locale: Locale('en'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: TranscriptEditorPage(initialText: 'Local transcript'),
+      ),
+    );
+
+    expect(find.text('Edit transcript'), findsOneWidget);
+    expect(
+      find.text(
+        'Only the local transcript is changed. The original recording remains unchanged.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('16 characters'), findsOneWidget);
+    expect(find.text('Save'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

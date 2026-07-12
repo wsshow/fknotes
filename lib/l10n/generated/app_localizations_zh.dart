@@ -1711,4 +1711,366 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get savePersona => '保存角色';
+
+  @override
+  String get microphonePermissionRequired => '需要麦克风权限';
+
+  @override
+  String get microphonePermissionDescription => '录音只会保存在本机。请允许麦克风权限后再开始。';
+
+  @override
+  String get openSettings => '前往设置';
+
+  @override
+  String recordingStartFailed(String error) {
+    return '无法开始录音：$error';
+  }
+
+  @override
+  String voiceNoteDefaultTitle(String date, String time) {
+    return '语音笔记 $date $time';
+  }
+
+  @override
+  String recordingSaveFailed(String error) {
+    return '保存失败：$error';
+  }
+
+  @override
+  String get discardRecordingQuestion => '放弃这段录音？';
+
+  @override
+  String get discardRecordingDescription => '还没有保存的录音将被删除。';
+
+  @override
+  String get continueEditing => '继续编辑';
+
+  @override
+  String get discard => '放弃';
+
+  @override
+  String get deviceOnly => '仅本机';
+
+  @override
+  String get recordIdea => '记录一段想法';
+
+  @override
+  String get recordingPrivacyDescription =>
+      '录音默认只保存在本机；仅手动云同步时才会上传。保存后可以继续添加标签和说明。';
+
+  @override
+  String get preparingMicrophone => '正在准备麦克风…';
+
+  @override
+  String get startRecording => '开始录音';
+
+  @override
+  String get paused => '已暂停';
+
+  @override
+  String get recording => '正在录音';
+
+  @override
+  String get resume => '继续';
+
+  @override
+  String get pause => '暂停';
+
+  @override
+  String get recordAgain => '重录';
+
+  @override
+  String get saveVoiceNote => '保存语音笔记';
+
+  @override
+  String get editTranscript => '编辑转写文字';
+
+  @override
+  String get transcriptLocalOnlyDescription => '仅修改本地转写文字，原始录音不会改变';
+
+  @override
+  String get transcriptHint => '输入转写文字';
+
+  @override
+  String transcriptCharacterCount(int count) {
+    return '$count 字';
+  }
+
+  @override
+  String get preparingModel => '正在准备模型';
+
+  @override
+  String get recognizedTextCopied => '识别文字已复制';
+
+  @override
+  String ocrFailedDetail(String error) {
+    return 'OCR 识别失败：$error';
+  }
+
+  @override
+  String get noClearTextRecognized => '未识别到清晰文字';
+
+  @override
+  String get importOfflineSpeechModel => '导入离线识别模型';
+
+  @override
+  String get importSpeechModelDescription =>
+      '请从解压后的 SenseVoice Small INT8 模型目录中，同时选择 ONNX 模型和 tokens.txt。\n\n模型约 228 MB，只保存在本机，不会进入笔记备份。';
+
+  @override
+  String get chooseFiles => '选择文件';
+
+  @override
+  String get importingOfflineModel => '正在导入离线模型';
+
+  @override
+  String get offlineSpeechModelImported => '离线语音识别模型已导入';
+
+  @override
+  String modelImportFailed(String error) {
+    return '模型导入失败：$error';
+  }
+
+  @override
+  String get downloadOfflineSpeechModelQuestion => '下载离线识别模型？';
+
+  @override
+  String get downloadSpeechModelDescription =>
+      '将从 ModelScope 魔搭社区下载约 228 MB，建议使用 Wi-Fi。\n\n模型下载会联网；笔记和音频只会在你手动云同步时上传。中断后可继续下载。';
+
+  @override
+  String get downloadingFromModelScope => '正在从 ModelScope 下载';
+
+  @override
+  String get offlineSpeechModelDownloaded => '离线语音识别模型下载完成';
+
+  @override
+  String get downloadPausedResumable => '已暂停下载，下次会从断点继续';
+
+  @override
+  String modelDownloadFailedDetail(String error) {
+    return '模型下载失败：$error';
+  }
+
+  @override
+  String get finishingInstallation => '正在完成安装';
+
+  @override
+  String importedAmount(String amount) {
+    return '已导入 $amount';
+  }
+
+  @override
+  String downloadedAmount(String amount) {
+    return '已下载 $amount';
+  }
+
+  @override
+  String amountFinishingInstall(String amount) {
+    return '$amount · 正在完成安装';
+  }
+
+  @override
+  String get speedTesting => '正在测速…';
+
+  @override
+  String get waitForTranscription => '请先等待正在进行的转写结束';
+
+  @override
+  String get removeOfflineModelQuestion => '移除离线模型？';
+
+  @override
+  String get removeOfflineModelDescription => '将释放约 228 MB 空间。已经保存的转写文字不会被删除。';
+
+  @override
+  String get speakerModelRequired => '需要说话人分离模型';
+
+  @override
+  String get speakerModelDownloadDescription =>
+      '首次使用需在本地模型中下载约 44.4 MB。模型安装后，分段和转写都完全在设备上完成。';
+
+  @override
+  String get speakerCount => '说话人数量';
+
+  @override
+  String get speakerCountDescription => '当前支持最长 30 分钟的录音；人数越准确，分离结果通常越稳定。';
+
+  @override
+  String get estimateAutomatically => '自动估算';
+
+  @override
+  String get estimateAutomaticallyDescription => '适合不确定人数的录音';
+
+  @override
+  String speakerCountOption(int count) {
+    return '$count 位说话人';
+  }
+
+  @override
+  String get transcriptCopied => '转写文字已复制';
+
+  @override
+  String get openWithAnotherApp => '用其他应用打开';
+
+  @override
+  String get editInformation => '编辑信息';
+
+  @override
+  String get preview => '预览';
+
+  @override
+  String get recognizedText => '识别文字';
+
+  @override
+  String get transcript => '转写文字';
+
+  @override
+  String get information => '信息';
+
+  @override
+  String get textInImage => '图片中的文字';
+
+  @override
+  String get copyAll => '复制全部';
+
+  @override
+  String get recognizeAgain => '重新识别';
+
+  @override
+  String get recognizeText => '识别文字';
+
+  @override
+  String get noRecognizedText => '暂无识别文字';
+
+  @override
+  String get ocrOnDemandDescription => '需要时可对这张图片进行本地文字识别';
+
+  @override
+  String get recognizing => '正在识别…';
+
+  @override
+  String get audioTranscript => '录音转写';
+
+  @override
+  String get editText => '编辑文字';
+
+  @override
+  String get audioStaysOnDevice => '完全在本机处理，音频不会离开设备';
+
+  @override
+  String get offlineSpeechModelRequired => '需要离线识别模型';
+
+  @override
+  String get offlineModelBackupDescription => '模型独立保存在本机，不增加笔记备份大小';
+
+  @override
+  String get downloadAbout228Mb => '在线下载约 228 MB';
+
+  @override
+  String get backgroundTranscriptionHint => '可以离开此页面继续使用笔记';
+
+  @override
+  String get transcriptionIncomplete => '转写没有完成';
+
+  @override
+  String get tryAgainLater => '请稍后重试';
+
+  @override
+  String get transcribeAgain => '重新转写';
+
+  @override
+  String get transcriptionCanceled => '已取消转写';
+
+  @override
+  String get recordingUnaffected => '录音文件没有受到影响';
+
+  @override
+  String get noTranscript => '暂无转写文字';
+
+  @override
+  String get transcriptionOnDemandDescription => '需要时再启动本地识别，不会自动处理录音';
+
+  @override
+  String get transcribeOnDevice => '本地转写';
+
+  @override
+  String get speakerDiarizedTranscription => '区分说话人转写';
+
+  @override
+  String get speakerDiarizedTranscriptionModelRequired =>
+      '区分说话人转写 · 需 44.4 MB 模型';
+
+  @override
+  String manageModelSize(String size) {
+    return '管理模型 · $size';
+  }
+
+  @override
+  String get importFromFiles => '从文件导入';
+
+  @override
+  String get viewAllModels => '查看全部模型';
+
+  @override
+  String get preparingLocalTranscription => '正在准备本地转写';
+
+  @override
+  String get readingAudio => '正在读取音频';
+
+  @override
+  String get separatingSpeakers => '正在区分说话人';
+
+  @override
+  String get recognizingOnDevice => '正在本地识别';
+
+  @override
+  String get savingTranscriptText => '正在保存转写文字';
+
+  @override
+  String get processing => '正在处理';
+
+  @override
+  String get noteInformation => '笔记信息';
+
+  @override
+  String get type => '类型';
+
+  @override
+  String get created => '创建';
+
+  @override
+  String get updated => '更新';
+
+  @override
+  String get fileInformation => '文件信息';
+
+  @override
+  String get fileName => '文件名';
+
+  @override
+  String get size => '大小';
+
+  @override
+  String get duration => '时长';
+
+  @override
+  String get saveStatus => '保存状态';
+
+  @override
+  String get fileMissing => '文件不存在';
+
+  @override
+  String get savedInUnifiedDirectory => '已保存在统一目录';
+
+  @override
+  String get description => '说明';
+
+  @override
+  String get originalFileMissing => '原文件不存在';
+
+  @override
+  String get missingFileDescription => '可以保留笔记信息或将它移到回收站';
+
+  @override
+  String get openWithLocalApp => '用本地应用打开';
 }

@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 
 import '../app.dart';
+import '../l10n/l10n.dart';
 import '../models/note_entry.dart';
 import '../providers/note_provider.dart';
 import '../services/file_storage_service.dart';
@@ -49,7 +50,7 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
   double? _modelImportProgress;
   bool _importingModel = false;
   bool _cancelModelDownload = false;
-  String _modelOperationLabel = '正在准备模型';
+  String _modelOperationLabel = '';
   int _modelTransferredBytes = 0;
   int _modelTotalBytes = 0;
   double _modelBytesPerSecond = 0;
@@ -163,7 +164,7 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
   Future<void> _copyOcr() async {
     await Clipboard.setData(ClipboardData(text: attachment?.ocrText ?? ''));
     if (mounted) {
-      AppFeedback.success(context, '识别文字已复制');
+      AppFeedback.success(context, context.l10n.recognizedTextCopied);
     }
   }
 
@@ -179,7 +180,9 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
       setState(() => _recognizing = false);
       AppFeedback.error(
         context,
-        result.didFail ? 'OCR 识别失败：${result.errorMessage}' : '未识别到清晰文字',
+        result.didFail
+            ? context.l10n.ocrFailedDetail(result.errorMessage ?? '')
+            : context.l10n.noClearTextRecognized,
       );
       return;
     }
@@ -204,22 +207,20 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
 
   Future<void> _importSpeechModel() async {
     if (_importingModel) return;
+    final l10n = context.l10n;
     final proceed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('导入离线识别模型'),
-        content: const Text(
-          '请从解压后的 SenseVoice Small INT8 模型目录中，同时选择 ONNX 模型和 tokens.txt。\n\n'
-          '模型约 228 MB，只保存在本机，不会进入笔记备份。',
-        ),
+        title: Text(l10n.importOfflineSpeechModel),
+        content: Text(l10n.importSpeechModelDescription),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            child: Text(l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('选择文件'),
+            child: Text(l10n.chooseFiles),
           ),
         ],
       ),
@@ -228,7 +229,7 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
     setState(() {
       _importingModel = true;
       _modelImportProgress = 0;
-      _modelOperationLabel = '正在导入离线模型';
+      _modelOperationLabel = l10n.importingOfflineModel;
       _downloadingModelOnline = false;
       _resetModelTransferStats();
     });
@@ -240,11 +241,11 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
       );
       if (info != null && mounted) {
         setState(() => _speechModel = info);
-        AppFeedback.success(context, '离线语音识别模型已导入');
+        AppFeedback.success(context, l10n.offlineSpeechModelImported);
       }
     } catch (error) {
       if (mounted) {
-        AppFeedback.error(context, '模型导入失败：$error');
+        AppFeedback.error(context, l10n.modelImportFailed('$error'));
       }
     } finally {
       if (mounted) {
@@ -258,22 +259,20 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
 
   Future<void> _downloadSpeechModel() async {
     if (_importingModel) return;
+    final l10n = context.l10n;
     final proceed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('下载离线识别模型？'),
-        content: const Text(
-          '将从 ModelScope 魔搭社区下载约 228 MB，建议使用 Wi-Fi。\n\n'
-          '模型下载会联网；笔记和音频只会在你手动云同步时上传。中断后可继续下载。',
-        ),
+        title: Text(l10n.downloadOfflineSpeechModelQuestion),
+        content: Text(l10n.downloadSpeechModelDescription),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            child: Text(l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('开始下载'),
+            child: Text(l10n.startDownload),
           ),
         ],
       ),
@@ -283,7 +282,7 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
       _importingModel = true;
       _cancelModelDownload = false;
       _modelImportProgress = 0;
-      _modelOperationLabel = '正在从 ModelScope 下载';
+      _modelOperationLabel = l10n.downloadingFromModelScope;
       _downloadingModelOnline = true;
       _resetModelTransferStats();
     });
@@ -296,15 +295,15 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
       );
       if (mounted) {
         setState(() => _speechModel = info);
-        AppFeedback.success(context, '离线语音识别模型下载完成');
+        AppFeedback.success(context, l10n.offlineSpeechModelDownloaded);
       }
     } on SpeechModelDownloadCanceled {
       if (mounted) {
-        AppFeedback.show(context, '已暂停下载，下次会从断点继续');
+        AppFeedback.show(context, l10n.downloadPausedResumable);
       }
     } catch (error) {
       if (mounted) {
-        AppFeedback.error(context, '模型下载失败：$error');
+        AppFeedback.error(context, l10n.modelDownloadFailedDetail('$error'));
       }
     } finally {
       if (mounted) {
@@ -348,39 +347,45 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
       _modelTransferredBytes = progress.copiedBytes;
       _modelTotalBytes = progress.totalBytes;
       _modelVerifying = progress.verifying;
-      if (progress.verifying) _modelOperationLabel = '正在完成安装';
+      if (progress.verifying) {
+        _modelOperationLabel = context.l10n.finishingInstallation;
+      }
     });
   }
 
   String _modelTransferDescription() {
+    final l10n = context.l10n;
     final transferred = _formatSize(_modelTransferredBytes);
     final total = _formatSize(_modelTotalBytes);
-    final verb = _downloadingModelOnline ? '已下载' : '已导入';
-    if (_modelVerifying) return '$verb $transferred · 正在完成安装';
+    final amount = _downloadingModelOnline
+        ? l10n.downloadedAmount(transferred)
+        : l10n.importedAmount(transferred);
+    if (_modelVerifying) return l10n.amountFinishingInstall(amount);
     final speed = _modelBytesPerSecond <= 0
-        ? '正在测速…'
+        ? l10n.speedTesting
         : '${_formatSize(_modelBytesPerSecond.round())}/s';
-    return '$verb $transferred / $total · $speed';
+    return '$amount / $total · $speed';
   }
 
   Future<void> _removeSpeechModel() async {
     if (_speech.jobs.any((job) => job.isRunning)) {
-      AppFeedback.show(context, '请先等待正在进行的转写结束');
+      AppFeedback.show(context, context.l10n.waitForTranscription);
       return;
     }
+    final l10n = context.l10n;
     final remove = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('移除离线模型？'),
-        content: const Text('将释放约 228 MB 空间。已经保存的转写文字不会被删除。'),
+        title: Text(l10n.removeOfflineModelQuestion),
+        content: Text(l10n.removeOfflineModelDescription),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            child: Text(l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('移除模型'),
+            child: Text(l10n.removeModel),
           ),
         ],
       ),
@@ -408,6 +413,7 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
     final item = attachment;
     final noteId = entry.id;
     if (item == null || noteId == null) return;
+    final l10n = context.l10n;
     if (_speechModel?.installed != true) {
       await _importSpeechModel();
       if (_speechModel?.installed != true) return;
@@ -418,19 +424,16 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
       final manage = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('需要说话人分离模型'),
-          content: const Text(
-            '首次使用需在本地模型中下载约 44.4 MB。'
-            '模型安装后，分段和转写都完全在设备上完成。',
-          ),
+          title: Text(l10n.speakerModelRequired),
+          content: Text(l10n.speakerModelDownloadDescription),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('取消'),
+              child: Text(l10n.cancel),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('管理模型'),
+              child: Text(l10n.manage),
             ),
           ],
         ),
@@ -453,27 +456,27 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
     final speakerCount = await showDialog<int>(
       context: context,
       builder: (context) => SimpleDialog(
-        title: const Text('说话人数量'),
+        title: Text(l10n.speakerCount),
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(24, 0, 24, 12),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
             child: Text(
-              '当前支持最长 30 分钟的录音；人数越准确，分离结果通常越稳定。',
-              style: TextStyle(color: AppColors.muted, height: 1.45),
+              l10n.speakerCountDescription,
+              style: const TextStyle(color: AppColors.muted, height: 1.45),
             ),
           ),
           SimpleDialogOption(
             onPressed: () => Navigator.pop(context, -1),
-            child: const ListTile(
-              leading: Icon(Icons.auto_awesome_rounded),
-              title: Text('自动估算'),
-              subtitle: Text('适合不确定人数的录音'),
+            child: ListTile(
+              leading: const Icon(Icons.auto_awesome_rounded),
+              title: Text(l10n.estimateAutomatically),
+              subtitle: Text(l10n.estimateAutomaticallyDescription),
             ),
           ),
           for (var count = 2; count <= 8; count++)
             SimpleDialogOption(
               onPressed: () => Navigator.pop(context, count),
-              child: Text('$count 位说话人'),
+              child: Text(l10n.speakerCountOption(count)),
             ),
         ],
       ),
@@ -503,7 +506,7 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
     if (text.isEmpty) return;
     await Clipboard.setData(ClipboardData(text: text));
     if (mounted) {
-      AppFeedback.success(context, '转写文字已复制');
+      AppFeedback.success(context, context.l10n.transcriptCopied);
     }
   }
 
@@ -547,6 +550,7 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final hasOcr = attachment?.type == NoteType.image;
     final hasTranscription = attachment?.type == NoteType.audio;
     return DefaultTabController(
@@ -559,7 +563,9 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                entry.title.isEmpty ? entry.primaryType.label : entry.title,
+                entry.title.isEmpty
+                    ? _localizedNoteType(context, entry.primaryType)
+                    : entry.title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
@@ -569,7 +575,8 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
                 ),
               ),
               Text(
-                attachment?.fileName ?? entry.primaryType.label,
+                attachment?.fileName ??
+                    _localizedNoteType(context, entry.primaryType),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
@@ -583,13 +590,13 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
           actions: [
             if (_file != null)
               IconButton(
-                tooltip: '用其他应用打开',
+                tooltip: l10n.openWithAnotherApp,
                 onPressed: _openExternal,
                 icon: const Icon(Icons.open_in_new_rounded),
               ),
             if (widget.attachment == null)
               IconButton(
-                tooltip: '编辑信息',
+                tooltip: l10n.editInformation,
                 onPressed: _edit,
                 icon: const Icon(Icons.edit_outlined),
               ),
@@ -603,10 +610,10 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
             unselectedLabelColor: AppColors.muted,
             labelStyle: const TextStyle(fontWeight: FontWeight.w600),
             tabs: [
-              const Tab(text: '预览'),
-              if (hasOcr) const Tab(text: '识别文字'),
-              if (hasTranscription) const Tab(text: '转写文字'),
-              const Tab(text: '信息'),
+              Tab(text: l10n.preview),
+              if (hasOcr) Tab(text: l10n.recognizedText),
+              if (hasTranscription) Tab(text: l10n.transcript),
+              Tab(text: l10n.information),
             ],
           ),
         ),
@@ -630,6 +637,7 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
   }
 
   Widget _buildOcrTab() {
+    final l10n = context.l10n;
     final text = attachment?.ocrText?.trim() ?? '';
     final hasRecognizedText = text.isNotEmpty;
     return ListView(
@@ -639,7 +647,7 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
           children: [
             Expanded(
               child: Text(
-                '图片中的文字',
+                l10n.textInImage,
                 style: Theme.of(
                   context,
                 ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
@@ -647,13 +655,15 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
             ),
             if (hasRecognizedText)
               IconButton.filledTonal(
-                tooltip: '复制全部',
+                tooltip: l10n.copyAll,
                 onPressed: _copyOcr,
                 icon: const Icon(Icons.copy_all_rounded),
               ),
             const SizedBox(width: 6),
             IconButton.filledTonal(
-              tooltip: hasRecognizedText ? '重新识别' : '识别文字',
+              tooltip: hasRecognizedText
+                  ? l10n.recognizeAgain
+                  : l10n.recognizeText,
               onPressed: _recognizing ? null : _recognizeText,
               icon: _recognizing
                   ? const SizedBox(
@@ -669,9 +679,9 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
         if (!hasRecognizedText)
           EmptyState(
             icon: Icons.text_snippet_outlined,
-            message: '暂无识别文字',
-            description: '需要时可对这张图片进行本地文字识别',
-            actionLabel: _recognizing ? '正在识别…' : '识别文字',
+            message: l10n.noRecognizedText,
+            description: l10n.ocrOnDemandDescription,
+            actionLabel: _recognizing ? l10n.recognizing : l10n.recognizeText,
             onAction: _recognizing ? null : _recognizeText,
           )
         else
@@ -689,6 +699,7 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
   }
 
   Widget _buildTranscriptionTab() {
+    final l10n = context.l10n;
     final text = attachment?.transcript?.trim() ?? '';
     final job = _speech.jobFor(attachment?.filePath ?? '');
     final modelInstalled = _speechModel?.installed == true;
@@ -699,7 +710,7 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
           children: [
             Expanded(
               child: Text(
-                '录音转写',
+                l10n.audioTranscript,
                 style: Theme.of(
                   context,
                 ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
@@ -707,13 +718,13 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
             ),
             if (text.isNotEmpty) ...[
               IconButton.filledTonal(
-                tooltip: '编辑文字',
+                tooltip: l10n.editText,
                 onPressed: _editTranscript,
                 icon: const Icon(Icons.edit_outlined),
               ),
               const SizedBox(width: 6),
               IconButton.filledTonal(
-                tooltip: '复制全部',
+                tooltip: l10n.copyAll,
                 onPressed: _copyTranscript,
                 icon: const Icon(Icons.copy_all_rounded),
               ),
@@ -721,39 +732,45 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
           ],
         ),
         const SizedBox(height: 8),
-        const Row(
+        Row(
           children: [
-            Icon(Icons.lock_outline_rounded, size: 15, color: AppColors.moss),
-            SizedBox(width: 5),
+            const Icon(
+              Icons.lock_outline_rounded,
+              size: 15,
+              color: AppColors.moss,
+            ),
+            const SizedBox(width: 5),
             Text(
-              '完全在本机处理，音频不会离开设备',
-              style: TextStyle(color: AppColors.muted, fontSize: 12),
+              l10n.audioStaysOnDevice,
+              style: const TextStyle(color: AppColors.muted, fontSize: 12),
             ),
           ],
         ),
         const SizedBox(height: 18),
         if (_importingModel)
           _TranscriptionProgressCard(
-            title: _modelOperationLabel,
+            title: _modelOperationLabel.isEmpty
+                ? l10n.preparingModel
+                : _modelOperationLabel,
             subtitle: _modelTransferDescription(),
             progress: _modelImportProgress ?? 0,
-            onCancel: _modelOperationLabel.contains('下载')
+            onCancel: _downloadingModelOnline
                 ? () => setState(() => _cancelModelDownload = true)
                 : null,
           )
         else if (!modelInstalled)
           EmptyState(
             icon: Icons.memory_rounded,
-            message: '需要离线识别模型',
-            description: '模型独立保存在本机，不增加笔记备份大小',
-            actionLabel: '在线下载约 228 MB',
+            message: l10n.offlineSpeechModelRequired,
+            description: l10n.offlineModelBackupDescription,
+            actionLabel: l10n.downloadAbout228Mb,
             onAction: _downloadSpeechModel,
           )
         else if (job?.isRunning == true)
           _TranscriptionProgressCard(
             title: _statusText(job!.status),
             subtitle: job.partialText.isEmpty
-                ? '可以离开此页面继续使用笔记'
+                ? l10n.backgroundTranscriptionHint
                 : job.partialText,
             progress: job.progress,
             onCancel: () => _speech.cancel(job.filePath),
@@ -761,25 +778,25 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
         else if (job?.status == TranscriptionStatus.failed)
           EmptyState(
             icon: Icons.error_outline_rounded,
-            message: '转写没有完成',
-            description: job?.errorMessage ?? '请稍后重试',
-            actionLabel: '重新转写',
+            message: l10n.transcriptionIncomplete,
+            description: job?.errorMessage ?? l10n.tryAgainLater,
+            actionLabel: l10n.transcribeAgain,
             onAction: _startTranscription,
           )
         else if (job?.status == TranscriptionStatus.canceled && text.isEmpty)
           EmptyState(
             icon: Icons.pause_circle_outline_rounded,
-            message: '已取消转写',
-            description: '录音文件没有受到影响',
-            actionLabel: '重新转写',
+            message: l10n.transcriptionCanceled,
+            description: l10n.recordingUnaffected,
+            actionLabel: l10n.transcribeAgain,
             onAction: _startTranscription,
           )
         else if (text.isEmpty)
           EmptyState(
             icon: Icons.text_snippet_outlined,
-            message: '暂无转写文字',
-            description: '需要时再启动本地识别，不会自动处理录音',
-            actionLabel: '本地转写',
+            message: l10n.noTranscript,
+            description: l10n.transcriptionOnDemandDescription,
+            actionLabel: l10n.transcribeOnDevice,
             onAction: _startTranscription,
           )
         else ...[
@@ -796,7 +813,7 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
           OutlinedButton.icon(
             onPressed: _startTranscription,
             icon: const Icon(Icons.refresh_rounded),
-            label: const Text('重新转写'),
+            label: Text(l10n.transcribeAgain),
           ),
         ],
         if (modelInstalled && job?.isRunning != true) ...[
@@ -807,8 +824,8 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
             icon: const Icon(Icons.groups_2_outlined),
             label: Text(
               _speakerModel?.installed == true
-                  ? '区分说话人转写'
-                  : '区分说话人转写 · 需 44.4 MB 模型',
+                  ? l10n.speakerDiarizedTranscription
+                  : l10n.speakerDiarizedTranscriptionModelRequired,
             ),
           ),
         ],
@@ -821,13 +838,15 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
                 child: TextButton.icon(
                   onPressed: _openModelManager,
                   icon: const Icon(Icons.memory_rounded),
-                  label: Text('管理模型 · ${_formatSize(_speechModel!.sizeBytes)}'),
+                  label: Text(
+                    l10n.manageModelSize(_formatSize(_speechModel!.sizeBytes)),
+                  ),
                 ),
               ),
               TextButton.icon(
                 onPressed: _removeSpeechModel,
                 icon: const Icon(Icons.delete_outline_rounded),
-                label: const Text('移除'),
+                label: Text(l10n.remove),
               ),
             ],
           ),
@@ -840,12 +859,12 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
                 TextButton.icon(
                   onPressed: _importSpeechModel,
                   icon: const Icon(Icons.folder_open_rounded),
-                  label: const Text('从文件导入'),
+                  label: Text(l10n.importFromFiles),
                 ),
                 TextButton.icon(
                   onPressed: _openModelManager,
                   icon: const Icon(Icons.memory_rounded),
-                  label: const Text('查看全部模型'),
+                  label: Text(l10n.viewAllModels),
                 ),
               ],
             ),
@@ -856,49 +875,60 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
   }
 
   String _statusText(TranscriptionStatus status) => switch (status) {
-    TranscriptionStatus.preparing => '正在准备本地转写',
-    TranscriptionStatus.decoding => '正在读取音频',
-    TranscriptionStatus.diarizing => '正在区分说话人',
-    TranscriptionStatus.recognizing => '正在本地识别',
-    TranscriptionStatus.saving => '正在保存转写文字',
-    _ => '正在处理',
+    TranscriptionStatus.preparing => context.l10n.preparingLocalTranscription,
+    TranscriptionStatus.decoding => context.l10n.readingAudio,
+    TranscriptionStatus.diarizing => context.l10n.separatingSpeakers,
+    TranscriptionStatus.recognizing => context.l10n.recognizingOnDevice,
+    TranscriptionStatus.saving => context.l10n.savingTranscriptText,
+    _ => context.l10n.processing,
   };
 
   Widget _buildInfoTab() {
+    final l10n = context.l10n;
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
       children: [
         _InfoCard(
-          title: '笔记信息',
+          title: l10n.noteInformation,
           children: [
-            _InfoRow('类型', attachment?.type.label ?? entry.primaryType.label),
-            _InfoRow('创建', _formatDate(entry.createdAt)),
-            _InfoRow('更新', _formatDate(entry.updatedAt)),
+            _InfoRow(
+              l10n.type,
+              _localizedNoteType(
+                context,
+                attachment?.type ?? entry.primaryType,
+              ),
+            ),
+            _InfoRow(l10n.created, _formatDate(context, entry.createdAt)),
+            _InfoRow(l10n.updated, _formatDate(context, entry.updatedAt)),
             if (entry.tags.isNotEmpty)
-              _InfoRow('标签', entry.tags.map((tag) => '#$tag').join('  ')),
+              _InfoRow(l10n.tags, entry.tags.map((tag) => '#$tag').join('  ')),
           ],
         ),
         const SizedBox(height: 14),
         _InfoCard(
-          title: '文件信息',
+          title: l10n.fileInformation,
           children: [
-            if (attachment != null) _InfoRow('文件名', attachment!.fileName),
             if (attachment != null)
-              _InfoRow('大小', _formatSize(attachment!.fileSize)),
+              _InfoRow(l10n.fileName, attachment!.fileName),
+            if (attachment != null)
+              _InfoRow(l10n.size, _formatSize(attachment!.fileSize)),
             if (attachment?.durationMs != null)
               _InfoRow(
-                '时长',
+                l10n.duration,
                 _formatDuration(
                   Duration(milliseconds: attachment!.durationMs!),
                 ),
               ),
-            _InfoRow('保存状态', _file == null ? '文件不存在' : '已保存在统一目录'),
+            _InfoRow(
+              l10n.saveStatus,
+              _file == null ? l10n.fileMissing : l10n.savedInUnifiedDirectory,
+            ),
           ],
         ),
         if (entry.content?.trim().isNotEmpty ?? false) ...[
           const SizedBox(height: 14),
           _InfoCard(
-            title: '说明',
+            title: l10n.description,
             children: [FkMarkdownView(data: entry.readableContent)],
           ),
         ],
@@ -906,8 +936,20 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
     );
   }
 
-  String _formatDate(DateTime date) =>
-      '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}  ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  String _formatDate(BuildContext context, DateTime date) {
+    final material = MaterialLocalizations.of(context);
+    return '${material.formatShortDate(date)}  '
+        '${material.formatTimeOfDay(TimeOfDay.fromDateTime(date))}';
+  }
+
+  String _localizedNoteType(BuildContext context, NoteType type) =>
+      switch (type) {
+        NoteType.text => context.l10n.note,
+        NoteType.image => context.l10n.image,
+        NoteType.audio => context.l10n.audio,
+        NoteType.video => context.l10n.video,
+        NoteType.document => context.l10n.file,
+      };
   String _formatSize(int bytes) => bytes < 1024
       ? '$bytes B'
       : bytes < 1048576
@@ -936,10 +978,10 @@ class _PreviewTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (file == null) {
-      return const EmptyState(
+      return EmptyState(
         icon: Icons.link_off_rounded,
-        message: '原文件不存在',
-        description: '可以保留笔记信息或将它移到回收站',
+        message: context.l10n.originalFileMissing,
+        description: context.l10n.missingFileDescription,
       );
     }
     return switch (attachment?.type ?? NoteType.text) {
@@ -1129,7 +1171,7 @@ class _DocumentPreview extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              fileName ?? '文件',
+              fileName ?? context.l10n.file,
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
             ),
@@ -1137,7 +1179,7 @@ class _DocumentPreview extends StatelessWidget {
             FilledButton.icon(
               onPressed: () => OpenFile.open(file.path),
               icon: const Icon(Icons.open_in_new_rounded),
-              label: const Text('用本地应用打开'),
+              label: Text(context.l10n.openWithLocalApp),
             ),
           ],
         ),
@@ -1206,7 +1248,10 @@ class _TranscriptionProgressCard extends StatelessWidget {
           const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerRight,
-            child: TextButton(onPressed: onCancel, child: const Text('取消')),
+            child: TextButton(
+              onPressed: onCancel,
+              child: Text(context.l10n.cancel),
+            ),
           ),
         ],
       ],

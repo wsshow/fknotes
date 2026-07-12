@@ -1835,4 +1835,393 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get savePersona => 'Save persona';
+
+  @override
+  String get microphonePermissionRequired => 'Microphone permission required';
+
+  @override
+  String get microphonePermissionDescription =>
+      'Recordings are saved only on this device. Allow microphone access before starting.';
+
+  @override
+  String get openSettings => 'Open settings';
+
+  @override
+  String recordingStartFailed(String error) {
+    return 'Couldn\'t start recording: $error';
+  }
+
+  @override
+  String voiceNoteDefaultTitle(String date, String time) {
+    return 'Voice note $date $time';
+  }
+
+  @override
+  String recordingSaveFailed(String error) {
+    return 'Couldn\'t save recording: $error';
+  }
+
+  @override
+  String get discardRecordingQuestion => 'Discard this recording?';
+
+  @override
+  String get discardRecordingDescription =>
+      'The unsaved recording will be deleted.';
+
+  @override
+  String get continueEditing => 'Continue editing';
+
+  @override
+  String get discard => 'Discard';
+
+  @override
+  String get deviceOnly => 'On device';
+
+  @override
+  String get recordIdea => 'Record an idea';
+
+  @override
+  String get recordingPrivacyDescription =>
+      'Recordings stay on this device by default and are uploaded only during manual cloud sync. Add tags and notes after saving.';
+
+  @override
+  String get preparingMicrophone => 'Preparing microphone…';
+
+  @override
+  String get startRecording => 'Start recording';
+
+  @override
+  String get paused => 'Paused';
+
+  @override
+  String get recording => 'Recording';
+
+  @override
+  String get resume => 'Resume';
+
+  @override
+  String get pause => 'Pause';
+
+  @override
+  String get recordAgain => 'Record again';
+
+  @override
+  String get saveVoiceNote => 'Save voice note';
+
+  @override
+  String get editTranscript => 'Edit transcript';
+
+  @override
+  String get transcriptLocalOnlyDescription =>
+      'Only the local transcript is changed. The original recording remains unchanged.';
+
+  @override
+  String get transcriptHint => 'Enter transcript';
+
+  @override
+  String transcriptCharacterCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count characters',
+      one: '1 character',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get preparingModel => 'Preparing model';
+
+  @override
+  String get recognizedTextCopied => 'Recognized text copied';
+
+  @override
+  String ocrFailedDetail(String error) {
+    return 'OCR failed: $error';
+  }
+
+  @override
+  String get noClearTextRecognized => 'No clear text recognized';
+
+  @override
+  String get importOfflineSpeechModel => 'Import offline speech model';
+
+  @override
+  String get importSpeechModelDescription =>
+      'From the extracted SenseVoice Small INT8 model directory, select both the ONNX model and tokens.txt.\n\nThe model is about 228 MB, stays on this device, and is excluded from note backups.';
+
+  @override
+  String get chooseFiles => 'Choose files';
+
+  @override
+  String get importingOfflineModel => 'Importing offline model';
+
+  @override
+  String get offlineSpeechModelImported => 'Offline speech model imported';
+
+  @override
+  String modelImportFailed(String error) {
+    return 'Model import failed: $error';
+  }
+
+  @override
+  String get downloadOfflineSpeechModelQuestion =>
+      'Download offline speech model?';
+
+  @override
+  String get downloadSpeechModelDescription =>
+      'About 228 MB will be downloaded from ModelScope. Wi-Fi is recommended.\n\nDownloading the model uses the network. Notes and audio are uploaded only during manual cloud sync. Interrupted downloads can resume.';
+
+  @override
+  String get downloadingFromModelScope => 'Downloading from ModelScope';
+
+  @override
+  String get offlineSpeechModelDownloaded => 'Offline speech model downloaded';
+
+  @override
+  String get downloadPausedResumable =>
+      'Download paused. It will resume next time.';
+
+  @override
+  String modelDownloadFailedDetail(String error) {
+    return 'Model download failed: $error';
+  }
+
+  @override
+  String get finishingInstallation => 'Finishing installation';
+
+  @override
+  String importedAmount(String amount) {
+    return 'Imported $amount';
+  }
+
+  @override
+  String downloadedAmount(String amount) {
+    return 'Downloaded $amount';
+  }
+
+  @override
+  String amountFinishingInstall(String amount) {
+    return '$amount · Finishing installation';
+  }
+
+  @override
+  String get speedTesting => 'Testing speed…';
+
+  @override
+  String get waitForTranscription =>
+      'Wait for the current transcription to finish.';
+
+  @override
+  String get removeOfflineModelQuestion => 'Remove offline model?';
+
+  @override
+  String get removeOfflineModelDescription =>
+      'This frees about 228 MB. Saved transcripts won\'t be deleted.';
+
+  @override
+  String get speakerModelRequired => 'Speaker diarization model required';
+
+  @override
+  String get speakerModelDownloadDescription =>
+      'First use requires an approximately 44.4 MB local-model download. Segmentation and transcription then run entirely on device.';
+
+  @override
+  String get speakerCount => 'Number of speakers';
+
+  @override
+  String get speakerCountDescription =>
+      'Recordings up to 30 minutes are supported. A more accurate speaker count usually produces more stable separation.';
+
+  @override
+  String get estimateAutomatically => 'Estimate automatically';
+
+  @override
+  String get estimateAutomaticallyDescription =>
+      'Best when the number of speakers is unknown';
+
+  @override
+  String speakerCountOption(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count speakers',
+      one: '1 speaker',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get transcriptCopied => 'Transcript copied';
+
+  @override
+  String get openWithAnotherApp => 'Open with another app';
+
+  @override
+  String get editInformation => 'Edit information';
+
+  @override
+  String get preview => 'Preview';
+
+  @override
+  String get recognizedText => 'Recognized text';
+
+  @override
+  String get transcript => 'Transcript';
+
+  @override
+  String get information => 'Information';
+
+  @override
+  String get textInImage => 'Text in image';
+
+  @override
+  String get copyAll => 'Copy all';
+
+  @override
+  String get recognizeAgain => 'Recognize again';
+
+  @override
+  String get recognizeText => 'Recognize text';
+
+  @override
+  String get noRecognizedText => 'No recognized text';
+
+  @override
+  String get ocrOnDemandDescription =>
+      'Run on-device text recognition on this image when needed';
+
+  @override
+  String get recognizing => 'Recognizing…';
+
+  @override
+  String get audioTranscript => 'Audio transcript';
+
+  @override
+  String get editText => 'Edit text';
+
+  @override
+  String get audioStaysOnDevice =>
+      'Processed entirely on device. Audio never leaves this device.';
+
+  @override
+  String get offlineSpeechModelRequired => 'Offline speech model required';
+
+  @override
+  String get offlineModelBackupDescription =>
+      'The model is stored separately on this device and doesn\'t increase backup size.';
+
+  @override
+  String get downloadAbout228Mb => 'Download about 228 MB';
+
+  @override
+  String get backgroundTranscriptionHint =>
+      'You can leave this page and continue using notes';
+
+  @override
+  String get transcriptionIncomplete => 'Transcription didn\'t finish';
+
+  @override
+  String get tryAgainLater => 'Try again later';
+
+  @override
+  String get transcribeAgain => 'Transcribe again';
+
+  @override
+  String get transcriptionCanceled => 'Transcription canceled';
+
+  @override
+  String get recordingUnaffected => 'The recording wasn\'t changed';
+
+  @override
+  String get noTranscript => 'No transcript';
+
+  @override
+  String get transcriptionOnDemandDescription =>
+      'Start on-device recognition only when needed; recordings aren\'t processed automatically.';
+
+  @override
+  String get transcribeOnDevice => 'Transcribe on device';
+
+  @override
+  String get speakerDiarizedTranscription => 'Transcribe with speakers';
+
+  @override
+  String get speakerDiarizedTranscriptionModelRequired =>
+      'Transcribe with speakers · 44.4 MB model required';
+
+  @override
+  String manageModelSize(String size) {
+    return 'Manage model · $size';
+  }
+
+  @override
+  String get importFromFiles => 'Import from files';
+
+  @override
+  String get viewAllModels => 'View all models';
+
+  @override
+  String get preparingLocalTranscription => 'Preparing on-device transcription';
+
+  @override
+  String get readingAudio => 'Reading audio';
+
+  @override
+  String get separatingSpeakers => 'Separating speakers';
+
+  @override
+  String get recognizingOnDevice => 'Recognizing on device';
+
+  @override
+  String get savingTranscriptText => 'Saving transcript';
+
+  @override
+  String get processing => 'Processing';
+
+  @override
+  String get noteInformation => 'Note information';
+
+  @override
+  String get type => 'Type';
+
+  @override
+  String get created => 'Created';
+
+  @override
+  String get updated => 'Updated';
+
+  @override
+  String get fileInformation => 'File information';
+
+  @override
+  String get fileName => 'File name';
+
+  @override
+  String get size => 'Size';
+
+  @override
+  String get duration => 'Duration';
+
+  @override
+  String get saveStatus => 'Save status';
+
+  @override
+  String get fileMissing => 'File missing';
+
+  @override
+  String get savedInUnifiedDirectory => 'Saved in unified directory';
+
+  @override
+  String get description => 'Description';
+
+  @override
+  String get originalFileMissing => 'Original file missing';
+
+  @override
+  String get missingFileDescription =>
+      'Keep the note information or move it to Trash.';
+
+  @override
+  String get openWithLocalApp => 'Open with local app';
 }

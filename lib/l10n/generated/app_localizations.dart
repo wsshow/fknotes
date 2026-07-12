@@ -3217,6 +3217,672 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'保存角色'**
   String get savePersona;
+
+  /// No description provided for @microphonePermissionRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要麦克风权限'**
+  String get microphonePermissionRequired;
+
+  /// No description provided for @microphonePermissionDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'录音只会保存在本机。请允许麦克风权限后再开始。'**
+  String get microphonePermissionDescription;
+
+  /// No description provided for @openSettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'前往设置'**
+  String get openSettings;
+
+  /// No description provided for @recordingStartFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法开始录音：{error}'**
+  String recordingStartFailed(String error);
+
+  /// No description provided for @voiceNoteDefaultTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'语音笔记 {date} {time}'**
+  String voiceNoteDefaultTitle(String date, String time);
+
+  /// No description provided for @recordingSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存失败：{error}'**
+  String recordingSaveFailed(String error);
+
+  /// No description provided for @discardRecordingQuestion.
+  ///
+  /// In zh, this message translates to:
+  /// **'放弃这段录音？'**
+  String get discardRecordingQuestion;
+
+  /// No description provided for @discardRecordingDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没有保存的录音将被删除。'**
+  String get discardRecordingDescription;
+
+  /// No description provided for @continueEditing.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续编辑'**
+  String get continueEditing;
+
+  /// No description provided for @discard.
+  ///
+  /// In zh, this message translates to:
+  /// **'放弃'**
+  String get discard;
+
+  /// No description provided for @deviceOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅本机'**
+  String get deviceOnly;
+
+  /// No description provided for @recordIdea.
+  ///
+  /// In zh, this message translates to:
+  /// **'记录一段想法'**
+  String get recordIdea;
+
+  /// No description provided for @recordingPrivacyDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'录音默认只保存在本机；仅手动云同步时才会上传。保存后可以继续添加标签和说明。'**
+  String get recordingPrivacyDescription;
+
+  /// No description provided for @preparingMicrophone.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在准备麦克风…'**
+  String get preparingMicrophone;
+
+  /// No description provided for @startRecording.
+  ///
+  /// In zh, this message translates to:
+  /// **'开始录音'**
+  String get startRecording;
+
+  /// No description provided for @paused.
+  ///
+  /// In zh, this message translates to:
+  /// **'已暂停'**
+  String get paused;
+
+  /// No description provided for @recording.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在录音'**
+  String get recording;
+
+  /// No description provided for @resume.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续'**
+  String get resume;
+
+  /// No description provided for @pause.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂停'**
+  String get pause;
+
+  /// No description provided for @recordAgain.
+  ///
+  /// In zh, this message translates to:
+  /// **'重录'**
+  String get recordAgain;
+
+  /// No description provided for @saveVoiceNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存语音笔记'**
+  String get saveVoiceNote;
+
+  /// No description provided for @editTranscript.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑转写文字'**
+  String get editTranscript;
+
+  /// No description provided for @transcriptLocalOnlyDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅修改本地转写文字，原始录音不会改变'**
+  String get transcriptLocalOnlyDescription;
+
+  /// No description provided for @transcriptHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入转写文字'**
+  String get transcriptHint;
+
+  /// No description provided for @transcriptCharacterCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 字'**
+  String transcriptCharacterCount(int count);
+
+  /// No description provided for @preparingModel.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在准备模型'**
+  String get preparingModel;
+
+  /// No description provided for @recognizedTextCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'识别文字已复制'**
+  String get recognizedTextCopied;
+
+  /// No description provided for @ocrFailedDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'OCR 识别失败：{error}'**
+  String ocrFailedDetail(String error);
+
+  /// No description provided for @noClearTextRecognized.
+  ///
+  /// In zh, this message translates to:
+  /// **'未识别到清晰文字'**
+  String get noClearTextRecognized;
+
+  /// No description provided for @importOfflineSpeechModel.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入离线识别模型'**
+  String get importOfflineSpeechModel;
+
+  /// No description provided for @importSpeechModelDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'请从解压后的 SenseVoice Small INT8 模型目录中，同时选择 ONNX 模型和 tokens.txt。\n\n模型约 228 MB，只保存在本机，不会进入笔记备份。'**
+  String get importSpeechModelDescription;
+
+  /// No description provided for @chooseFiles.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择文件'**
+  String get chooseFiles;
+
+  /// No description provided for @importingOfflineModel.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在导入离线模型'**
+  String get importingOfflineModel;
+
+  /// No description provided for @offlineSpeechModelImported.
+  ///
+  /// In zh, this message translates to:
+  /// **'离线语音识别模型已导入'**
+  String get offlineSpeechModelImported;
+
+  /// No description provided for @modelImportFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'模型导入失败：{error}'**
+  String modelImportFailed(String error);
+
+  /// No description provided for @downloadOfflineSpeechModelQuestion.
+  ///
+  /// In zh, this message translates to:
+  /// **'下载离线识别模型？'**
+  String get downloadOfflineSpeechModelQuestion;
+
+  /// No description provided for @downloadSpeechModelDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'将从 ModelScope 魔搭社区下载约 228 MB，建议使用 Wi-Fi。\n\n模型下载会联网；笔记和音频只会在你手动云同步时上传。中断后可继续下载。'**
+  String get downloadSpeechModelDescription;
+
+  /// No description provided for @downloadingFromModelScope.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在从 ModelScope 下载'**
+  String get downloadingFromModelScope;
+
+  /// No description provided for @offlineSpeechModelDownloaded.
+  ///
+  /// In zh, this message translates to:
+  /// **'离线语音识别模型下载完成'**
+  String get offlineSpeechModelDownloaded;
+
+  /// No description provided for @downloadPausedResumable.
+  ///
+  /// In zh, this message translates to:
+  /// **'已暂停下载，下次会从断点继续'**
+  String get downloadPausedResumable;
+
+  /// No description provided for @modelDownloadFailedDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'模型下载失败：{error}'**
+  String modelDownloadFailedDetail(String error);
+
+  /// No description provided for @finishingInstallation.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在完成安装'**
+  String get finishingInstallation;
+
+  /// No description provided for @importedAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'已导入 {amount}'**
+  String importedAmount(String amount);
+
+  /// No description provided for @downloadedAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'已下载 {amount}'**
+  String downloadedAmount(String amount);
+
+  /// No description provided for @amountFinishingInstall.
+  ///
+  /// In zh, this message translates to:
+  /// **'{amount} · 正在完成安装'**
+  String amountFinishingInstall(String amount);
+
+  /// No description provided for @speedTesting.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在测速…'**
+  String get speedTesting;
+
+  /// No description provided for @waitForTranscription.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先等待正在进行的转写结束'**
+  String get waitForTranscription;
+
+  /// No description provided for @removeOfflineModelQuestion.
+  ///
+  /// In zh, this message translates to:
+  /// **'移除离线模型？'**
+  String get removeOfflineModelQuestion;
+
+  /// No description provided for @removeOfflineModelDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'将释放约 228 MB 空间。已经保存的转写文字不会被删除。'**
+  String get removeOfflineModelDescription;
+
+  /// No description provided for @speakerModelRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要说话人分离模型'**
+  String get speakerModelRequired;
+
+  /// No description provided for @speakerModelDownloadDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'首次使用需在本地模型中下载约 44.4 MB。模型安装后，分段和转写都完全在设备上完成。'**
+  String get speakerModelDownloadDescription;
+
+  /// No description provided for @speakerCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'说话人数量'**
+  String get speakerCount;
+
+  /// No description provided for @speakerCountDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前支持最长 30 分钟的录音；人数越准确，分离结果通常越稳定。'**
+  String get speakerCountDescription;
+
+  /// No description provided for @estimateAutomatically.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动估算'**
+  String get estimateAutomatically;
+
+  /// No description provided for @estimateAutomaticallyDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'适合不确定人数的录音'**
+  String get estimateAutomaticallyDescription;
+
+  /// No description provided for @speakerCountOption.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 位说话人'**
+  String speakerCountOption(int count);
+
+  /// No description provided for @transcriptCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'转写文字已复制'**
+  String get transcriptCopied;
+
+  /// No description provided for @openWithAnotherApp.
+  ///
+  /// In zh, this message translates to:
+  /// **'用其他应用打开'**
+  String get openWithAnotherApp;
+
+  /// No description provided for @editInformation.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑信息'**
+  String get editInformation;
+
+  /// No description provided for @preview.
+  ///
+  /// In zh, this message translates to:
+  /// **'预览'**
+  String get preview;
+
+  /// No description provided for @recognizedText.
+  ///
+  /// In zh, this message translates to:
+  /// **'识别文字'**
+  String get recognizedText;
+
+  /// No description provided for @transcript.
+  ///
+  /// In zh, this message translates to:
+  /// **'转写文字'**
+  String get transcript;
+
+  /// No description provided for @information.
+  ///
+  /// In zh, this message translates to:
+  /// **'信息'**
+  String get information;
+
+  /// No description provided for @textInImage.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片中的文字'**
+  String get textInImage;
+
+  /// No description provided for @copyAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制全部'**
+  String get copyAll;
+
+  /// No description provided for @recognizeAgain.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新识别'**
+  String get recognizeAgain;
+
+  /// No description provided for @recognizeText.
+  ///
+  /// In zh, this message translates to:
+  /// **'识别文字'**
+  String get recognizeText;
+
+  /// No description provided for @noRecognizedText.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无识别文字'**
+  String get noRecognizedText;
+
+  /// No description provided for @ocrOnDemandDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要时可对这张图片进行本地文字识别'**
+  String get ocrOnDemandDescription;
+
+  /// No description provided for @recognizing.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在识别…'**
+  String get recognizing;
+
+  /// No description provided for @audioTranscript.
+  ///
+  /// In zh, this message translates to:
+  /// **'录音转写'**
+  String get audioTranscript;
+
+  /// No description provided for @editText.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑文字'**
+  String get editText;
+
+  /// No description provided for @audioStaysOnDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'完全在本机处理，音频不会离开设备'**
+  String get audioStaysOnDevice;
+
+  /// No description provided for @offlineSpeechModelRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要离线识别模型'**
+  String get offlineSpeechModelRequired;
+
+  /// No description provided for @offlineModelBackupDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'模型独立保存在本机，不增加笔记备份大小'**
+  String get offlineModelBackupDescription;
+
+  /// No description provided for @downloadAbout228Mb.
+  ///
+  /// In zh, this message translates to:
+  /// **'在线下载约 228 MB'**
+  String get downloadAbout228Mb;
+
+  /// No description provided for @backgroundTranscriptionHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'可以离开此页面继续使用笔记'**
+  String get backgroundTranscriptionHint;
+
+  /// No description provided for @transcriptionIncomplete.
+  ///
+  /// In zh, this message translates to:
+  /// **'转写没有完成'**
+  String get transcriptionIncomplete;
+
+  /// No description provided for @tryAgainLater.
+  ///
+  /// In zh, this message translates to:
+  /// **'请稍后重试'**
+  String get tryAgainLater;
+
+  /// No description provided for @transcribeAgain.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新转写'**
+  String get transcribeAgain;
+
+  /// No description provided for @transcriptionCanceled.
+  ///
+  /// In zh, this message translates to:
+  /// **'已取消转写'**
+  String get transcriptionCanceled;
+
+  /// No description provided for @recordingUnaffected.
+  ///
+  /// In zh, this message translates to:
+  /// **'录音文件没有受到影响'**
+  String get recordingUnaffected;
+
+  /// No description provided for @noTranscript.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无转写文字'**
+  String get noTranscript;
+
+  /// No description provided for @transcriptionOnDemandDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要时再启动本地识别，不会自动处理录音'**
+  String get transcriptionOnDemandDescription;
+
+  /// No description provided for @transcribeOnDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地转写'**
+  String get transcribeOnDevice;
+
+  /// No description provided for @speakerDiarizedTranscription.
+  ///
+  /// In zh, this message translates to:
+  /// **'区分说话人转写'**
+  String get speakerDiarizedTranscription;
+
+  /// No description provided for @speakerDiarizedTranscriptionModelRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'区分说话人转写 · 需 44.4 MB 模型'**
+  String get speakerDiarizedTranscriptionModelRequired;
+
+  /// No description provided for @manageModelSize.
+  ///
+  /// In zh, this message translates to:
+  /// **'管理模型 · {size}'**
+  String manageModelSize(String size);
+
+  /// No description provided for @importFromFiles.
+  ///
+  /// In zh, this message translates to:
+  /// **'从文件导入'**
+  String get importFromFiles;
+
+  /// No description provided for @viewAllModels.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看全部模型'**
+  String get viewAllModels;
+
+  /// No description provided for @preparingLocalTranscription.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在准备本地转写'**
+  String get preparingLocalTranscription;
+
+  /// No description provided for @readingAudio.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在读取音频'**
+  String get readingAudio;
+
+  /// No description provided for @separatingSpeakers.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在区分说话人'**
+  String get separatingSpeakers;
+
+  /// No description provided for @recognizingOnDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在本地识别'**
+  String get recognizingOnDevice;
+
+  /// No description provided for @savingTranscriptText.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在保存转写文字'**
+  String get savingTranscriptText;
+
+  /// No description provided for @processing.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在处理'**
+  String get processing;
+
+  /// No description provided for @noteInformation.
+  ///
+  /// In zh, this message translates to:
+  /// **'笔记信息'**
+  String get noteInformation;
+
+  /// No description provided for @type.
+  ///
+  /// In zh, this message translates to:
+  /// **'类型'**
+  String get type;
+
+  /// No description provided for @created.
+  ///
+  /// In zh, this message translates to:
+  /// **'创建'**
+  String get created;
+
+  /// No description provided for @updated.
+  ///
+  /// In zh, this message translates to:
+  /// **'更新'**
+  String get updated;
+
+  /// No description provided for @fileInformation.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件信息'**
+  String get fileInformation;
+
+  /// No description provided for @fileName.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件名'**
+  String get fileName;
+
+  /// No description provided for @size.
+  ///
+  /// In zh, this message translates to:
+  /// **'大小'**
+  String get size;
+
+  /// No description provided for @duration.
+  ///
+  /// In zh, this message translates to:
+  /// **'时长'**
+  String get duration;
+
+  /// No description provided for @saveStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存状态'**
+  String get saveStatus;
+
+  /// No description provided for @fileMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件不存在'**
+  String get fileMissing;
+
+  /// No description provided for @savedInUnifiedDirectory.
+  ///
+  /// In zh, this message translates to:
+  /// **'已保存在统一目录'**
+  String get savedInUnifiedDirectory;
+
+  /// No description provided for @description.
+  ///
+  /// In zh, this message translates to:
+  /// **'说明'**
+  String get description;
+
+  /// No description provided for @originalFileMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'原文件不存在'**
+  String get originalFileMissing;
+
+  /// No description provided for @missingFileDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'可以保留笔记信息或将它移到回收站'**
+  String get missingFileDescription;
+
+  /// No description provided for @openWithLocalApp.
+  ///
+  /// In zh, this message translates to:
+  /// **'用本地应用打开'**
+  String get openWithLocalApp;
 }
 
 class _AppLocalizationsDelegate

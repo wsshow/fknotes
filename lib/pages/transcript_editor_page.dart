@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app.dart';
+import '../l10n/l10n.dart';
 import '../widgets/editor_context_menu.dart';
 
 class TranscriptEditorPage extends StatefulWidget {
@@ -45,13 +46,13 @@ class _TranscriptEditorPageState extends State<TranscriptEditorPage> {
       appBar: AppBar(
         leading: IconButton(
           key: const Key('cancel-transcript-edit'),
-          tooltip: '取消',
+          tooltip: context.l10n.cancel,
           onPressed: () => Navigator.pop(context),
           icon: const Icon(Icons.close_rounded),
         ),
-        title: const Text(
-          '编辑转写文字',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+        title: Text(
+          context.l10n.editTranscript,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
         ),
         actions: [
           Padding(
@@ -59,7 +60,7 @@ class _TranscriptEditorPageState extends State<TranscriptEditorPage> {
             child: FilledButton(
               key: const Key('save-transcript-edit'),
               onPressed: text.trim().isEmpty ? null : _save,
-              child: const Text('保存'),
+              child: Text(context.l10n.save),
             ),
           ),
         ],
@@ -71,18 +72,21 @@ class _TranscriptEditorPageState extends State<TranscriptEditorPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Row(
+              Row(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.lock_outline_rounded,
                     size: 15,
                     color: AppColors.moss,
                   ),
-                  SizedBox(width: 6),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      '仅修改本地转写文字，原始录音不会改变',
-                      style: TextStyle(color: AppColors.muted, fontSize: 12),
+                      context.l10n.transcriptLocalOnlyDescription,
+                      style: const TextStyle(
+                        color: AppColors.muted,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 ],
@@ -110,13 +114,13 @@ class _TranscriptEditorPageState extends State<TranscriptEditorPage> {
                       fontSize: 17,
                       height: 1.65,
                     ),
-                    decoration: const InputDecoration(
-                      hintText: '输入转写文字',
+                    decoration: InputDecoration(
+                      hintText: context.l10n.transcriptHint,
                       filled: false,
                       border: InputBorder.none,
                       enabledBorder: InputBorder.none,
                       focusedBorder: InputBorder.none,
-                      contentPadding: EdgeInsets.all(16),
+                      contentPadding: const EdgeInsets.all(16),
                     ),
                   ),
                 ),
@@ -125,7 +129,7 @@ class _TranscriptEditorPageState extends State<TranscriptEditorPage> {
               Align(
                 alignment: Alignment.centerRight,
                 child: Text(
-                  '${text.characters.length} 字',
+                  context.l10n.transcriptCharacterCount(text.characters.length),
                   style: const TextStyle(
                     color: AppColors.muted,
                     fontSize: 12,
