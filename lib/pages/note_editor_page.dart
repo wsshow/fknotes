@@ -1592,10 +1592,6 @@ class _EditorToolbarState extends State<_EditorToolbar> {
           selected: format.underline,
           onPressed: editor?.toggleUnderline,
         ),
-        _FontSizeMenuButton(
-          value: format.fontSize,
-          onSelected: editor?.setFontSize,
-        ),
         _BlockStyleMenuButton(
           active: active,
           headingLevel: format.headingLevel,
@@ -2412,80 +2408,6 @@ class _ToolbarMenuRow extends StatelessWidget {
         const Icon(Icons.check_rounded, size: 18, color: AppColors.coral),
     ],
   );
-}
-
-class _FontSizeMenuButton extends StatelessWidget {
-  final double? value;
-  final ValueChanged<double>? onSelected;
-
-  const _FontSizeMenuButton({required this.value, required this.onSelected});
-
-  @override
-  Widget build(BuildContext context) {
-    const sizes = [14.0, 17.0, 20.0, 24.0, 28.0];
-    return PopupMenuButton<double>(
-      tooltip: '字号',
-      enabled: onSelected != null,
-      initialValue: value,
-      onSelected: onSelected,
-      position: PopupMenuPosition.over,
-      itemBuilder: (context) => [
-        for (final size in sizes)
-          PopupMenuItem(
-            value: size,
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 28,
-                  child: Text(
-                    '${size.toInt()}',
-                    style: TextStyle(
-                      color: value == size ? AppColors.coral : AppColors.ink,
-                      fontWeight: value == size
-                          ? FontWeight.w700
-                          : FontWeight.w500,
-                    ),
-                  ),
-                ),
-                Text(
-                  size == 17 ? '正文' : '号字',
-                  style: const TextStyle(fontSize: 12, color: AppColors.muted),
-                ),
-                const Spacer(),
-                if (value == size)
-                  const Icon(
-                    Icons.check_rounded,
-                    size: 18,
-                    color: AppColors.coral,
-                  ),
-              ],
-            ),
-          ),
-      ],
-      child: SizedBox(
-        width: 48,
-        height: 48,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              value?.toInt().toString() ?? '—',
-              style: const TextStyle(
-                color: AppColors.muted,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const Icon(
-              Icons.arrow_drop_down_rounded,
-              size: 16,
-              color: AppColors.muted,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _AddContentAction extends StatelessWidget {

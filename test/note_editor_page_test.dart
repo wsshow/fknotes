@@ -155,7 +155,7 @@ void main() {
     expect(find.byTooltip('斜体'), findsOneWidget);
     expect(find.byTooltip('段落样式'), findsOneWidget);
     expect(find.byTooltip('下划线'), findsOneWidget);
-    expect(find.byTooltip('字号'), findsOneWidget);
+    expect(find.byTooltip('字号'), findsNothing);
     expect(find.byTooltip('列表与缩进'), findsOneWidget);
     expect(find.byTooltip('更多格式'), findsOneWidget);
     expect(find.byTooltip('实时语音输入'), findsOneWidget);
@@ -195,19 +195,6 @@ void main() {
 
     await tester.tap(find.text('稍后再说'));
     await tester.pumpAndSettle();
-
-    await tester.ensureVisible(find.byTooltip('字号'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('字号'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('14'), findsOneWidget);
-    expect(find.text('28'), findsOneWidget);
-
-    await tester.tap(find.text('24'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('24'), findsOneWidget);
   });
 
   testWidgets('Markdown content stays in the live structured editor', (
