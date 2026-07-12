@@ -19,6 +19,7 @@ import 'local_chat_page.dart';
 import 'note_editor_page.dart';
 import 'model_management_page.dart';
 import 'app_lock_settings_page.dart';
+import 'cloud_sync_page.dart';
 import 'record_audio_page.dart';
 import 'search_page.dart';
 
@@ -572,7 +573,7 @@ class _BrandHeader extends StatelessWidget {
               ),
             ),
             const Text(
-              '完全本地 · 私密可靠',
+              '本地优先 · 私密可靠',
               style: TextStyle(
                 fontSize: 11,
                 color: AppColors.muted,
@@ -1231,7 +1232,7 @@ class _DataTabState extends State<_DataTab> {
           ),
           const SizedBox(height: 6),
           const Text(
-            '数据不上传，不跟踪，完全由你掌控。',
+            '默认只保存在本机；是否同步完全由你决定。',
             style: TextStyle(color: AppColors.muted),
           ),
           const SizedBox(height: 20),
@@ -1307,6 +1308,13 @@ class _DataTabState extends State<_DataTab> {
           const SizedBox(height: 12),
           _SettingCard(
             children: [
+              _SettingRow(
+                icon: Icons.cloud_sync_outlined,
+                title: '云同步',
+                subtitle: '手动同步用户数据，支持 S3 和 WebDAV',
+                onTap: _openCloudSync,
+              ),
+              const Divider(height: 1),
               _SettingRow(
                 icon: Icons.folder_rounded,
                 title: '应用私有存储',
@@ -1423,7 +1431,7 @@ class _DataTabState extends State<_DataTab> {
           const SizedBox(height: 24),
           const Center(
             child: Text(
-              '非空笔记  ·  所有处理均在设备端完成',
+              '非空笔记  ·  本地优先，同步由你掌控',
               style: TextStyle(
                 fontSize: 12,
                 color: AppColors.muted,
@@ -1463,6 +1471,15 @@ class _DataTabState extends State<_DataTab> {
     } finally {
       if (mounted) setState(() => _backupBusy = false);
     }
+  }
+
+  Future<void> _openCloudSync() async {
+    final restored = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => const CloudSyncPage()),
+    );
+    if (restored == true) await widget.provider.loadEntries();
+    await _refreshSize();
   }
 
   Future<void> _restoreBackup() async {

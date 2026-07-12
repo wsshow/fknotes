@@ -21,6 +21,7 @@ class BackupService {
   static const _maxArchiveFiles = 100000;
   static const _maxExpandedBytes = 128 * 1024 * 1024 * 1024;
   static const _appLockPath = 'settings/app-lock.json';
+  static const _cloudSyncSettingsPath = 'settings/cloud-sync.json';
   static const _recoveryRoot = 'recovery';
 
   static const _managedRoots = {
@@ -42,16 +43,41 @@ class BackupService {
   final _storage = FileStorageService.instance;
 
   Future<bool> exportBackup({Rect? sharePositionOrigin}) async {
+    final artifact = await createBackupArtifact();
+    final name = p.basename(artifact.file.path);
+    final result = await SharePlus.instance.share(
+      ShareParams(
+        files: [
+          XFile(artifact.file.path, mimeType: 'application/zip', name: name),
+        ],
+        title: '保存非空笔记备份',
+        subject: '非空笔记完整备份',
+        sharePositionOrigin: sharePositionOrigin,
+      ),
+    );
+    return result.status != ShareResultStatus.dismissed;
+  }
+
+  /// Creates a verified snapshot containing user data only. Downloaded
+  /// models, inference caches, app-lock state and cloud credentials are never
+  /// included.
+  Future<BackupArtifact> createBackupArtifact({
+    Directory? outputDirectory,
+  }) async {
     final now = DateTime.now();
     final name =
-        'fknotes_${now.year}${_two(now.month)}${_two(now.day)}_${_two(now.hour)}${_two(now.minute)}.fknotes.zip';
+        'fknotes_${now.year}${_two(now.month)}${_two(now.day)}_'
+        '${_two(now.hour)}${_two(now.minute)}${_two(now.second)}_'
+        '${now.microsecondsSinceEpoch}.fknotes.zip';
     await DatabaseService.instance.close();
     try {
-      final exportDir = Directory(
-        p.join((await getTemporaryDirectory()).path, 'fknotes_exports'),
-      );
-      if (await exportDir.exists()) await exportDir.delete(recursive: true);
+      final exportDir =
+          outputDirectory ??
+          Directory(
+            p.join((await getTemporaryDirectory()).path, 'fknotes_exports'),
+          );
       await exportDir.create(recursive: true);
+      await _cleanupOldArtifacts(exportDir, now);
       final output = File(p.join(exportDir.path, name));
       final root = Directory(_storage.baseDir);
       final files = <({File file, String relative})>[];
@@ -70,6 +96,7 @@ class BackupService {
       files.sort((left, right) => left.relative.compareTo(right.relative));
       final encoder = ZipFileEncoder()..create(output.path);
       var encoderOpen = true;
+      late String contentDigest;
       try {
         final manifestFiles = <String, Object?>{};
         for (final item in files) {
@@ -81,12 +108,16 @@ class BackupService {
           };
           await encoder.addFile(item.file, item.relative);
         }
+        contentDigest = sha256
+            .convert(utf8.encode(jsonEncode(manifestFiles)))
+            .toString();
         encoder.addArchiveFile(
           ArchiveFile.string(
             _manifestName,
             jsonEncode({
               'formatVersion': _backupFormatVersion,
               'createdAt': now.toUtc().toIso8601String(),
+              'contentDigest': contentDigest,
               'files': manifestFiles,
             }),
           ),
@@ -102,22 +133,15 @@ class BackupService {
           }
         }
       }
-
-      // Android does not implement file_selector's save-location API. The
-      // native share sheet includes Files/Drive and works consistently across
-      // Android and iOS without requesting broad storage permissions.
-      final result = await SharePlus.instance.share(
-        ShareParams(
-          files: [XFile(output.path, mimeType: 'application/zip', name: name)],
-          title: '保存非空笔记备份',
-          subject: '非空笔记完整备份',
-          sharePositionOrigin: sharePositionOrigin,
-        ),
+      final archiveDigest = await sha256.bind(output.openRead()).first;
+      return BackupArtifact(
+        file: output,
+        contentDigest: contentDigest,
+        archiveSha256: archiveDigest.toString(),
+        sizeBytes: await output.length(),
+        createdAt: now.toUtc(),
       );
-      return result.status != ShareResultStatus.dismissed;
     } finally {
-      // Keep the app usable even while the generated ZIP remains in the
-      // temporary directory for the receiving system app to consume.
       await DatabaseService.instance.database;
     }
   }
@@ -126,7 +150,13 @@ class BackupService {
     const group = XTypeGroup(label: 'FK Notes Backup', extensions: ['zip']);
     final selected = await openFile(acceptedTypeGroups: [group]);
     if (selected == null) return false;
-    final input = InputFileStream(selected.path);
+    await restoreBackupFile(File(selected.path));
+    return true;
+  }
+
+  Future<void> restoreBackupFile(File backup) async {
+    if (!await backup.exists()) throw const FormatException('备份文件不存在');
+    final input = InputFileStream(backup.path);
     late final Archive archive;
     try {
       archive = ZipDecoder().decodeStream(input, verify: true);
@@ -195,7 +225,7 @@ class BackupService {
         }
       }
       await _preserveDeviceOnlySettings(previous, root);
-      await _storage.init();
+      await _storage.init(baseDir: root.path);
       if (manifest != null) await _validateManifest(manifest, root, fileNames);
       await DatabaseService.instance.validateUserData();
       try {
@@ -204,13 +234,13 @@ class BackupService {
         // The restored data is already validated; stale rollback data can be
         // removed on the next restore attempt.
       }
-      return true;
+      return;
     } catch (_) {
       await DatabaseService.instance.close();
       if (moveCompleted) await _deleteManagedData(root);
       await _moveManagedData(previous, root);
       if (await previous.exists()) await previous.delete(recursive: true);
-      await _storage.init();
+      await _storage.init(baseDir: root.path);
       await DatabaseService.instance.database;
       rethrow;
     } finally {
@@ -262,11 +292,13 @@ class BackupService {
     Directory previous,
     Directory root,
   ) async {
-    final source = File(p.join(previous.path, _appLockPath));
-    if (!await source.exists()) return;
-    final destination = File(p.join(root.path, _appLockPath));
-    await destination.parent.create(recursive: true);
-    await source.copy(destination.path);
+    for (final relative in const [_appLockPath, _cloudSyncSettingsPath]) {
+      final source = File(p.join(previous.path, relative));
+      if (!await source.exists()) continue;
+      final destination = File(p.join(root.path, relative));
+      await destination.parent.create(recursive: true);
+      await source.copy(destination.path);
+    }
   }
 
   String _safeName(String value) {
@@ -285,9 +317,15 @@ class BackupService {
   }
 
   bool _isIncludedBackupPath(String relativePath) =>
-      relativePath != _appLockPath &&
+      !_isDeviceOnlySetting(relativePath) &&
       p.posix.split(relativePath).firstOrNull != _recoveryRoot &&
       _isManagedPath(relativePath);
+
+  bool _isDeviceOnlySetting(String relativePath) =>
+      relativePath == _appLockPath ||
+      relativePath.startsWith('$_appLockPath.') ||
+      relativePath == _cloudSyncSettingsPath ||
+      relativePath.startsWith('$_cloudSyncSettingsPath.');
 
   Future<void> _moveManagedData(Directory source, Directory target) async {
     await target.create(recursive: true);
@@ -319,5 +357,35 @@ class BackupService {
     }
   }
 
+  Future<void> _cleanupOldArtifacts(Directory directory, DateTime now) async {
+    final cutoff = now.subtract(const Duration(days: 1));
+    await for (final entity in directory.list(followLinks: false)) {
+      if (entity is! File || !entity.path.endsWith('.fknotes.zip')) continue;
+      try {
+        if ((await entity.lastModified()).isBefore(cutoff)) {
+          await entity.delete();
+        }
+      } on FileSystemException {
+        // Temporary exports may still be held by a receiving system app.
+      }
+    }
+  }
+
   String _two(int value) => value.toString().padLeft(2, '0');
+}
+
+class BackupArtifact {
+  final File file;
+  final String contentDigest;
+  final String archiveSha256;
+  final int sizeBytes;
+  final DateTime createdAt;
+
+  const BackupArtifact({
+    required this.file,
+    required this.contentDigest,
+    required this.archiveSha256,
+    required this.sizeBytes,
+    required this.createdAt,
+  });
 }

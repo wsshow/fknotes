@@ -109,7 +109,7 @@ class _BrandWordmark extends StatelessWidget {
           ),
           SizedBox(height: 5),
           Text(
-            '完全本地 · 私密可靠',
+            '本地优先 · 私密可靠',
             style: TextStyle(
               color: AppColors.muted,
               fontSize: 12.5,

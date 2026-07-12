@@ -1,5 +1,5 @@
 name: fknotes
-description: "非空笔记：完全本地、隐私优先的多媒体笔记应用。"
+description: "非空笔记：本地优先、隐私优先的多媒体笔记应用。"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev

@@ -94,7 +94,7 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
                   SizedBox(width: 9),
                   Expanded(
                     child: Text(
-                      '只有下载模型时需要联网。笔记、图片、音频和识别结果不会上传。模型不进入笔记备份。',
+                      '模型只在用户下载时联网，且不会进入笔记备份；用户数据仅在手动云同步时上传。',
                       style: TextStyle(color: AppColors.muted, height: 1.55),
                     ),
                   ),

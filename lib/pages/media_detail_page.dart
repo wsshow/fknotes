@@ -274,7 +274,7 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
         title: const Text('下载离线识别模型？'),
         content: const Text(
           '将从 ModelScope 魔搭社区下载约 228 MB，建议使用 Wi-Fi。\n\n'
-          '下载是应用唯一需要联网的功能；笔记和音频不会上传。中断后可继续下载。',
+          '模型下载会联网；笔记和音频只会在你手动云同步时上传。中断后可继续下载。',
         ),
         actions: [
           TextButton(

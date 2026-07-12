@@ -31,7 +31,7 @@
 	<key>NSFaceIDUsageDescription</key>
 	<string>用于通过系统 Face ID 解锁非空笔记中的本地内容。</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>用于创建仅保存在本机的语音笔记。</string>
+	<string>用于创建默认保存在本机的语音笔记。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>用于选择需要保存和识别的图片或视频。</string>
 	<key>UIApplicationSceneManifest</key>

@@ -99,8 +99,15 @@ void main() {
     await tester.tap(find.text('数据'));
     await tester.pumpAndSettle();
     expect(find.text('本地数据'), findsOneWidget);
-    expect(find.text('应用锁'), findsOneWidget);
+    expect(find.text('云同步'), findsOneWidget);
     expect(find.text('资料占用'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('应用锁'),
+      350,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('应用锁'), findsOneWidget);
 
     await tester.drag(find.byType(ListView), const Offset(0, -1200));
     await tester.pumpAndSettle();

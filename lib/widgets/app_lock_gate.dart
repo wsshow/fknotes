@@ -167,7 +167,7 @@ class _LockBrandHeader extends StatelessWidget {
             ),
             SizedBox(height: 2),
             Text(
-              '完全本地 · 私密可靠',
+              '本地优先 · 私密可靠',
               style: TextStyle(
                 color: AppColors.muted,
                 fontSize: 10.5,

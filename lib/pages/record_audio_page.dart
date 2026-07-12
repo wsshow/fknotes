@@ -331,7 +331,7 @@ class _RecordAudioPageState extends State<RecordAudioPage> {
         ),
         const SizedBox(height: 9),
         const Text(
-          '录音不会上传，保存后可以继续添加标签和说明。',
+          '录音默认只保存在本机；仅手动云同步时才会上传。保存后可以继续添加标签和说明。',
           textAlign: TextAlign.center,
           style: TextStyle(color: AppColors.muted, height: 1.55),
         ),
