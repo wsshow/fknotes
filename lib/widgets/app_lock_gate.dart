@@ -64,61 +64,76 @@ class _AppLockScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final privacyOnly = obscured && !locked;
-    return MediaQuery.withClampedTextScaling(
-      minScaleFactor: 1,
-      maxScaleFactor: 1.3,
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      explicitChildNodes: true,
+      label: privacyOnly ? '隐私保护' : '应用锁',
       child: Material(
         color: AppColors.canvas,
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 22, 24, 20),
-            child: Column(
-              children: [
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: _LockBrandHeader(),
-                ),
-                Expanded(
-                  child: Center(
-                    child: SingleChildScrollView(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 390),
-                        child: privacyOnly
-                            ? const _PrivacyOnlyState()
-                            : _AuthenticationCard(
-                                initializing: initializing,
-                                waitingForAuthentication:
-                                    waitingForAuthentication,
-                                message: message,
-                                onUnlock: onUnlock,
-                              ),
-                      ),
-                    ),
+          child: LayoutBuilder(
+            builder: (context, constraints) => SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 22, 24, 20),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: (constraints.maxHeight - 42).clamp(
+                    0,
+                    double.infinity,
                   ),
                 ),
-                const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.shield_outlined,
-                      size: 15,
-                      color: AppColors.muted,
-                    ),
-                    SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        '系统身份验证 · 本地内容保持私密',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: AppColors.muted,
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w500,
+                child: IntrinsicHeight(
+                  child: Column(
+                    children: [
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: _LockBrandHeader(),
+                      ),
+                      Expanded(
+                        child: Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 20),
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 390),
+                              child: privacyOnly
+                                  ? const _PrivacyOnlyState()
+                                  : _AuthenticationCard(
+                                      initializing: initializing,
+                                      waitingForAuthentication:
+                                          waitingForAuthentication,
+                                      message: message,
+                                      onUnlock: onUnlock,
+                                    ),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                      const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.shield_outlined,
+                            size: 15,
+                            color: AppColors.muted,
+                          ),
+                          SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              '系统身份验证 · 本地内容保持私密',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: AppColors.muted,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ],
+              ),
             ),
           ),
         ),
@@ -136,29 +151,31 @@ class _LockBrandHeader extends StatelessWidget {
     children: [
       BrandMark(size: 42),
       SizedBox(width: 11),
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '非空笔记',
-            style: TextStyle(
-              color: AppColors.ink,
-              fontFamily: 'serif',
-              fontSize: 17,
-              height: 1.2,
-              fontWeight: FontWeight.w700,
+      Flexible(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '非空笔记',
+              style: TextStyle(
+                color: AppColors.ink,
+                fontFamily: 'serif',
+                fontSize: 17,
+                height: 1.2,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-          ),
-          SizedBox(height: 2),
-          Text(
-            '完全本地 · 私密可靠',
-            style: TextStyle(
-              color: AppColors.muted,
-              fontSize: 10.5,
-              fontWeight: FontWeight.w500,
+            SizedBox(height: 2),
+            Text(
+              '完全本地 · 私密可靠',
+              style: TextStyle(
+                color: AppColors.muted,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w500,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     ],
   );
@@ -206,10 +223,14 @@ class _AuthenticationCard extends StatelessWidget {
             ),
             alignment: Alignment.center,
             child: waiting
-                ? const SizedBox(
-                    width: 27,
-                    height: 27,
-                    child: CircularProgressIndicator(strokeWidth: 2.4),
+                ? Semantics(
+                    label: '正在等待系统身份验证',
+                    liveRegion: true,
+                    child: const SizedBox(
+                      width: 27,
+                      height: 27,
+                      child: CircularProgressIndicator(strokeWidth: 2.4),
+                    ),
                   )
                 : const Icon(
                     Icons.lock_outline_rounded,

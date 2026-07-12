@@ -2868,19 +2868,21 @@ class _MarkdownTableEditorSheetState extends State<_MarkdownTableEditorSheet> {
                 ),
               ),
               const SizedBox(height: 12),
-              Row(
+              OverflowBar(
+                alignment: MainAxisAlignment.end,
+                overflowAlignment: OverflowBarAlignment.end,
+                spacing: 8,
+                overflowSpacing: 8,
                 children: [
                   OutlinedButton.icon(
                     onPressed: _addRow,
                     icon: const Icon(Icons.add_rounded),
                     label: const Text('添加一行'),
                   ),
-                  const Spacer(),
                   TextButton(
                     onPressed: () => Navigator.pop(context),
                     child: const Text('取消'),
                   ),
-                  const SizedBox(width: 8),
                   FilledButton(
                     key: const Key('markdown-table-save'),
                     onPressed: _finish,

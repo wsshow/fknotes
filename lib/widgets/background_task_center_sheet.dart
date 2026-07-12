@@ -209,7 +209,12 @@ class _TaskCard extends StatelessWidget {
                 ),
                 if (item.progress != null && !failed) ...[
                   const SizedBox(height: 9),
-                  LinearProgressIndicator(value: item.progress),
+                  Semantics(
+                    label: '${item.title}进度',
+                    value: '${(item.progress! * 100).round()}%',
+                    liveRegion: true,
+                    child: LinearProgressIndicator(value: item.progress),
+                  ),
                 ],
               ],
             ),

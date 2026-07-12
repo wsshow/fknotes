@@ -1929,7 +1929,11 @@ class _LinkEditorSheetState extends State<_LinkEditorSheet> {
               ),
             ),
             const SizedBox(height: 20),
-            Row(
+            OverflowBar(
+              alignment: MainAxisAlignment.end,
+              overflowAlignment: OverflowBarAlignment.end,
+              spacing: 8,
+              overflowSpacing: 8,
               children: [
                 if (widget.initialValue != null)
                   TextButton.icon(
@@ -1938,12 +1942,10 @@ class _LinkEditorSheetState extends State<_LinkEditorSheet> {
                     icon: const Icon(Icons.link_off_rounded),
                     label: const Text('移除链接'),
                   ),
-                const Spacer(),
                 TextButton(
                   onPressed: () => Navigator.pop(context),
                   child: const Text('取消'),
                 ),
-                const SizedBox(width: 8),
                 FilledButton(onPressed: _save, child: const Text('完成')),
               ],
             ),
@@ -1979,6 +1981,9 @@ class _LiveDictationBar extends StatelessWidget {
       RealtimeDictationStatus.failed => service.errorMessage ?? '实时听写失败',
       _ => service.partialText.isEmpty ? '正在聆听…' : service.partialText,
     };
+    final useCompactFinish =
+        MediaQuery.sizeOf(context).width < 380 ||
+        MediaQuery.textScalerOf(context).scale(1) > 1.4;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(12, 9, 8, 9),
@@ -2026,14 +2031,21 @@ class _LiveDictationBar extends StatelessWidget {
             icon: const Icon(Icons.close_rounded, size: 20),
           ),
           if (onFinish != null)
-            FilledButton(
-              onPressed: onFinish,
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                minimumSize: const Size(0, 38),
+            if (useCompactFinish)
+              IconButton.filled(
+                tooltip: '完成听写',
+                onPressed: onFinish,
+                icon: const Icon(Icons.check_rounded, size: 20),
+              )
+            else
+              FilledButton(
+                onPressed: onFinish,
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  minimumSize: const Size(0, 38),
+                ),
+                child: const Text('完成'),
               ),
-              child: const Text('完成'),
-            ),
         ],
       ),
     );

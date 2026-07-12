@@ -57,7 +57,10 @@ void main() {
     expect(find.text('认证已取消'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
-    await tester.tap(find.byKey(const Key('app-lock-unlock-button')));
+    final unlockButton = find.byKey(const Key('app-lock-unlock-button'));
+    await tester.ensureVisible(unlockButton);
+    await tester.pumpAndSettle();
+    await tester.tap(unlockButton);
     await tester.pumpAndSettle();
 
     expect(find.text('应用已锁定'), findsNothing);

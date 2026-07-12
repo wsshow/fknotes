@@ -13,6 +13,12 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(2)),
+          child: child!,
+        ),
         home: Builder(
           builder: (context) => Scaffold(
             body: TextButton(
@@ -39,6 +45,7 @@ void main() {
     expect(find.byType(TranscriptEditorPage), findsOneWidget);
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.text('仅修改本地转写文字，原始录音不会改变'), findsOneWidget);
+    expect(tester.takeException(), isNull);
     expect(
       tester.getSize(find.byKey(const Key('transcript-editor-field'))).height,
       greaterThan(300),

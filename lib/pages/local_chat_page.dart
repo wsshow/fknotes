@@ -562,53 +562,59 @@ class _ModelBar extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => Material(
-    color: AppColors.surface,
-    child: InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: AppColors.line)),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              installed ? Icons.memory_rounded : Icons.download_outlined,
-              size: 18,
-              color: installed ? AppColors.moss : AppColors.muted,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                '$name · ${installed ? '已安装' : '未安装'}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12),
+  Widget build(BuildContext context) => Semantics(
+    button: onTap != null,
+    label: '$name，${installed ? '已安装' : '未安装'}，$roleLabel',
+    onTap: onTap,
+    excludeSemantics: true,
+    child: Material(
+      color: AppColors.surface,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: AppColors.line)),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                installed ? Icons.memory_rounded : Icons.download_outlined,
+                size: 18,
+                color: installed ? AppColors.moss : AppColors.muted,
               ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-              decoration: BoxDecoration(
-                color: AppColors.softGreen,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                roleLabel,
-                style: const TextStyle(
-                  color: AppColors.moss,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '$name · ${installed ? '已安装' : '未安装'}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12),
                 ),
               ),
-            ),
-            const SizedBox(width: 3),
-            const Icon(
-              Icons.chevron_right_rounded,
-              size: 19,
-              color: AppColors.muted,
-            ),
-          ],
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                decoration: BoxDecoration(
+                  color: AppColors.softGreen,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  roleLabel,
+                  style: const TextStyle(
+                    color: AppColors.moss,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 3),
+              const Icon(
+                Icons.chevron_right_rounded,
+                size: 19,
+                color: AppColors.muted,
+              ),
+            ],
+          ),
         ),
       ),
     ),
@@ -684,89 +690,102 @@ class _ChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = message.role == LocalChatRole.user;
-    return Align(
-      alignment: user ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.sizeOf(context).width * .84,
-        ),
-        margin: const EdgeInsets.only(bottom: 14),
-        padding: const EdgeInsets.fromLTRB(14, 11, 14, 10),
-        decoration: BoxDecoration(
-          color: user ? AppColors.moss : AppColors.surface,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(17),
-            topRight: const Radius.circular(17),
-            bottomLeft: Radius.circular(user ? 17 : 5),
-            bottomRight: Radius.circular(user ? 5 : 17),
+    return Semantics(
+      container: true,
+      liveRegion: generating,
+      label: user
+          ? '你的消息'
+          : generating
+          ? 'AI 正在回复'
+          : 'AI 回复',
+      child: Align(
+        alignment: user ? Alignment.centerRight : Alignment.centerLeft,
+        child: Container(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.sizeOf(context).width * .84,
           ),
-          border: user ? null : Border.all(color: AppColors.line),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (message.content.isEmpty && generating)
-              const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            else if (user)
-              SelectableText(
-                message.content,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  height: 1.55,
-                ),
-              )
-            else
-              FkMarkdownView(data: message.content, compact: true),
-            if (!user && message.content.isNotEmpty) ...[
-              const SizedBox(height: 7),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (message.status == LocalChatMessageStatus.stopped)
-                    const Padding(
-                      padding: EdgeInsets.only(right: 8),
-                      child: Text(
-                        '已停止',
-                        style: TextStyle(color: AppColors.muted, fontSize: 10),
+          margin: const EdgeInsets.only(bottom: 14),
+          padding: const EdgeInsets.fromLTRB(14, 11, 14, 10),
+          decoration: BoxDecoration(
+            color: user ? AppColors.moss : AppColors.surface,
+            borderRadius: BorderRadius.only(
+              topLeft: const Radius.circular(17),
+              topRight: const Radius.circular(17),
+              bottomLeft: Radius.circular(user ? 17 : 5),
+              bottomRight: Radius.circular(user ? 5 : 17),
+            ),
+            border: user ? null : Border.all(color: AppColors.line),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (message.content.isEmpty && generating)
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else if (user)
+                SelectableText(
+                  message.content,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    height: 1.55,
+                  ),
+                )
+              else
+                FkMarkdownView(data: message.content, compact: true),
+              if (!user && message.content.isNotEmpty) ...[
+                const SizedBox(height: 7),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (message.status == LocalChatMessageStatus.stopped)
+                      const Padding(
+                        padding: EdgeInsets.only(right: 8),
+                        child: Text(
+                          '已停止',
+                          style: TextStyle(
+                            color: AppColors.muted,
+                            fontSize: 10,
+                          ),
+                        ),
                       ),
-                    ),
-                  InkWell(
-                    onTap: () async {
-                      await Clipboard.setData(
-                        ClipboardData(text: message.content),
-                      );
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(
-                          context,
-                        ).showSnackBar(const SnackBar(content: Text('已复制回答')));
-                      }
-                    },
-                    child: const Padding(
-                      padding: EdgeInsets.all(3),
-                      child: Icon(
+                    IconButton(
+                      tooltip: '复制回答',
+                      onPressed: () async {
+                        await Clipboard.setData(
+                          ClipboardData(text: message.content),
+                        );
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('已复制回答')),
+                          );
+                        }
+                      },
+                      icon: const Icon(
                         Icons.copy_rounded,
-                        size: 15,
+                        size: 17,
                         color: AppColors.muted,
                       ),
                     ),
-                  ),
-                  if (generating)
-                    const Padding(
-                      padding: EdgeInsets.only(left: 8),
-                      child: Text(
-                        '正在生成…',
-                        style: TextStyle(color: AppColors.muted, fontSize: 10),
+                    if (generating)
+                      const Padding(
+                        padding: EdgeInsets.only(left: 8),
+                        child: Text(
+                          '正在生成…',
+                          style: TextStyle(
+                            color: AppColors.muted,
+                            fontSize: 10,
+                          ),
+                        ),
                       ),
-                    ),
-                ],
-              ),
+                  ],
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -948,9 +967,7 @@ class _SystemPromptSheetState extends State<_SystemPromptSheet> {
     final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
     final availableHeight =
         MediaQuery.sizeOf(context).height - keyboardInset - 32;
-    return AnimatedPadding(
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOutCubic,
+    return Padding(
       padding: EdgeInsets.only(bottom: keyboardInset),
       child: SafeArea(
         top: false,
@@ -991,7 +1008,11 @@ class _SystemPromptSheetState extends State<_SystemPromptSheet> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                Row(
+                OverflowBar(
+                  alignment: MainAxisAlignment.end,
+                  overflowAlignment: OverflowBarAlignment.end,
+                  spacing: 8,
+                  overflowSpacing: 8,
                   children: [
                     TextButton.icon(
                       onPressed: () {
@@ -1004,9 +1025,7 @@ class _SystemPromptSheetState extends State<_SystemPromptSheet> {
                       icon: const Icon(Icons.restore_rounded),
                       label: const Text('恢复默认'),
                     ),
-                    const Spacer(),
                     TextButton(onPressed: _dismiss, child: const Text('取消')),
-                    const SizedBox(width: 8),
                     FilledButton(
                       onPressed: () => _dismiss(_controller.text),
                       child: const Text('保存设定'),

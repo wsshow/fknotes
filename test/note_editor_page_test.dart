@@ -40,7 +40,7 @@ void main() {
     tester,
   ) async {
     _usePhoneViewport(tester);
-    await _pumpHomePage(tester);
+    await _pumpHomePage(tester, textScaler: const TextScaler.linear(2));
 
     await tester.tap(find.text('新建'));
     await tester.pumpAndSettle();
@@ -48,6 +48,7 @@ void main() {
     expect(find.text('拍照'), findsOneWidget);
     expect(find.text('拍照 OCR'), findsNothing);
     expect(find.text('图片'), findsWidgets);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('home opens the standalone local chat', (tester) async {
@@ -603,7 +604,10 @@ void _usePhoneViewport(WidgetTester tester) {
   addTearDown(tester.view.reset);
 }
 
-Future<void> _pumpHomePage(WidgetTester tester) async {
+Future<void> _pumpHomePage(
+  WidgetTester tester, {
+  TextScaler textScaler = TextScaler.noScaling,
+}) async {
   final appLock = AppLockController(
     preferencesStore: _DisabledAppLockPreferencesStore(),
     authenticator: _UnusedDeviceAuthenticator(),
@@ -617,7 +621,13 @@ Future<void> _pumpHomePage(WidgetTester tester) async {
         ChangeNotifierProvider.value(value: appLock),
         ChangeNotifierProvider(create: (_) => NoteProvider()),
       ],
-      child: const MaterialApp(home: HomePage()),
+      child: MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+          child: child!,
+        ),
+        home: const HomePage(),
+      ),
     ),
   );
 }

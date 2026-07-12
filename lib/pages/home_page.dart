@@ -236,7 +236,7 @@ class _HomePageState extends State<HomePage> {
       context: context,
       isScrollControlled: true,
       builder: (sheetContext) => SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 2, 20, 26),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -256,71 +256,72 @@ class _HomePageState extends State<HomePage> {
                 ).textTheme.bodyMedium?.copyWith(color: AppColors.muted),
               ),
               const SizedBox(height: 20),
-              GridView.count(
-                crossAxisCount: 4,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                mainAxisSpacing: 16,
-                crossAxisSpacing: 10,
-                childAspectRatio: .83,
-                children: [
-                  _CaptureAction(
-                    Icons.edit_note_rounded,
-                    '笔记',
-                    AppColors.moss,
-                    () {
-                      _afterSheetClose(sheetContext, _createTextNote);
-                    },
-                  ),
-                  _CaptureAction(
-                    Icons.camera_alt_rounded,
-                    '拍照',
-                    const Color(0xFF9B654E),
-                    () {
-                      _afterSheetClose(sheetContext, _takePhoto);
-                    },
-                  ),
-                  _CaptureAction(
-                    Icons.image_rounded,
-                    '图片',
-                    const Color(0xFF9B654E),
-                    () {
-                      _afterSheetClose(sheetContext, _pickImage);
-                    },
-                  ),
-                  _CaptureAction(
-                    Icons.mic_rounded,
-                    '录音',
-                    const Color(0xFFA66742),
-                    () {
-                      _afterSheetClose(sheetContext, _openRecorder);
-                    },
-                  ),
-                  _CaptureAction(
-                    Icons.audio_file_rounded,
-                    '音频',
-                    const Color(0xFFA66742),
-                    () {
-                      _afterSheetClose(sheetContext, _pickAudio);
-                    },
-                  ),
-                  _CaptureAction(
-                    Icons.video_file_rounded,
-                    '视频',
-                    const Color(0xFFA94F46),
-                    () {
-                      _afterSheetClose(sheetContext, _pickVideo);
-                    },
-                  ),
-                  _CaptureAction(
-                    Icons.upload_file_rounded,
-                    '文件',
-                    const Color(0xFF986047),
-                    () {
-                      _afterSheetClose(sheetContext, _pickDocument);
-                    },
-                  ),
-                ],
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final textScale = MediaQuery.textScalerOf(context).scale(1);
+                  final columns = constraints.maxWidth < 330 || textScale > 1.6
+                      ? 3
+                      : 4;
+                  const spacing = 10.0;
+                  final itemWidth =
+                      (constraints.maxWidth - spacing * (columns - 1)) /
+                      columns;
+                  return Wrap(
+                    spacing: spacing,
+                    runSpacing: 16,
+                    children: [
+                      _CaptureAction(
+                        Icons.edit_note_rounded,
+                        '笔记',
+                        AppColors.moss,
+                        () => _afterSheetClose(sheetContext, _createTextNote),
+                        width: itemWidth,
+                      ),
+                      _CaptureAction(
+                        Icons.camera_alt_rounded,
+                        '拍照',
+                        const Color(0xFF9B654E),
+                        () => _afterSheetClose(sheetContext, _takePhoto),
+                        width: itemWidth,
+                      ),
+                      _CaptureAction(
+                        Icons.image_rounded,
+                        '图片',
+                        const Color(0xFF9B654E),
+                        () => _afterSheetClose(sheetContext, _pickImage),
+                        width: itemWidth,
+                      ),
+                      _CaptureAction(
+                        Icons.mic_rounded,
+                        '录音',
+                        const Color(0xFFA66742),
+                        () => _afterSheetClose(sheetContext, _openRecorder),
+                        width: itemWidth,
+                      ),
+                      _CaptureAction(
+                        Icons.audio_file_rounded,
+                        '音频',
+                        const Color(0xFFA66742),
+                        () => _afterSheetClose(sheetContext, _pickAudio),
+                        width: itemWidth,
+                      ),
+                      _CaptureAction(
+                        Icons.video_file_rounded,
+                        '视频',
+                        const Color(0xFFA94F46),
+                        () => _afterSheetClose(sheetContext, _pickVideo),
+                        width: itemWidth,
+                      ),
+                      _CaptureAction(
+                        Icons.upload_file_rounded,
+                        '文件',
+                        const Color(0xFF986047),
+                        () => _afterSheetClose(sheetContext, _pickDocument),
+                        width: itemWidth,
+                      ),
+                    ],
+                  );
+                },
               ),
             ],
           ),
@@ -600,22 +601,28 @@ class _SearchButton extends StatelessWidget {
   final VoidCallback onTap;
   const _SearchButton({required this.onTap});
   @override
-  Widget build(BuildContext context) => Material(
-    color: AppColors.softAmber,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-    child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(15),
-      child: const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 15, vertical: 14),
-        child: Row(
-          children: [
-            Icon(Icons.search_rounded, color: AppColors.muted),
-            SizedBox(width: 12),
-            Expanded(
-              child: Text('搜索笔记', style: TextStyle(color: AppColors.muted)),
-            ),
-          ],
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: '搜索本地知识库',
+    onTap: onTap,
+    excludeSemantics: true,
+    child: Material(
+      color: AppColors.softAmber,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(15),
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 15, vertical: 14),
+          child: Row(
+            children: [
+              Icon(Icons.search_rounded, color: AppColors.muted),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text('搜索笔记', style: TextStyle(color: AppColors.muted)),
+              ),
+            ],
+          ),
         ),
       ),
     ),
@@ -626,49 +633,87 @@ class _LocalHero extends StatelessWidget {
   final NoteProvider provider;
   const _LocalHero({required this.provider});
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text('所有笔记', style: Theme.of(context).textTheme.headlineMedium),
-      const SizedBox(height: 18),
-      IntrinsicHeight(
-        child: Row(
-          children: [
-            _OverviewStat('${provider.activeEntries.length}', '条笔记'),
-            const VerticalDivider(width: 28),
-            _OverviewStat('${provider.attachmentCount}', '个附件'),
-            const VerticalDivider(width: 28),
-            const Expanded(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Icon(
-                    Icons.verified_user_outlined,
-                    size: 17,
-                    color: AppColors.moss,
-                  ),
-                  SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      '仅保存在本机',
-                      maxLines: 2,
-                      style: TextStyle(
-                        color: AppColors.muted,
-                        fontSize: 12,
-                        height: 1.25,
-                      ),
+  Widget build(BuildContext context) {
+    final adaptiveStats =
+        MediaQuery.sizeOf(context).width < 380 ||
+        MediaQuery.textScalerOf(context).scale(1) > 1.4;
+    final localOnly = const Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.verified_user_outlined, size: 17, color: AppColors.moss),
+        SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            '仅保存在本机',
+            maxLines: 2,
+            style: TextStyle(
+              color: AppColors.muted,
+              fontSize: 12,
+              height: 1.25,
+            ),
+          ),
+        ),
+      ],
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('所有笔记', style: Theme.of(context).textTheme.headlineMedium),
+        const SizedBox(height: 18),
+        if (adaptiveStats)
+          Wrap(
+            spacing: 24,
+            runSpacing: 14,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _OverviewStat('${provider.activeEntries.length}', '条笔记'),
+              _OverviewStat('${provider.attachmentCount}', '个附件'),
+              localOnly,
+            ],
+          )
+        else
+          IntrinsicHeight(
+            child: Row(
+              children: [
+                _OverviewStat('${provider.activeEntries.length}', '条笔记'),
+                const VerticalDivider(width: 28),
+                _OverviewStat('${provider.attachmentCount}', '个附件'),
+                const VerticalDivider(width: 28),
+                const Expanded(
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.verified_user_outlined,
+                          size: 17,
+                          color: AppColors.moss,
+                        ),
+                        SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            '仅保存在本机',
+                            maxLines: 2,
+                            style: TextStyle(
+                              color: AppColors.muted,
+                              fontSize: 12,
+                              height: 1.25,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
-      const SizedBox(height: 20),
-      const Divider(),
-    ],
-  );
+          ),
+        const SizedBox(height: 20),
+        const Divider(),
+      ],
+    );
+  }
 }
 
 class _OverviewStat extends StatelessWidget {
@@ -759,42 +804,44 @@ class _QuickActions extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 78,
-    child: Row(
-      children: [
-        Expanded(
-          child: _QuickAction(
-            icon: Icons.notes_rounded,
-            label: '笔记',
-            onTap: onCreateText,
+  Widget build(BuildContext context) => ConstrainedBox(
+    constraints: const BoxConstraints(minHeight: 78),
+    child: IntrinsicHeight(
+      child: Row(
+        children: [
+          Expanded(
+            child: _QuickAction(
+              icon: Icons.notes_rounded,
+              label: '笔记',
+              onTap: onCreateText,
+            ),
           ),
-        ),
-        const VerticalDivider(width: 1),
-        Expanded(
-          child: _QuickAction(
-            icon: Icons.image_outlined,
-            label: '图片',
-            onTap: onPickImage,
+          const VerticalDivider(width: 1),
+          Expanded(
+            child: _QuickAction(
+              icon: Icons.image_outlined,
+              label: '图片',
+              onTap: onPickImage,
+            ),
           ),
-        ),
-        const VerticalDivider(width: 1),
-        Expanded(
-          child: _QuickAction(
-            icon: Icons.mic_none_rounded,
-            label: '录音',
-            onTap: onRecordAudio,
+          const VerticalDivider(width: 1),
+          Expanded(
+            child: _QuickAction(
+              icon: Icons.mic_none_rounded,
+              label: '录音',
+              onTap: onRecordAudio,
+            ),
           ),
-        ),
-        const VerticalDivider(width: 1),
-        Expanded(
-          child: _QuickAction(
-            icon: Icons.description_outlined,
-            label: '文件',
-            onTap: onPickDocument,
+          const VerticalDivider(width: 1),
+          Expanded(
+            child: _QuickAction(
+              icon: Icons.description_outlined,
+              label: '文件',
+              onTap: onPickDocument,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     ),
   );
 }
@@ -810,26 +857,35 @@ class _QuickAction extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => Material(
-    color: Colors.transparent,
-    clipBehavior: Clip.antiAlias,
-    child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, color: AppColors.ink, size: 25),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            style: const TextStyle(
-              fontFamily: 'serif',
-              fontSize: 13,
-              color: AppColors.ink,
-            ),
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: '新建$label',
+    onTap: onTap,
+    excludeSemantics: true,
+    child: Material(
+      color: Colors.transparent,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: AppColors.ink, size: 25),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontFamily: 'serif',
+                  fontSize: 13,
+                  color: AppColors.ink,
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     ),
   );
@@ -921,46 +977,51 @@ class _LibraryTab extends StatelessWidget {
               ],
             ),
           ),
-          SizedBox(
-            height: 46,
-            child: ListView(
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 46),
+            child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              children: [
-                _ScopeChip(
-                  '全部',
-                  provider.scope == NoteScope.active,
-                  () => provider.setScope(NoteScope.active),
-                ),
-                _ScopeChip(
-                  '收藏',
-                  provider.scope == NoteScope.favorites,
-                  () => provider.setScope(NoteScope.favorites),
-                ),
-                _ScopeChip(
-                  '归档',
-                  provider.scope == NoteScope.archived,
-                  () => provider.setScope(NoteScope.archived),
-                ),
-                _ScopeChip(
-                  '回收站',
-                  provider.scope == NoteScope.trash,
-                  () => provider.setScope(NoteScope.trash),
-                ),
-              ],
+              child: Row(
+                children: [
+                  _ScopeChip(
+                    '全部',
+                    provider.scope == NoteScope.active,
+                    () => provider.setScope(NoteScope.active),
+                  ),
+                  _ScopeChip(
+                    '收藏',
+                    provider.scope == NoteScope.favorites,
+                    () => provider.setScope(NoteScope.favorites),
+                  ),
+                  _ScopeChip(
+                    '归档',
+                    provider.scope == NoteScope.archived,
+                    () => provider.setScope(NoteScope.archived),
+                  ),
+                  _ScopeChip(
+                    '回收站',
+                    provider.scope == NoteScope.trash,
+                    () => provider.setScope(NoteScope.trash),
+                  ),
+                ],
+              ),
             ),
           ),
           if (provider.scope == NoteScope.active ||
               provider.scope == NoteScope.favorites)
-            SizedBox(
-              height: 48,
-              child: ListView(
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                children: [
-                  _TypeChip(null, provider),
-                  for (final type in NoteType.values) _TypeChip(type, provider),
-                ],
+                child: Row(
+                  children: [
+                    _TypeChip(null, provider),
+                    for (final type in NoteType.values)
+                      _TypeChip(type, provider),
+                  ],
+                ),
               ),
             ),
           const SizedBox(height: 6),
@@ -1560,29 +1621,53 @@ class _CaptureAction extends StatelessWidget {
   final String label;
   final Color color;
   final VoidCallback onTap;
-  const _CaptureAction(this.icon, this.label, this.color, this.onTap);
+  final double width;
+  const _CaptureAction(
+    this.icon,
+    this.label,
+    this.color,
+    this.onTap, {
+    required this.width,
+  });
   @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(15),
-    child: Column(
-      children: [
-        Container(
-          width: 54,
-          height: 54,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: .12),
-            borderRadius: BorderRadius.circular(15),
+  Widget build(BuildContext context) => SizedBox(
+    width: width,
+    child: Semantics(
+      button: true,
+      label: '新建$label',
+      onTap: onTap,
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(15),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 54,
+                height: 54,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: .12),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: Icon(icon, color: color, size: 27),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                maxLines: 2,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
           ),
-          child: Icon(icon, color: color, size: 27),
         ),
-        const SizedBox(height: 8),
-        Text(
-          label,
-          maxLines: 1,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-        ),
-      ],
+      ),
     ),
   );
 }

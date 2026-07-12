@@ -361,11 +361,14 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
                             fontWeight: FontWeight.w700,
                           ),
                         ),
-                        Text(
-                          _statusText,
-                          style: const TextStyle(
-                            color: AppColors.muted,
-                            fontSize: 12,
+                        Semantics(
+                          liveRegion: true,
+                          child: Text(
+                            _statusText,
+                            style: const TextStyle(
+                              color: AppColors.muted,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
                       ],
@@ -413,7 +416,11 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
                 ),
               ],
               const SizedBox(height: 14),
-              Row(
+              OverflowBar(
+                alignment: MainAxisAlignment.end,
+                overflowAlignment: OverflowBarAlignment.end,
+                spacing: 8,
+                overflowSpacing: 8,
                 children: [
                   if (_generating)
                     TextButton.icon(
@@ -435,7 +442,6 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
                       onPressed: _retry,
                       icon: const Icon(Icons.refresh_rounded),
                     ),
-                  const Spacer(),
                   PopupMenuButton<NoteAssistantPlacement>(
                     key: const Key('note-assistant-use-result'),
                     enabled: canInsertNoteAssistantOutput(

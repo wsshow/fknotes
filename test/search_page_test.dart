@@ -41,4 +41,33 @@ void main() {
     expect(find.text('打开搜索'), findsOneWidget);
     expect(find.byType(SearchPage), findsNothing);
   });
+
+  testWidgets('search stays usable on a narrow screen with large text', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 568);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(2)),
+          child: child!,
+        ),
+        home: const SearchPage(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('搜索你的本地知识库'), findsOneWidget);
+    expect(find.text('对话'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    expect(
+      tester.getSize(find.widgetWithText(TextButton, '取消')).height,
+      greaterThanOrEqualTo(48),
+    );
+  });
 }

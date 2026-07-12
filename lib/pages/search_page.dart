@@ -109,30 +109,38 @@ class _SearchPageState extends State<SearchPage> {
               child: Row(
                 children: [
                   Expanded(
-                    child: SizedBox(
-                      height: 56,
-                      child: TextField(
-                        controller: _controller,
-                        focusNode: _focusNode,
-                        autofocus: true,
-                        textInputAction: TextInputAction.search,
-                        style: const TextStyle(
-                          fontFamily: 'serif',
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: '搜索你的本地知识库',
-                          prefixIcon: const Icon(Icons.search_rounded),
-                          suffixIcon: _query.isEmpty
-                              ? null
-                              : IconButton(
-                                  tooltip: '清空',
-                                  onPressed: _controller.clear,
-                                  icon: const Icon(Icons.close_rounded),
-                                ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            vertical: 14,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 56),
+                      child: Semantics(
+                        textField: true,
+                        label: '搜索本地知识库',
+                        child: TextField(
+                          controller: _controller,
+                          focusNode: _focusNode,
+                          autofocus: true,
+                          textInputAction: TextInputAction.search,
+                          onSubmitted: (value) {
+                            final query = value.trim();
+                            if (query.isNotEmpty) _search(query);
+                          },
+                          style: const TextStyle(
+                            fontFamily: 'serif',
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          decoration: InputDecoration(
+                            hintText: '搜索你的本地知识库',
+                            prefixIcon: const Icon(Icons.search_rounded),
+                            suffixIcon: _query.isEmpty
+                                ? null
+                                : IconButton(
+                                    tooltip: '清空',
+                                    onPressed: _controller.clear,
+                                    icon: const Icon(Icons.close_rounded),
+                                  ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 14,
+                            ),
                           ),
                         ),
                       ),
@@ -155,27 +163,29 @@ class _SearchPageState extends State<SearchPage> {
                 ],
               ),
             ),
-            SizedBox(
-              height: 48,
-              child: ListView(
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                children: [
-                  for (final filter in LocalSearchFilter.values)
-                    _FilterChip(
-                      label: filter.label,
-                      icon: switch (filter) {
-                        LocalSearchFilter.all => null,
-                        LocalSearchFilter.notes => Icons.note_outlined,
-                        LocalSearchFilter.attachments =>
-                          Icons.attach_file_rounded,
-                        LocalSearchFilter.conversations =>
-                          Icons.chat_bubble_outline_rounded,
-                      },
-                      selected: _filter == filter,
-                      onTap: () => setState(() => _filter = filter),
-                    ),
-                ],
+                child: Row(
+                  children: [
+                    for (final filter in LocalSearchFilter.values)
+                      _FilterChip(
+                        label: filter.label,
+                        icon: switch (filter) {
+                          LocalSearchFilter.all => null,
+                          LocalSearchFilter.notes => Icons.note_outlined,
+                          LocalSearchFilter.attachments =>
+                            Icons.attach_file_rounded,
+                          LocalSearchFilter.conversations =>
+                            Icons.chat_bubble_outline_rounded,
+                        },
+                        selected: _filter == filter,
+                        onTap: () => setState(() => _filter = filter),
+                      ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 4),
@@ -263,13 +273,16 @@ class _SearchPageState extends State<SearchPage> {
       separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         if (index == 0) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Text(
-              '${results.length} 条匹配',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+          return Semantics(
+            liveRegion: true,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                '${results.length} 条匹配',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+              ),
             ),
           );
         }
@@ -384,76 +397,90 @@ class _SearchHitCard extends StatelessWidget {
     final color = note == null
         ? AppColors.moss
         : NoteCard.colorForType(note.primaryType);
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(15),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: .1),
-                      borderRadius: BorderRadius.circular(11),
-                    ),
-                    child: Icon(
-                      note == null
-                          ? Icons.chat_bubble_outline_rounded
-                          : NoteCard.iconForType(note.primaryType),
-                      color: color,
-                      size: 19,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      result.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
+    final semanticLabel = [
+      result.title,
+      result.sourceLabel,
+      if (result.snippet.isNotEmpty) result.snippet,
+    ].join('，');
+    return Semantics(
+      button: true,
+      label: semanticLabel,
+      onTap: onTap,
+      excludeSemantics: true,
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(15),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: .1),
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      child: Icon(
+                        note == null
+                            ? Icons.chat_bubble_outline_rounded
+                            : NoteCard.iconForType(note.primaryType),
+                        color: color,
+                        size: 19,
                       ),
                     ),
-                  ),
-                  const Icon(
-                    Icons.chevron_right_rounded,
-                    color: AppColors.muted,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        result.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const Icon(
+                      Icons.chevron_right_rounded,
+                      color: AppColors.muted,
+                    ),
+                  ],
+                ),
+                if (result.snippet.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    result.snippet,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: AppColors.muted, height: 1.5),
                   ),
                 ],
-              ),
-              if (result.snippet.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  result.snippet,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: AppColors.muted, height: 1.5),
-                ),
-              ],
-              const SizedBox(height: 13),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                decoration: BoxDecoration(
-                  color: AppColors.softGreen,
-                  borderRadius: BorderRadius.circular(9),
-                ),
-                child: Text(
-                  result.sourceLabel,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.moss,
-                    fontWeight: FontWeight.w700,
+                const SizedBox(height: 13),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.softGreen,
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Text(
+                    result.sourceLabel,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.moss,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
