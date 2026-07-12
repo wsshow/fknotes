@@ -930,6 +930,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
   final List<_EditorSnapshot> _undoStack = [];
   final List<_EditorSnapshot> _redoStack = [];
   Timer? _historyGroupTimer;
+  Timer? _documentSyncTimer;
   bool _historyGroupOpen = false;
   bool _restoringHistory = false;
   bool _dictating = false;
@@ -975,7 +976,9 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
       ),
       focusNode: FocusNode(),
     );
-    block.controller.addListener(_syncDocument);
+    block.controller.addListener(
+      () => _syncDocument(deferForLargeDocument: true),
+    );
     block.focusNode.addListener(() {
       if (!block.focusNode.hasFocus || !mounted) return;
       final index = _blocks.indexOf(block);
@@ -1021,9 +1024,35 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
       ),
   ];
 
-  void _syncDocument() {
+  bool get _isLargeDocument {
+    if (_blocks.length >= 80) return true;
+    var characters = 0;
+    for (final block in _blocks) {
+      characters += block.controller.visibleTextValue.length;
+      if (characters >= 20000) return true;
+    }
+    return false;
+  }
+
+  void _syncDocument({bool deferForLargeDocument = false}) {
     _refreshActiveFormat();
     if (_syncing) return;
+    if (deferForLargeDocument && _isLargeDocument) {
+      _documentSyncTimer?.cancel();
+      _documentSyncTimer = Timer(
+        const Duration(milliseconds: 120),
+        _performDocumentSync,
+      );
+      return;
+    }
+    _documentSyncTimer?.cancel();
+    _documentSyncTimer = null;
+    _performDocumentSync();
+  }
+
+  void _performDocumentSync() {
+    if (_syncing) return;
+    _documentSyncTimer = null;
     final text = NoteBlockCodec.encode(_document);
     if (widget.controller.text != text) {
       widget.controller.value = TextEditingValue(
@@ -1037,6 +1066,14 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
       _lastRichDocument = richDocument;
       widget.onRichContentChanged?.call(richDocument);
     }
+  }
+
+  /// Flushes a pending large-document update before persistence or mode changes.
+  String flushPendingChanges() {
+    _documentSyncTimer?.cancel();
+    _documentSyncTimer = null;
+    _performDocumentSync();
+    return _lastRichDocument;
   }
 
   _EditorSnapshot _createSnapshot(String richDocument) {
@@ -1095,6 +1132,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
   }
 
   void undo() {
+    if (_documentSyncTimer != null) flushPendingChanges();
     if (_undoStack.isEmpty) return;
     HapticFeedback.selectionClick();
     _closeHistoryGroup();
@@ -1104,6 +1142,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
   }
 
   void redo() {
+    if (_documentSyncTimer != null) flushPendingChanges();
     if (_redoStack.isEmpty) return;
     HapticFeedback.selectionClick();
     _closeHistoryGroup();
@@ -1423,6 +1462,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
 
   void finishDictation({required bool keepText}) {
     if (!_dictating) return;
+    if (_documentSyncTimer != null) flushPendingChanges();
     final before = _dictationSnapshot;
     _dictating = false;
     _dictationSnapshot = null;
@@ -1998,6 +2038,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
   @override
   void dispose() {
     _historyGroupTimer?.cancel();
+    _documentSyncTimer?.cancel();
     activeType.dispose();
     activeFormat.dispose();
     historyState.dispose();

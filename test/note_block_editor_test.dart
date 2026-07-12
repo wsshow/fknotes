@@ -1099,4 +1099,45 @@ print('ok');
 
     expect(controller.text, '不要丢失');
   });
+
+  testWidgets('large documents coalesce typing and flush without data loss', (
+    tester,
+  ) async {
+    final blocks = List.generate(
+      80,
+      (index) => NoteBlockData(NoteBlockType.paragraph, '第 $index 段内容'),
+    );
+    final original = NoteBlockCodec.encode(blocks);
+    final controller = TextEditingController(text: original);
+    final editorKey = GlobalKey<NoteBlockEditorState>();
+    var richUpdates = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: NoteBlockEditor(
+              key: editorKey,
+              controller: controller,
+              initialRichContent: NoteRichDocumentCodec.encode(blocks),
+              hintText: '开始记录',
+              onRichContentChanged: (_) => richUpdates++,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField).first, '已修改');
+    expect(controller.text, original);
+    expect(richUpdates, 0);
+
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(controller.text, startsWith('已修改'));
+    expect(richUpdates, 1);
+
+    await tester.enterText(find.byType(TextField).first, '再次修改');
+    final rich = editorKey.currentState!.flushPendingChanges();
+    expect(controller.text, startsWith('再次修改'));
+    expect(NoteRichDocumentCodec.tryDecode(rich)!.first.text, '再次修改');
+  });
 }

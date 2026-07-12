@@ -91,6 +91,8 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       ).showSnackBar(const SnackBar(content: Text('请先完成或取消实时听写')));
       return;
     }
+    _richContent =
+        _blockEditorKey.currentState?.flushPendingChanges() ?? _richContent;
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() => _previewingMarkdown = !_previewingMarkdown);
   }
@@ -550,6 +552,8 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       _saveAgain = true;
       return false;
     }
+    _richContent =
+        _blockEditorKey.currentState?.flushPendingChanges() ?? _richContent;
     final title = _title.text.trim();
     final content = _content.text;
     if (title.isEmpty && content.trim().isEmpty && _attachments.isEmpty) {
