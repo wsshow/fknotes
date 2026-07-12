@@ -569,7 +569,8 @@ class NoteBlockCodec {
           if (cell.tag != 'th' && cell.tag != 'td') continue;
           cells.add(_escapeTableCell(cell.textContent));
           if (rows.isEmpty) {
-            final alignment = cell.attributes['style'] ?? '';
+            final alignment =
+                cell.attributes['align'] ?? cell.attributes['style'] ?? '';
             alignments.add(
               alignment.contains('center')
                   ? ':---:'
@@ -784,6 +785,109 @@ class _InlineAccumulator {
   }
 
   _InlineData finish() => _InlineData(_text.toString(), _styles);
+}
+
+enum MarkdownTableAlignment { left, center, right }
+
+class MarkdownTableData {
+  final List<String> headers;
+  final List<List<String>> rows;
+  final List<MarkdownTableAlignment> alignments;
+
+  const MarkdownTableData({
+    required this.headers,
+    required this.rows,
+    required this.alignments,
+  });
+
+  static MarkdownTableData? tryParse(String source) {
+    final lines = source
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+    if (lines.length < 2) return null;
+    final headers = _splitRow(lines[0]);
+    final separators = _splitRow(lines[1]);
+    if (headers.isEmpty || separators.length != headers.length) return null;
+    final alignments = <MarkdownTableAlignment>[];
+    for (final separator in separators) {
+      final value = separator.trim();
+      if (!RegExp(r'^:?-{3,}:?$').hasMatch(value)) return null;
+      alignments.add(
+        value.startsWith(':') && value.endsWith(':')
+            ? MarkdownTableAlignment.center
+            : value.endsWith(':')
+            ? MarkdownTableAlignment.right
+            : MarkdownTableAlignment.left,
+      );
+    }
+    final rows = <List<String>>[];
+    for (final line in lines.skip(2)) {
+      final cells = _splitRow(line);
+      rows.add(
+        List.generate(
+          headers.length,
+          (index) => index < cells.length ? cells[index] : '',
+        ),
+      );
+    }
+    return MarkdownTableData(
+      headers: headers,
+      rows: rows,
+      alignments: alignments,
+    );
+  }
+
+  String encode() {
+    final width = headers.length;
+    String row(List<String> cells) =>
+        '| ${List.generate(width, (index) => _escapeCell(index < cells.length ? cells[index] : '')).join(' | ')} |';
+    final separators = List.generate(width, (index) {
+      final alignment = index < alignments.length
+          ? alignments[index]
+          : MarkdownTableAlignment.left;
+      return switch (alignment) {
+        MarkdownTableAlignment.left => ':---',
+        MarkdownTableAlignment.center => ':---:',
+        MarkdownTableAlignment.right => '---:',
+      };
+    });
+    return [row(headers), row(separators), ...rows.map(row)].join('\n');
+  }
+
+  static List<String> _splitRow(String source) {
+    var value = source.trim();
+    if (value.startsWith('|')) value = value.substring(1);
+    if (value.endsWith('|') && !value.endsWith(r'\|')) {
+      value = value.substring(0, value.length - 1);
+    }
+    final cells = <String>[];
+    final current = StringBuffer();
+    var escaped = false;
+    for (final rune in value.runes) {
+      final character = String.fromCharCode(rune);
+      if (escaped) {
+        current.write(character);
+        escaped = false;
+      } else if (character == r'\') {
+        escaped = true;
+      } else if (character == '|') {
+        cells.add(current.toString().trim());
+        current.clear();
+      } else {
+        current.write(character);
+      }
+    }
+    if (escaped) current.write(r'\');
+    cells.add(current.toString().trim());
+    return cells;
+  }
+
+  static String _escapeCell(String value) => value
+      .replaceAll(r'\', r'\\')
+      .replaceAll('|', r'\|')
+      .replaceAll('\n', '<br>');
 }
 
 class NoteBlockEditor extends StatefulWidget {
@@ -1926,6 +2030,9 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     if (block.type == NoteBlockType.attachment) {
       return _buildAttachmentReference(index, block);
     }
+    if (block.type == NoteBlockType.rawMarkdown) {
+      return _buildTableBlock(block);
+    }
     if (block.type == NoteBlockType.divider) {
       return Semantics(
         label: '分割线',
@@ -2070,6 +2177,104 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
         ],
       ),
     );
+  }
+
+  Widget _buildTableBlock(_EditableBlock block) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.softBlue.withValues(alpha: .52),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 6, 0),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.table_chart_outlined,
+                  size: 18,
+                  color: AppColors.coral,
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Markdown 表格',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () => _editMarkdownTable(block),
+                  icon: const Icon(Icons.grid_on_rounded, size: 17),
+                  label: const Text('编辑表格'),
+                ),
+              ],
+            ),
+          ),
+          Focus(
+            canRequestFocus: false,
+            onKeyEvent: (_, event) => _handleBlockKeyEvent(block, event),
+            child: TextField(
+              controller: block.controller,
+              focusNode: block.focusNode,
+              contextMenuBuilder: _buildBlockContextMenu,
+              inputFormatters: [
+                _BlockInputFormatter(
+                  onNewline: (selection) => _splitBlock(block, selection),
+                  onBackspaceAtStart: () => _backspaceAtStart(block),
+                  allowNewlines: true,
+                ),
+              ],
+              maxLines: null,
+              keyboardType: TextInputType.multiline,
+              textInputAction: TextInputAction.newline,
+              cursorColor: AppColors.coral,
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 14,
+                height: 1.5,
+                color: AppColors.ink,
+              ),
+              decoration: const InputDecoration(
+                isDense: true,
+                filled: false,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                contentPadding: EdgeInsets.fromLTRB(12, 6, 12, 12),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _editMarkdownTable(_EditableBlock block) async {
+    final table = MarkdownTableData.tryParse(block.controller.visibleTextValue);
+    if (table == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('表格语法不完整，请先检查 Markdown 原文')));
+      return;
+    }
+    final result = await showModalBottomSheet<MarkdownTableData>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _MarkdownTableEditorSheet(initial: table),
+    );
+    if (result == null || !mounted || !_blocks.contains(block)) return;
+    _beginDiscreteChange();
+    _syncing = true;
+    block.controller.replaceVisibleText(result.encode(), const []);
+    _syncing = false;
+    _syncDocument();
+    _refocus(block);
+    _endDiscreteChange();
   }
 
   Widget _buildAttachmentReference(int index, _EditableBlock block) {
@@ -2238,6 +2443,303 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
       _ => const SizedBox.shrink(),
     };
   }
+}
+
+class _MarkdownTableEditorSheet extends StatefulWidget {
+  final MarkdownTableData initial;
+
+  const _MarkdownTableEditorSheet({required this.initial});
+
+  @override
+  State<_MarkdownTableEditorSheet> createState() =>
+      _MarkdownTableEditorSheetState();
+}
+
+class _MarkdownTableEditorSheetState extends State<_MarkdownTableEditorSheet> {
+  late final List<List<TextEditingController>> _cells;
+  late final List<MarkdownTableAlignment> _alignments;
+
+  @override
+  void initState() {
+    super.initState();
+    _cells = [
+      [
+        for (final value in widget.initial.headers)
+          TextEditingController(text: value),
+      ],
+      for (final row in widget.initial.rows)
+        [for (final value in row) TextEditingController(text: value)],
+    ];
+    _alignments = [...widget.initial.alignments];
+  }
+
+  @override
+  void dispose() {
+    for (final row in _cells) {
+      for (final controller in row) {
+        controller.dispose();
+      }
+    }
+    super.dispose();
+  }
+
+  void _addRow() => setState(() {
+    _cells.add(
+      List.generate(_cells.first.length, (_) => TextEditingController()),
+    );
+  });
+
+  void _removeRow(int index) => setState(() {
+    final removed = _cells.removeAt(index);
+    for (final controller in removed) {
+      controller.dispose();
+    }
+  });
+
+  void _addColumn() => setState(() {
+    for (final row in _cells) {
+      row.add(TextEditingController());
+    }
+    _alignments.add(MarkdownTableAlignment.left);
+  });
+
+  void _removeColumn(int index) => setState(() {
+    if (_cells.first.length <= 1) return;
+    for (final row in _cells) {
+      row.removeAt(index).dispose();
+    }
+    _alignments.removeAt(index);
+  });
+
+  void _finish() {
+    Navigator.pop(
+      context,
+      MarkdownTableData(
+        headers: _cells.first.map((cell) => cell.text.trim()).toList(),
+        rows: [
+          for (final row in _cells.skip(1))
+            row.map((cell) => cell.text.trim()).toList(),
+        ],
+        alignments: [..._alignments],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 180),
+      padding: EdgeInsets.only(bottom: keyboardInset),
+      child: FractionallySizedBox(
+        heightFactor: .82,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '编辑表格',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        SizedBox(height: 3),
+                        Text(
+                          '表头、对齐和单元格会同步保存为标准 GFM 表格。',
+                          style: TextStyle(color: AppColors.muted),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: '添加列',
+                    onPressed: _addColumn,
+                    icon: const Icon(Icons.view_column_outlined),
+                  ),
+                  IconButton(
+                    key: const Key('markdown-table-add-row'),
+                    tooltip: '添加行',
+                    onPressed: _addRow,
+                    icon: const Icon(Icons.table_rows_outlined),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(width: 38),
+                            for (
+                              var column = 0;
+                              column < _cells.first.length;
+                              column++
+                            )
+                              _TableHeaderCell(
+                                controller: _cells.first[column],
+                                alignment: _alignments[column],
+                                canRemove: _cells.first.length > 1,
+                                onAlignmentChanged: (value) =>
+                                    setState(() => _alignments[column] = value),
+                                onRemove: () => _removeColumn(column),
+                              ),
+                          ],
+                        ),
+                        for (var row = 1; row < _cells.length; row++)
+                          Row(
+                            children: [
+                              SizedBox(
+                                width: 38,
+                                child: IconButton(
+                                  tooltip: '删除第 $row 行',
+                                  onPressed: () => _removeRow(row),
+                                  icon: const Icon(
+                                    Icons.remove_circle_outline_rounded,
+                                    size: 19,
+                                  ),
+                                ),
+                              ),
+                              for (final controller in _cells[row])
+                                _TableBodyCell(controller: controller),
+                            ],
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _addRow,
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('添加一行'),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('取消'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    key: const Key('markdown-table-save'),
+                    onPressed: _finish,
+                    child: const Text('保存表格'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TableHeaderCell extends StatelessWidget {
+  final TextEditingController controller;
+  final MarkdownTableAlignment alignment;
+  final bool canRemove;
+  final ValueChanged<MarkdownTableAlignment> onAlignmentChanged;
+  final VoidCallback onRemove;
+
+  const _TableHeaderCell({
+    required this.controller,
+    required this.alignment,
+    required this.canRemove,
+    required this.onAlignmentChanged,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 168,
+    padding: const EdgeInsets.all(8),
+    decoration: BoxDecoration(
+      color: AppColors.softGreen,
+      border: Border.all(color: AppColors.line),
+    ),
+    child: Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: controller,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  hintText: '表头',
+                ),
+              ),
+            ),
+            if (canRemove)
+              IconButton(
+                tooltip: '删除列',
+                onPressed: onRemove,
+                icon: const Icon(Icons.close_rounded, size: 18),
+              ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        DropdownButton<MarkdownTableAlignment>(
+          value: alignment,
+          isExpanded: true,
+          underline: const SizedBox.shrink(),
+          onChanged: (value) {
+            if (value != null) onAlignmentChanged(value);
+          },
+          items: const [
+            DropdownMenuItem(
+              value: MarkdownTableAlignment.left,
+              child: Text('左对齐'),
+            ),
+            DropdownMenuItem(
+              value: MarkdownTableAlignment.center,
+              child: Text('居中'),
+            ),
+            DropdownMenuItem(
+              value: MarkdownTableAlignment.right,
+              child: Text('右对齐'),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
+class _TableBodyCell extends StatelessWidget {
+  final TextEditingController controller;
+
+  const _TableBodyCell({required this.controller});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 168,
+    padding: const EdgeInsets.all(8),
+    decoration: BoxDecoration(border: Border.all(color: AppColors.line)),
+    child: TextField(
+      controller: controller,
+      minLines: 1,
+      maxLines: 3,
+      decoration: const InputDecoration(isDense: true, hintText: '内容'),
+    ),
+  );
 }
 
 class _BlockTextEditingController extends TextEditingController {

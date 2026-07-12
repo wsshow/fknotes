@@ -69,6 +69,23 @@ print('ok');
     expect(NoteBlockCodec.structurallyMatches(blocks, encoded), isTrue);
   });
 
+  test('Markdown table data preserves cells, escaping and alignment', () {
+    final table = MarkdownTableData.tryParse(
+      '| 名称 | 说明 |\n| :--- | ---: |\n| FKNotes | 本地 \\| 私密 |',
+    )!;
+
+    expect(table.headers, ['名称', '说明']);
+    expect(table.rows.single, ['FKNotes', '本地 | 私密']);
+    expect(table.alignments, [
+      MarkdownTableAlignment.left,
+      MarkdownTableAlignment.right,
+    ]);
+    expect(
+      table.encode(),
+      '| 名称 | 说明 |\n| :--- | ---: |\n| FKNotes | 本地 \\| 私密 |',
+    );
+  });
+
   test('standard GFM markers reopen as semantic block types', () {
     final blocks = NoteBlockCodec.decode('- 条目\n\n1. 顺序\n\n- [ ] 待办\n\n> 引用');
 
@@ -555,6 +572,37 @@ print('ok');
     await tester.pumpWidget(app(const []));
     await tester.pump();
     expect(find.text('附件已移除'), findsOneWidget);
+  });
+
+  testWidgets('table block offers structured row and cell editing', (
+    tester,
+  ) async {
+    final controller = TextEditingController(
+      text: '| 项目 | 状态 |\n| :--- | ---: |\n| 基础 | 完成 |',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(controller: controller, hintText: '开始记录'),
+        ),
+      ),
+    );
+
+    expect(find.text('Markdown 表格'), findsOneWidget);
+    await tester.tap(find.text('编辑表格'));
+    await tester.pumpAndSettle();
+    expect(find.text('表头、对齐和单元格会同步保存为标准 GFM 表格。'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('markdown-table-add-row')));
+    await tester.pump();
+    final bodyFields = find.widgetWithText(TextField, '内容');
+    expect(bodyFields, findsNWidgets(4));
+    await tester.enterText(bodyFields.last, '新增');
+    await tester.tap(find.byKey(const Key('markdown-table-save')));
+    await tester.pumpAndSettle();
+
+    expect(controller.text, contains('|  | 新增 |'));
+    expect(controller.text, contains('| :--- | ---: |'));
   });
 
   testWidgets('standard divider syntax renders as a real divider', (

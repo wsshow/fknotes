@@ -179,6 +179,40 @@ void main() {
     expect(find.text('24'), findsOneWidget);
   });
 
+  testWidgets('Markdown preview renders the note and restores editing', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final entry = NoteEntry(
+      type: NoteType.text,
+      title: '预览测试',
+      content: '# 标题\n\n**重点**\n\n| 项目 | 状态 |\n| --- | --- |\n| 基础 | 完成 |',
+      createdAt: DateTime(2026),
+      updatedAt: DateTime(2026),
+    );
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => NoteProvider(),
+        child: MaterialApp(home: NoteEditorPage(existingEntry: entry)),
+      ),
+    );
+
+    expect(find.byType(NoteBlockEditor), findsOneWidget);
+    await tester.tap(find.byTooltip('预览排版'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('note-markdown-preview-body')), findsOneWidget);
+    expect(find.byType(NoteBlockEditor), findsNothing);
+    expect(find.text('重点'), findsOneWidget);
+    expect(find.text('**重点**'), findsNothing);
+    expect(find.text('项目'), findsOneWidget);
+    expect(find.byTooltip('继续编辑'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('继续编辑'));
+    await tester.pumpAndSettle();
+    expect(find.byType(NoteBlockEditor), findsOneWidget);
+  });
+
   testWidgets('editor exposes the local assistant action', (tester) async {
     _usePhoneViewport(tester);
     await tester.pumpWidget(

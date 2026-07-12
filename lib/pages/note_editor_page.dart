@@ -22,6 +22,7 @@ import '../services/video_import_service.dart';
 import '../utils/markdown_text.dart';
 import '../widgets/app_popup_menu.dart';
 import '../widgets/editor_context_menu.dart';
+import '../widgets/fk_markdown_view.dart';
 import '../widgets/note_assistant_sheet.dart';
 import '../widgets/note_block_editor.dart';
 import '../widgets/note_card.dart';
@@ -74,6 +75,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
   bool _recoveringDictationFailure = false;
   bool _dictationOperationPending = false;
   bool _showDictationDiagnostics = false;
+  bool _previewingMarkdown = false;
   bool _dictationDiagnosticsCollapsed = false;
   double _dictationDiagnosticsTop = 72;
   double _dictationDiagnosticsLeft = 12;
@@ -81,6 +83,17 @@ class _NoteEditorPageState extends State<NoteEditorPage>
   double _dictationDiagnosticsHeight = 380;
 
   bool get _isEditing => _entry != null;
+
+  void _toggleMarkdownPreview() {
+    if (_dictation.isActive) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请先完成或取消实时听写')));
+      return;
+    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _previewingMarkdown = !_previewingMarkdown);
+  }
 
   @override
   void initState() {
@@ -935,7 +948,6 @@ class _NoteEditorPageState extends State<NoteEditorPage>
             icon: const Icon(Icons.close_rounded),
           ),
           title: Row(
-            mainAxisSize: MainAxisSize.min,
             children: [
               Container(
                 width: 8,
@@ -946,37 +958,53 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                 ),
               ),
               const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _isEditing ? '编辑笔记' : '新笔记',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  ValueListenableBuilder<TextEditingValue>(
-                    valueListenable: _content,
-                    builder: (context, value, child) => Text(
-                      '${_saving
-                          ? '正在保存…'
-                          : _changed
-                          ? '本地草稿'
-                          : '已保存在本机'} · '
-                      '${NoteBlockCodec.visibleCharacterCount(value.text)} 字',
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _isEditing ? '编辑笔记' : '新笔记',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 10,
-                        color: AppColors.muted,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                  ),
-                ],
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: _content,
+                      builder: (context, value, child) => Text(
+                        '${_saving
+                            ? '正在保存…'
+                            : _changed
+                            ? '本地草稿'
+                            : '已保存在本机'} · '
+                        '${NoteBlockCodec.visibleCharacterCount(value.text)} 字',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: AppColors.muted,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
           actions: [
+            IconButton(
+              key: const Key('note-markdown-preview'),
+              tooltip: _previewingMarkdown ? '继续编辑' : '预览排版',
+              onPressed: _toggleMarkdownPreview,
+              icon: Icon(
+                _previewingMarkdown
+                    ? Icons.edit_rounded
+                    : Icons.visibility_outlined,
+              ),
+            ),
             IconButton(
               key: const Key('note-read-aloud'),
               tooltip: _readAloud.isActive ? '停止朗读' : '朗读笔记',
@@ -1042,7 +1070,9 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                       child: GestureDetector(
                         key: const Key('note-editor-scroll-surface'),
                         behavior: HitTestBehavior.translucent,
-                        onTap: () => _blockEditorKey.currentState?.focusAtEnd(),
+                        onTap: _previewingMarkdown
+                            ? null
+                            : () => _blockEditorKey.currentState?.focusAtEnd(),
                         child: SingleChildScrollView(
                           padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
                           child: Column(
@@ -1170,88 +1200,111 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                                 padding: EdgeInsets.symmetric(vertical: 18),
                                 child: Divider(),
                               ),
-                              NoteBlockEditor(
-                                key: _blockEditorKey,
-                                controller: _content,
-                                initialRichContent: _richContent,
-                                onRichContentChanged: _onRichContentChanged,
-                                attachments: _attachments,
-                                onOpenAttachment: _openAttachment,
-                                minLines: hasAttachmentContent ? 10 : 16,
-                                hintText: hasAttachmentContent
-                                    ? '添加说明、想法或摘要…'
-                                    : '开始记录…',
-                              ),
+                              if (_previewingMarkdown)
+                                ConstrainedBox(
+                                  key: const Key('note-markdown-preview-body'),
+                                  constraints: BoxConstraints(
+                                    minHeight:
+                                        (hasAttachmentContent ? 10 : 16) * 27,
+                                  ),
+                                  child: _content.text.trim().isEmpty
+                                      ? const Align(
+                                          alignment: Alignment.topLeft,
+                                          child: Text(
+                                            '还没有可预览的内容',
+                                            style: TextStyle(
+                                              color: AppColors.muted,
+                                            ),
+                                          ),
+                                        )
+                                      : FkMarkdownView(data: _content.text),
+                                )
+                              else
+                                NoteBlockEditor(
+                                  key: _blockEditorKey,
+                                  controller: _content,
+                                  initialRichContent: _richContent,
+                                  onRichContentChanged: _onRichContentChanged,
+                                  attachments: _attachments,
+                                  onOpenAttachment: _openAttachment,
+                                  minLines: hasAttachmentContent ? 10 : 16,
+                                  hintText: hasAttachmentContent
+                                      ? '添加说明、想法或摘要…'
+                                      : '开始记录…',
+                                ),
                             ],
                           ),
                         ),
                       ),
                     ),
-                    Container(
-                      decoration: const BoxDecoration(
-                        color: AppColors.surface,
-                        border: Border(top: BorderSide(color: AppColors.line)),
-                      ),
-                      padding: const EdgeInsets.fromLTRB(12, 9, 12, 10),
-                      child: TextFieldTapRegion(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (_dictation.isActive ||
-                                _dictation.status ==
-                                    RealtimeDictationStatus.failed)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 8),
-                                child: _LiveDictationBar(
-                                  service: _dictation,
-                                  onCancel: _cancelDictation,
-                                  onShowDiagnostics: kDebugMode
-                                      ? () => setState(
-                                          () =>
-                                              _showDictationDiagnostics = true,
-                                        )
-                                      : null,
-                                  onFinish:
-                                      _dictation.status ==
-                                          RealtimeDictationStatus.listening
-                                      ? _stopDictation
-                                      : null,
-                                ),
-                              ),
-                            Row(
-                              children: [
-                                IconButton.filled(
-                                  tooltip: '添加图片、录音或文件',
-                                  onPressed: _importing || _dictation.isActive
-                                      ? null
-                                      : _showAddContentSheet,
-                                  icon: _importing
-                                      ? const SizedBox.square(
-                                          dimension: 18,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                          ),
-                                        )
-                                      : const Icon(Icons.add_rounded),
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: _ScrollableEditorToolbar(
-                                    child: _EditorToolbar(
-                                      editorKey: _blockEditorKey,
-                                      onReferenceAttachment:
-                                          _showAttachmentReferenceSheet,
-                                      onDictation: _toggleDictation,
-                                      dictationStatus: _dictation.status,
-                                    ),
+                    if (!_previewingMarkdown)
+                      Container(
+                        decoration: const BoxDecoration(
+                          color: AppColors.surface,
+                          border: Border(
+                            top: BorderSide(color: AppColors.line),
+                          ),
+                        ),
+                        padding: const EdgeInsets.fromLTRB(12, 9, 12, 10),
+                        child: TextFieldTapRegion(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (_dictation.isActive ||
+                                  _dictation.status ==
+                                      RealtimeDictationStatus.failed)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: _LiveDictationBar(
+                                    service: _dictation,
+                                    onCancel: _cancelDictation,
+                                    onShowDiagnostics: kDebugMode
+                                        ? () => setState(
+                                            () => _showDictationDiagnostics =
+                                                true,
+                                          )
+                                        : null,
+                                    onFinish:
+                                        _dictation.status ==
+                                            RealtimeDictationStatus.listening
+                                        ? _stopDictation
+                                        : null,
                                   ),
                                 ),
-                              ],
-                            ),
-                          ],
+                              Row(
+                                children: [
+                                  IconButton.filled(
+                                    tooltip: '添加图片、录音或文件',
+                                    onPressed: _importing || _dictation.isActive
+                                        ? null
+                                        : _showAddContentSheet,
+                                    icon: _importing
+                                        ? const SizedBox.square(
+                                            dimension: 18,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : const Icon(Icons.add_rounded),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: _ScrollableEditorToolbar(
+                                      child: _EditorToolbar(
+                                        editorKey: _blockEditorKey,
+                                        onReferenceAttachment:
+                                            _showAttachmentReferenceSheet,
+                                        onDictation: _toggleDictation,
+                                        dictationStatus: _dictation.status,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),
