@@ -1282,44 +1282,23 @@ class LocalChatComposer extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (pendingAttachments.isNotEmpty) ...[
-              SizedBox(
-                height: 76,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: pendingAttachments.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: 8),
-                  itemBuilder: (context, index) {
-                    final attachment = pendingAttachments[index];
-                    return _PendingImage(
-                      attachment: attachment,
-                      onRemove: () => onRemoveAttachment(attachment),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 7),
-              if (!imageInputAvailable)
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    '当前运行时暂不支持图片理解',
-                    style: TextStyle(color: AppColors.coral, fontSize: 10),
-                  ),
-                ),
-              const SizedBox(height: 5),
-            ],
             ValueListenableBuilder<TextEditingValue>(
               valueListenable: controller,
               builder: (context, value, _) {
                 final hasContent =
                     value.text.trim().isNotEmpty ||
                     pendingAttachments.isNotEmpty;
+                final canAddImage =
+                    !generating &&
+                    !dictating &&
+                    !pickingImages &&
+                    pendingAttachments.length < 4;
                 return Container(
-                  padding: const EdgeInsets.fromLTRB(5, 4, 5, 4),
                   decoration: BoxDecoration(
                     color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(28),
+                    borderRadius: BorderRadius.circular(
+                      pendingAttachments.isEmpty ? 28 : 24,
+                    ),
                     border: Border.all(color: AppColors.line),
                     boxShadow: [
                       BoxShadow(
@@ -1329,111 +1308,171 @@ class LocalChatComposer extends StatelessWidget {
                       ),
                     ],
                   ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      IconButton(
-                        key: const Key('local-chat-take-photo'),
-                        tooltip: imageInputAvailable ? '拍照' : '拍照（等待多模态支持）',
-                        onPressed:
-                            generating ||
-                                dictating ||
-                                pickingImages ||
-                                pendingAttachments.length >= 4
-                            ? null
-                            : onTakePhoto,
-                        style: IconButton.styleFrom(
-                          fixedSize: const Size(44, 44),
-                          foregroundColor: AppColors.ink,
-                        ),
-                        icon: pickingImages
-                            ? const SizedBox(
-                                width: 19,
-                                height: 19,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.photo_camera_outlined, size: 25),
-                      ),
-                      Expanded(
-                        child: TextField(
-                          key: const Key('local-chat-input'),
-                          controller: controller,
-                          focusNode: focusNode,
-                          contextMenuBuilder: buildAppEditableTextContextMenu,
-                          enabled: !generating && !dictating,
-                          minLines: 1,
-                          maxLines: 6,
-                          maxLength: 4000,
-                          buildCounter:
-                              (
-                                _, {
-                                required currentLength,
-                                required isFocused,
-                                maxLength,
-                              }) => null,
-                          textCapitalization: TextCapitalization.sentences,
-                          decoration: InputDecoration(
-                            hintText: dictating ? '正在听写…' : '发消息或使用语音…',
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            disabledBorder: InputBorder.none,
-                            filled: false,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 12,
+                      if (pendingAttachments.isNotEmpty) ...[
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+                          child: SizedBox(
+                            height: 92,
+                            child: ListView.separated(
+                              key: const Key('local-chat-image-strip'),
+                              scrollDirection: Axis.horizontal,
+                              itemCount:
+                                  pendingAttachments.length +
+                                  (canAddImage ? 1 : 0),
+                              separatorBuilder: (_, _) =>
+                                  const SizedBox(width: 9),
+                              itemBuilder: (context, index) {
+                                if (index == pendingAttachments.length) {
+                                  return _AddPendingImage(
+                                    loading: pickingImages,
+                                    onPressed: onPickImages,
+                                  );
+                                }
+                                final attachment = pendingAttachments[index];
+                                return _PendingImage(
+                                  attachment: attachment,
+                                  onPreview: () => _showChatImagePreview(
+                                    context,
+                                    pendingAttachments,
+                                    index,
+                                  ),
+                                  onRemove: () =>
+                                      onRemoveAttachment(attachment),
+                                );
+                              },
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 4),
-                      if (generating)
-                        _ChatComposerAction(
-                          key: const Key('stop-local-chat'),
-                          tooltip: '停止生成',
-                          onPressed: onStop,
-                          filled: true,
-                          icon: Icons.stop_rounded,
-                        )
-                      else if (dictating || dictationPreparing)
-                        _ChatComposerAction(
-                          key: const Key('local-chat-voice-input'),
-                          tooltip: '完成语音输入',
-                          onPressed: onToggleDictation,
-                          active: true,
-                          icon: dictationPreparing ? null : Icons.stop_rounded,
-                          loading: dictationPreparing,
-                        )
-                      else if (hasContent)
-                        _ChatComposerAction(
-                          key: const Key('send-local-chat'),
-                          tooltip: '发送',
-                          onPressed: onSend,
-                          filled: true,
-                          icon: Icons.arrow_upward_rounded,
-                        )
-                      else ...[
-                        _ChatComposerAction(
-                          key: const Key('local-chat-voice-input'),
-                          tooltip: '语音输入',
-                          onPressed: onToggleDictation,
-                          icon: Icons.graphic_eq_rounded,
-                        ),
-                        const SizedBox(width: 5),
-                        _ChatComposerAction(
-                          key: const Key('local-chat-add-image'),
-                          tooltip: imageInputAvailable
-                              ? '添加图片'
-                              : '添加图片（等待多模态支持）',
-                          onPressed:
-                              pickingImages || pendingAttachments.length >= 4
-                              ? null
-                              : onPickImages,
-                          icon: Icons.add_rounded,
-                        ),
+                        if (!imageInputAvailable)
+                          const Padding(
+                            padding: EdgeInsets.fromLTRB(14, 0, 14, 9),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                '当前模型不支持图片理解，请切换模型后发送',
+                                style: TextStyle(
+                                  color: AppColors.coral,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ),
+                          ),
+                        const Divider(height: 1, color: AppColors.line),
                       ],
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(5, 4, 5, 4),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            IconButton(
+                              key: const Key('local-chat-take-photo'),
+                              tooltip: imageInputAvailable
+                                  ? '拍照'
+                                  : '拍照（当前模型不支持图片）',
+                              onPressed: canAddImage ? onTakePhoto : null,
+                              style: IconButton.styleFrom(
+                                fixedSize: const Size(44, 44),
+                                foregroundColor: AppColors.ink,
+                              ),
+                              icon: pickingImages
+                                  ? const SizedBox(
+                                      width: 19,
+                                      height: 19,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.photo_camera_outlined,
+                                      size: 25,
+                                    ),
+                            ),
+                            Expanded(
+                              child: TextField(
+                                key: const Key('local-chat-input'),
+                                controller: controller,
+                                focusNode: focusNode,
+                                contextMenuBuilder:
+                                    buildAppEditableTextContextMenu,
+                                enabled: !generating && !dictating,
+                                minLines: 1,
+                                maxLines: 6,
+                                maxLength: 4000,
+                                buildCounter:
+                                    (
+                                      _, {
+                                      required currentLength,
+                                      required isFocused,
+                                      maxLength,
+                                    }) => null,
+                                textCapitalization:
+                                    TextCapitalization.sentences,
+                                decoration: InputDecoration(
+                                  hintText: dictating ? '正在听写…' : '发消息或使用语音…',
+                                  border: InputBorder.none,
+                                  enabledBorder: InputBorder.none,
+                                  focusedBorder: InputBorder.none,
+                                  disabledBorder: InputBorder.none,
+                                  filled: false,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 12,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            if (generating)
+                              _ChatComposerAction(
+                                key: const Key('stop-local-chat'),
+                                tooltip: '停止生成',
+                                onPressed: onStop,
+                                filled: true,
+                                icon: Icons.stop_rounded,
+                              )
+                            else if (dictating || dictationPreparing)
+                              _ChatComposerAction(
+                                key: const Key('local-chat-voice-input'),
+                                tooltip: '完成语音输入',
+                                onPressed: onToggleDictation,
+                                active: true,
+                                icon: dictationPreparing
+                                    ? null
+                                    : Icons.stop_rounded,
+                                loading: dictationPreparing,
+                              )
+                            else if (hasContent)
+                              _ChatComposerAction(
+                                key: const Key('send-local-chat'),
+                                tooltip: '发送',
+                                onPressed: onSend,
+                                filled: true,
+                                icon: Icons.arrow_upward_rounded,
+                              )
+                            else ...[
+                              _ChatComposerAction(
+                                key: const Key('local-chat-voice-input'),
+                                tooltip: '语音输入',
+                                onPressed: onToggleDictation,
+                                icon: Icons.graphic_eq_rounded,
+                              ),
+                              const SizedBox(width: 5),
+                              _ChatComposerAction(
+                                key: const Key('local-chat-add-image'),
+                                tooltip: imageInputAvailable
+                                    ? '添加图片'
+                                    : '添加图片（当前模型不支持）',
+                                onPressed: canAddImage ? onPickImages : null,
+                                icon: Icons.add_rounded,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 );
@@ -1516,27 +1555,47 @@ class _ChatComposerAction extends StatelessWidget {
 
 class _PendingImage extends StatelessWidget {
   final LocalChatAttachment attachment;
+  final VoidCallback onPreview;
   final VoidCallback onRemove;
 
-  const _PendingImage({required this.attachment, required this.onRemove});
+  const _PendingImage({
+    required this.attachment,
+    required this.onPreview,
+    required this.onRemove,
+  });
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    width: 76,
+    width: 92,
     child: Stack(
       children: [
         Positioned.fill(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Image.file(
-              File(
-                FileStorageService.instance.absolutePath(attachment.filePath),
+          child: Semantics(
+            button: true,
+            label: '预览图片',
+            child: Material(
+              color: AppColors.surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+                side: const BorderSide(color: AppColors.line),
               ),
-              fit: BoxFit.cover,
-              cacheWidth: 240,
-              errorBuilder: (_, _, _) => const ColoredBox(
-                color: AppColors.softBlue,
-                child: Icon(Icons.broken_image_outlined),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                key: Key('pending-chat-image-${attachment.id}'),
+                onTap: onPreview,
+                child: Image.file(
+                  File(
+                    FileStorageService.instance.absolutePath(
+                      attachment.filePath,
+                    ),
+                  ),
+                  fit: BoxFit.cover,
+                  cacheWidth: 276,
+                  errorBuilder: (_, _, _) => const ColoredBox(
+                    color: AppColors.softBlue,
+                    child: Icon(Icons.broken_image_outlined),
+                  ),
+                ),
               ),
             ),
           ),
@@ -1544,19 +1603,69 @@ class _PendingImage extends StatelessWidget {
         Positioned(
           top: 3,
           right: 3,
-          child: IconButton.filled(
-            tooltip: '移除图片',
-            onPressed: onRemove,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints.tightFor(width: 26, height: 26),
-            style: IconButton.styleFrom(
-              backgroundColor: AppColors.ink.withValues(alpha: .68),
-              foregroundColor: Colors.white,
+          child: Tooltip(
+            message: '移除图片',
+            child: Semantics(
+              button: true,
+              label: '移除图片',
+              child: Material(
+                color: AppColors.ink.withValues(alpha: .72),
+                shape: const CircleBorder(),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  key: Key('remove-chat-image-${attachment.id}'),
+                  onTap: onRemove,
+                  child: const SizedBox.square(
+                    dimension: 27,
+                    child: Icon(
+                      Icons.close_rounded,
+                      color: Colors.white,
+                      size: 17,
+                    ),
+                  ),
+                ),
+              ),
             ),
-            icon: const Icon(Icons.close_rounded, size: 16),
           ),
         ),
       ],
+    ),
+  );
+}
+
+class _AddPendingImage extends StatelessWidget {
+  final bool loading;
+  final VoidCallback onPressed;
+
+  const _AddPendingImage({required this.loading, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 92,
+    child: Tooltip(
+      message: '继续添加图片',
+      child: Material(
+        color: AppColors.softBlue,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          key: const Key('local-chat-image-strip-add'),
+          onTap: loading ? null : onPressed,
+          borderRadius: BorderRadius.circular(14),
+          child: Center(
+            child: loading
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(
+                    Icons.add_rounded,
+                    color: AppColors.muted,
+                    size: 34,
+                  ),
+          ),
+        ),
+      ),
     ),
   );
 }
@@ -1576,19 +1685,131 @@ class _ChatMessageAttachments extends StatelessWidget {
       separatorBuilder: (_, _) => const SizedBox(width: 7),
       itemBuilder: (context, index) {
         final attachment = attachments[index];
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.file(
-            File(FileStorageService.instance.absolutePath(attachment.filePath)),
-            width: 176,
-            height: 132,
-            fit: BoxFit.cover,
-            cacheWidth: 520,
-            errorBuilder: (_, _, _) => const SizedBox(
-              width: 176,
-              child: ColoredBox(
-                color: AppColors.softBlue,
-                child: Icon(Icons.broken_image_outlined),
+        return Semantics(
+          button: true,
+          label: '预览图片 ${index + 1}',
+          child: InkWell(
+            key: Key('sent-chat-image-${attachment.id}'),
+            onTap: () => _showChatImagePreview(context, attachments, index),
+            borderRadius: BorderRadius.circular(12),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.file(
+                File(
+                  FileStorageService.instance.absolutePath(attachment.filePath),
+                ),
+                width: 176,
+                height: 132,
+                fit: BoxFit.cover,
+                cacheWidth: 520,
+                errorBuilder: (_, _, _) => const SizedBox(
+                  width: 176,
+                  child: ColoredBox(
+                    color: AppColors.softBlue,
+                    child: Icon(Icons.broken_image_outlined),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}
+
+Future<void> _showChatImagePreview(
+  BuildContext context,
+  List<LocalChatAttachment> attachments,
+  int initialIndex,
+) => Navigator.of(context).push(
+  MaterialPageRoute<void>(
+    fullscreenDialog: true,
+    builder: (_) => _ChatImagePreviewPage(
+      attachments: List.unmodifiable(attachments),
+      initialIndex: initialIndex,
+    ),
+  ),
+);
+
+class _ChatImagePreviewPage extends StatefulWidget {
+  final List<LocalChatAttachment> attachments;
+  final int initialIndex;
+
+  const _ChatImagePreviewPage({
+    required this.attachments,
+    required this.initialIndex,
+  });
+
+  @override
+  State<_ChatImagePreviewPage> createState() => _ChatImagePreviewPageState();
+}
+
+class _ChatImagePreviewPageState extends State<_ChatImagePreviewPage> {
+  late final PageController _pageController;
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _pageController = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    key: const Key('local-chat-image-preview'),
+    backgroundColor: Colors.black,
+    appBar: AppBar(
+      backgroundColor: Colors.black,
+      foregroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      leading: IconButton(
+        tooltip: '关闭预览',
+        onPressed: () => Navigator.pop(context),
+        icon: const Icon(Icons.close_rounded),
+      ),
+      title: Text(
+        '${_currentIndex + 1} / ${widget.attachments.length}',
+        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+      ),
+      centerTitle: true,
+    ),
+    body: PageView.builder(
+      key: const Key('local-chat-image-preview-pages'),
+      controller: _pageController,
+      itemCount: widget.attachments.length,
+      onPageChanged: (index) => setState(() => _currentIndex = index),
+      itemBuilder: (context, index) {
+        final attachment = widget.attachments[index];
+        return InteractiveViewer(
+          key: Key('local-chat-image-zoom-${attachment.id}'),
+          minScale: 1,
+          maxScale: 5,
+          boundaryMargin: const EdgeInsets.all(72),
+          child: Center(
+            child: Image.file(
+              File(
+                FileStorageService.instance.absolutePath(attachment.filePath),
+              ),
+              fit: BoxFit.contain,
+              errorBuilder: (_, _, _) => const Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.broken_image_outlined,
+                    color: Colors.white70,
+                    size: 42,
+                  ),
+                  SizedBox(height: 10),
+                  Text('图片无法打开', style: TextStyle(color: Colors.white70)),
+                ],
               ),
             ),
           ),
