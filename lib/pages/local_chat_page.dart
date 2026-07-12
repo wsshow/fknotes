@@ -11,6 +11,7 @@ import '../services/local_assistant_service.dart';
 import '../services/local_chat_prompt_builder.dart';
 import '../services/local_chat_store.dart';
 import '../services/local_llm/local_llm_output_filter.dart';
+import '../widgets/fk_markdown_view.dart';
 import 'model_management_page.dart';
 
 class LocalChatPage extends StatefulWidget {
@@ -697,15 +698,17 @@ class _ChatBubble extends StatelessWidget {
                 height: 18,
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
-            else
+            else if (user)
               SelectableText(
                 message.content,
-                style: TextStyle(
-                  color: user ? Colors.white : AppColors.ink,
+                style: const TextStyle(
+                  color: Colors.white,
                   fontSize: 15,
                   height: 1.55,
                 ),
-              ),
+              )
+            else
+              FkMarkdownView(data: message.content, compact: true),
             if (!user && message.content.isNotEmpty) ...[
               const SizedBox(height: 7),
               Row(

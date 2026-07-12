@@ -59,6 +59,11 @@ dependencies:
   # the same Dart API and Android build fixes while using ORT 1.24.3.
   sherpa_onnx: 1.13.3
   crypto: ^3.0.7
+  # Markdown is the canonical semantic format for notes and model output.
+  # Pin parser and renderer together so AST/rendering behavior changes only
+  # through an intentional, tested upgrade.
+  markdown: 7.3.1
+  flutter_markdown_plus: 1.0.12
 
 dev_dependencies:
   flutter_test:

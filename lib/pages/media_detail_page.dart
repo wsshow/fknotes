@@ -17,6 +17,7 @@ import '../services/speech_model_service.dart';
 import '../services/speech_transcription_service.dart';
 import '../services/speaker_diarization_model_service.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/fk_markdown_view.dart';
 import 'note_editor_page.dart';
 import 'model_management_page.dart';
 import 'transcript_editor_page.dart';
@@ -915,9 +916,7 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
           const SizedBox(height: 14),
           _InfoCard(
             title: '说明',
-            children: [
-              Text(entry.readableContent, style: const TextStyle(height: 1.6)),
-            ],
+            children: [FkMarkdownView(data: entry.readableContent)],
           ),
         ],
       ],

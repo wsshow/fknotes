@@ -8,6 +8,7 @@ import '../models/local_llm.dart';
 import '../services/local_assistant_service.dart';
 import '../services/local_llm/local_llm_output_filter.dart';
 import '../services/note_assistant_prompt_builder.dart';
+import 'fk_markdown_view.dart';
 
 Future<NoteAssistantTask?> showNoteAssistantTaskSheet(BuildContext context) =>
     showModalBottomSheet<NoteAssistantTask>(
@@ -255,10 +256,7 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
                                 ),
                         )
                       : SingleChildScrollView(
-                          child: SelectableText(
-                            _visibleOutput,
-                            style: const TextStyle(fontSize: 16, height: 1.65),
-                          ),
+                          child: FkMarkdownView(data: _visibleOutput),
                         ),
                 ),
               ),
