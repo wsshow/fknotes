@@ -10,6 +10,15 @@ import '../services/local_llm/local_llm_output_filter.dart';
 import '../services/note_assistant_prompt_builder.dart';
 import 'fk_markdown_view.dart';
 
+bool canInsertNoteAssistantOutput({
+  required String output,
+  required LocalLlmFinishReason? finishReason,
+}) =>
+    output.trim().isNotEmpty &&
+    (finishReason == LocalLlmFinishReason.completed ||
+        finishReason == LocalLlmFinishReason.maxTokens ||
+        finishReason == LocalLlmFinishReason.canceled);
+
 Future<NoteAssistantAction?> showNoteAssistantTaskSheet(BuildContext context) =>
     showModalBottomSheet<NoteAssistantAction>(
       context: context,
@@ -192,7 +201,6 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
   LocalLlmFinishReason? _finishReason;
   bool _loadingModel = true;
   bool _generating = false;
-  bool _completed = false;
 
   @override
   void initState() {
@@ -231,9 +239,6 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
               _metrics = event.metrics;
               _finishReason = event.reason;
               _generating = false;
-              _completed =
-                  event.reason == LocalLlmFinishReason.completed ||
-                  event.reason == LocalLlmFinishReason.maxTokens;
             });
         }
       }
@@ -366,11 +371,19 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
                     ),
                   const Spacer(),
                   FilledButton.icon(
-                    onPressed: _completed && _visibleOutput.trim().isNotEmpty
+                    onPressed:
+                        canInsertNoteAssistantOutput(
+                          output: _visibleOutput,
+                          finishReason: _finishReason,
+                        )
                         ? () => Navigator.pop(context, _visibleOutput.trim())
                         : null,
                     icon: const Icon(Icons.add_rounded),
-                    label: const Text('插入笔记末尾'),
+                    label: Text(
+                      _finishReason == LocalLlmFinishReason.canceled
+                          ? '插入当前内容'
+                          : '插入笔记末尾',
+                    ),
                   ),
                 ],
               ),
@@ -402,7 +415,6 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
       _metrics = null;
       _finishReason = null;
       _loadingModel = true;
-      _completed = false;
     });
     unawaited(_run());
   }
@@ -413,7 +425,7 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
     return switch (_finishReason) {
       LocalLlmFinishReason.completed => '生成完成，请检查后使用',
       LocalLlmFinishReason.maxTokens => '已达到输出上限，请检查结果',
-      LocalLlmFinishReason.canceled => '生成已停止，可复制当前内容',
+      LocalLlmFinishReason.canceled => '生成已停止，可复制或插入当前内容',
       LocalLlmFinishReason.timeout => '生成超时，可重试或复制当前内容',
       null => '本地生成未完成',
     };

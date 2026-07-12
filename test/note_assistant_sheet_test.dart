@@ -1,9 +1,34 @@
 import 'package:fknotes/services/note_assistant_prompt_builder.dart';
 import 'package:fknotes/widgets/note_assistant_sheet.dart';
+import 'package:fknotes/models/local_llm.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('manually stopped assistant output remains insertable', () {
+    expect(
+      canInsertNoteAssistantOutput(
+        output: '已经生成的部分内容',
+        finishReason: LocalLlmFinishReason.canceled,
+      ),
+      isTrue,
+    );
+    expect(
+      canInsertNoteAssistantOutput(
+        output: '已经生成的部分内容',
+        finishReason: LocalLlmFinishReason.timeout,
+      ),
+      isFalse,
+    );
+    expect(
+      canInsertNoteAssistantOutput(
+        output: '   ',
+        finishReason: LocalLlmFinishReason.canceled,
+      ),
+      isFalse,
+    );
+  });
+
   testWidgets('note assistant accepts a free-form instruction', (tester) async {
     NoteAssistantAction? selected;
     await tester.pumpWidget(
