@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
+import 'package:url_launcher/url_launcher.dart';
 
 import '../app.dart';
 
@@ -42,9 +45,7 @@ class FkMarkdownView extends StatelessWidget {
       ),
       onTapLink: (text, href, title) {
         if (href == null || !context.mounted) return;
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          const SnackBar(content: Text('为保护隐私，Markdown 外部链接不会自动打开')),
-        );
+        unawaited(_confirmAndOpenLink(context, href));
       },
       styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
         p: base,
@@ -101,6 +102,53 @@ class FkMarkdownView extends StatelessWidget {
     height: 1.3,
     fontWeight: FontWeight.w700,
   );
+
+  static Future<void> _confirmAndOpenLink(
+    BuildContext context,
+    String href,
+  ) async {
+    final uri = Uri.tryParse(href);
+    if (uri == null || !{'http', 'https', 'mailto'}.contains(uri.scheme)) {
+      ScaffoldMessenger.maybeOf(
+        context,
+      )?.showSnackBar(const SnackBar(content: Text('这个链接地址无效或使用了不受支持的协议')));
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('打开外部链接？'),
+        content: Text(
+          '${uri.host.isEmpty ? href : uri.host}\n\n链接将交给系统中的其他应用处理，可能离开 FKNotes。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('继续打开'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    try {
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!opened && context.mounted) {
+        ScaffoldMessenger.maybeOf(
+          context,
+        )?.showSnackBar(const SnackBar(content: Text('系统中没有可以打开这个链接的应用')));
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.maybeOf(
+          context,
+        )?.showSnackBar(const SnackBar(content: Text('无法打开这个链接')));
+      }
+    }
+  }
 }
 
 class _BlockedMarkdownImage extends StatelessWidget {

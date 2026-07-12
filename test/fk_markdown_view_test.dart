@@ -40,4 +40,41 @@ void main() {
     expect(find.text('未加载外部图片：秘密图片'), findsOneWidget);
     expect(find.byType(Image), findsNothing);
   });
+
+  testWidgets('external links require an explicit confirmation', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: FkMarkdownView(data: '[官网](https://example.com/path)'),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('官网'));
+    await tester.pumpAndSettle();
+    expect(find.text('打开外部链接？'), findsOneWidget);
+    expect(find.textContaining('example.com'), findsOneWidget);
+    expect(find.text('继续打开'), findsOneWidget);
+
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(find.text('打开外部链接？'), findsNothing);
+  });
+
+  testWidgets('unsafe link schemes are rejected', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: FkMarkdownView(data: '[危险链接](javascript:alert(1))'),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('危险链接'));
+    await tester.pump();
+    expect(find.text('这个链接地址无效或使用了不受支持的协议'), findsOneWidget);
+    expect(find.text('打开外部链接？'), findsNothing);
+  });
 }

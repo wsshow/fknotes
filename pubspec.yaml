@@ -64,6 +64,7 @@ dependencies:
   # through an intentional, tested upgrade.
   markdown: 7.3.1
   flutter_markdown_plus: 1.0.12
+  url_launcher: 6.3.2
 
 dev_dependencies:
   flutter_test:
