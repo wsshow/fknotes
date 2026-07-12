@@ -11,6 +11,7 @@ import '../services/local_assistant_service.dart';
 import '../services/local_chat_prompt_builder.dart';
 import '../services/local_chat_store.dart';
 import '../services/local_llm/local_llm_output_filter.dart';
+import '../widgets/app_popup_menu.dart';
 import '../widgets/fk_markdown_view.dart';
 import 'model_management_page.dart';
 
@@ -134,29 +135,25 @@ class _LocalChatPageState extends State<LocalChatPage> {
           onPressed: _loading || _generating ? null : _editSystemPrompt,
           icon: const Icon(Icons.psychology_alt_outlined),
         ),
-        PopupMenuButton<String>(
+        AppAnchoredMenuButton<String>(
           tooltip: '更多对话操作',
           enabled: !_loading && !_generating,
+          icon: const Icon(Icons.more_vert_rounded),
           onSelected: (value) {
             if (value == 'new') unawaited(_newConversation());
             if (value == 'delete') unawaited(_deleteConversation());
           },
-          itemBuilder: (context) => const [
-            PopupMenuItem(
+          actions: const [
+            AppMenuAction(
               value: 'new',
-              child: ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.add_comment_outlined),
-                title: Text('新对话'),
-              ),
+              icon: Icons.add_comment_outlined,
+              label: '新对话',
             ),
-            PopupMenuItem(
+            AppMenuAction(
               value: 'delete',
-              child: ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.delete_outline_rounded),
-                title: Text('删除当前对话'),
-              ),
+              icon: Icons.delete_outline_rounded,
+              label: '删除当前对话',
+              destructive: true,
             ),
           ],
         ),

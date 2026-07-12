@@ -1125,8 +1125,9 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                           : Icons.volume_up_outlined,
                     ),
             ),
-            PopupMenuButton<String>(
+            AppAnchoredMenuButton<String>(
               tooltip: '更多笔记操作',
+              icon: const Icon(Icons.more_vert_rounded),
               onSelected: (value) {
                 HapticFeedback.selectionClick();
                 setState(() {
@@ -1137,18 +1138,20 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                 _scheduleAutosave();
                 _queueRecoveryDraft();
               },
-              itemBuilder: (_) => [
-                AppPopupMenuItem.action(
+              actions: [
+                AppMenuAction(
                   value: 'favorite',
                   icon: _favorite
                       ? Icons.star_rounded
                       : Icons.star_outline_rounded,
                   label: _favorite ? '取消收藏' : '收藏',
+                  selected: _favorite,
                 ),
-                AppPopupMenuItem.action(
+                AppMenuAction(
                   value: 'pin',
                   icon: Icons.vertical_align_top_rounded,
                   label: _pinned ? '取消置顶' : '置顶',
+                  selected: _pinned,
                 ),
               ],
             ),
@@ -2372,18 +2375,17 @@ class _BlockStyleMenuButton extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => PopupMenuButton<String>(
+  Widget build(BuildContext context) => AppAnchoredMenuButton<String>(
     tooltip: '段落样式',
     enabled: enabled,
     onSelected: onSelected,
-    position: PopupMenuPosition.over,
-    itemBuilder: (context) => [
-      _item('paragraph', '正文', Icons.notes_rounded),
+    actions: [
+      _action('paragraph', '正文', Icons.notes_rounded),
       for (var level = 1; level <= 6; level++)
-        _item('h$level', '标题 $level', Icons.title_rounded),
-      _item('quote', '引用', Icons.format_quote_rounded),
-      _item('code', '代码块', Icons.data_object_rounded),
-      _item('divider', '分割线', Icons.horizontal_rule_rounded),
+        _action('h$level', '标题 $level', Icons.title_rounded),
+      _action('quote', '引用', Icons.format_quote_rounded),
+      _action('code', '代码块', Icons.data_object_rounded),
+      _action('divider', '分割线', Icons.horizontal_rule_rounded),
     ],
     child: SizedBox(
       width: 58,
@@ -2413,7 +2415,7 @@ class _BlockStyleMenuButton extends StatelessWidget {
     ),
   );
 
-  PopupMenuItem<String> _item(String value, String label, IconData icon) {
+  AppMenuAction<String> _action(String value, String label, IconData icon) {
     final selected = value == 'paragraph'
         ? active == NoteBlockType.paragraph
         : value == 'code'
@@ -2423,28 +2425,11 @@ class _BlockStyleMenuButton extends StatelessWidget {
         : value == 'divider'
         ? active == NoteBlockType.divider
         : active == NoteBlockType.heading && value == 'h$headingLevel';
-    return PopupMenuItem(
+    return AppMenuAction(
       value: value,
-      child: Row(
-        children: [
-          Icon(
-            icon,
-            size: 19,
-            color: selected ? AppColors.coral : AppColors.muted,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              ),
-            ),
-          ),
-          if (selected)
-            const Icon(Icons.check_rounded, size: 18, color: AppColors.coral),
-        ],
-      ),
+      icon: icon,
+      label: label,
+      selected: selected,
     );
   }
 }
@@ -2465,44 +2450,40 @@ class _ListStyleMenuButton extends StatelessWidget {
   bool _isSelected(NoteBlockType type) => active == type;
 
   @override
-  Widget build(BuildContext context) => PopupMenuButton<String>(
+  Widget build(BuildContext context) => AppAnchoredMenuButton<String>(
     tooltip: '列表与缩进',
     enabled: enabled,
     onSelected: onSelected,
-    position: PopupMenuPosition.over,
-    itemBuilder: (context) => [
-      _item(
-        'todo',
-        '待办事项',
-        Icons.check_box_outlined,
-        _isSelected(NoteBlockType.todo),
+    actions: [
+      AppMenuAction(
+        value: 'todo',
+        label: '待办事项',
+        icon: Icons.check_box_outlined,
+        selected: _isSelected(NoteBlockType.todo),
       ),
-      _item(
-        'bullet',
-        '无序列表',
-        Icons.format_list_bulleted_rounded,
-        _isSelected(NoteBlockType.bullet),
+      AppMenuAction(
+        value: 'bullet',
+        label: '无序列表',
+        icon: Icons.format_list_bulleted_rounded,
+        selected: _isSelected(NoteBlockType.bullet),
       ),
-      _item(
-        'ordered',
-        '有序列表',
-        Icons.format_list_numbered_rounded,
-        _isSelected(NoteBlockType.ordered),
+      AppMenuAction(
+        value: 'ordered',
+        label: '有序列表',
+        icon: Icons.format_list_numbered_rounded,
+        selected: _isSelected(NoteBlockType.ordered),
       ),
-      const PopupMenuDivider(),
-      _item(
-        'outdent',
-        '减少缩进',
-        Icons.format_indent_decrease_rounded,
-        false,
-        itemEnabled: indent > 0,
+      AppMenuAction(
+        value: 'outdent',
+        label: '减少缩进',
+        icon: Icons.format_indent_decrease_rounded,
+        enabled: indent > 0,
       ),
-      _item(
-        'indent',
-        '增加缩进',
-        Icons.format_indent_increase_rounded,
-        false,
-        itemEnabled: indent < 3,
+      AppMenuAction(
+        value: 'indent',
+        label: '增加缩进',
+        icon: Icons.format_indent_increase_rounded,
+        enabled: indent < 3,
       ),
     ],
     child: _ToolbarMenuIcon(
@@ -2518,18 +2499,6 @@ class _ListStyleMenuButton extends StatelessWidget {
           indent > 0,
     ),
   );
-
-  PopupMenuItem<String> _item(
-    String value,
-    String label,
-    IconData icon,
-    bool selected, {
-    bool itemEnabled = true,
-  }) => PopupMenuItem(
-    value: value,
-    enabled: itemEnabled,
-    child: _ToolbarMenuRow(icon: icon, label: label, selected: selected),
-  );
 }
 
 class _MoreFormattingMenuButton extends StatelessWidget {
@@ -2544,24 +2513,28 @@ class _MoreFormattingMenuButton extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => PopupMenuButton<String>(
+  Widget build(BuildContext context) => AppAnchoredMenuButton<String>(
     tooltip: '更多格式',
     enabled: enabled,
     onSelected: onSelected,
-    position: PopupMenuPosition.over,
-    itemBuilder: (context) => [
-      _item(
-        'strikethrough',
-        '删除线',
-        Icons.strikethrough_s_rounded,
-        format.strikethrough,
+    actions: [
+      AppMenuAction(
+        value: 'strikethrough',
+        label: '删除线',
+        icon: Icons.strikethrough_s_rounded,
+        selected: format.strikethrough,
       ),
-      _item('inline-code', '行内代码', Icons.code_rounded, format.inlineCode),
-      _item(
-        'link',
-        format.link == null ? '添加链接' : '编辑链接',
-        Icons.link_rounded,
-        format.link != null,
+      AppMenuAction(
+        value: 'inline-code',
+        label: '行内代码',
+        icon: Icons.code_rounded,
+        selected: format.inlineCode,
+      ),
+      AppMenuAction(
+        value: 'link',
+        label: format.link == null ? '添加链接' : '编辑链接',
+        icon: Icons.link_rounded,
+        selected: format.link != null,
       ),
     ],
     child: _ToolbarMenuIcon(
@@ -2569,16 +2542,6 @@ class _MoreFormattingMenuButton extends StatelessWidget {
       selected:
           format.strikethrough || format.inlineCode || format.link != null,
     ),
-  );
-
-  PopupMenuItem<String> _item(
-    String value,
-    String label,
-    IconData icon,
-    bool selected,
-  ) => PopupMenuItem(
-    value: value,
-    child: _ToolbarMenuRow(icon: icon, label: label, selected: selected),
   );
 }
 
@@ -2607,36 +2570,6 @@ class _ToolbarMenuIcon extends StatelessWidget {
         ),
       ],
     ),
-  );
-}
-
-class _ToolbarMenuRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool selected;
-
-  const _ToolbarMenuRow({
-    required this.icon,
-    required this.label,
-    required this.selected,
-  });
-
-  @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Icon(icon, size: 19, color: selected ? AppColors.coral : AppColors.muted),
-      const SizedBox(width: 12),
-      Expanded(
-        child: Text(
-          label,
-          style: TextStyle(
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-          ),
-        ),
-      ),
-      if (selected)
-        const Icon(Icons.check_rounded, size: 18, color: AppColors.coral),
-    ],
   );
 }
 
@@ -2874,8 +2807,9 @@ class _AttachmentEditorTile extends StatelessWidget {
                   ],
                 ),
               ),
-              PopupMenuButton<String>(
+              AppAnchoredMenuButton<String>(
                 tooltip: '调整附件',
+                icon: const Icon(Icons.more_vert_rounded),
                 onSelected: (value) {
                   switch (value) {
                     case 'up':
@@ -2888,25 +2822,25 @@ class _AttachmentEditorTile extends StatelessWidget {
                       onRemove();
                   }
                 },
-                itemBuilder: (_) => [
-                  AppPopupMenuItem.action(
+                actions: [
+                  AppMenuAction(
                     value: 'up',
                     enabled: canMoveUp,
                     icon: Icons.arrow_upward_rounded,
                     label: '上移',
                   ),
-                  AppPopupMenuItem.action(
+                  AppMenuAction(
                     value: 'down',
                     enabled: canMoveDown,
                     icon: Icons.arrow_downward_rounded,
                     label: '下移',
                   ),
-                  AppPopupMenuItem.action(
+                  const AppMenuAction(
                     value: 'reference',
                     icon: Icons.add_link_rounded,
                     label: '引用到正文',
                   ),
-                  AppPopupMenuItem.action(
+                  const AppMenuAction(
                     value: 'remove',
                     icon: Icons.remove_circle_outline_rounded,
                     label: '移除',

@@ -8,6 +8,7 @@ import '../models/local_llm.dart';
 import '../services/local_assistant_service.dart';
 import '../services/local_llm/local_llm_output_filter.dart';
 import '../services/note_assistant_prompt_builder.dart';
+import 'app_popup_menu.dart';
 import 'fk_markdown_view.dart';
 
 bool canInsertNoteAssistantOutput({
@@ -442,7 +443,7 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
                       onPressed: _retry,
                       icon: const Icon(Icons.refresh_rounded),
                     ),
-                  PopupMenuButton<NoteAssistantPlacement>(
+                  AppAnchoredMenuButton<NoteAssistantPlacement>(
                     key: const Key('note-assistant-use-result'),
                     enabled: canInsertNoteAssistantOutput(
                       output: _visibleOutput,
@@ -456,18 +457,13 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
                         placement: placement,
                       ),
                     ),
-                    itemBuilder: (_) => [
+                    actions: [
                       for (final placement in NoteAssistantPlacement.values)
                         if (widget.placements.contains(placement))
-                          PopupMenuItem(
+                          AppMenuAction(
                             value: placement,
-                            child: Row(
-                              children: [
-                                Icon(_placementIcon(placement), size: 20),
-                                const SizedBox(width: 10),
-                                Text(placement.label),
-                              ],
-                            ),
+                            icon: _placementIcon(placement),
+                            label: placement.label,
                           ),
                     ],
                     child: IgnorePointer(

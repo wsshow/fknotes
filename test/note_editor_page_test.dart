@@ -177,9 +177,26 @@ void main() {
     expect(find.byTooltip('朗读笔记'), findsOneWidget);
     expect(find.byTooltip('预览排版'), findsNothing);
 
-    await tester.ensureVisible(find.byTooltip('更多格式'));
-    await tester.tap(find.byTooltip('更多格式'));
+    final noteActions = find.byTooltip('更多笔记操作');
+    final noteActionsRect = tester.getRect(noteActions);
+    await tester.tap(noteActions);
     await tester.pumpAndSettle();
+    expect(
+      tester.getRect(find.byType(MenuItemButton).first).top,
+      greaterThan(noteActionsRect.bottom),
+    );
+    await tester.tapAt(const Offset(16, 180));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.byTooltip('更多格式'));
+    final moreFormatting = find.byTooltip('更多格式');
+    final toolbarButtonRect = tester.getRect(moreFormatting);
+    await tester.tap(moreFormatting);
+    await tester.pumpAndSettle();
+    expect(
+      tester.getRect(find.byType(MenuItemButton).last).bottom,
+      lessThan(toolbarButtonRect.top),
+    );
     expect(find.text('删除线'), findsOneWidget);
     expect(find.byIcon(Icons.strikethrough_s_rounded), findsOneWidget);
     expect(find.text('行内代码'), findsOneWidget);
@@ -582,10 +599,25 @@ void main() {
     expect(focusNode.hasFocus, isTrue);
     expect(tester.testTextInput.isVisible, isTrue);
 
-    await tester.ensureVisible(find.byTooltip('段落样式'));
+    final paragraphMenu = find.byTooltip('段落样式');
+    await tester.ensureVisible(paragraphMenu);
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('段落样式'));
+    final paragraphMenuRect = tester.getRect(paragraphMenu);
+    await tester.tap(paragraphMenu);
     await tester.pumpAndSettle();
+    final menuScrollView = find.ancestor(
+      of: find.byType(MenuItemButton).first,
+      matching: find.byType(SingleChildScrollView),
+    );
+    expect(menuScrollView, findsWidgets);
+    final scrollRects = [
+      tester.getRect(menuScrollView.first),
+      tester.getRect(menuScrollView.last),
+    ];
+    final menuRect = scrollRects.reduce(
+      (first, second) => first.width <= second.width ? first : second,
+    );
+    expect(menuRect.bottom, lessThan(paragraphMenuRect.top));
     await tester.tap(find.text('引用'));
     await tester.pump();
 

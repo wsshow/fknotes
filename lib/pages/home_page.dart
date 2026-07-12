@@ -947,30 +947,34 @@ class _LibraryTab extends StatelessWidget {
                     onPressed: () => _confirmEmptyTrash(context),
                     icon: const Icon(Icons.delete_sweep_outlined),
                   ),
-                PopupMenuButton<NoteSort>(
+                AppAnchoredMenuButton<NoteSort>(
                   tooltip: '排序',
                   icon: const Icon(Icons.swap_vert_rounded),
                   onSelected: provider.setSort,
-                  itemBuilder: (_) => [
-                    AppPopupMenuItem.action(
+                  actions: [
+                    AppMenuAction(
                       value: NoteSort.updated,
                       icon: Icons.update_rounded,
                       label: '最近更新',
+                      selected: provider.sort == NoteSort.updated,
                     ),
-                    AppPopupMenuItem.action(
+                    AppMenuAction(
                       value: NoteSort.created,
                       icon: Icons.schedule_rounded,
                       label: '创建时间',
+                      selected: provider.sort == NoteSort.created,
                     ),
-                    AppPopupMenuItem.action(
+                    AppMenuAction(
                       value: NoteSort.title,
                       icon: Icons.sort_by_alpha_rounded,
                       label: '标题',
+                      selected: provider.sort == NoteSort.title,
                     ),
-                    AppPopupMenuItem.action(
+                    AppMenuAction(
                       value: NoteSort.size,
                       icon: Icons.data_usage_rounded,
                       label: '文件大小',
+                      selected: provider.sort == NoteSort.size,
                     ),
                   ],
                 ),

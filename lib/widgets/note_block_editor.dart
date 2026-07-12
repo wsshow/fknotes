@@ -10,6 +10,7 @@ import '../app.dart';
 import '../models/note_entry.dart';
 import '../services/file_storage_service.dart';
 import '../services/note_assistant_prompt_builder.dart';
+import 'app_popup_menu.dart';
 import 'editor_context_menu.dart';
 import 'note_card.dart';
 
@@ -2943,27 +2944,44 @@ class _TableHeaderCell extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 6),
-        DropdownButton<MarkdownTableAlignment>(
-          value: alignment,
-          isExpanded: true,
-          underline: const SizedBox.shrink(),
-          onChanged: (value) {
-            if (value != null) onAlignmentChanged(value);
-          },
-          items: const [
-            DropdownMenuItem(
+        AppAnchoredMenuButton<MarkdownTableAlignment>(
+          tooltip: '单元格对齐方式',
+          onSelected: onAlignmentChanged,
+          actions: [
+            AppMenuAction(
               value: MarkdownTableAlignment.left,
-              child: Text('左对齐'),
+              icon: Icons.format_align_left_rounded,
+              label: '左对齐',
+              selected: alignment == MarkdownTableAlignment.left,
             ),
-            DropdownMenuItem(
+            AppMenuAction(
               value: MarkdownTableAlignment.center,
-              child: Text('居中'),
+              icon: Icons.format_align_center_rounded,
+              label: '居中',
+              selected: alignment == MarkdownTableAlignment.center,
             ),
-            DropdownMenuItem(
+            AppMenuAction(
               value: MarkdownTableAlignment.right,
-              child: Text('右对齐'),
+              icon: Icons.format_align_right_rounded,
+              label: '右对齐',
+              selected: alignment == MarkdownTableAlignment.right,
             ),
           ],
+          child: SizedBox(
+            height: 48,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(switch (alignment) {
+                    MarkdownTableAlignment.left => '左对齐',
+                    MarkdownTableAlignment.center => '居中',
+                    MarkdownTableAlignment.right => '右对齐',
+                  }),
+                ),
+                const Icon(Icons.arrow_drop_down_rounded),
+              ],
+            ),
+          ),
         ),
       ],
     ),

@@ -495,7 +495,7 @@ class _MoreMenu extends StatelessWidget {
   const _MoreMenu({required this.card});
 
   @override
-  Widget build(BuildContext context) => PopupMenuButton<_Action>(
+  Widget build(BuildContext context) => AppAnchoredMenuButton<_Action>(
     tooltip: '更多',
     icon: const Icon(Icons.more_horiz_rounded, size: 21),
     onSelected: (action) {
@@ -514,41 +514,44 @@ class _MoreMenu extends StatelessWidget {
           card.onDelete?.call();
       }
     },
-    itemBuilder: (_) => [
+    actions: [
       if (card.onRestore != null)
-        AppPopupMenuItem.action(
+        const AppMenuAction(
           value: _Action.restore,
           icon: Icons.restore_rounded,
           label: '恢复',
         ),
       if (card.onFavorite != null)
-        AppPopupMenuItem.action(
+        AppMenuAction(
           value: _Action.favorite,
           icon: card.entry.isFavorite
               ? Icons.star_outline_rounded
               : Icons.star_rounded,
           label: card.entry.isFavorite ? '取消收藏' : '收藏',
+          selected: card.entry.isFavorite,
         ),
       if (card.onPin != null)
-        AppPopupMenuItem.action(
+        AppMenuAction(
           value: _Action.pin,
           icon: Icons.vertical_align_top_rounded,
           label: card.entry.isPinned ? '取消置顶' : '置顶',
+          selected: card.entry.isPinned,
         ),
       if (card.onArchive != null)
-        AppPopupMenuItem.action(
+        AppMenuAction(
           value: _Action.archive,
           icon: Icons.archive_outlined,
           label: card.entry.isArchived ? '移出归档' : '归档',
+          selected: card.entry.isArchived,
         ),
       if (card.onEdit != null)
-        AppPopupMenuItem.action(
+        const AppMenuAction(
           value: _Action.edit,
           icon: Icons.edit_outlined,
           label: '编辑',
         ),
       if (card.onDelete != null)
-        AppPopupMenuItem.action(
+        AppMenuAction(
           value: _Action.delete,
           icon: Icons.delete_outline_rounded,
           label: card.entry.isDeleted ? '永久删除' : '移到回收站',
