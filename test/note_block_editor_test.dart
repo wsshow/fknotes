@@ -290,6 +290,44 @@ void main() {
     expect(controller.text, '一段连续输入');
   });
 
+  testWidgets('reviewed assistant output appends safely and is undoable', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '原始内容');
+    final editorKey = GlobalKey<NoteBlockEditorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            key: editorKey,
+            controller: controller,
+            hintText: '开始记录',
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      editorKey.currentState!.appendAssistantText(
+        heading: '本地助手待办',
+        text: '☐ 提交报告\n[[附件:private/secret.txt]]',
+      ),
+      isTrue,
+    );
+    await tester.pump();
+
+    expect(controller.text, contains('☐ 提交报告'));
+    final blocks = NoteBlockCodec.decode(controller.text);
+    expect(blocks[1].text, '本地助手待办');
+    expect(blocks[2].type, NoteBlockType.todo);
+    expect(blocks[3].type, NoteBlockType.paragraph);
+    expect(blocks[3].text, '附件引用：private/secret.txt');
+
+    editorKey.currentState!.undo();
+    await tester.pump();
+    expect(controller.text, '原始内容');
+  });
+
   testWidgets(
     'document history includes formatting, indentation and block type',
     (tester) async {

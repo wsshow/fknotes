@@ -23,6 +23,8 @@ class LocalAssistantService with WidgetsBindingObserver {
 
   final LocalLlmCoordinator _coordinator;
   final _models = LanguageModelService.instance;
+  static const _idleTimeout = Duration(minutes: 2);
+  Timer? _idleUnloadTimer;
 
   LocalLlmRuntimeSnapshot get snapshot => _coordinator.snapshot;
   Stream<LocalLlmRuntimeSnapshot> get snapshots => _coordinator.snapshots;
@@ -36,6 +38,7 @@ class LocalAssistantService with WidgetsBindingObserver {
     bool enableThinking = false,
     LocalLlmBackend backend = LocalLlmBackend.cpu,
   }) async {
+    _idleUnloadTimer?.cancel();
     _ensureHeavyAudioWorkIsIdle();
     final selectedId = await _models.selectedModelId();
     final descriptor = await _models.descriptor(selectedId);
@@ -49,19 +52,28 @@ class LocalAssistantService with WidgetsBindingObserver {
         enablePromptCache: true,
       ),
     );
+    _scheduleIdleUnload();
   }
 
-  Stream<LocalLlmGenerationEvent> generate(LocalLlmGenerationRequest request) {
+  Stream<LocalLlmGenerationEvent> generate(
+    LocalLlmGenerationRequest request,
+  ) async* {
+    _ensureHeavyAudioWorkIsIdle();
+    _idleUnloadTimer?.cancel();
     try {
-      _ensureHeavyAudioWorkIsIdle();
-      return _coordinator.generate(request);
-    } catch (error, stackTrace) {
-      return Stream.error(error, stackTrace);
+      yield* _coordinator.generate(request);
+    } finally {
+      _scheduleIdleUnload();
     }
   }
 
   Future<void> cancel() => _coordinator.cancel();
-  Future<void> unload() => _coordinator.unload();
+
+  Future<void> unload() {
+    _idleUnloadTimer?.cancel();
+    _idleUnloadTimer = null;
+    return _coordinator.unload();
+  }
 
   @override
   void didHaveMemoryPressure() {
@@ -70,7 +82,10 @@ class LocalAssistantService with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.detached) unawaited(unload());
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      unawaited(unload());
+    }
   }
 
   void _ensureHeavyAudioWorkIsIdle() {
@@ -83,5 +98,10 @@ class LocalAssistantService with WidgetsBindingObserver {
     if (NoteReadAloudService.instance.isActive) {
       throw const LocalLlmException('请先停止正在进行的笔记朗读');
     }
+  }
+
+  void _scheduleIdleUnload() {
+    _idleUnloadTimer?.cancel();
+    _idleUnloadTimer = Timer(_idleTimeout, () => unawaited(unload()));
   }
 }

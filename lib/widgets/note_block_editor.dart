@@ -567,6 +567,53 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     return true;
   }
 
+  /// Appends reviewed assistant output as an undoable document change.
+  ///
+  /// Generated attachment markers are deliberately converted to plain text so
+  /// model output can never manufacture a live reference to a local file.
+  bool appendAssistantText({required String heading, required String text}) {
+    if (text.trim().isEmpty) return false;
+    _beginDiscreteChange();
+    final generated = NoteBlockCodec.decode(text.trim()).map((block) {
+      if (block.type != NoteBlockType.attachment) return block;
+      return NoteBlockData(
+        NoteBlockType.paragraph,
+        '附件引用：${block.attachmentPath ?? ''}',
+      );
+    });
+    _blocks.add(
+      _makeBlock(
+        NoteBlockData(
+          NoteBlockType.paragraph,
+          heading,
+          styles: [
+            NoteTextStyleRange(
+              0,
+              heading.length,
+              const NoteTextAttributes(bold: true, fontSize: 20),
+            ),
+          ],
+        ),
+      ),
+    );
+    _blocks.addAll(generated.map(_makeBlock));
+    _activeIndex = _blocks.length - 1;
+    _syncDocument();
+    _endDiscreteChange();
+    setState(() {});
+    final block = _blocks[_activeIndex];
+    if (block.type != NoteBlockType.divider &&
+        block.type != NoteBlockType.attachment) {
+      _refocus(
+        block,
+        selection: TextSelection.collapsed(
+          offset: block.controller.visibleTextValue.length,
+        ),
+      );
+    }
+    return true;
+  }
+
   /// Replaces the contiguous dictation immediately before the current caret.
   ///
   /// The final offline pass can revise the whole streaming hypothesis. This

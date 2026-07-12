@@ -11,14 +11,17 @@ import '../app.dart';
 import '../models/note_entry.dart';
 import '../providers/note_provider.dart';
 import '../services/file_storage_service.dart';
+import '../services/language_model_service.dart';
 import '../services/local_model_manager.dart';
 import '../services/kokoro_tts_model_service.dart';
 import '../services/note_read_aloud_service.dart';
+import '../services/note_assistant_prompt_builder.dart';
 import '../services/realtime_dictation_service.dart';
 import '../services/streaming_speech_model_service.dart';
 import '../services/video_import_service.dart';
-import '../widgets/editor_context_menu.dart';
 import '../widgets/app_popup_menu.dart';
+import '../widgets/editor_context_menu.dart';
+import '../widgets/note_assistant_sheet.dart';
 import '../widgets/note_block_editor.dart';
 import '../widgets/note_card.dart';
 import 'media_detail_page.dart';
@@ -359,6 +362,84 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       }
     } finally {
       _dictationOperationPending = false;
+    }
+  }
+
+  Future<void> _openLocalAssistant() async {
+    if (_title.text.trim().isEmpty && _content.text.trim().isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请先写下一些笔记内容')));
+      return;
+    }
+
+    try {
+      final models = LanguageModelService.instance;
+      final selectedId = await models.selectedModelId();
+      final installed = await models.inspect(selectedId);
+      if (!mounted) return;
+      if (!installed.installed) {
+        final downloadSize =
+            '${(models.downloadSizeBytes(selectedId) / 1073741824).toStringAsFixed(1)} GB';
+        final openModels = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('需要本地语言模型'),
+            content: Text(
+              '当前选择的是 ${models.displayName(selectedId)}，首次使用需下载约 '
+              '$downloadSize。下载完成后，笔记内容只在本机处理。',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('稍后再说'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('管理模型'),
+              ),
+            ],
+          ),
+        );
+        if (openModels == true && mounted) {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ModelManagementPage(focusModelId: selectedId),
+            ),
+          );
+        }
+        return;
+      }
+
+      final task = await showNoteAssistantTaskSheet(context);
+      if (task == null || !mounted) return;
+      final generated = await showModalBottomSheet<String>(
+        context: context,
+        isScrollControlled: true,
+        builder: (context) => NoteAssistantResultSheet(
+          task: task,
+          title: _title.text,
+          content: _content.text,
+        ),
+      );
+      if (generated == null || !mounted) return;
+      final inserted =
+          _blockEditorKey.currentState?.appendAssistantText(
+            heading: task.resultHeading,
+            text: generated,
+          ) ??
+          false;
+      if (inserted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('生成内容已插入笔记末尾')));
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('无法启动本地助手：$error')));
     }
   }
 
@@ -915,6 +996,10 @@ class _NoteEditorPageState extends State<NoteEditorPage>
               tooltip: '更多笔记操作',
               onSelected: (value) {
                 HapticFeedback.selectionClick();
+                if (value == 'assistant') {
+                  unawaited(_openLocalAssistant());
+                  return;
+                }
                 setState(() {
                   if (value == 'favorite') _favorite = !_favorite;
                   if (value == 'pin') _pinned = !_pinned;
@@ -923,6 +1008,11 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                 _scheduleAutosave();
               },
               itemBuilder: (_) => [
+                AppPopupMenuItem.action(
+                  value: 'assistant',
+                  icon: Icons.auto_awesome_rounded,
+                  label: '本地助手',
+                ),
                 AppPopupMenuItem.action(
                   value: 'favorite',
                   icon: _favorite

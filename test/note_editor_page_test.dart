@@ -126,7 +126,6 @@ void main() {
       () => Future<void>.delayed(const Duration(milliseconds: 20)),
     );
     await tester.pumpAndSettle();
-
     expect(find.text('需要离线朗读模型'), findsOneWidget);
     expect(find.textContaining('140.2 MB'), findsOneWidget);
     expect(find.text('管理模型'), findsOneWidget);
@@ -154,6 +153,28 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('24'), findsOneWidget);
+  });
+
+  testWidgets('editor exposes the local assistant action', (tester) async {
+    _usePhoneViewport(tester);
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => NoteProvider(),
+        child: const MaterialApp(home: NoteEditorPage()),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField).first, '需要总结的笔记');
+    await tester.tap(find.byTooltip('更多笔记操作'));
+    await tester.pumpAndSettle();
+    expect(find.text('本地助手'), findsOneWidget);
+
+    final assistantItem = find.byWidgetPredicate(
+      (widget) =>
+          widget is PopupMenuItem<String> && widget.value == 'assistant',
+    );
+    expect(assistantItem, findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('tag editor uses a bottom sheet and saves unique tags', (
