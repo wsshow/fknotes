@@ -151,6 +151,7 @@ void main() {
     expect(find.byTooltip('撤销'), findsOneWidget);
     expect(find.byTooltip('重做'), findsOneWidget);
     expect(find.byTooltip('本地助手'), findsOneWidget);
+    expect(find.text('AI'), findsOneWidget);
     expect(find.byTooltip('加粗'), findsOneWidget);
     expect(find.byTooltip('斜体'), findsOneWidget);
     expect(find.byTooltip('段落样式'), findsOneWidget);

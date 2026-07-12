@@ -1548,12 +1548,8 @@ class _EditorToolbarState extends State<_EditorToolbar> {
         widget.dictationStatus == RealtimeDictationStatus.stopping;
     return Row(
       children: [
-        _EditorToolButton(
+        _EditorAiButton(
           key: const Key('note-editor-assistant'),
-          tooltip: '本地助手',
-          icon: Icons.auto_awesome_rounded,
-          selected: false,
-          prominent: true,
           onPressed: widget.onAssistant,
         ),
         _EditorToolButton(
@@ -2092,15 +2088,12 @@ class _EditorToolButton extends StatelessWidget {
   final String tooltip;
   final IconData icon;
   final bool selected;
-  final bool prominent;
   final VoidCallback? onPressed;
 
   const _EditorToolButton({
-    super.key,
     required this.tooltip,
     required this.icon,
     required this.selected,
-    this.prominent = false,
     required this.onPressed,
   });
 
@@ -2109,16 +2102,42 @@ class _EditorToolButton extends StatelessWidget {
     tooltip: tooltip,
     onPressed: onPressed,
     style: IconButton.styleFrom(
-      backgroundColor: selected
-          ? AppColors.softGreen
-          : prominent
-          ? AppColors.softAmber
-          : Colors.transparent,
-      foregroundColor: selected || prominent
-          ? AppColors.coral
-          : AppColors.muted,
+      backgroundColor: selected ? AppColors.softGreen : Colors.transparent,
+      foregroundColor: selected ? AppColors.coral : AppColors.muted,
     ),
     icon: Icon(icon),
+  );
+}
+
+class _EditorAiButton extends StatelessWidget {
+  final VoidCallback onPressed;
+
+  const _EditorAiButton({super.key, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    tooltip: '本地助手',
+    onPressed: onPressed,
+    style: IconButton.styleFrom(
+      backgroundColor: Colors.transparent,
+      foregroundColor: AppColors.muted,
+    ),
+    icon: const Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'AI',
+          style: TextStyle(
+            color: AppColors.muted,
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -.4,
+          ),
+        ),
+        SizedBox(width: 1),
+        Icon(Icons.auto_awesome_rounded, size: 11),
+      ],
+    ),
   );
 }
 
