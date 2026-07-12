@@ -743,6 +743,82 @@ print('ok');
     expect(controller.text, '粘贴内容');
   });
 
+  testWidgets('multi-block Markdown paste creates semantic blocks atomically', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    final editorKey = GlobalKey<NoteBlockEditorState>();
+    String? richContent;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            key: editorKey,
+            controller: controller,
+            hintText: '开始记录',
+            onRichContentChanged: (value) => richContent = value,
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byType(TextField).first);
+
+    expect(
+      editorKey.currentState!.pasteMarkdown('# 计划\n\n- [x] 完成基础\n\n**重点**说明'),
+      isTrue,
+    );
+    await tester.pump();
+
+    final blocks = NoteRichDocumentCodec.tryDecode(richContent)!;
+    expect(blocks.map((block) => block.type), [
+      NoteBlockType.heading,
+      NoteBlockType.todo,
+      NoteBlockType.paragraph,
+    ]);
+    expect(blocks[1].checked, isTrue);
+    expect(blocks[2].text, '重点说明');
+    expect(blocks[2].styles.single.attributes.bold, isTrue);
+    expect(controller.text, '# 计划\n\n- [x] 完成基础\n\n**重点**说明');
+
+    editorKey.currentState!.undo();
+    await tester.pump();
+    expect(controller.text, isEmpty);
+  });
+
+  testWidgets('inline Markdown paste keeps the surrounding block and caret', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '前后');
+    final editorKey = GlobalKey<NoteBlockEditorState>();
+    String? richContent;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            key: editorKey,
+            controller: controller,
+            hintText: '开始记录',
+            onRichContentChanged: (value) => richContent = value,
+          ),
+        ),
+      ),
+    );
+    final field = find.byType(TextField).first;
+    await tester.tap(field);
+    final fieldController = tester.widget<TextField>(field).controller!;
+    fieldController.selection = const TextSelection.collapsed(offset: 2);
+
+    expect(editorKey.currentState!.pasteMarkdown('**重点**'), isTrue);
+    await tester.pump();
+
+    final block = NoteRichDocumentCodec.tryDecode(richContent)!.single;
+    expect(block.text, '前重点后');
+    expect(block.styles.single.start, 1);
+    expect(block.styles.single.end, 3);
+    expect(block.styles.single.attributes.bold, isTrue);
+    expect(controller.text, '前**重点**后');
+  });
+
   testWidgets('live dictation replaces partial text as one undoable change', (
     tester,
   ) async {

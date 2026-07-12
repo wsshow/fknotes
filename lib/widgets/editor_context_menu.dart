@@ -9,8 +9,9 @@ const editorBlockBoundary = '\u200B';
 
 Widget buildEditorContextMenu(
   BuildContext context,
-  EditableTextState editableTextState,
-) {
+  EditableTextState editableTextState, {
+  Future<void> Function()? onPaste,
+}) {
   const supported = {
     ContextMenuButtonType.cut,
     ContextMenuButtonType.copy,
@@ -45,6 +46,12 @@ Widget buildEditorContextMenu(
               ? null
               : () {
                   _excludeBlockBoundary(editableTextState);
+                  if (item.type == ContextMenuButtonType.paste &&
+                      onPaste != null) {
+                    ContextMenuController.removeAny();
+                    onPaste();
+                    return;
+                  }
                   item.onPressed!.call();
                 },
         ),

@@ -859,6 +859,25 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     return block;
   }
 
+  Widget _buildBlockContextMenu(
+    BuildContext context,
+    EditableTextState editableTextState,
+  ) {
+    _EditableBlock? owner;
+    for (final block in _blocks) {
+      if (identical(block.controller, editableTextState.widget.controller)) {
+        owner = block;
+        break;
+      }
+    }
+    final block = owner;
+    return buildEditorContextMenu(
+      context,
+      editableTextState,
+      onPaste: block == null ? null : () => _pasteFromClipboard(block),
+    );
+  }
+
   List<NoteBlockData> get _document => [
     for (final block in _blocks)
       NoteBlockData(
@@ -1055,6 +1074,136 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
         ),
       );
     }
+    return true;
+  }
+
+  Future<void> _pasteFromClipboard(_EditableBlock block) async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final value = data?.text;
+    if (!mounted ||
+        value == null ||
+        value.isEmpty ||
+        !_blocks.contains(block)) {
+      return;
+    }
+    _pasteMarkdown(block, value);
+  }
+
+  /// Inserts clipboard or imported Markdown at the active caret.
+  ///
+  /// Inline Markdown stays in the current block. Block Markdown is parsed into
+  /// semantic editor blocks in one undoable operation.
+  bool pasteMarkdown(String source) {
+    final block = _activeEditableBlock;
+    if (block == null || source.isEmpty) return false;
+    return _pasteMarkdown(block, source);
+  }
+
+  bool _pasteMarkdown(_EditableBlock block, String source) {
+    final index = _blocks.indexOf(block);
+    if (index < 0) return false;
+    final parsed = NoteBlockCodec.decode(source).map((item) {
+      if (item.type != NoteBlockType.attachment) return item;
+      return NoteBlockData(
+        NoteBlockType.paragraph,
+        '附件引用：${item.attachmentPath ?? ''}',
+      );
+    }).toList();
+    if (parsed.isEmpty) return false;
+    final selection = block.controller.visibleSelectionValue.isValid
+        ? block.controller.visibleSelectionValue
+        : TextSelection.collapsed(
+            offset: block.controller.visibleTextValue.length,
+          );
+    final start = selection.start.clamp(
+      0,
+      block.controller.visibleTextValue.length,
+    );
+    final end = selection.end.clamp(
+      start,
+      block.controller.visibleTextValue.length,
+    );
+    _beginDiscreteChange();
+
+    final inline =
+        !source.contains('\n') &&
+        parsed.length == 1 &&
+        parsed.single.type == NoteBlockType.paragraph;
+    if (inline) {
+      final inserted = parsed.single;
+      final original = block.controller.visibleTextValue;
+      final nextText = original.replaceRange(start, end, inserted.text);
+      final delta = inserted.text.length - (end - start);
+      final inherited = block.controller.attributesForSelection(selection);
+      final insertedStyles =
+          inserted.styles.isEmpty &&
+              inherited != NoteTextAttributes.defaults &&
+              inserted.text.isNotEmpty
+          ? [NoteTextStyleRange(start, start + inserted.text.length, inherited)]
+          : [
+              for (final range in inserted.styles)
+                NoteTextStyleRange(
+                  range.start + start,
+                  range.end + start,
+                  range.attributes,
+                ),
+            ];
+      final styles = [
+        ...block.controller.styleRangesFor(0, start),
+        ...insertedStyles,
+        ...block.controller.styleRangesFor(end, original.length, shift: delta),
+      ];
+      _syncing = true;
+      block.controller.replaceVisibleText(nextText, styles);
+      _syncing = false;
+      block.controller.visibleSelectionValue = TextSelection.collapsed(
+        offset: start + inserted.text.length,
+      );
+      _syncDocument();
+      _refocus(block, offset: start + inserted.text.length);
+      _endDiscreteChange();
+      return true;
+    }
+
+    final original = block.controller.visibleTextValue;
+    final beforeText = original.substring(0, start);
+    final afterText = original.substring(end);
+    final replacement = <NoteBlockData>[
+      if (beforeText.isNotEmpty)
+        NoteBlockData(
+          block.type,
+          beforeText,
+          checked: block.checked,
+          indent: block.indent,
+          headingLevel: block.headingLevel,
+          codeLanguage: block.codeLanguage,
+          styles: block.controller.styleRangesFor(0, start),
+        ),
+      ...parsed,
+      if (afterText.isNotEmpty)
+        NoteBlockData(
+          NoteBlockType.paragraph,
+          afterText,
+          styles: block.controller.styleRangesFor(
+            end,
+            original.length,
+            shift: -end,
+          ),
+        ),
+    ];
+    _syncing = true;
+    final removed = _blocks.removeAt(index)..dispose();
+    assert(removed == block);
+    final insertedBlocks = replacement.map(_makeBlock).toList();
+    _blocks.insertAll(index, insertedBlocks);
+    _syncing = false;
+    _activeIndex = index + insertedBlocks.length - 1;
+    activeType.value = _blocks[_activeIndex].type;
+    _syncDocument();
+    setState(() {});
+    final target = _blocks[_activeIndex];
+    _refocus(target);
+    _endDiscreteChange();
     return true;
   }
 
@@ -1742,7 +1891,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
                   TextField(
                     controller: block.controller,
                     focusNode: block.focusNode,
-                    contextMenuBuilder: buildEditorContextMenu,
+                    contextMenuBuilder: _buildBlockContextMenu,
                     inputFormatters: [
                       _BlockInputFormatter(
                         onNewline: (selection) => _splitBlock(block, selection),
