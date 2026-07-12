@@ -1,4 +1,5 @@
 import 'package:fknotes/models/local_llm.dart';
+import 'package:fknotes/services/local_llm/local_llm_output_filter.dart';
 import 'package:fknotes/services/note_assistant_prompt_builder.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -43,14 +44,14 @@ void main() {
 
   test('reasoning blocks never reach assistant output', () {
     expect(
-      NoteAssistantOutputFilter.visibleText(
+      LocalLlmOutputFilter.visibleText(
         '<think>private reasoning</think>\n用户可见内容',
       ),
       '用户可见内容',
     );
-    expect(NoteAssistantOutputFilter.visibleText('开头\n<think>尚未结束'), '开头\n');
+    expect(LocalLlmOutputFilter.visibleText('开头\n<think>尚未结束'), '开头\n');
     expect(
-      NoteAssistantOutputFilter.visibleText('回答一<think>内部</think>回答二'),
+      LocalLlmOutputFilter.visibleText('回答一<think>内部</think>回答二'),
       '回答一回答二',
     );
   });

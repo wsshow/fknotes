@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../app.dart';
 import '../models/local_llm.dart';
 import '../services/local_assistant_service.dart';
+import '../services/local_llm/local_llm_output_filter.dart';
 import '../services/note_assistant_prompt_builder.dart';
 
 Future<NoteAssistantTask?> showNoteAssistantTaskSheet(BuildContext context) =>
@@ -144,13 +145,13 @@ class _NoteAssistantResultSheetState extends State<NoteAssistantResultSheet> {
           case LocalLlmTextDelta():
             _rawOutput.write(event.text);
             setState(
-              () => _visibleOutput = NoteAssistantOutputFilter.visibleText(
+              () => _visibleOutput = LocalLlmOutputFilter.visibleText(
                 _rawOutput.toString(),
               ),
             );
           case LocalLlmGenerationCompleted():
             setState(() {
-              _visibleOutput = NoteAssistantOutputFilter.visibleText(
+              _visibleOutput = LocalLlmOutputFilter.visibleText(
                 _rawOutput.toString(),
               ).trim();
               _metrics = event.metrics;

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:fknotes/models/note_entry.dart';
 import 'package:fknotes/pages/home_page.dart';
+import 'package:fknotes/pages/local_chat_page.dart';
 import 'package:fknotes/pages/media_detail_page.dart';
 import 'package:fknotes/pages/note_editor_page.dart';
 import 'package:fknotes/pages/transcript_editor_page.dart';
@@ -45,6 +46,21 @@ void main() {
     expect(find.text('图片'), findsWidgets);
   });
 
+  testWidgets('home opens the standalone local chat', (tester) async {
+    _usePhoneViewport(tester);
+    await _pumpHomePage(tester);
+
+    expect(find.byTooltip('本地助手'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('open-local-chat')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.byType(LocalChatPage), findsOneWidget);
+    expect(find.text('本地助手'), findsOneWidget);
+    expect(find.byTooltip('角色设定'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('data tab shows the installed version and build metadata', (
     tester,
   ) async {
@@ -62,6 +78,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('本地数据'), findsOneWidget);
     expect(find.text('应用锁'), findsOneWidget);
+    expect(find.text('资料占用'), findsOneWidget);
 
     await tester.drag(find.byType(ListView), const Offset(0, -1200));
     await tester.pumpAndSettle();

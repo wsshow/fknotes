@@ -69,23 +69,3 @@ class NoteAssistantPromptBuilder {
         '${source.substring(source.length - trailing)}';
   }
 }
-
-/// Removes model-internal reasoning tags before text reaches the UI or editor.
-class NoteAssistantOutputFilter {
-  static String visibleText(String value) {
-    var visible = value.replaceAll(
-      RegExp(r'<think>.*?</think>', dotAll: true, caseSensitive: false),
-      '',
-    );
-    final openReasoning = RegExp(
-      r'<think>',
-      caseSensitive: false,
-    ).firstMatch(visible);
-    if (openReasoning != null) {
-      visible = visible.substring(0, openReasoning.start);
-    }
-    return visible
-        .replaceAll(RegExp(r'</think>', caseSensitive: false), '')
-        .trimLeft();
-  }
-}

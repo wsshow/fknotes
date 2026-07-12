@@ -52,6 +52,13 @@ void main() {
         attachmentColumns.map((column) => column['name']),
         containsAll(['transcript', 'transcription_model', 'transcribed_at']),
       );
+      final chatTables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type = 'table'",
+      );
+      expect(
+        chatTables.map((row) => row['name']),
+        containsAll(['chat_sessions', 'chat_messages']),
+      );
     },
   );
 }

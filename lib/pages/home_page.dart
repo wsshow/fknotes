@@ -14,6 +14,7 @@ import '../widgets/app_popup_menu.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/note_card.dart';
 import '../widgets/navigation_icons.dart';
+import 'local_chat_page.dart';
 import 'note_editor_page.dart';
 import 'model_management_page.dart';
 import 'app_lock_settings_page.dart';
@@ -60,6 +61,7 @@ class _HomePageState extends State<HomePage> {
               _OverviewTab(
                 provider: provider,
                 onSearch: _openSearch,
+                onOpenAssistant: _openAssistant,
                 onOpenLibrary: () => setState(() => _tab = 1),
                 onCreateText: _createTextNote,
                 onPickImage: _pickImage,
@@ -183,6 +185,11 @@ class _HomePageState extends State<HomePage> {
   void _openSearch() => Navigator.push(
     context,
     MaterialPageRoute(builder: (_) => const SearchPage()),
+  );
+
+  void _openAssistant() => Navigator.push(
+    context,
+    MaterialPageRoute(builder: (_) => const LocalChatPage()),
   );
 
   Future<void> _moveToTrash(NoteEntry entry) async {
@@ -419,6 +426,7 @@ typedef NoteBuilder = Widget Function(NoteEntry entry, {bool compact});
 class _OverviewTab extends StatelessWidget {
   final NoteProvider provider;
   final VoidCallback onSearch;
+  final VoidCallback onOpenAssistant;
   final VoidCallback onOpenLibrary;
   final VoidCallback onCreateText;
   final VoidCallback onPickImage;
@@ -429,6 +437,7 @@ class _OverviewTab extends StatelessWidget {
   const _OverviewTab({
     required this.provider,
     required this.onSearch,
+    required this.onOpenAssistant,
     required this.onOpenLibrary,
     required this.onCreateText,
     required this.onPickImage,
@@ -451,7 +460,7 @@ class _OverviewTab extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
               sliver: SliverList.list(
                 children: [
-                  const _BrandHeader(),
+                  _BrandHeader(onAssistant: onOpenAssistant),
                   const SizedBox(height: 22),
                   _SearchButton(onTap: onSearch),
                   const SizedBox(height: 28),
@@ -538,7 +547,8 @@ class _OverviewTab extends StatelessWidget {
 }
 
 class _BrandHeader extends StatelessWidget {
-  const _BrandHeader();
+  final VoidCallback onAssistant;
+  const _BrandHeader({required this.onAssistant});
   @override
   Widget build(BuildContext context) => Row(
     children: [
@@ -565,6 +575,16 @@ class _BrandHeader extends StatelessWidget {
             ),
           ],
         ),
+      ),
+      IconButton.filledTonal(
+        key: const Key('open-local-chat'),
+        tooltip: '本地助手',
+        onPressed: onAssistant,
+        style: IconButton.styleFrom(
+          backgroundColor: AppColors.softGreen,
+          foregroundColor: AppColors.moss,
+        ),
+        icon: const Icon(Icons.auto_awesome_rounded),
       ),
     ],
   );

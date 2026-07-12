@@ -15,7 +15,7 @@ class DatabaseService {
     final path = p.join(FileStorageService.instance.baseDir, 'fknotes.db');
     return openDatabase(
       path,
-      version: 4,
+      version: 5,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -48,6 +48,7 @@ class DatabaseService {
       )
     ''');
     await _createAttachmentsTable(db);
+    await _createChatTables(db);
     await _createIndexes(db);
   }
 
@@ -90,6 +91,9 @@ class DatabaseService {
         );
       }
     }
+    if (oldVersion < 5) {
+      await _createChatTables(db);
+    }
   }
 
   Future<void> _createAttachmentsTable(Database db) => db.execute('''
@@ -112,6 +116,38 @@ class DatabaseService {
       FOREIGN KEY(note_id) REFERENCES entries(id) ON DELETE CASCADE
     )
   ''');
+
+  Future<void> _createChatTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS chat_sessions (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        system_prompt TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS chat_messages (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'complete',
+        created_at TEXT NOT NULL,
+        sort_order INTEGER NOT NULL,
+        FOREIGN KEY(session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_chat_sessions_updated '
+      'ON chat_sessions(updated_at DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_chat_messages_session '
+      'ON chat_messages(session_id, sort_order)',
+    );
+  }
 
   Future<void> _createIndexes(Database db) async {
     await db.execute(
