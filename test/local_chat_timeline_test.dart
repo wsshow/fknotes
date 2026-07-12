@@ -21,4 +21,10 @@ void main() {
     expect(LocalChatScrollFollowPolicy.shouldFollow(72.1), isFalse);
     expect(LocalChatScrollFollowPolicy.shouldFollow(500), isFalse);
   });
+
+  test('voice input appends recognized text without damaging the draft', () {
+    expect(LocalChatVoiceInputText.combine('', ' 你好 '), '你好');
+    expect(LocalChatVoiceInputText.combine('已有文字  ', '继续说'), '已有文字 继续说');
+    expect(LocalChatVoiceInputText.combine('已有文字', ''), '已有文字');
+  });
 }

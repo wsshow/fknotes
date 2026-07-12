@@ -99,6 +99,46 @@ void main() {
       throwsA(isA<LocalLlmException>()),
     );
   });
+
+  test(
+    'rejects image input until the native multimodal bridge is enabled',
+    () async {
+      final engine = MnnLocalLlmEngine(
+        transport: _FakeMnnTransport(),
+        supportDirectoryProvider: () async => temporaryDirectory,
+      );
+      await engine.loadModel(model());
+
+      await expectLater(
+        engine
+            .generate(
+              LocalLlmGenerationRequest(
+                messages: const [
+                  LocalLlmMessage(
+                    role: LocalLlmRole.user,
+                    content: '分析图片',
+                    attachments: [
+                      LocalLlmAttachment(
+                        path: 'assistant/image.jpg',
+                        mimeType: 'image/jpeg',
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            )
+            .toList(),
+        throwsA(
+          isA<LocalLlmException>().having(
+            (error) => error.message,
+            'message',
+            contains('尚未启用图片输入'),
+          ),
+        ),
+      );
+      expect(engine.state, LocalLlmEngineState.ready);
+    },
+  );
 }
 
 class _FakeMnnTransport implements MnnNativeTransport {

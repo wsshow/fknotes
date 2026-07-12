@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:mime/mime.dart';
 
 import '../app.dart';
 import '../models/local_chat.dart';
@@ -12,6 +15,8 @@ import '../services/local_assistant_service.dart';
 import '../services/local_chat_prompt_builder.dart';
 import '../services/local_chat_store.dart';
 import '../services/local_llm/local_llm_output_filter.dart';
+import '../services/file_storage_service.dart';
+import '../services/realtime_dictation_service.dart';
 import '../widgets/app_popup_menu.dart';
 import '../widgets/editor_context_menu.dart';
 import '../widgets/fk_markdown_view.dart';
@@ -31,6 +36,9 @@ class _LocalChatPageState extends State<LocalChatPage> {
   final _store = LocalChatStore.instance;
   final _assistant = LocalAssistantService.instance;
   final _models = LanguageModelService.instance;
+  final _storage = FileStorageService.instance;
+  final _imagePicker = ImagePicker();
+  final _dictation = RealtimeDictationService.instance;
   final _input = TextEditingController();
   final _inputFocus = FocusNode();
   final _scroll = ScrollController();
@@ -41,6 +49,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
   bool _loading = true;
   bool _generating = false;
   bool _modelInstalled = false;
+  LocalLlmCapabilities _modelCapabilities = const LocalLlmCapabilities();
   String _modelName = '本地语言模型';
   String? _loadError;
   String? _generationError;
@@ -48,10 +57,15 @@ class _LocalChatPageState extends State<LocalChatPage> {
   bool _closed = false;
   bool _autoFollowOutput = true;
   bool _showJumpToBottom = false;
+  final List<LocalChatAttachment> _pendingAttachments = [];
+  bool _pickingImages = false;
+  bool _chatDictating = false;
+  String _dictationBaseText = '';
 
   @override
   void initState() {
     super.initState();
+    _dictation.addListener(_handleDictationChanged);
     unawaited(_initialize());
   }
 
@@ -86,6 +100,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
             (sessions.isEmpty ? _store.createSession() : sessions.first);
         _modelName = _models.displayName(selectedId);
         _modelInstalled = model.installed;
+        _modelCapabilities = _models.capabilities(selectedId);
         _loading = false;
       });
       _scrollToEnd(force: true);
@@ -103,6 +118,11 @@ class _LocalChatPageState extends State<LocalChatPage> {
   void dispose() {
     _closed = true;
     if (_generating) unawaited(_assistant.cancel());
+    if (_chatDictating) unawaited(_dictation.cancel());
+    _dictation.removeListener(_handleDictationChanged);
+    for (final attachment in _pendingAttachments) {
+      unawaited(_storage.deleteFile(attachment.filePath));
+    }
     _input.dispose();
     _inputFocus.dispose();
     _scroll.dispose();
@@ -187,10 +207,20 @@ class _LocalChatPageState extends State<LocalChatPage> {
                   onRetry: _canRetry ? _retryLastMessage : null,
                   onClose: () => setState(() => _generationError = null),
                 ),
-              _Composer(
+              LocalChatComposer(
                 controller: _input,
                 focusNode: _inputFocus,
                 generating: _generating,
+                pendingAttachments: _pendingAttachments,
+                imageInputAvailable: _modelCapabilities.imageInput,
+                pickingImages: _pickingImages,
+                dictating: _chatDictating,
+                dictationPreparing:
+                    _chatDictating &&
+                    _dictation.status == RealtimeDictationStatus.preparing,
+                onPickImages: _pickChatImages,
+                onRemoveAttachment: _removePendingAttachment,
+                onToggleDictation: _toggleDictation,
                 onSend: _send,
                 onStop: _stop,
               ),
@@ -326,19 +356,38 @@ class _LocalChatPageState extends State<LocalChatPage> {
   }
 
   Future<void> _send() async {
+    if (_generating) return;
+    if (_chatDictating) await _finishDictation();
+    if (!mounted) return;
     final content = _input.text.trim();
-    if (content.isEmpty || _generating) return;
+    if ((content.isEmpty && _pendingAttachments.isEmpty) || _generating) return;
+    if (_pendingAttachments.isNotEmpty && !_modelCapabilities.imageInput) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('当前本地运行时仅支持文字输入；图片已经保留在输入区，请移除或等待多模态运行时')),
+      );
+      return;
+    }
     if (!await _ensureModelInstalled()) return;
+    final attachments = List<LocalChatAttachment>.unmodifiable(
+      _pendingAttachments,
+    );
     _input.clear();
+    _pendingAttachments.clear();
     final firstUserMessage = !_session.messages.any(
       (message) => message.role == LocalChatRole.user,
     );
     final messages = [
       ..._session.messages,
-      _store.createMessage(role: LocalChatRole.user, content: content),
+      _store.createMessage(
+        role: LocalChatRole.user,
+        content: content,
+        attachments: attachments,
+      ),
     ];
     _session = _session.copyWith(
-      title: firstUserMessage ? _store.titleFrom(content) : _session.title,
+      title: firstUserMessage
+          ? _store.titleFrom(content.isEmpty ? '图片对话' : content)
+          : _session.title,
       messages: messages,
       updatedAt: DateTime.now(),
     );
@@ -499,7 +548,120 @@ class _LocalChatPageState extends State<LocalChatPage> {
     setState(() {
       _modelName = _models.displayName(selectedId);
       _modelInstalled = info.installed;
+      _modelCapabilities = _models.capabilities(selectedId);
     });
+  }
+
+  Future<void> _pickChatImages() async {
+    if (_generating || _pickingImages || _pendingAttachments.length >= 4) {
+      return;
+    }
+    setState(() => _pickingImages = true);
+    final imported = <LocalChatAttachment>[];
+    try {
+      final selected = await _imagePicker.pickMultiImage();
+      final remaining = 4 - _pendingAttachments.length;
+      for (final image in selected.take(remaining)) {
+        final source = File(image.path);
+        if (!await source.exists()) continue;
+        final filePath = await _storage.copyFile(source, 'assistant');
+        imported.add(
+          _store.createImageAttachment(
+            filePath: filePath,
+            fileName: image.name,
+            mimeType: lookupMimeType(image.path) ?? 'image/*',
+          ),
+        );
+      }
+      if (!mounted) {
+        for (final attachment in imported) {
+          await _storage.deleteFile(attachment.filePath);
+        }
+        return;
+      }
+      setState(() => _pendingAttachments.addAll(imported));
+      if (imported.isNotEmpty && !_modelCapabilities.imageInput) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('图片输入界面已准备好；当前 MNN 文字运行时暂时不能读取图片内容')),
+        );
+      }
+    } catch (error) {
+      for (final attachment in imported) {
+        await _storage.deleteFile(attachment.filePath);
+      }
+      if (mounted) {
+        setState(() => _generationError = _cleanError(error));
+      }
+    } finally {
+      if (mounted) setState(() => _pickingImages = false);
+    }
+  }
+
+  Future<void> _removePendingAttachment(LocalChatAttachment attachment) async {
+    setState(() => _pendingAttachments.remove(attachment));
+    await _storage.deleteFile(attachment.filePath);
+  }
+
+  Future<void> _toggleDictation() async {
+    if (_generating) return;
+    if (_chatDictating) {
+      await _finishDictation();
+      return;
+    }
+    if (_dictation.isActive) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('其他页面正在使用实时语音输入')));
+      return;
+    }
+    _dictationBaseText = _input.text.trimRight();
+    setState(() => _chatDictating = true);
+    try {
+      if (_assistant.isActive) await _assistant.unload();
+      await _dictation.start();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _chatDictating = false;
+        _generationError = _cleanError(error);
+      });
+    }
+  }
+
+  Future<void> _finishDictation() async {
+    if (!_chatDictating) return;
+    try {
+      if (_dictation.isActive) await _dictation.stop();
+      _applyDictationText(_dictation.text);
+    } catch (error) {
+      if (mounted) setState(() => _generationError = _cleanError(error));
+    } finally {
+      if (mounted) setState(() => _chatDictating = false);
+    }
+  }
+
+  void _handleDictationChanged() {
+    if (!_chatDictating || !mounted) return;
+    _applyDictationText(_dictation.text);
+    if (_dictation.status == RealtimeDictationStatus.failed) {
+      setState(() {
+        _chatDictating = false;
+        _generationError = _dictation.errorMessage ?? '语音输入失败';
+      });
+    } else {
+      setState(() {});
+    }
+  }
+
+  void _applyDictationText(String recognized) {
+    final combined = LocalChatVoiceInputText.combine(
+      _dictationBaseText,
+      recognized,
+    );
+    _input.value = TextEditingValue(
+      text: combined,
+      selection: TextSelection.collapsed(offset: combined.length),
+    );
   }
 
   Future<void> _openModels() async {
@@ -730,6 +892,17 @@ class LocalChatScrollFollowPolicy {
       extentAfter <= bottomThreshold;
 }
 
+class LocalChatVoiceInputText {
+  const LocalChatVoiceInputText._();
+
+  static String combine(String existing, String recognized) {
+    final base = existing.trimRight();
+    final speech = recognized.trim();
+    final separator = base.isEmpty || speech.isEmpty ? '' : ' ';
+    return '$base$separator$speech';
+  }
+}
+
 class _ChatDateDivider extends StatelessWidget {
   final DateTime createdAt;
 
@@ -950,6 +1123,10 @@ class _ChatBubble extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (message.attachments.isNotEmpty) ...[
+                _ChatMessageAttachments(attachments: message.attachments),
+                if (message.content.isNotEmpty) const SizedBox(height: 9),
+              ],
               if (message.content.isEmpty && generating)
                 const SizedBox(
                   width: 18,
@@ -1044,17 +1221,34 @@ class _ChatBubble extends StatelessWidget {
   }
 }
 
-class _Composer extends StatelessWidget {
+class LocalChatComposer extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
   final bool generating;
+  final List<LocalChatAttachment> pendingAttachments;
+  final bool imageInputAvailable;
+  final bool pickingImages;
+  final bool dictating;
+  final bool dictationPreparing;
+  final VoidCallback onPickImages;
+  final ValueChanged<LocalChatAttachment> onRemoveAttachment;
+  final VoidCallback onToggleDictation;
   final VoidCallback onSend;
   final VoidCallback onStop;
 
-  const _Composer({
+  const LocalChatComposer({
+    super.key,
     required this.controller,
     required this.focusNode,
     required this.generating,
+    required this.pendingAttachments,
+    required this.imageInputAvailable,
+    required this.pickingImages,
+    required this.dictating,
+    required this.dictationPreparing,
+    required this.onPickImages,
+    required this.onRemoveAttachment,
+    required this.onToggleDictation,
     required this.onSend,
     required this.onStop,
   });
@@ -1068,52 +1262,215 @@ class _Composer extends StatelessWidget {
         color: AppColors.surface,
         border: Border(top: BorderSide(color: AppColors.line)),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: TextField(
-              key: const Key('local-chat-input'),
-              controller: controller,
-              focusNode: focusNode,
-              contextMenuBuilder: buildAppEditableTextContextMenu,
-              enabled: !generating,
-              minLines: 1,
-              maxLines: 6,
-              maxLength: 4000,
-              buildCounter:
-                  (
-                    _, {
-                    required currentLength,
-                    required isFocused,
-                    maxLength,
-                  }) => null,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                hintText: '输入消息…',
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 15,
-                  vertical: 11,
+          if (pendingAttachments.isNotEmpty) ...[
+            SizedBox(
+              height: 76,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: pendingAttachments.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 8),
+                itemBuilder: (context, index) {
+                  final attachment = pendingAttachments[index];
+                  return _PendingImage(
+                    attachment: attachment,
+                    onRemove: () => onRemoveAttachment(attachment),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 7),
+            if (!imageInputAvailable)
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '当前运行时暂不支持图片理解',
+                  style: TextStyle(color: AppColors.coral, fontSize: 10),
                 ),
+              ),
+            const SizedBox(height: 5),
+          ],
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              IconButton(
+                key: const Key('local-chat-add-image'),
+                tooltip: imageInputAvailable ? '添加图片' : '添加图片（等待多模态支持）',
+                onPressed: generating || pickingImages ? null : onPickImages,
+                icon: pickingImages
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.add_photo_alternate_outlined),
+              ),
+              IconButton(
+                key: const Key('local-chat-voice-input'),
+                tooltip: dictating ? '完成语音输入' : '语音输入',
+                onPressed: generating ? null : onToggleDictation,
+                color: dictating ? AppColors.coral : AppColors.muted,
+                icon: dictationPreparing
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(
+                        dictating
+                            ? Icons.stop_circle_outlined
+                            : Icons.mic_none_rounded,
+                      ),
+              ),
+              const SizedBox(width: 3),
+              Expanded(
+                child: TextField(
+                  key: const Key('local-chat-input'),
+                  controller: controller,
+                  focusNode: focusNode,
+                  contextMenuBuilder: buildAppEditableTextContextMenu,
+                  enabled: !generating && !dictating,
+                  minLines: 1,
+                  maxLines: 6,
+                  maxLength: 4000,
+                  buildCounter:
+                      (
+                        _, {
+                        required currentLength,
+                        required isFocused,
+                        maxLength,
+                      }) => null,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: InputDecoration(
+                    hintText: dictating ? '正在听写…' : '输入消息…',
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 15,
+                      vertical: 11,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 9),
+              IconButton.filled(
+                key: Key(generating ? 'stop-local-chat' : 'send-local-chat'),
+                tooltip: generating ? '停止生成' : '发送',
+                onPressed: generating ? onStop : onSend,
+                style: IconButton.styleFrom(
+                  backgroundColor: AppColors.moss,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(46, 46),
+                ),
+                icon: Icon(
+                  generating ? Icons.stop_rounded : Icons.arrow_upward_rounded,
+                ),
+              ),
+            ],
+          ),
+          if (dictating) ...[
+            const SizedBox(height: 5),
+            Row(
+              children: [
+                const SizedBox(width: 96),
+                Expanded(
+                  child: Text(
+                    dictationPreparing ? '正在准备离线语音识别…' : '正在听写，点击麦克风完成',
+                    style: const TextStyle(
+                      color: AppColors.coral,
+                      fontSize: 10,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    ),
+  );
+}
+
+class _PendingImage extends StatelessWidget {
+  final LocalChatAttachment attachment;
+  final VoidCallback onRemove;
+
+  const _PendingImage({required this.attachment, required this.onRemove});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 76,
+    child: Stack(
+      children: [
+        Positioned.fill(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.file(
+              File(
+                FileStorageService.instance.absolutePath(attachment.filePath),
+              ),
+              fit: BoxFit.cover,
+              cacheWidth: 240,
+              errorBuilder: (_, _, _) => const ColoredBox(
+                color: AppColors.softBlue,
+                child: Icon(Icons.broken_image_outlined),
               ),
             ),
           ),
-          const SizedBox(width: 9),
-          IconButton.filled(
-            key: Key(generating ? 'stop-local-chat' : 'send-local-chat'),
-            tooltip: generating ? '停止生成' : '发送',
-            onPressed: generating ? onStop : onSend,
+        ),
+        Positioned(
+          top: 3,
+          right: 3,
+          child: IconButton.filled(
+            tooltip: '移除图片',
+            onPressed: onRemove,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 26, height: 26),
             style: IconButton.styleFrom(
-              backgroundColor: AppColors.moss,
+              backgroundColor: AppColors.ink.withValues(alpha: .68),
               foregroundColor: Colors.white,
-              minimumSize: const Size(46, 46),
             ),
-            icon: Icon(
-              generating ? Icons.stop_rounded : Icons.arrow_upward_rounded,
+            icon: const Icon(Icons.close_rounded, size: 16),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _ChatMessageAttachments extends StatelessWidget {
+  final List<LocalChatAttachment> attachments;
+
+  const _ChatMessageAttachments({required this.attachments});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: 132,
+    child: ListView.separated(
+      scrollDirection: Axis.horizontal,
+      shrinkWrap: true,
+      itemCount: attachments.length,
+      separatorBuilder: (_, _) => const SizedBox(width: 7),
+      itemBuilder: (context, index) {
+        final attachment = attachments[index];
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Image.file(
+            File(FileStorageService.instance.absolutePath(attachment.filePath)),
+            width: 176,
+            height: 132,
+            fit: BoxFit.cover,
+            cacheWidth: 520,
+            errorBuilder: (_, _, _) => const SizedBox(
+              width: 176,
+              child: ColoredBox(
+                color: AppColors.softBlue,
+                child: Icon(Icons.broken_image_outlined),
+              ),
             ),
           ),
-        ],
-      ),
+        );
+      },
     ),
   );
 }

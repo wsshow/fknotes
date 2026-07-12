@@ -126,6 +126,13 @@ class MnnLocalLlmEngine implements LocalLlmEngine {
         await controller.close();
         return;
       }
+      if (request.messages.any((message) => message.attachments.isNotEmpty)) {
+        controller.addError(
+          const LocalLlmException('当前 MNN 运行时尚未启用图片输入，请切换支持多模态的运行时'),
+        );
+        await controller.close();
+        return;
+      }
       final requestId = _newRequestId();
       final done = Completer<void>();
       _activeGenerationRequestId = requestId;

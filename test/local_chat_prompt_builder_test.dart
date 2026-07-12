@@ -71,4 +71,35 @@ void main() {
 
     expect(request.messages.map((item) => item.content), ['继续', '重新回答']);
   });
+
+  test('preserves image inputs for a future multimodal runtime', () {
+    final request = LocalChatPromptBuilder.build(
+      systemPrompt: '',
+      messages: [
+        LocalChatMessage(
+          id: 'image',
+          role: LocalChatRole.user,
+          content: '这张图里有什么？',
+          createdAt: DateTime(2026),
+          attachments: [
+            LocalChatAttachment(
+              id: 'attachment',
+              type: LocalChatAttachmentType.image,
+              filePath: 'assistant/example.jpg',
+              fileName: 'example.jpg',
+              mimeType: 'image/jpeg',
+              createdAt: DateTime(2026),
+            ),
+          ],
+        ),
+      ],
+    );
+
+    expect(request.messages.single.attachments, hasLength(1));
+    expect(
+      request.messages.single.attachments.single.path,
+      'assistant/example.jpg',
+    );
+    expect(request.messages.single.attachments.single.mimeType, 'image/jpeg');
+  });
 }

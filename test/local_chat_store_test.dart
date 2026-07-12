@@ -105,4 +105,35 @@ void main() {
     );
     expect(orphaned, isEmpty);
   });
+
+  test('persists image attachments and deletes their managed files', () async {
+    final source = File('${root.path}/source.jpg');
+    await source.writeAsBytes([1, 2, 3, 4]);
+    final filePath = await FileStorageService.instance.copyFile(
+      source,
+      'assistant',
+    );
+    final attachment = store.createImageAttachment(
+      filePath: filePath,
+      fileName: 'idea.jpg',
+      mimeType: 'image/jpeg',
+    );
+    final session = store.createSession().copyWith(
+      messages: [
+        store.createMessage(
+          role: LocalChatRole.user,
+          content: '分析这张图',
+          attachments: [attachment],
+        ),
+      ],
+    );
+    await store.saveSession(session);
+
+    final restored = (await store.loadSessions()).single;
+    expect(restored.messages.single.attachments.single.fileName, 'idea.jpg');
+    expect(await FileStorageService.instance.fileExists(filePath), isTrue);
+
+    await store.deleteSession(session.id);
+    expect(await FileStorageService.instance.fileExists(filePath), isFalse);
+  });
 }

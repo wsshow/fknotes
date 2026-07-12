@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/local_chat.dart';
 import 'database_service.dart';
+import 'file_storage_service.dart';
 
 class LocalChatStore {
   LocalChatStore._();
@@ -32,11 +35,13 @@ class LocalChatStore {
   LocalChatMessage createMessage({
     required LocalChatRole role,
     required String content,
+    List<LocalChatAttachment> attachments = const [],
     LocalChatMessageStatus status = LocalChatMessageStatus.complete,
   }) => LocalChatMessage(
     id: _uuid.v4(),
     role: role,
     content: content,
+    attachments: List.unmodifiable(attachments),
     createdAt: DateTime.now(),
     status: status,
   );
@@ -48,6 +53,19 @@ class LocalChatStore {
     if (runes.length <= 24) return normalized;
     return '${String.fromCharCodes(runes.take(24))}…';
   }
+
+  LocalChatAttachment createImageAttachment({
+    required String filePath,
+    required String fileName,
+    required String mimeType,
+  }) => LocalChatAttachment(
+    id: _uuid.v4(),
+    type: LocalChatAttachmentType.image,
+    filePath: filePath,
+    fileName: fileName,
+    mimeType: mimeType,
+    createdAt: DateTime.now(),
+  );
 
   LocalChatPersona createPersona({
     required String name,
@@ -150,6 +168,9 @@ class LocalChatStore {
                   ? LocalChatRole.assistant
                   : LocalChatRole.user,
               content: row['content'] as String,
+              attachments: _decodeAttachments(
+                row['attachments_json'] as String? ?? '[]',
+              ),
               createdAt: DateTime.parse(row['created_at'] as String),
               status: row['status'] == 'stopped'
                   ? LocalChatMessageStatus.stopped
@@ -198,6 +219,11 @@ class LocalChatStore {
             'session_id': session.id,
             'role': message.role.name,
             'content': message.content,
+            'attachments_json': jsonEncode(
+              message.attachments
+                  .map((attachment) => attachment.toJson())
+                  .toList(),
+            ),
             'status': message.status.name,
             'created_at': message.createdAt.toIso8601String(),
             'sort_order': index,
@@ -213,9 +239,43 @@ class LocalChatStore {
   Future<void> deleteSession(String id) {
     final result = _writeQueue.then((_) async {
       final database = await DatabaseService.instance.database;
+      final rows = await database.query(
+        'chat_messages',
+        columns: ['attachments_json'],
+        where: 'session_id = ?',
+        whereArgs: [id],
+      );
+      final paths = <String>{
+        for (final row in rows)
+          for (final attachment in _decodeAttachments(
+            row['attachments_json'] as String? ?? '[]',
+          ))
+            attachment.filePath,
+      };
       await database.delete('chat_sessions', where: 'id = ?', whereArgs: [id]);
+      for (final path in paths) {
+        await FileStorageService.instance.deleteFile(path);
+      }
     });
     _writeQueue = result.catchError((_) {});
     return result;
+  }
+
+  static List<LocalChatAttachment> _decodeAttachments(String source) {
+    try {
+      final decoded = jsonDecode(source);
+      if (decoded is! List) return const [];
+      return decoded
+          .map(
+            (item) => LocalChatAttachment.fromJson(
+              Map<String, Object?>.from(item as Map),
+            ),
+          )
+          .toList(growable: false);
+    } on FormatException {
+      return const [];
+    } on TypeError {
+      return const [];
+    }
   }
 }

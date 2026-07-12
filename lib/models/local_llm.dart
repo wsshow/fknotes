@@ -20,8 +20,20 @@ enum LocalLlmFinishReason { completed, maxTokens, canceled, timeout }
 class LocalLlmMessage {
   final LocalLlmRole role;
   final String content;
+  final List<LocalLlmAttachment> attachments;
 
-  const LocalLlmMessage({required this.role, required this.content});
+  const LocalLlmMessage({
+    required this.role,
+    required this.content,
+    this.attachments = const [],
+  });
+}
+
+class LocalLlmAttachment {
+  final String path;
+  final String mimeType;
+
+  const LocalLlmAttachment({required this.path, required this.mimeType});
 }
 
 class LocalLlmCapabilities {

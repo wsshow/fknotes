@@ -88,6 +88,13 @@ void main() {
         sessionColumns.map((column) => column['name']),
         contains('persona_id'),
       );
+      final messageColumns = await db.rawQuery(
+        'PRAGMA table_info(chat_messages)',
+      );
+      expect(
+        messageColumns.map((column) => column['name']),
+        contains('attachments_json'),
+      );
       final searchRows = await db.query(
         'search_fts',
         where: 'kind = ? AND body = ?',

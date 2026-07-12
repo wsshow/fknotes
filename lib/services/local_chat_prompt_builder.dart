@@ -14,7 +14,9 @@ class LocalChatPromptBuilder {
     final selected = <LocalLlmMessage>[];
 
     for (final message in messages.reversed) {
-      if (message.content.trim().isEmpty) continue;
+      if (message.content.trim().isEmpty && message.attachments.isEmpty) {
+        continue;
+      }
       if (message.role == LocalChatRole.assistant &&
           message.status != LocalChatMessageStatus.complete) {
         continue;
@@ -27,6 +29,13 @@ class LocalChatPromptBuilder {
               ? LocalLlmRole.user
               : LocalLlmRole.assistant,
           content: content,
+          attachments: [
+            for (final attachment in message.attachments)
+              LocalLlmAttachment(
+                path: attachment.filePath,
+                mimeType: attachment.mimeType,
+              ),
+          ],
         ),
       );
       remaining -= content.length;

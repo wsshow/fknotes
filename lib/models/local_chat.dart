@@ -2,6 +2,59 @@ enum LocalChatRole { user, assistant }
 
 enum LocalChatMessageStatus { complete, stopped }
 
+enum LocalChatAttachmentType { image }
+
+class LocalChatAttachment {
+  final String id;
+  final LocalChatAttachmentType type;
+  final String filePath;
+  final String fileName;
+  final String mimeType;
+  final DateTime createdAt;
+
+  const LocalChatAttachment({
+    required this.id,
+    required this.type,
+    required this.filePath,
+    required this.fileName,
+    required this.mimeType,
+    required this.createdAt,
+  });
+
+  Map<String, Object> toJson() => {
+    'id': id,
+    'type': type.name,
+    'filePath': filePath,
+    'fileName': fileName,
+    'mimeType': mimeType,
+    'createdAt': createdAt.toIso8601String(),
+  };
+
+  factory LocalChatAttachment.fromJson(Map<String, Object?> json) {
+    final id = json['id'] as String?;
+    final filePath = json['filePath'] as String?;
+    final createdAt = DateTime.tryParse(json['createdAt'] as String? ?? '');
+    if (id == null ||
+        id.isEmpty ||
+        filePath == null ||
+        filePath.isEmpty ||
+        createdAt == null) {
+      throw const FormatException('聊天附件格式不正确');
+    }
+    return LocalChatAttachment(
+      id: id,
+      type: LocalChatAttachmentType.values.firstWhere(
+        (value) => value.name == json['type'],
+        orElse: () => LocalChatAttachmentType.image,
+      ),
+      filePath: filePath,
+      fileName: json['fileName'] as String? ?? '图片',
+      mimeType: json['mimeType'] as String? ?? 'image/*',
+      createdAt: createdAt,
+    );
+  }
+}
+
 class LocalChatPersona {
   static const defaultId = 'default';
   static const defaultSystemPrompt =
@@ -45,6 +98,7 @@ class LocalChatMessage {
   final String id;
   final LocalChatRole role;
   final String content;
+  final List<LocalChatAttachment> attachments;
   final DateTime createdAt;
   final LocalChatMessageStatus status;
 
@@ -53,17 +107,20 @@ class LocalChatMessage {
     required this.role,
     required this.content,
     required this.createdAt,
+    this.attachments = const [],
     this.status = LocalChatMessageStatus.complete,
   });
 
   LocalChatMessage copyWith({
     String? content,
+    List<LocalChatAttachment>? attachments,
     LocalChatMessageStatus? status,
   }) => LocalChatMessage(
     id: id,
     role: role,
     content: content ?? this.content,
     createdAt: createdAt,
+    attachments: attachments ?? this.attachments,
     status: status ?? this.status,
   );
 
@@ -71,6 +128,9 @@ class LocalChatMessage {
     'id': id,
     'role': role.name,
     'content': content,
+    'attachments': attachments
+        .map((attachment) => attachment.toJson())
+        .toList(),
     'createdAt': createdAt.toIso8601String(),
     'status': status.name,
   };
@@ -94,6 +154,13 @@ class LocalChatMessage {
       },
       content: content,
       createdAt: createdAt,
+      attachments: (json['attachments'] as List? ?? const [])
+          .map(
+            (attachment) => LocalChatAttachment.fromJson(
+              Map<String, Object?>.from(attachment as Map),
+            ),
+          )
+          .toList(growable: false),
       status: json['status'] == 'stopped'
           ? LocalChatMessageStatus.stopped
           : LocalChatMessageStatus.complete,

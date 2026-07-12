@@ -18,7 +18,7 @@ class DatabaseService {
     final path = p.join(FileStorageService.instance.baseDir, 'fknotes.db');
     return openDatabase(
       path,
-      version: 7,
+      version: 8,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -112,6 +112,16 @@ class DatabaseService {
         );
       }
     }
+    if (oldVersion < 8) {
+      final columns = (await db.rawQuery(
+        'PRAGMA table_info(chat_messages)',
+      )).map((column) => column['name'] as String).toSet();
+      if (!columns.contains('attachments_json')) {
+        await db.execute(
+          "ALTER TABLE chat_messages ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]'",
+        );
+      }
+    }
   }
 
   Future<void> _createAttachmentsTable(Database db) => db.execute('''
@@ -154,6 +164,7 @@ class DatabaseService {
         session_id TEXT NOT NULL,
         role TEXT NOT NULL,
         content TEXT NOT NULL,
+        attachments_json TEXT NOT NULL DEFAULT '[]',
         status TEXT NOT NULL DEFAULT 'complete',
         created_at TEXT NOT NULL,
         sort_order INTEGER NOT NULL,
