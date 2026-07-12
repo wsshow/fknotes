@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../app.dart';
+import '../l10n/l10n.dart';
 import '../models/local_chat.dart';
 import '../services/local_chat_store.dart';
 import '../widgets/app_feedback.dart';
@@ -100,16 +101,16 @@ class _LocalChatRolesPageState extends State<LocalChatRolesPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('删除“${persona.name}”？'),
-        content: const Text('使用这个角色的对话会切换回通用助手，聊天记录不会删除。'),
+        title: Text(context.l10n.personaDeleteQuestion(persona.name)),
+        content: Text(context.l10n.personaDeleteDescription),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            child: Text(context.l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('删除'),
+            child: Text(context.l10n.remove),
           ),
         ],
       ),
@@ -144,11 +145,11 @@ class _LocalChatRolesPageState extends State<LocalChatRolesPage> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: const Text('角色管理'),
+      title: Text(context.l10n.personaManagement),
       actions: [
         IconButton(
           key: const Key('local-chat-add-persona'),
-          tooltip: '新建角色',
+          tooltip: context.l10n.createPersona,
           onPressed: _loading ? null : _createPersona,
           icon: const Icon(Icons.add_rounded),
         ),
@@ -160,7 +161,7 @@ class _LocalChatRolesPageState extends State<LocalChatRolesPage> {
         : FloatingActionButton.extended(
             onPressed: _createPersona,
             icon: const Icon(Icons.add_rounded),
-            label: const Text('新建角色'),
+            label: Text(context.l10n.createPersona),
           ),
     body: _loading
         ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
@@ -169,15 +170,15 @@ class _LocalChatRolesPageState extends State<LocalChatRolesPage> {
             child: OutlinedButton.icon(
               onPressed: _load,
               icon: const Icon(Icons.refresh_rounded),
-              label: const Text('重新加载'),
+              label: Text(context.l10n.reload),
             ),
           )
         : ListView(
             padding: const EdgeInsets.fromLTRB(20, 10, 20, 110),
             children: [
-              const Text(
-                '角色决定本地模型回答问题时采用的身份、语气和规则。你可以在聊天中随时切换，所有设定只保存在本机。',
-                style: TextStyle(color: AppColors.muted, height: 1.55),
+              Text(
+                context.l10n.personaManagementDescription,
+                style: const TextStyle(color: AppColors.muted, height: 1.55),
               ),
               const SizedBox(height: 18),
               for (final persona in _personas) ...[
@@ -243,7 +244,9 @@ class _PersonaCard extends StatelessWidget {
                 children: [
                   Flexible(
                     child: Text(
-                      persona.name,
+                      persona.id == LocalChatPersona.defaultId
+                          ? context.l10n.generalAssistant
+                          : persona.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontWeight: FontWeight.w700),
@@ -251,17 +254,19 @@ class _PersonaCard extends StatelessWidget {
                   ),
                   if (persona.builtIn) ...[
                     const SizedBox(width: 7),
-                    const _PersonaBadge(label: '内置'),
+                    _PersonaBadge(label: context.l10n.builtIn),
                   ],
                   if (selected) ...[
                     const SizedBox(width: 7),
-                    const _PersonaBadge(label: '当前'),
+                    _PersonaBadge(label: context.l10n.current),
                   ],
                 ],
               ),
               const SizedBox(height: 4),
               Text(
-                persona.description.isEmpty ? '未填写角色说明' : persona.description,
+                persona.description.isEmpty
+                    ? context.l10n.personaDescriptionMissing
+                    : persona.description,
                 style: const TextStyle(
                   color: AppColors.muted,
                   fontSize: 12,
@@ -273,22 +278,22 @@ class _PersonaCard extends StatelessWidget {
         ),
         if (!persona.builtIn)
           AppAnchoredMenuButton<String>(
-            tooltip: '角色操作',
+            tooltip: context.l10n.personaActions,
             icon: const Icon(Icons.more_vert_rounded),
             onSelected: (value) {
               if (value == 'edit') onEdit();
               if (value == 'delete') onDelete();
             },
-            actions: const [
+            actions: [
               AppMenuAction(
                 value: 'edit',
                 icon: Icons.edit_outlined,
-                label: '编辑角色',
+                label: context.l10n.editPersona,
               ),
               AppMenuAction(
                 value: 'delete',
                 icon: Icons.delete_outline_rounded,
-                label: '删除角色',
+                label: context.l10n.deletePersona,
                 destructive: true,
               ),
             ],
@@ -402,13 +407,15 @@ class _PersonaEditorSheetState extends State<_PersonaEditorSheet> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                widget.persona == null ? '新建角色' : '编辑角色',
+                widget.persona == null
+                    ? context.l10n.createPersona
+                    : context.l10n.editPersona,
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 5),
-              const Text(
-                '角色名称用于切换；系统提示词会在每次请求中作为最高优先级的本地指令。',
-                style: TextStyle(color: AppColors.muted, fontSize: 12),
+              Text(
+                context.l10n.personaInstructionDescription,
+                style: const TextStyle(color: AppColors.muted, fontSize: 12),
               ),
               const SizedBox(height: 14),
               TextField(
@@ -418,7 +425,9 @@ class _PersonaEditorSheetState extends State<_PersonaEditorSheet> {
                 autofocus: widget.persona == null,
                 maxLength: 30,
                 textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(labelText: '角色名称'),
+                decoration: InputDecoration(
+                  labelText: context.l10n.personaName,
+                ),
               ),
               const SizedBox(height: 10),
               TextField(
@@ -427,7 +436,9 @@ class _PersonaEditorSheetState extends State<_PersonaEditorSheet> {
                 contextMenuBuilder: buildAppEditableTextContextMenu,
                 maxLength: 100,
                 textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(labelText: '简短说明（可选）'),
+                decoration: InputDecoration(
+                  labelText: context.l10n.shortDescriptionOptional,
+                ),
               ),
               const SizedBox(height: 10),
               Expanded(
@@ -440,9 +451,9 @@ class _PersonaEditorSheetState extends State<_PersonaEditorSheet> {
                   expands: true,
                   textAlignVertical: TextAlignVertical.top,
                   maxLength: 2000,
-                  decoration: const InputDecoration(
-                    labelText: '系统提示词',
-                    hintText: '例如：你是一位耐心的英语口语教练……',
+                  decoration: InputDecoration(
+                    labelText: context.l10n.systemPrompt,
+                    hintText: context.l10n.systemPromptHint,
                     alignLabelWithHint: true,
                   ),
                 ),
@@ -454,12 +465,12 @@ class _PersonaEditorSheetState extends State<_PersonaEditorSheet> {
                 children: [
                   TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: const Text('取消'),
+                    child: Text(context.l10n.cancel),
                   ),
                   FilledButton(
                     key: const Key('local-chat-persona-save'),
                     onPressed: _valid ? _save : null,
-                    child: const Text('保存角色'),
+                    child: Text(context.l10n.savePersona),
                   ),
                 ],
               ),

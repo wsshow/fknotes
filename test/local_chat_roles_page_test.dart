@@ -1,4 +1,5 @@
 import 'package:fknotes/models/local_chat.dart';
+import 'package:fknotes/l10n/generated/app_localizations.dart';
 import 'package:fknotes/pages/local_chat_roles_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -41,5 +42,35 @@ void main() {
     expect(find.text('英语教练'), findsOneWidget);
     expect(find.text('当前'), findsOneWidget);
     expect(find.byKey(const Key('local-chat-add-persona')), findsOneWidget);
+  });
+
+  testWidgets('role manager renders built-in metadata in English', (
+    tester,
+  ) async {
+    final now = DateTime(2026, 7, 12);
+    final builtIn = LocalChatPersona(
+      id: LocalChatPersona.defaultId,
+      name: '通用助手',
+      description: '',
+      systemPrompt: LocalChatPersona.defaultSystemPrompt,
+      builtIn: true,
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: LocalChatRolesPage(initialPersonas: [builtIn]),
+      ),
+    );
+
+    expect(find.text('Personas'), findsOneWidget);
+    expect(find.text('General assistant'), findsOneWidget);
+    expect(find.text('Built in'), findsOneWidget);
+    expect(find.text('No description'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

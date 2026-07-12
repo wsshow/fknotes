@@ -81,6 +81,18 @@ void main() {
     ]);
   });
 
+  test('English locale localizes the built-in system and Markdown prompt', () {
+    final request = LocalChatPromptBuilder.build(
+      systemPrompt: LocalChatPersona.defaultSystemPrompt,
+      messages: [message('1', LocalChatRole.user, 'Hello')],
+      languageCode: 'en',
+    );
+
+    expect(request.messages.first.content, contains('on-device assistant'));
+    expect(request.messages.first.content, contains('Use LaTeX for math'));
+    expect(request.messages.first.content, isNot(contains('准确、清晰')));
+  });
+
   test('preserves image inputs for the multimodal runtime', () {
     final request = LocalChatPromptBuilder.build(
       systemPrompt: '',

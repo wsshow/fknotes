@@ -1578,4 +1578,261 @@ class AppLocalizationsEn extends AppLocalizations {
   String fileAttachmentMetadata(int count) {
     return 'Files · $count';
   }
+
+  @override
+  String get localLanguageModel => 'Local language model';
+
+  @override
+  String get conversationHistory => 'Chat history';
+
+  @override
+  String get personaManagement => 'Personas';
+
+  @override
+  String get moreConversationActions => 'More chat actions';
+
+  @override
+  String get newConversation => 'New chat';
+
+  @override
+  String get deleteCurrentConversation => 'Delete current chat';
+
+  @override
+  String get jumpToBottom => 'Jump to bottom';
+
+  @override
+  String get generalAssistant => 'General assistant';
+
+  @override
+  String get textOnlyRuntimeImageWarning =>
+      'The current local runtime supports text only. Images remain in the composer; remove them or wait for a multimodal runtime.';
+
+  @override
+  String get imageConversation => 'Image chat';
+
+  @override
+  String chatModelDownloadDescription(String model, String size) {
+    return 'The selected model is $model. Its first use requires about $size. Chat content is processed only on this device.';
+  }
+
+  @override
+  String get imageKeptUnsupportedModel =>
+      'The image remains in the composer. The current model can\'t understand images; switch to a compatible model.';
+
+  @override
+  String get voiceInputBusyElsewhere =>
+      'Another page is using live voice input.';
+
+  @override
+  String get voiceInputFailed => 'Voice input failed.';
+
+  @override
+  String get deleteCurrentConversationQuestion => 'Delete current chat?';
+
+  @override
+  String get deleteConversationDescription =>
+      'The messages and persona selection in this chat can\'t be recovered.';
+
+  @override
+  String chatSaveFailed(String error) {
+    return 'Couldn\'t save chat history: $error';
+  }
+
+  @override
+  String get today => 'Today';
+
+  @override
+  String get yesterday => 'Yesterday';
+
+  @override
+  String get installedState => 'Installed';
+
+  @override
+  String get notInstalledState => 'Not installed';
+
+  @override
+  String get chatEmptyTitle => 'What would you like to explore?';
+
+  @override
+  String get chatEmptyDescription =>
+      'Ask anything. Messages and persona settings remain on this device.';
+
+  @override
+  String get chatSuggestionPriorities =>
+      'Help me identify today\'s three most important priorities';
+
+  @override
+  String get chatSuggestionExplain =>
+      'Explain a complex idea in plain language';
+
+  @override
+  String get chatSuggestionDevelopIdea => 'Help me develop a new idea';
+
+  @override
+  String get yourImageMessage => 'Your image message';
+
+  @override
+  String get yourMessage => 'Your message';
+
+  @override
+  String get aiReplying => 'AI is replying';
+
+  @override
+  String get aiReply => 'AI reply';
+
+  @override
+  String get stopped => 'Stopped';
+
+  @override
+  String get copyReply => 'Copy reply';
+
+  @override
+  String get replyCopied => 'Reply copied';
+
+  @override
+  String get generating => 'Generating…';
+
+  @override
+  String get modelDoesNotSupportImages =>
+      'The current model can\'t understand images. Switch models before sending.';
+
+  @override
+  String get takePhoto => 'Take photo';
+
+  @override
+  String get takePhotoUnsupported => 'Take photo (current model unsupported)';
+
+  @override
+  String get dictating => 'Listening…';
+
+  @override
+  String get messageOrVoiceHint => 'Message or use voice…';
+
+  @override
+  String get stopGeneration => 'Stop generation';
+
+  @override
+  String get finishVoiceInput => 'Finish voice input';
+
+  @override
+  String get send => 'Send';
+
+  @override
+  String get voiceInput => 'Voice input';
+
+  @override
+  String get addImage => 'Add image';
+
+  @override
+  String get addImageUnsupported => 'Add image (current model unsupported)';
+
+  @override
+  String get preparingOfflineSpeech => 'Preparing offline speech recognition…';
+
+  @override
+  String get dictationTapMicToFinish =>
+      'Listening. Tap the microphone to finish.';
+
+  @override
+  String get previewImage => 'Preview image';
+
+  @override
+  String get removeImage => 'Remove image';
+
+  @override
+  String get addMoreImages => 'Add more images';
+
+  @override
+  String previewImageNumber(int index) {
+    return 'Preview image $index';
+  }
+
+  @override
+  String get closePreview => 'Close preview';
+
+  @override
+  String get imageCannotOpen => 'Couldn\'t open image';
+
+  @override
+  String get dismissMessage => 'Dismiss message';
+
+  @override
+  String get readAgain => 'Read again';
+
+  @override
+  String get switchPersona => 'Switch persona';
+
+  @override
+  String get manage => 'Manage';
+
+  @override
+  String get noSavedConversations => 'No saved chats';
+
+  @override
+  String conversationMessageCount(int count, String time) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count messages',
+      one: '1 message',
+    );
+    return '$_temp0 · $time';
+  }
+
+  @override
+  String personaDeleteQuestion(String name) {
+    return 'Delete “$name”?';
+  }
+
+  @override
+  String get personaDeleteDescription =>
+      'Chats using this persona will switch to General assistant. Chat history won\'t be deleted.';
+
+  @override
+  String get createPersona => 'New persona';
+
+  @override
+  String get reload => 'Reload';
+
+  @override
+  String get personaManagementDescription =>
+      'Personas define the identity, tone, and rules used by the local model. Switch at any time while chatting. All settings remain on this device.';
+
+  @override
+  String get builtIn => 'Built in';
+
+  @override
+  String get current => 'Current';
+
+  @override
+  String get personaDescriptionMissing => 'No description';
+
+  @override
+  String get personaActions => 'Persona actions';
+
+  @override
+  String get editPersona => 'Edit persona';
+
+  @override
+  String get deletePersona => 'Delete persona';
+
+  @override
+  String get personaInstructionDescription =>
+      'The name appears in the persona switcher. The system prompt is sent as the highest-priority local instruction with every request.';
+
+  @override
+  String get personaName => 'Persona name';
+
+  @override
+  String get shortDescriptionOptional => 'Short description (optional)';
+
+  @override
+  String get systemPrompt => 'System prompt';
+
+  @override
+  String get systemPromptHint =>
+      'For example: You are a patient English conversation coach…';
+
+  @override
+  String get savePersona => 'Save persona';
 }

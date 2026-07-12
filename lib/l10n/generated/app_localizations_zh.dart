@@ -1470,4 +1470,245 @@ class AppLocalizationsZh extends AppLocalizations {
   String fileAttachmentMetadata(int count) {
     return '文件 · $count 个';
   }
+
+  @override
+  String get localLanguageModel => '本地语言模型';
+
+  @override
+  String get conversationHistory => '对话记录';
+
+  @override
+  String get personaManagement => '角色管理';
+
+  @override
+  String get moreConversationActions => '更多对话操作';
+
+  @override
+  String get newConversation => '新对话';
+
+  @override
+  String get deleteCurrentConversation => '删除当前对话';
+
+  @override
+  String get jumpToBottom => '回到底部';
+
+  @override
+  String get generalAssistant => '通用助手';
+
+  @override
+  String get textOnlyRuntimeImageWarning =>
+      '当前本地运行时仅支持文字输入；图片已经保留在输入区，请移除或等待多模态运行时';
+
+  @override
+  String get imageConversation => '图片对话';
+
+  @override
+  String chatModelDownloadDescription(String model, String size) {
+    return '当前选择的是 $model，首次使用需下载约 $size。聊天内容只在本机处理。';
+  }
+
+  @override
+  String get imageKeptUnsupportedModel => '图片已保留在输入区；当前模型不支持图片理解，请切换到支持图片的模型';
+
+  @override
+  String get voiceInputBusyElsewhere => '其他页面正在使用实时语音输入';
+
+  @override
+  String get voiceInputFailed => '语音输入失败';
+
+  @override
+  String get deleteCurrentConversationQuestion => '删除当前对话？';
+
+  @override
+  String get deleteConversationDescription => '聊天内容和这个会话的角色设定将无法恢复。';
+
+  @override
+  String chatSaveFailed(String error) {
+    return '无法保存聊天记录：$error';
+  }
+
+  @override
+  String get today => '今天';
+
+  @override
+  String get yesterday => '昨天';
+
+  @override
+  String get installedState => '已安装';
+
+  @override
+  String get notInstalledState => '未安装';
+
+  @override
+  String get chatEmptyTitle => '你想聊什么？';
+
+  @override
+  String get chatEmptyDescription => '自由输入任何内容。消息和角色设定只保存在本机。';
+
+  @override
+  String get chatSuggestionPriorities => '帮我梳理今天最重要的三件事';
+
+  @override
+  String get chatSuggestionExplain => '用通俗的话解释一个复杂概念';
+
+  @override
+  String get chatSuggestionDevelopIdea => '和我一起完善一个新想法';
+
+  @override
+  String get yourImageMessage => '你的图片消息';
+
+  @override
+  String get yourMessage => '你的消息';
+
+  @override
+  String get aiReplying => 'AI 正在回复';
+
+  @override
+  String get aiReply => 'AI 回复';
+
+  @override
+  String get stopped => '已停止';
+
+  @override
+  String get copyReply => '复制回答';
+
+  @override
+  String get replyCopied => '已复制回答';
+
+  @override
+  String get generating => '正在生成…';
+
+  @override
+  String get modelDoesNotSupportImages => '当前模型不支持图片理解，请切换模型后发送';
+
+  @override
+  String get takePhoto => '拍照';
+
+  @override
+  String get takePhotoUnsupported => '拍照（当前模型不支持图片）';
+
+  @override
+  String get dictating => '正在听写…';
+
+  @override
+  String get messageOrVoiceHint => '发消息或使用语音…';
+
+  @override
+  String get stopGeneration => '停止生成';
+
+  @override
+  String get finishVoiceInput => '完成语音输入';
+
+  @override
+  String get send => '发送';
+
+  @override
+  String get voiceInput => '语音输入';
+
+  @override
+  String get addImage => '添加图片';
+
+  @override
+  String get addImageUnsupported => '添加图片（当前模型不支持）';
+
+  @override
+  String get preparingOfflineSpeech => '正在准备离线语音识别…';
+
+  @override
+  String get dictationTapMicToFinish => '正在听写，点击麦克风完成';
+
+  @override
+  String get previewImage => '预览图片';
+
+  @override
+  String get removeImage => '移除图片';
+
+  @override
+  String get addMoreImages => '继续添加图片';
+
+  @override
+  String previewImageNumber(int index) {
+    return '预览图片 $index';
+  }
+
+  @override
+  String get closePreview => '关闭预览';
+
+  @override
+  String get imageCannotOpen => '图片无法打开';
+
+  @override
+  String get dismissMessage => '关闭提示';
+
+  @override
+  String get readAgain => '重新读取';
+
+  @override
+  String get switchPersona => '切换角色';
+
+  @override
+  String get manage => '管理';
+
+  @override
+  String get noSavedConversations => '还没有保存的对话';
+
+  @override
+  String conversationMessageCount(int count, String time) {
+    return '$count 条消息 · $time';
+  }
+
+  @override
+  String personaDeleteQuestion(String name) {
+    return '删除“$name”？';
+  }
+
+  @override
+  String get personaDeleteDescription => '使用这个角色的对话会切换回通用助手，聊天记录不会删除。';
+
+  @override
+  String get createPersona => '新建角色';
+
+  @override
+  String get reload => '重新加载';
+
+  @override
+  String get personaManagementDescription =>
+      '角色决定本地模型回答问题时采用的身份、语气和规则。你可以在聊天中随时切换，所有设定只保存在本机。';
+
+  @override
+  String get builtIn => '内置';
+
+  @override
+  String get current => '当前';
+
+  @override
+  String get personaDescriptionMissing => '未填写角色说明';
+
+  @override
+  String get personaActions => '角色操作';
+
+  @override
+  String get editPersona => '编辑角色';
+
+  @override
+  String get deletePersona => '删除角色';
+
+  @override
+  String get personaInstructionDescription =>
+      '角色名称用于切换；系统提示词会在每次请求中作为最高优先级的本地指令。';
+
+  @override
+  String get personaName => '角色名称';
+
+  @override
+  String get shortDescriptionOptional => '简短说明（可选）';
+
+  @override
+  String get systemPrompt => '系统提示词';
+
+  @override
+  String get systemPromptHint => '例如：你是一位耐心的英语口语教练……';
+
+  @override
+  String get savePersona => '保存角色';
 }

@@ -7,12 +7,15 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../app.dart';
+import '../l10n/l10n.dart';
+import '../l10n/local_model_l10n.dart';
 import '../models/local_chat.dart';
 import '../models/local_llm.dart';
 import '../services/language_model_service.dart';
 import '../services/local_assistant_service.dart';
 import '../services/local_chat_prompt_builder.dart';
 import '../services/local_chat_store.dart';
+import '../services/local_model_manager.dart';
 import '../services/local_llm/local_llm_output_filter.dart';
 import '../services/file_storage_service.dart';
 import '../services/realtime_dictation_service.dart';
@@ -22,6 +25,37 @@ import '../widgets/editor_context_menu.dart';
 import '../widgets/fk_markdown_view.dart';
 import 'local_chat_roles_page.dart';
 import 'model_management_page.dart';
+
+String _localizedModelName(BuildContext context, String modelId) {
+  try {
+    return localizedModelName(
+      context.l10n,
+      LocalModelManager.instance.modelOf(modelId),
+    );
+  } catch (_) {
+    return context.l10n.localLanguageModel;
+  }
+}
+
+String _localizedPersonaName(BuildContext context, LocalChatPersona persona) =>
+    persona.id == LocalChatPersona.defaultId
+    ? context.l10n.generalAssistant
+    : persona.name;
+
+String _localizedSessionTitle(BuildContext context, String title) =>
+    title == '新对话' ? context.l10n.newConversation : title;
+
+String _localizedChatDate(BuildContext context, DateTime value) {
+  final today = DateTime.now();
+  if (LocalChatTimeLabel.isSameDay(value, today)) return context.l10n.today;
+  if (LocalChatTimeLabel.isSameDay(
+    value,
+    today.subtract(const Duration(days: 1)),
+  )) {
+    return context.l10n.yesterday;
+  }
+  return MaterialLocalizations.of(context).formatShortDate(value);
+}
 
 class LocalChatPage extends StatefulWidget {
   final String? initialSessionId;
@@ -50,7 +84,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
   bool _generating = false;
   bool _modelInstalled = false;
   LocalLlmCapabilities _modelCapabilities = const LocalLlmCapabilities();
-  String _modelName = '本地语言模型';
+  String _modelId = '';
   String? _loadError;
   String? _generationError;
   String? _draftMessageId;
@@ -98,7 +132,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
         _session =
             initialSession ??
             (sessions.isEmpty ? _store.createSession() : sessions.first);
-        _modelName = _models.displayName(selectedId);
+        _modelId = selectedId;
         _modelInstalled = model.installed;
         _modelCapabilities = _models.capabilities(selectedId);
         _loading = false;
@@ -136,13 +170,13 @@ class _LocalChatPageState extends State<LocalChatPage> {
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            '本地助手',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          Text(
+            context.l10n.localAssistant,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
           ),
           if (!_loading)
             Text(
-              _session.title,
+              _localizedSessionTitle(context, _session.title),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
@@ -155,33 +189,33 @@ class _LocalChatPageState extends State<LocalChatPage> {
       ),
       actions: [
         IconButton(
-          tooltip: '对话记录',
+          tooltip: context.l10n.conversationHistory,
           onPressed: _loading || _generating ? null : _showHistory,
           icon: const Icon(Icons.history_rounded),
         ),
         IconButton(
-          tooltip: '角色管理',
+          tooltip: context.l10n.personaManagement,
           onPressed: _loading || _generating ? null : _openPersonaManager,
           icon: const Icon(Icons.psychology_alt_outlined),
         ),
         AppAnchoredMenuButton<String>(
-          tooltip: '更多对话操作',
+          tooltip: context.l10n.moreConversationActions,
           enabled: !_loading && !_generating,
           icon: const Icon(Icons.more_vert_rounded),
           onSelected: (value) {
             if (value == 'new') unawaited(_newConversation());
             if (value == 'delete') unawaited(_deleteConversation());
           },
-          actions: const [
+          actions: [
             AppMenuAction(
               value: 'new',
               icon: Icons.add_comment_outlined,
-              label: '新对话',
+              label: context.l10n.newConversation,
             ),
             AppMenuAction(
               value: 'delete',
               icon: Icons.delete_outline_rounded,
-              label: '删除当前对话',
+              label: context.l10n.deleteCurrentConversation,
               destructive: true,
             ),
           ],
@@ -194,9 +228,11 @@ class _LocalChatPageState extends State<LocalChatPage> {
         : Column(
             children: [
               _ModelBar(
-                name: _modelName,
+                name: _modelId.isEmpty
+                    ? context.l10n.localLanguageModel
+                    : _localizedModelName(context, _modelId),
                 installed: _modelInstalled,
-                roleLabel: _roleLabel,
+                roleLabel: _roleLabel(context),
                 onModelTap: _generating ? null : _openModels,
                 onRoleTap: _generating ? null : _showPersonaSwitcher,
               ),
@@ -286,7 +322,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
                 ignoring: !_showJumpToBottom,
                 child: FloatingActionButton.small(
                   key: const Key('local-chat-jump-to-bottom'),
-                  tooltip: '回到底部',
+                  tooltip: context.l10n.jumpToBottom,
                   onPressed: _jumpToBottom,
                   backgroundColor: AppColors.surface,
                   foregroundColor: AppColors.moss,
@@ -332,8 +368,12 @@ class _LocalChatPageState extends State<LocalChatPage> {
     _scrollToEnd(force: true);
   }
 
-  String get _roleLabel {
-    return _currentPersona?.name ?? '通用助手';
+  String _roleLabel(BuildContext context) {
+    final persona = _currentPersona;
+    if (persona == null || persona.id == LocalChatPersona.defaultId) {
+      return context.l10n.generalAssistant;
+    }
+    return persona.name;
   }
 
   LocalChatPersona? get _currentPersona {
@@ -358,12 +398,13 @@ class _LocalChatPageState extends State<LocalChatPage> {
 
   Future<void> _send() async {
     if (_generating) return;
+    final l10n = context.l10n;
     if (_chatDictating) await _finishDictation();
     if (!mounted) return;
     final content = _input.text.trim();
     if ((content.isEmpty && _pendingAttachments.isEmpty) || _generating) return;
     if (_pendingAttachments.isNotEmpty && !_modelCapabilities.imageInput) {
-      AppFeedback.error(context, '当前本地运行时仅支持文字输入；图片已经保留在输入区，请移除或等待多模态运行时');
+      AppFeedback.error(context, l10n.textOnlyRuntimeImageWarning);
       return;
     }
     if (!await _ensureModelInstalled()) return;
@@ -385,7 +426,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
     ];
     _session = _session.copyWith(
       title: firstUserMessage
-          ? _store.titleFrom(content.isEmpty ? '图片对话' : content)
+          ? _store.titleFrom(content.isEmpty ? l10n.imageConversation : content)
           : _session.title,
       messages: messages,
       updatedAt: DateTime.now(),
@@ -411,6 +452,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
     final request = LocalChatPromptBuilder.build(
       systemPrompt: _session.systemPrompt,
       messages: _session.messages,
+      languageCode: Localizations.localeOf(context).languageCode,
     );
     final draft = _store.createMessage(
       role: LocalChatRole.assistant,
@@ -506,19 +548,21 @@ class _LocalChatPageState extends State<LocalChatPage> {
       final openManager = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('需要本地语言模型'),
+          title: Text(context.l10n.localLanguageModelRequired),
           content: Text(
-            '当前选择的是 ${_models.displayName(selectedId)}，首次使用需下载约 '
-            '$size。聊天内容只在本机处理。',
+            context.l10n.chatModelDownloadDescription(
+              _localizedModelName(context, selectedId),
+              size,
+            ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('稍后再说'),
+              child: Text(context.l10n.maybeLater),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('管理模型'),
+              child: Text(context.l10n.manageModels),
             ),
           ],
         ),
@@ -545,7 +589,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
     final info = await _models.inspect(selectedId);
     if (!mounted) return;
     setState(() {
-      _modelName = _models.displayName(selectedId);
+      _modelId = selectedId;
       _modelInstalled = info.installed;
       _modelCapabilities = _models.capabilities(selectedId);
     });
@@ -593,7 +637,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
       }
       setState(() => _pendingAttachments.addAll(imported));
       if (imported.isNotEmpty && !_modelCapabilities.imageInput) {
-        AppFeedback.show(context, '图片已保留在输入区；当前模型不支持图片理解，请切换到支持图片的模型');
+        AppFeedback.show(context, context.l10n.imageKeptUnsupportedModel);
       }
     } catch (error) {
       for (final attachment in imported) {
@@ -619,7 +663,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
       return;
     }
     if (_dictation.isActive) {
-      AppFeedback.show(context, '其他页面正在使用实时语音输入');
+      AppFeedback.show(context, context.l10n.voiceInputBusyElsewhere);
       return;
     }
     _dictationBaseText = _input.text.trimRight();
@@ -654,7 +698,8 @@ class _LocalChatPageState extends State<LocalChatPage> {
     if (_dictation.status == RealtimeDictationStatus.failed) {
       setState(() {
         _chatDictating = false;
-        _generationError = _dictation.errorMessage ?? '语音输入失败';
+        _generationError =
+            _dictation.errorMessage ?? context.l10n.voiceInputFailed;
       });
     } else {
       setState(() {});
@@ -797,16 +842,16 @@ class _LocalChatPageState extends State<LocalChatPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('删除当前对话？'),
-        content: const Text('聊天内容和这个会话的角色设定将无法恢复。'),
+        title: Text(context.l10n.deleteCurrentConversationQuestion),
+        content: Text(context.l10n.deleteConversationDescription),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            child: Text(context.l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('删除'),
+            child: Text(context.l10n.remove),
           ),
         ],
       ),
@@ -825,6 +870,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
   }
 
   Future<void> _persist() async {
+    final l10n = context.l10n;
     try {
       await _store.saveSession(_session);
       // Rebuild the collection instead of mutating a list returned by a
@@ -835,7 +881,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
         ..._sessions.where((item) => item.id != _session.id),
       ]..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     } catch (error) {
-      _generationError = '无法保存聊天记录：${_cleanError(error)}';
+      _generationError = l10n.chatSaveFailed(_cleanError(error));
       if (mounted) setState(() {});
     }
   }
@@ -925,7 +971,7 @@ class _ChatDateDivider extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10),
           child: Text(
-            LocalChatTimeLabel.date(createdAt),
+            _localizedChatDate(context, createdAt),
             style: const TextStyle(
               color: AppColors.muted,
               fontSize: 11,
@@ -957,7 +1003,8 @@ class _ModelBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     button: onModelTap != null,
-    label: '$name，${installed ? '已安装' : '未安装'}，$roleLabel',
+    label:
+        '$name, ${installed ? context.l10n.installedState : context.l10n.notInstalledState}, $roleLabel',
     onTap: onModelTap,
     child: Material(
       color: AppColors.surface,
@@ -978,7 +1025,7 @@ class _ModelBar extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  '$name · ${installed ? '已安装' : '未安装'}',
+                  '$name · ${installed ? context.l10n.installedState : context.l10n.notInstalledState}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 12),
@@ -1056,17 +1103,29 @@ class _EmptyChat extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 18),
-        Text('你想聊什么？', style: Theme.of(context).textTheme.headlineSmall),
+        Text(
+          context.l10n.chatEmptyTitle,
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
         const SizedBox(height: 7),
-        const Text(
-          '自由输入任何内容。消息和角色设定只保存在本机。',
+        Text(
+          context.l10n.chatEmptyDescription,
           textAlign: TextAlign.center,
-          style: TextStyle(color: AppColors.muted, height: 1.5),
+          style: const TextStyle(color: AppColors.muted, height: 1.5),
         ),
         const SizedBox(height: 26),
-        _Suggestion(text: '帮我梳理今天最重要的三件事', onTap: onSuggestion),
-        _Suggestion(text: '用通俗的话解释一个复杂概念', onTap: onSuggestion),
-        _Suggestion(text: '和我一起完善一个新想法', onTap: onSuggestion),
+        _Suggestion(
+          text: context.l10n.chatSuggestionPriorities,
+          onTap: onSuggestion,
+        ),
+        _Suggestion(
+          text: context.l10n.chatSuggestionExplain,
+          onTap: onSuggestion,
+        ),
+        _Suggestion(
+          text: context.l10n.chatSuggestionDevelopIdea,
+          onTap: onSuggestion,
+        ),
       ],
     ),
   );
@@ -1105,7 +1164,7 @@ class _ChatBubble extends StatelessWidget {
     if (user && message.attachments.isNotEmpty) {
       return Semantics(
         container: true,
-        label: '你的图片消息',
+        label: context.l10n.yourImageMessage,
         child: Align(
           alignment: Alignment.centerRight,
           child: _UserMediaMessage(message: message),
@@ -1116,10 +1175,10 @@ class _ChatBubble extends StatelessWidget {
       container: true,
       liveRegion: generating,
       label: user
-          ? '你的消息'
+          ? context.l10n.yourMessage
           : generating
-          ? 'AI 正在回复'
-          : 'AI 回复',
+          ? context.l10n.aiReplying
+          : context.l10n.aiReply,
       child: Align(
         alignment: user ? Alignment.centerRight : Alignment.centerLeft,
         child: Container(
@@ -1190,20 +1249,26 @@ class _ChatBubble extends StatelessWidget {
                     ),
                     if (message.status == LocalChatMessageStatus.stopped) ...[
                       const SizedBox(width: 8),
-                      const Text(
-                        '已停止',
-                        style: TextStyle(color: AppColors.muted, fontSize: 10),
+                      Text(
+                        context.l10n.stopped,
+                        style: const TextStyle(
+                          color: AppColors.muted,
+                          fontSize: 10,
+                        ),
                       ),
                     ],
                     const SizedBox(width: 6),
                     IconButton(
-                      tooltip: '复制回答',
+                      tooltip: context.l10n.copyReply,
                       onPressed: () async {
                         await Clipboard.setData(
                           ClipboardData(text: message.content),
                         );
                         if (context.mounted) {
-                          AppFeedback.success(context, '已复制回答');
+                          AppFeedback.success(
+                            context,
+                            context.l10n.replyCopied,
+                          );
                         }
                       },
                       style: IconButton.styleFrom(
@@ -1220,11 +1285,11 @@ class _ChatBubble extends StatelessWidget {
                       ),
                     ),
                     if (generating)
-                      const Padding(
-                        padding: EdgeInsets.only(left: 6),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 6),
                         child: Text(
-                          '正在生成…',
-                          style: TextStyle(
+                          context.l10n.generating,
+                          style: const TextStyle(
                             color: AppColors.muted,
                             fontSize: 10,
                           ),
@@ -1351,13 +1416,13 @@ class LocalChatComposer extends StatelessWidget {
                           ),
                         ),
                         if (!imageInputAvailable)
-                          const Padding(
-                            padding: EdgeInsets.fromLTRB(14, 0, 14, 9),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(14, 0, 14, 9),
                             child: Align(
                               alignment: Alignment.centerLeft,
                               child: Text(
-                                '当前模型不支持图片理解，请切换模型后发送',
-                                style: TextStyle(
+                                context.l10n.modelDoesNotSupportImages,
+                                style: const TextStyle(
                                   color: AppColors.coral,
                                   fontSize: 10,
                                 ),
@@ -1374,8 +1439,8 @@ class LocalChatComposer extends StatelessWidget {
                             IconButton(
                               key: const Key('local-chat-take-photo'),
                               tooltip: imageInputAvailable
-                                  ? '拍照'
-                                  : '拍照（当前模型不支持图片）',
+                                  ? context.l10n.takePhoto
+                                  : context.l10n.takePhotoUnsupported,
                               onPressed: canAddImage ? onTakePhoto : null,
                               style: IconButton.styleFrom(
                                 fixedSize: const Size(44, 44),
@@ -1415,7 +1480,9 @@ class LocalChatComposer extends StatelessWidget {
                                 textCapitalization:
                                     TextCapitalization.sentences,
                                 decoration: InputDecoration(
-                                  hintText: dictating ? '正在听写…' : '发消息或使用语音…',
+                                  hintText: dictating
+                                      ? context.l10n.dictating
+                                      : context.l10n.messageOrVoiceHint,
                                   border: InputBorder.none,
                                   enabledBorder: InputBorder.none,
                                   focusedBorder: InputBorder.none,
@@ -1432,7 +1499,7 @@ class LocalChatComposer extends StatelessWidget {
                             if (generating)
                               _ChatComposerAction(
                                 key: const Key('stop-local-chat'),
-                                tooltip: '停止生成',
+                                tooltip: context.l10n.stopGeneration,
                                 onPressed: onStop,
                                 filled: true,
                                 icon: Icons.stop_rounded,
@@ -1440,7 +1507,7 @@ class LocalChatComposer extends StatelessWidget {
                             else if (dictating || dictationPreparing)
                               _ChatComposerAction(
                                 key: const Key('local-chat-voice-input'),
-                                tooltip: '完成语音输入',
+                                tooltip: context.l10n.finishVoiceInput,
                                 onPressed: onToggleDictation,
                                 active: true,
                                 icon: dictationPreparing
@@ -1451,7 +1518,7 @@ class LocalChatComposer extends StatelessWidget {
                             else if (hasContent)
                               _ChatComposerAction(
                                 key: const Key('send-local-chat'),
-                                tooltip: '发送',
+                                tooltip: context.l10n.send,
                                 onPressed: onSend,
                                 filled: true,
                                 icon: Icons.arrow_upward_rounded,
@@ -1459,7 +1526,7 @@ class LocalChatComposer extends StatelessWidget {
                             else ...[
                               _ChatComposerAction(
                                 key: const Key('local-chat-voice-input'),
-                                tooltip: '语音输入',
+                                tooltip: context.l10n.voiceInput,
                                 onPressed: onToggleDictation,
                                 icon: Icons.graphic_eq_rounded,
                               ),
@@ -1467,8 +1534,8 @@ class LocalChatComposer extends StatelessWidget {
                               _ChatComposerAction(
                                 key: const Key('local-chat-add-image'),
                                 tooltip: imageInputAvailable
-                                    ? '添加图片'
-                                    : '添加图片（当前模型不支持）',
+                                    ? context.l10n.addImage
+                                    : context.l10n.addImageUnsupported,
                                 onPressed: canAddImage ? onPickImages : null,
                                 icon: Icons.add_rounded,
                               ),
@@ -1488,7 +1555,9 @@ class LocalChatComposer extends StatelessWidget {
                   const SizedBox(width: 52),
                   Expanded(
                     child: Text(
-                      dictationPreparing ? '正在准备离线语音识别…' : '正在听写，点击麦克风完成',
+                      dictationPreparing
+                          ? context.l10n.preparingOfflineSpeech
+                          : context.l10n.dictationTapMicToFinish,
                       style: const TextStyle(
                         color: AppColors.coral,
                         fontSize: 10,
@@ -1575,7 +1644,7 @@ class _PendingImage extends StatelessWidget {
         Positioned.fill(
           child: Semantics(
             button: true,
-            label: '预览图片',
+            label: context.l10n.previewImage,
             child: Material(
               color: AppColors.surface,
               shape: RoundedRectangleBorder(
@@ -1607,10 +1676,10 @@ class _PendingImage extends StatelessWidget {
           top: 3,
           right: 3,
           child: Tooltip(
-            message: '移除图片',
+            message: context.l10n.removeImage,
             child: Semantics(
               button: true,
-              label: '移除图片',
+              label: context.l10n.removeImage,
               child: Material(
                 color: AppColors.ink.withValues(alpha: .72),
                 shape: const CircleBorder(),
@@ -1646,7 +1715,7 @@ class _AddPendingImage extends StatelessWidget {
   Widget build(BuildContext context) => SizedBox(
     width: 92,
     child: Tooltip(
-      message: '继续添加图片',
+      message: context.l10n.addMoreImages,
       child: Material(
         color: AppColors.softBlue,
         borderRadius: BorderRadius.circular(14),
@@ -1805,7 +1874,7 @@ class _SentChatImage extends StatelessWidget {
     );
     return Semantics(
       button: true,
-      label: '预览图片 ${index + 1}',
+      label: context.l10n.previewImageNumber(index + 1),
       child: Material(
         color: AppColors.surface,
         shape: RoundedRectangleBorder(
@@ -1881,7 +1950,7 @@ class _ChatImagePreviewPageState extends State<_ChatImagePreviewPage> {
       foregroundColor: Colors.white,
       surfaceTintColor: Colors.transparent,
       leading: IconButton(
-        tooltip: '关闭预览',
+        tooltip: context.l10n.closePreview,
         onPressed: () => Navigator.pop(context),
         icon: const Icon(Icons.close_rounded),
       ),
@@ -1909,16 +1978,19 @@ class _ChatImagePreviewPageState extends State<_ChatImagePreviewPage> {
                 FileStorageService.instance.absolutePath(attachment.filePath),
               ),
               fit: BoxFit.contain,
-              errorBuilder: (_, _, _) => const Column(
+              errorBuilder: (_, _, _) => Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.broken_image_outlined,
                     color: Colors.white70,
                     size: 42,
                   ),
-                  SizedBox(height: 10),
-                  Text('图片无法打开', style: TextStyle(color: Colors.white70)),
+                  const SizedBox(height: 10),
+                  Text(
+                    context.l10n.imageCannotOpen,
+                    style: const TextStyle(color: Colors.white70),
+                  ),
                 ],
               ),
             ),
@@ -1957,9 +2029,9 @@ class _GenerationError extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(child: Text(message, style: const TextStyle(fontSize: 12))),
         if (onRetry != null)
-          TextButton(onPressed: onRetry, child: const Text('重试')),
+          TextButton(onPressed: onRetry, child: Text(context.l10n.retry)),
         IconButton(
-          tooltip: '关闭提示',
+          tooltip: context.l10n.dismissMessage,
           onPressed: onClose,
           icon: const Icon(Icons.close_rounded, size: 18),
         ),
@@ -1989,7 +2061,10 @@ class _LoadFailure extends StatelessWidget {
               const SizedBox(height: 10),
               Text(message, textAlign: TextAlign.center),
               const SizedBox(height: 12),
-              OutlinedButton(onPressed: onRetry, child: const Text('重新读取')),
+              OutlinedButton(
+                onPressed: onRetry,
+                child: Text(context.l10n.readAgain),
+              ),
             ],
           ),
         ),
@@ -2017,14 +2092,14 @@ class _PersonaPickerSheet extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  '切换角色',
+                  context.l10n.switchPersona,
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
               ),
               TextButton.icon(
                 onPressed: () => Navigator.pop(context, managePersonas),
                 icon: const Icon(Icons.settings_outlined, size: 18),
-                label: const Text('管理'),
+                label: Text(context.l10n.manage),
               ),
             ],
           ),
@@ -2046,7 +2121,7 @@ class _PersonaPickerSheet extends StatelessWidget {
                     foregroundColor: selected ? Colors.white : AppColors.coral,
                     child: const Icon(Icons.psychology_alt_outlined),
                   ),
-                  title: Text(persona.name),
+                  title: Text(_localizedPersonaName(context, persona)),
                   subtitle: persona.description.isEmpty
                       ? null
                       : Text(
@@ -2088,26 +2163,26 @@ class _ChatHistorySheet extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    '对话记录',
+                    context.l10n.conversationHistory,
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
                 FilledButton.tonalIcon(
                   onPressed: () => Navigator.pop(context, newConversation),
                   icon: const Icon(Icons.add_rounded),
-                  label: const Text('新对话'),
+                  label: Text(context.l10n.newConversation),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 10),
           if (sessions.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 28),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 28),
               child: Center(
                 child: Text(
-                  '还没有保存的对话',
-                  style: TextStyle(color: AppColors.muted),
+                  context.l10n.noSavedConversations,
+                  style: const TextStyle(color: AppColors.muted),
                 ),
               ),
             )
@@ -2125,12 +2200,15 @@ class _ChatHistorySheet extends StatelessWidget {
                     ),
                     leading: const Icon(Icons.chat_bubble_outline_rounded),
                     title: Text(
-                      session.title,
+                      _localizedSessionTitle(context, session.title),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     subtitle: Text(
-                      '${session.messages.length} 条消息 · ${_time(session.updatedAt)}',
+                      context.l10n.conversationMessageCount(
+                        session.messages.length,
+                        _time(session.updatedAt),
+                      ),
                     ),
                     trailing: session.id == selectedId
                         ? const Icon(Icons.check_rounded, color: AppColors.moss)

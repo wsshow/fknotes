@@ -2761,6 +2761,462 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'文件 · {count} 个'**
   String fileAttachmentMetadata(int count);
+
+  /// No description provided for @localLanguageModel.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地语言模型'**
+  String get localLanguageModel;
+
+  /// No description provided for @conversationHistory.
+  ///
+  /// In zh, this message translates to:
+  /// **'对话记录'**
+  String get conversationHistory;
+
+  /// No description provided for @personaManagement.
+  ///
+  /// In zh, this message translates to:
+  /// **'角色管理'**
+  String get personaManagement;
+
+  /// No description provided for @moreConversationActions.
+  ///
+  /// In zh, this message translates to:
+  /// **'更多对话操作'**
+  String get moreConversationActions;
+
+  /// No description provided for @newConversation.
+  ///
+  /// In zh, this message translates to:
+  /// **'新对话'**
+  String get newConversation;
+
+  /// No description provided for @deleteCurrentConversation.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除当前对话'**
+  String get deleteCurrentConversation;
+
+  /// No description provided for @jumpToBottom.
+  ///
+  /// In zh, this message translates to:
+  /// **'回到底部'**
+  String get jumpToBottom;
+
+  /// No description provided for @generalAssistant.
+  ///
+  /// In zh, this message translates to:
+  /// **'通用助手'**
+  String get generalAssistant;
+
+  /// No description provided for @textOnlyRuntimeImageWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前本地运行时仅支持文字输入；图片已经保留在输入区，请移除或等待多模态运行时'**
+  String get textOnlyRuntimeImageWarning;
+
+  /// No description provided for @imageConversation.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片对话'**
+  String get imageConversation;
+
+  /// No description provided for @chatModelDownloadDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前选择的是 {model}，首次使用需下载约 {size}。聊天内容只在本机处理。'**
+  String chatModelDownloadDescription(String model, String size);
+
+  /// No description provided for @imageKeptUnsupportedModel.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片已保留在输入区；当前模型不支持图片理解，请切换到支持图片的模型'**
+  String get imageKeptUnsupportedModel;
+
+  /// No description provided for @voiceInputBusyElsewhere.
+  ///
+  /// In zh, this message translates to:
+  /// **'其他页面正在使用实时语音输入'**
+  String get voiceInputBusyElsewhere;
+
+  /// No description provided for @voiceInputFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'语音输入失败'**
+  String get voiceInputFailed;
+
+  /// No description provided for @deleteCurrentConversationQuestion.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除当前对话？'**
+  String get deleteCurrentConversationQuestion;
+
+  /// No description provided for @deleteConversationDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'聊天内容和这个会话的角色设定将无法恢复。'**
+  String get deleteConversationDescription;
+
+  /// No description provided for @chatSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法保存聊天记录：{error}'**
+  String chatSaveFailed(String error);
+
+  /// No description provided for @today.
+  ///
+  /// In zh, this message translates to:
+  /// **'今天'**
+  String get today;
+
+  /// No description provided for @yesterday.
+  ///
+  /// In zh, this message translates to:
+  /// **'昨天'**
+  String get yesterday;
+
+  /// No description provided for @installedState.
+  ///
+  /// In zh, this message translates to:
+  /// **'已安装'**
+  String get installedState;
+
+  /// No description provided for @notInstalledState.
+  ///
+  /// In zh, this message translates to:
+  /// **'未安装'**
+  String get notInstalledState;
+
+  /// No description provided for @chatEmptyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'你想聊什么？'**
+  String get chatEmptyTitle;
+
+  /// No description provided for @chatEmptyDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'自由输入任何内容。消息和角色设定只保存在本机。'**
+  String get chatEmptyDescription;
+
+  /// No description provided for @chatSuggestionPriorities.
+  ///
+  /// In zh, this message translates to:
+  /// **'帮我梳理今天最重要的三件事'**
+  String get chatSuggestionPriorities;
+
+  /// No description provided for @chatSuggestionExplain.
+  ///
+  /// In zh, this message translates to:
+  /// **'用通俗的话解释一个复杂概念'**
+  String get chatSuggestionExplain;
+
+  /// No description provided for @chatSuggestionDevelopIdea.
+  ///
+  /// In zh, this message translates to:
+  /// **'和我一起完善一个新想法'**
+  String get chatSuggestionDevelopIdea;
+
+  /// No description provided for @yourImageMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'你的图片消息'**
+  String get yourImageMessage;
+
+  /// No description provided for @yourMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'你的消息'**
+  String get yourMessage;
+
+  /// No description provided for @aiReplying.
+  ///
+  /// In zh, this message translates to:
+  /// **'AI 正在回复'**
+  String get aiReplying;
+
+  /// No description provided for @aiReply.
+  ///
+  /// In zh, this message translates to:
+  /// **'AI 回复'**
+  String get aiReply;
+
+  /// No description provided for @stopped.
+  ///
+  /// In zh, this message translates to:
+  /// **'已停止'**
+  String get stopped;
+
+  /// No description provided for @copyReply.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制回答'**
+  String get copyReply;
+
+  /// No description provided for @replyCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'已复制回答'**
+  String get replyCopied;
+
+  /// No description provided for @generating.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在生成…'**
+  String get generating;
+
+  /// No description provided for @modelDoesNotSupportImages.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前模型不支持图片理解，请切换模型后发送'**
+  String get modelDoesNotSupportImages;
+
+  /// No description provided for @takePhoto.
+  ///
+  /// In zh, this message translates to:
+  /// **'拍照'**
+  String get takePhoto;
+
+  /// No description provided for @takePhotoUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'拍照（当前模型不支持图片）'**
+  String get takePhotoUnsupported;
+
+  /// No description provided for @dictating.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在听写…'**
+  String get dictating;
+
+  /// No description provided for @messageOrVoiceHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'发消息或使用语音…'**
+  String get messageOrVoiceHint;
+
+  /// No description provided for @stopGeneration.
+  ///
+  /// In zh, this message translates to:
+  /// **'停止生成'**
+  String get stopGeneration;
+
+  /// No description provided for @finishVoiceInput.
+  ///
+  /// In zh, this message translates to:
+  /// **'完成语音输入'**
+  String get finishVoiceInput;
+
+  /// No description provided for @send.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送'**
+  String get send;
+
+  /// No description provided for @voiceInput.
+  ///
+  /// In zh, this message translates to:
+  /// **'语音输入'**
+  String get voiceInput;
+
+  /// No description provided for @addImage.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加图片'**
+  String get addImage;
+
+  /// No description provided for @addImageUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加图片（当前模型不支持）'**
+  String get addImageUnsupported;
+
+  /// No description provided for @preparingOfflineSpeech.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在准备离线语音识别…'**
+  String get preparingOfflineSpeech;
+
+  /// No description provided for @dictationTapMicToFinish.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在听写，点击麦克风完成'**
+  String get dictationTapMicToFinish;
+
+  /// No description provided for @previewImage.
+  ///
+  /// In zh, this message translates to:
+  /// **'预览图片'**
+  String get previewImage;
+
+  /// No description provided for @removeImage.
+  ///
+  /// In zh, this message translates to:
+  /// **'移除图片'**
+  String get removeImage;
+
+  /// No description provided for @addMoreImages.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续添加图片'**
+  String get addMoreImages;
+
+  /// No description provided for @previewImageNumber.
+  ///
+  /// In zh, this message translates to:
+  /// **'预览图片 {index}'**
+  String previewImageNumber(int index);
+
+  /// No description provided for @closePreview.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭预览'**
+  String get closePreview;
+
+  /// No description provided for @imageCannotOpen.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片无法打开'**
+  String get imageCannotOpen;
+
+  /// No description provided for @dismissMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭提示'**
+  String get dismissMessage;
+
+  /// No description provided for @readAgain.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新读取'**
+  String get readAgain;
+
+  /// No description provided for @switchPersona.
+  ///
+  /// In zh, this message translates to:
+  /// **'切换角色'**
+  String get switchPersona;
+
+  /// No description provided for @manage.
+  ///
+  /// In zh, this message translates to:
+  /// **'管理'**
+  String get manage;
+
+  /// No description provided for @noSavedConversations.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没有保存的对话'**
+  String get noSavedConversations;
+
+  /// No description provided for @conversationMessageCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 条消息 · {time}'**
+  String conversationMessageCount(int count, String time);
+
+  /// No description provided for @personaDeleteQuestion.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除“{name}”？'**
+  String personaDeleteQuestion(String name);
+
+  /// No description provided for @personaDeleteDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用这个角色的对话会切换回通用助手，聊天记录不会删除。'**
+  String get personaDeleteDescription;
+
+  /// No description provided for @createPersona.
+  ///
+  /// In zh, this message translates to:
+  /// **'新建角色'**
+  String get createPersona;
+
+  /// No description provided for @reload.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新加载'**
+  String get reload;
+
+  /// No description provided for @personaManagementDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'角色决定本地模型回答问题时采用的身份、语气和规则。你可以在聊天中随时切换，所有设定只保存在本机。'**
+  String get personaManagementDescription;
+
+  /// No description provided for @builtIn.
+  ///
+  /// In zh, this message translates to:
+  /// **'内置'**
+  String get builtIn;
+
+  /// No description provided for @current.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前'**
+  String get current;
+
+  /// No description provided for @personaDescriptionMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'未填写角色说明'**
+  String get personaDescriptionMissing;
+
+  /// No description provided for @personaActions.
+  ///
+  /// In zh, this message translates to:
+  /// **'角色操作'**
+  String get personaActions;
+
+  /// No description provided for @editPersona.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑角色'**
+  String get editPersona;
+
+  /// No description provided for @deletePersona.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除角色'**
+  String get deletePersona;
+
+  /// No description provided for @personaInstructionDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'角色名称用于切换；系统提示词会在每次请求中作为最高优先级的本地指令。'**
+  String get personaInstructionDescription;
+
+  /// No description provided for @personaName.
+  ///
+  /// In zh, this message translates to:
+  /// **'角色名称'**
+  String get personaName;
+
+  /// No description provided for @shortDescriptionOptional.
+  ///
+  /// In zh, this message translates to:
+  /// **'简短说明（可选）'**
+  String get shortDescriptionOptional;
+
+  /// No description provided for @systemPrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统提示词'**
+  String get systemPrompt;
+
+  /// No description provided for @systemPromptHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'例如：你是一位耐心的英语口语教练……'**
+  String get systemPromptHint;
+
+  /// No description provided for @savePersona.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存角色'**
+  String get savePersona;
 }
 
 class _AppLocalizationsDelegate

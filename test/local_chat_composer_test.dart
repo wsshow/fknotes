@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:fknotes/models/local_chat.dart';
+import 'package:fknotes/l10n/generated/app_localizations.dart';
 import 'package:fknotes/pages/local_chat_page.dart';
 import 'package:fknotes/services/file_storage_service.dart';
 import 'package:flutter/material.dart';
@@ -62,6 +63,50 @@ void main() {
 
     await tester.tap(find.byKey(const Key('send-local-chat')));
     expect(sendCount, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('chat composer renders English actions without overflow', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = TextEditingController();
+    final focusNode = FocusNode();
+    addTearDown(controller.dispose);
+    addTearDown(focusNode.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: Scaffold(
+          bottomNavigationBar: LocalChatComposer(
+            controller: controller,
+            focusNode: focusNode,
+            generating: false,
+            pendingAttachments: const [],
+            imageInputAvailable: true,
+            pickingImages: false,
+            dictating: false,
+            dictationPreparing: false,
+            onTakePhoto: () {},
+            onPickImages: () {},
+            onRemoveAttachment: (_) {},
+            onToggleDictation: () {},
+            onSend: () {},
+            onStop: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byTooltip('Take photo'), findsOneWidget);
+    expect(find.byTooltip('Voice input'), findsOneWidget);
+    expect(find.byTooltip('Add image'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
