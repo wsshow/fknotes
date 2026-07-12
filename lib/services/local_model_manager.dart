@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 
 import '../models/local_model.dart';
 import 'kokoro_tts_model_service.dart';
+import 'language_model_service.dart';
+import 'local_assistant_service.dart';
 import 'model_download_transport.dart';
 import 'note_read_aloud_service.dart';
 import 'realtime_dictation_preferences_service.dart';
@@ -121,8 +123,41 @@ class LocalModelManager extends ChangeNotifier {
   static const kokoroTtsId = KokoroTtsModelService.modelId;
   static const mlKitChineseOcrId = 'mlkit-text-recognition-chinese';
   static const imageUnderstandingId = 'image-understanding-local';
+  static const miniCpm5Id = LanguageModelService.miniCpm5Id;
+  static const qwen35Id = LanguageModelService.qwen35Id;
 
   static const catalog = <LocalModelDefinition>[
+    LocalModelDefinition(
+      id: miniCpm5Id,
+      name: 'MiniCPM5 1B INT4',
+      summary: '轻量、快速的本地笔记助手',
+      description: '适合摘要、标题、标签、改写和待办提取；支持中英文、思考模式与工具调用。',
+      category: LocalModelCategory.language,
+      availability: LocalModelAvailability.downloadable,
+      task: LocalModelTask.textGeneration,
+      downloadSizeBytes: LanguageModelService.miniCpm5DownloadSizeBytes,
+      languages: ['中文', '英语'],
+      engine: 'MNN 3.6 · INT4',
+      version: 'MiniCPM5 1B · 2026-05',
+      source: 'OpenBMB / taobao-mnn · Hugging Face 国内镜像优先',
+      license: 'Apache-2.0',
+    ),
+    LocalModelDefinition(
+      id: qwen35Id,
+      name: 'Qwen3.5 2B INT4',
+      summary: '质量与资源均衡的本地笔记助手',
+      description: '推荐用于中文写作、复杂摘要、中英文整理与笔记问答；当前先开放文字能力。',
+      category: LocalModelCategory.language,
+      availability: LocalModelAvailability.downloadable,
+      task: LocalModelTask.textGeneration,
+      downloadSizeBytes: LanguageModelService.qwen35DownloadSizeBytes,
+      languages: ['中文', '英语', '多语言'],
+      engine: 'MNN 3.6 · INT4',
+      version: 'Qwen3.5 2B · 2026-03',
+      source: 'Qwen / taobao-mnn · Hugging Face 国内镜像优先',
+      license: 'Apache-2.0',
+      recommended: true,
+    ),
     LocalModelDefinition(
       id: senseVoiceId,
       name: 'SenseVoice Small INT8',
@@ -270,6 +305,7 @@ class LocalModelManager extends ChangeNotifier {
   final _speechDenoiserModels = SpeechDenoiserModelService.instance;
   final _speakerDiarizationModels = SpeakerDiarizationModelService.instance;
   final _kokoroTtsModels = KokoroTtsModelService.instance;
+  final _languageModels = LanguageModelService.instance;
   final _dictationPreferences = RealtimeDictationPreferencesService.instance;
   final Map<String, LocalModelInstallation> _installations = {};
   final Map<String, ModelTransferState> _transfers = {};
@@ -277,10 +313,12 @@ class LocalModelManager extends ChangeNotifier {
   bool _importPickerBusy = false;
   int _initializationGeneration = 0;
   String _selectedLiveDictationModelId = streamingChineseId;
+  String _selectedAssistantModelId = qwen35Id;
 
   List<LocalModelDefinition> get models => catalog;
   bool get initialized => _initialized;
   String get selectedLiveDictationModelId => _selectedLiveDictationModelId;
+  String get selectedAssistantModelId => _selectedAssistantModelId;
   LocalModelDefinition modelOf(String id) => _definition(id);
   LocalModelInstallation installationOf(String id) =>
       _installations[id] ?? const LocalModelInstallation();
@@ -315,6 +353,11 @@ class LocalModelManager extends ChangeNotifier {
       _speakerDiarizationModels.partialDownloadBytes(),
       _kokoroTtsModels.inspect(),
       _kokoroTtsModels.partialDownloadBytes(),
+      _languageModels.inspect(miniCpm5Id),
+      _languageModels.partialDownloadBytes(miniCpm5Id),
+      _languageModels.inspect(qwen35Id),
+      _languageModels.partialDownloadBytes(qwen35Id),
+      _languageModels.selectedModelId(),
     ]);
     final speech = results[0] as SpeechModelInfo;
     final partial = results[1] as int;
@@ -331,8 +374,14 @@ class LocalModelManager extends ChangeNotifier {
     final speakerDiarizationPartial = results[12] as int;
     final kokoroTts = results[13] as KokoroTtsModelInfo;
     final kokoroTtsPartial = results[14] as int;
+    final miniCpm5 = results[15] as LanguageModelInfo;
+    final miniCpm5Partial = results[16] as int;
+    final qwen35 = results[17] as LanguageModelInfo;
+    final qwen35Partial = results[18] as int;
+    final selectedAssistantModelId = results[19] as String;
     if (generation != _initializationGeneration) return;
     _selectedLiveDictationModelId = selectedLiveDictationModelId;
+    _selectedAssistantModelId = selectedAssistantModelId;
     _installations[senseVoiceId] = LocalModelInstallation(
       installed: speech.installed,
       installedSizeBytes: speech.sizeBytes,
@@ -367,6 +416,16 @@ class LocalModelManager extends ChangeNotifier {
       installed: kokoroTts.installed,
       installedSizeBytes: kokoroTts.sizeBytes,
       partialSizeBytes: kokoroTtsPartial,
+    );
+    _installations[miniCpm5Id] = LocalModelInstallation(
+      installed: miniCpm5.installed,
+      installedSizeBytes: miniCpm5.sizeBytes,
+      partialSizeBytes: miniCpm5Partial,
+    );
+    _installations[qwen35Id] = LocalModelInstallation(
+      installed: qwen35.installed,
+      installedSizeBytes: qwen35.sizeBytes,
+      partialSizeBytes: qwen35Partial,
     );
     _installations[mlKitChineseOcrId] = const LocalModelInstallation(
       installed: true,
@@ -419,6 +478,12 @@ class LocalModelManager extends ChangeNotifier {
           shouldCancel: () => transfer.cancelRequested,
           onProgress: progress,
         );
+      } else if (LanguageModelService.supportedModelIds.contains(modelId)) {
+        await _languageModels.download(
+          modelId,
+          shouldCancel: () => transfer.cancelRequested,
+          onProgress: progress,
+        );
       } else if (StreamingSpeechModelService.supportedModelIds.contains(
         modelId,
       )) {
@@ -432,6 +497,9 @@ class LocalModelManager extends ChangeNotifier {
       }
       if (StreamingSpeechModelService.supportedModelIds.contains(modelId)) {
         await _selectIfNoUsableLiveModel(modelId);
+      }
+      if (LanguageModelService.supportedModelIds.contains(modelId)) {
+        await _selectIfNoUsableAssistantModel(modelId);
       }
       transfer.status = ModelTransferStatus.completed;
       await initialize(force: true);
@@ -453,6 +521,7 @@ class LocalModelManager extends ChangeNotifier {
         modelId != speechDenoiserId &&
         modelId != speakerDiarizationId &&
         modelId != kokoroTtsId &&
+        !LanguageModelService.supportedModelIds.contains(modelId) &&
         !StreamingSpeechModelService.supportedModelIds.contains(modelId)) {
       return;
     }
@@ -488,6 +557,11 @@ class LocalModelManager extends ChangeNotifier {
         );
       } else if (modelId == kokoroTtsId) {
         imported = await _kokoroTtsModels.pickAndImport(onProgress: progress);
+      } else if (LanguageModelService.supportedModelIds.contains(modelId)) {
+        imported = await _languageModels.pickAndImport(
+          modelId,
+          onProgress: progress,
+        );
       } else {
         imported = await _streamingModels.pickAndImport(
           modelId,
@@ -499,6 +573,9 @@ class LocalModelManager extends ChangeNotifier {
       } else {
         if (StreamingSpeechModelService.supportedModelIds.contains(modelId)) {
           await _selectIfNoUsableLiveModel(modelId);
+        }
+        if (LanguageModelService.supportedModelIds.contains(modelId)) {
+          await _selectIfNoUsableAssistantModel(modelId);
         }
         transfer.status = ModelTransferStatus.completed;
       }
@@ -567,6 +644,22 @@ class LocalModelManager extends ChangeNotifier {
         throw StateError('请先停止正在进行的笔记朗读');
       }
       await _kokoroTtsModels.remove();
+    } else if (LanguageModelService.supportedModelIds.contains(modelId)) {
+      if (LocalAssistantService.instance.loadedModelId == modelId) {
+        throw StateError('请先结束正在进行的本地助手任务并释放模型');
+      }
+      await _languageModels.remove(modelId);
+      if (_selectedAssistantModelId == modelId) {
+        String? replacement;
+        for (final candidate in LanguageModelService.supportedModelIds) {
+          if (candidate == modelId) continue;
+          if ((await _languageModels.inspect(candidate)).installed) {
+            replacement = candidate;
+            break;
+          }
+        }
+        if (replacement != null) await _languageModels.selectModel(replacement);
+      }
     } else if (StreamingSpeechModelService.supportedModelIds.contains(
       modelId,
     )) {
@@ -605,11 +698,28 @@ class LocalModelManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> selectForAssistant(String modelId) async {
+    final definition = _definition(modelId);
+    if (definition.task != LocalModelTask.textGeneration) return;
+    await _languageModels.selectModel(modelId);
+    _selectedAssistantModelId = modelId;
+    notifyListeners();
+  }
+
   Future<void> _selectIfNoUsableLiveModel(String installedModelId) async {
     final selected = await _streamingModels.inspect();
     if (!selected.installed) {
       await _streamingModels.selectModel(installedModelId);
       _selectedLiveDictationModelId = installedModelId;
+    }
+  }
+
+  Future<void> _selectIfNoUsableAssistantModel(String installedModelId) async {
+    final selectedId = await _languageModels.selectedModelId();
+    final selected = await _languageModels.inspect(selectedId);
+    if (!selected.installed) {
+      await _languageModels.selectModel(installedModelId);
+      _selectedAssistantModelId = installedModelId;
     }
   }
 

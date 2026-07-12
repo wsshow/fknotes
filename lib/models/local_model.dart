@@ -1,4 +1,4 @@
-enum LocalModelCategory { speech, vision }
+enum LocalModelCategory { language, speech, vision }
 
 enum LocalModelAvailability { downloadable, builtIn, planned }
 
@@ -9,6 +9,7 @@ enum LocalModelTask {
   speechEnhancement,
   speakerDiarization,
   textToSpeech,
+  textGeneration,
   textRecognition,
   imageUnderstanding,
 }

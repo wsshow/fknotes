@@ -130,9 +130,19 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('本地模型'), findsOneWidget);
-    expect(find.text('语音模型'), findsOneWidget);
-    expect(find.text('SenseVoice Small INT8'), findsOneWidget);
-    expect(find.text('继续下载'), findsOneWidget);
+    expect(find.text('语言模型'), findsOneWidget);
+    expect(find.text('MiniCPM5 1B INT4'), findsOneWidget);
+    expect(find.text('Qwen3.5 2B INT4'), findsOneWidget);
+    expect(find.text('597.4 MB'), findsOneWidget);
+    expect(find.text('1.3 GB'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('实时听写设置'),
+      350,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
     expect(find.text('实时听写设置'), findsOneWidget);
     expect(find.text('热词增强'), findsOneWidget);
     expect(find.text('结束后精修'), findsOneWidget);
@@ -188,7 +198,20 @@ void main() {
       isFalse,
     );
 
-    await tester.drag(find.byType(ListView), const Offset(0, -700));
+    await tester.scrollUntilVisible(
+      find.text('SenseVoice Small INT8'),
+      350,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('SenseVoice Small INT8'), findsOneWidget);
+    expect(find.text('继续下载'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('Streaming Zipformer 中文'),
+      350,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Streaming Zipformer 中文'), findsOneWidget);

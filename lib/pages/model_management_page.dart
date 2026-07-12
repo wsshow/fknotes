@@ -49,6 +49,9 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
 
   @override
   Widget build(BuildContext context) {
+    final language = _manager.models
+        .where((model) => model.category == LocalModelCategory.language)
+        .toList();
     final speech = _manager.models
         .where((model) => model.category == LocalModelCategory.speech)
         .toList();
@@ -97,6 +100,31 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
                 ],
               ),
             ),
+            const SizedBox(height: 26),
+            _sectionTitle('语言模型'),
+            const SizedBox(height: 6),
+            const Text(
+              '由用户下载并选择本地助手使用的模型，默认上下文为 4096。',
+              style: TextStyle(color: AppColors.muted, height: 1.45),
+            ),
+            const SizedBox(height: 12),
+            for (var index = 0; index < language.length; index++) ...[
+              _ModelCard(
+                definition: language[index],
+                installation: _manager.installationOf(language[index].id),
+                transfer: _manager.transferOf(language[index].id),
+                emphasized: language[index].id == widget.focusModelId,
+                selectedForAssistant:
+                    language[index].id == _manager.selectedAssistantModelId,
+                onDownload: () => _confirmDownload(language[index]),
+                onImport: () => _manager.import(language[index].id),
+                onCancel: () => _manager.cancel(language[index].id),
+                onRemove: () => _confirmRemove(language[index]),
+                onSelect: () => _selectForAssistant(language[index]),
+                onDetails: () => _showDetails(language[index]),
+              ),
+              if (index != language.length - 1) const SizedBox(height: 12),
+            ],
             const SizedBox(height: 26),
             _sectionTitle('实时听写设置'),
             const SizedBox(height: 12),
@@ -198,7 +226,7 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text('移除${model.name}？'),
-        content: Text('将释放约 ${_formatBytes(size)} 空间。已经生成的识别文字不会被删除。'),
+        content: Text('将释放约 ${_formatBytes(size)} 空间。已经生成的笔记内容不会被删除。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -234,6 +262,26 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('已将${model.name}设为实时听写模型')));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.toString().replaceFirst('Bad state: ', '')),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _selectForAssistant(LocalModelDefinition model) async {
+    if (model.task != LocalModelTask.textGeneration) return;
+    try {
+      await _manager.selectForAssistant(model.id);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('已将${model.name}设为本地助手模型')));
       }
     } catch (error) {
       if (mounted) {
@@ -752,6 +800,7 @@ class _ModelCard extends StatelessWidget {
   final ModelTransferState? transfer;
   final bool emphasized;
   final bool selectedForLiveDictation;
+  final bool selectedForAssistant;
   final VoidCallback onDownload;
   final VoidCallback onImport;
   final VoidCallback onCancel;
@@ -764,6 +813,7 @@ class _ModelCard extends StatelessWidget {
     required this.transfer,
     this.emphasized = false,
     this.selectedForLiveDictation = false,
+    this.selectedForAssistant = false,
     required this.onDownload,
     required this.onImport,
     required this.onCancel,
@@ -782,6 +832,7 @@ class _ModelCard extends StatelessWidget {
       LocalModelTask.speechEnhancement => Icons.noise_control_off_rounded,
       LocalModelTask.speakerDiarization => Icons.groups_2_outlined,
       LocalModelTask.textToSpeech => Icons.record_voice_over_rounded,
+      LocalModelTask.textGeneration => Icons.auto_awesome_rounded,
       LocalModelTask.textRecognition => Icons.document_scanner_rounded,
       LocalModelTask.imageUnderstanding => Icons.image_search_rounded,
     };
@@ -838,6 +889,13 @@ class _ModelCard extends StatelessWidget {
                             label: '当前听写',
                             installed: installation.installed,
                           ),
+                        ],
+                        if (selectedForAssistant &&
+                            installation.installed &&
+                            definition.task ==
+                                LocalModelTask.textGeneration) ...[
+                          const SizedBox(width: 7),
+                          const _StatusBadge(label: '当前助手', installed: true),
                         ],
                       ],
                     ),
@@ -941,6 +999,13 @@ class _ModelCard extends StatelessWidget {
               onPressed: onSelect,
               icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
               label: const Text('用于听写'),
+            ),
+          if (definition.task == LocalModelTask.textGeneration &&
+              !selectedForAssistant)
+            TextButton.icon(
+              onPressed: onSelect,
+              icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+              label: const Text('用于助手'),
             ),
           TextButton.icon(
             onPressed: onRemove,
@@ -1060,4 +1125,6 @@ String _formatBytes(int bytes) => bytes < 1024
     ? '$bytes B'
     : bytes < 1048576
     ? '${(bytes / 1024).toStringAsFixed(1)} KB'
-    : '${(bytes / 1048576).toStringAsFixed(1)} MB';
+    : bytes < 1073741824
+    ? '${(bytes / 1048576).toStringAsFixed(1)} MB'
+    : '${(bytes / 1073741824).toStringAsFixed(1)} GB';

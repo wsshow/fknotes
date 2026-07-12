@@ -118,6 +118,14 @@ class MnnLocalLlmEngine implements LocalLlmEngine {
         await controller.close();
         return;
       }
+      const defaults = LocalLlmGenerationOptions();
+      if (request.options.temperature != defaults.temperature ||
+          request.options.topP != defaults.topP ||
+          request.options.topK != defaults.topK) {
+        controller.addError(const LocalLlmException('当前版本的 MNN 引擎仅支持默认采样参数'));
+        await controller.close();
+        return;
+      }
       final requestId = _newRequestId();
       final done = Completer<void>();
       _activeGenerationRequestId = requestId;

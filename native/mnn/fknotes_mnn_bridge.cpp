@@ -111,6 +111,8 @@ public:
                     << "\",\"thread_num\":" << threads
                     << ",\"max_all_tokens\":" << context_tokens
                     << ",\"use_mmap\":true"
+                    << ",\"sampler_type\":\"mixed\""
+                    << ",\"temperature\":0.7,\"topP\":0.95,\"topK\":40"
                     << ",\"prompt_cache\":" << (enable_prompt_cache ? "true" : "false")
                     << ",\"jinja\":{\"context\":{\"enable_thinking\":"
                     << (enable_thinking ? "true" : "false") << "}}";
