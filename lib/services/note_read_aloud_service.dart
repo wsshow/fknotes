@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 
 import 'kokoro_tts_model_service.dart';
+import 'local_inference_coordinator.dart';
 
 enum ReadAloudStatus { idle, generating, playing, paused, failed }
 
@@ -28,6 +29,8 @@ class NoteReadAloudService extends ChangeNotifier {
 
   final _models = KokoroTtsModelService.instance;
   final AudioPlayer _player = AudioPlayer();
+  final _inference = LocalInferenceCoordinator.instance;
+  LocalInferenceLease? _inferenceLease;
   Isolate? _worker;
   ReceivePort? _messages;
   ReceivePort? _errors;
@@ -54,6 +57,10 @@ class NoteReadAloudService extends ChangeNotifier {
     errorMessage = null;
     notifyListeners();
     try {
+      _inferenceLease = _inference.acquire(
+        type: LocalInferenceTaskType.readAloud,
+        ownerId: 'note-read-aloud',
+      );
       final model = await _models.inspect(verifyIntegrity: true);
       _ensureCurrent(requestGeneration);
       if (!model.installed) {
@@ -83,6 +90,8 @@ class NoteReadAloudService extends ChangeNotifier {
     } catch (error) {
       await _cleanupWorker();
       await _deleteTemporaryWave();
+      _inferenceLease?.release();
+      _inferenceLease = null;
       if (error is _ReadAloudCanceled) {
         status = ReadAloudStatus.idle;
         errorMessage = null;
@@ -121,6 +130,8 @@ class NoteReadAloudService extends ChangeNotifier {
     }
     await _cleanupWorker();
     await _deleteTemporaryWave();
+    _inferenceLease?.release();
+    _inferenceLease = null;
     status = ReadAloudStatus.idle;
     errorMessage = null;
     notifyListeners();

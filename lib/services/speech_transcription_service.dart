@@ -10,6 +10,7 @@ import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 
 import '../models/note_entry.dart';
 import 'file_storage_service.dart';
+import 'local_inference_coordinator.dart';
 import 'note_service.dart';
 import 'speech_model_service.dart';
 import 'speaker_diarization_model_service.dart';
@@ -73,6 +74,7 @@ class SpeechTranscriptionService extends ChangeNotifier {
   final _voiceActivityModels = VoiceActivityModelService.instance;
   final _speakerDiarizationModels = SpeakerDiarizationModelService.instance;
   final _notes = NoteService.instance;
+  final _inference = LocalInferenceCoordinator.instance;
   final Map<String, TranscriptionJob> _jobs = {};
 
   List<TranscriptionJob> get jobs => List.unmodifiable(_jobs.values);
@@ -109,7 +111,12 @@ class SpeechTranscriptionService extends ChangeNotifier {
 
   Future<void> _run(TranscriptionJob job) async {
     String? temporaryWave;
+    LocalInferenceLease? inferenceLease;
     try {
+      inferenceLease = _inference.acquire(
+        type: LocalInferenceTaskType.transcription,
+        ownerId: job.key,
+      );
       final model = await _models.inspect();
       if (!model.installed) throw StateError('请先导入离线语音识别模型');
       final voiceActivity = await _voiceActivityModels.inspect(
@@ -159,6 +166,7 @@ class SpeechTranscriptionService extends ChangeNotifier {
         _update(job, status: TranscriptionStatus.failed);
       }
     } finally {
+      inferenceLease?.release();
       job.worker = null;
       job.cancelWorker = null;
       if (temporaryWave != null &&

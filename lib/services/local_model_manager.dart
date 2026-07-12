@@ -316,6 +316,8 @@ class LocalModelManager extends ChangeNotifier {
   String _selectedAssistantModelId = qwen35Id;
 
   List<LocalModelDefinition> get models => catalog;
+  List<ModelTransferState> get transfers =>
+      List.unmodifiable(_transfers.values);
   bool get initialized => _initialized;
   String get selectedLiveDictationModelId => _selectedLiveDictationModelId;
   String get selectedAssistantModelId => _selectedAssistantModelId;
@@ -323,6 +325,13 @@ class LocalModelManager extends ChangeNotifier {
   LocalModelInstallation installationOf(String id) =>
       _installations[id] ?? const LocalModelInstallation();
   ModelTransferState? transferOf(String id) => _transfers[id];
+
+  void dismissTransfer(String modelId) {
+    final transfer = _transfers[modelId];
+    if (transfer == null || transfer.isRunning) return;
+    _transfers.remove(modelId);
+    notifyListeners();
+  }
 
   int get installedCount => catalog.where((model) {
     return model.availability == LocalModelAvailability.builtIn ||

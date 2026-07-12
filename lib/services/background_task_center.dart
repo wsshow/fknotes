@@ -1,0 +1,175 @@
+import 'package:flutter/foundation.dart';
+
+import 'local_inference_coordinator.dart';
+import 'local_model_manager.dart';
+import 'speech_transcription_service.dart';
+import 'video_import_service.dart';
+
+enum BackgroundTaskKind { model, attachment, transcription, inference }
+
+enum BackgroundTaskState { running, failed }
+
+class BackgroundTaskItem {
+  final String id;
+  final BackgroundTaskKind kind;
+  final BackgroundTaskState state;
+  final String title;
+  final String description;
+  final double? progress;
+  final bool cancelable;
+  final String? resourceType;
+
+  const BackgroundTaskItem({
+    required this.id,
+    required this.kind,
+    required this.state,
+    required this.title,
+    required this.description,
+    this.progress,
+    this.cancelable = false,
+    this.resourceType,
+  });
+}
+
+class BackgroundTaskCenter extends ChangeNotifier {
+  BackgroundTaskCenter._() {
+    _models.addListener(_changed);
+    _attachments.addListener(_changed);
+    _transcriptions.addListener(_changed);
+    _inference.addListener(_changed);
+  }
+
+  static final BackgroundTaskCenter instance = BackgroundTaskCenter._();
+
+  final _models = LocalModelManager.instance;
+  final _attachments = AttachmentImportService.instance;
+  final _transcriptions = SpeechTranscriptionService.instance;
+  final _inference = LocalInferenceCoordinator.instance;
+
+  List<BackgroundTaskItem> get items {
+    final result = <BackgroundTaskItem>[];
+    for (final transfer in _models.transfers) {
+      if (!transfer.isRunning &&
+          transfer.status != ModelTransferStatus.failed) {
+        continue;
+      }
+      final model = _models.modelOf(transfer.modelId);
+      result.add(
+        BackgroundTaskItem(
+          id: transfer.modelId,
+          kind: BackgroundTaskKind.model,
+          state: transfer.status == ModelTransferStatus.failed
+              ? BackgroundTaskState.failed
+              : BackgroundTaskState.running,
+          title: model.name,
+          description: transfer.status == ModelTransferStatus.failed
+              ? transfer.errorMessage ?? '模型任务失败'
+              : _modelStatusLabel(transfer.status),
+          progress: transfer.totalBytes > 0 ? transfer.progress : null,
+          cancelable: transfer.isRunning && transfer.cancelable,
+        ),
+      );
+    }
+    for (final job in _attachments.jobs) {
+      if (job.committed || job.status == AttachmentImportStatus.canceled) {
+        continue;
+      }
+      if (job.status != AttachmentImportStatus.importing &&
+          job.status != AttachmentImportStatus.completed &&
+          job.status != AttachmentImportStatus.failed) {
+        continue;
+      }
+      result.add(
+        BackgroundTaskItem(
+          id: job.id,
+          kind: BackgroundTaskKind.attachment,
+          state: job.status == AttachmentImportStatus.failed
+              ? BackgroundTaskState.failed
+              : BackgroundTaskState.running,
+          title: job.fileName,
+          description: switch (job.status) {
+            AttachmentImportStatus.importing => '正在导入附件',
+            AttachmentImportStatus.completed => '正在保存到笔记',
+            AttachmentImportStatus.failed => job.errorMessage ?? '附件导入失败',
+            AttachmentImportStatus.canceled => '已取消',
+          },
+          progress: job.status == AttachmentImportStatus.completed
+              ? 1
+              : job.progress,
+          cancelable: job.status == AttachmentImportStatus.importing,
+        ),
+      );
+    }
+    for (final job in _transcriptions.jobs) {
+      if (!job.isRunning && job.status != TranscriptionStatus.failed) continue;
+      result.add(
+        BackgroundTaskItem(
+          id: job.filePath,
+          kind: BackgroundTaskKind.transcription,
+          state: job.status == TranscriptionStatus.failed
+              ? BackgroundTaskState.failed
+              : BackgroundTaskState.running,
+          title: '音频转写',
+          description: job.status == TranscriptionStatus.failed
+              ? job.errorMessage ?? '转写失败'
+              : _transcriptionStatusLabel(job.status),
+          progress: job.isRunning ? job.progress : null,
+          cancelable: job.isRunning,
+        ),
+      );
+    }
+    final activity = _inference.activity;
+    if (activity != null &&
+        activity.type != LocalInferenceTaskType.transcription) {
+      result.add(
+        BackgroundTaskItem(
+          id: activity.ownerId,
+          kind: BackgroundTaskKind.inference,
+          state: BackgroundTaskState.running,
+          title: activity.type.label,
+          description: '正在使用本地推理资源',
+          cancelable: true,
+          resourceType: activity.type.name,
+        ),
+      );
+    }
+    result.sort((left, right) {
+      if (left.state == right.state) return left.title.compareTo(right.title);
+      return left.state == BackgroundTaskState.running ? -1 : 1;
+    });
+    return result;
+  }
+
+  int get activeCount =>
+      items.where((item) => item.state == BackgroundTaskState.running).length;
+
+  int get failedCount =>
+      items.where((item) => item.state == BackgroundTaskState.failed).length;
+
+  void _changed() => notifyListeners();
+
+  static String _modelStatusLabel(ModelTransferStatus status) =>
+      switch (status) {
+        ModelTransferStatus.connecting => '正在连接下载源',
+        ModelTransferStatus.downloading => '正在下载模型',
+        ModelTransferStatus.importing => '正在导入模型',
+        ModelTransferStatus.waitingToInstall => '等待安装资源',
+        ModelTransferStatus.verifying => '正在校验并安装',
+        ModelTransferStatus.canceling => '正在取消',
+        ModelTransferStatus.completed => '已完成',
+        ModelTransferStatus.failed => '失败',
+        ModelTransferStatus.canceled => '已取消',
+      };
+
+  static String _transcriptionStatusLabel(TranscriptionStatus status) =>
+      switch (status) {
+        TranscriptionStatus.preparing => '正在准备转写',
+        TranscriptionStatus.decoding => '正在解码音频',
+        TranscriptionStatus.diarizing => '正在区分说话人',
+        TranscriptionStatus.recognizing => '正在识别语音',
+        TranscriptionStatus.saving => '正在保存转写',
+        TranscriptionStatus.completed => '已完成',
+        TranscriptionStatus.failed => '失败',
+        TranscriptionStatus.canceled => '已取消',
+      };
+}

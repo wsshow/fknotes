@@ -11,6 +11,7 @@ import '../services/backup_service.dart';
 import '../services/file_storage_service.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/app_popup_menu.dart';
+import '../widgets/background_task_center_sheet.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/note_card.dart';
 import '../widgets/navigation_icons.dart';
@@ -460,7 +461,10 @@ class _OverviewTab extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
               sliver: SliverList.list(
                 children: [
-                  _BrandHeader(onAssistant: onOpenAssistant),
+                  _BrandHeader(
+                    provider: provider,
+                    onAssistant: onOpenAssistant,
+                  ),
                   const SizedBox(height: 22),
                   _SearchButton(onTap: onSearch),
                   const SizedBox(height: 28),
@@ -547,8 +551,9 @@ class _OverviewTab extends StatelessWidget {
 }
 
 class _BrandHeader extends StatelessWidget {
+  final NoteProvider provider;
   final VoidCallback onAssistant;
-  const _BrandHeader({required this.onAssistant});
+  const _BrandHeader({required this.provider, required this.onAssistant});
   @override
   Widget build(BuildContext context) => Row(
     children: [
@@ -576,6 +581,7 @@ class _BrandHeader extends StatelessWidget {
           ],
         ),
       ),
+      BackgroundTaskCenterButton(provider: provider),
       IconButton.filledTonal(
         key: const Key('open-local-chat'),
         tooltip: '本地助手',
@@ -877,6 +883,7 @@ class _LibraryTab extends StatelessWidget {
                   icon: const Icon(Icons.search_rounded),
                   tooltip: '搜索',
                 ),
+                BackgroundTaskCenterButton(provider: provider),
                 if (provider.scope == NoteScope.trash &&
                     provider.trashCount > 0)
                   IconButton(
@@ -1143,12 +1150,19 @@ class _DataTabState extends State<_DataTab> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 140),
         children: [
-          Text(
-            '本地数据',
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-              letterSpacing: -.4,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '本地数据',
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -.4,
+                  ),
+                ),
+              ),
+              BackgroundTaskCenterButton(provider: widget.provider),
+            ],
           ),
           const SizedBox(height: 6),
           const Text(

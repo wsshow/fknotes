@@ -6,11 +6,9 @@ import 'package:flutter/widgets.dart';
 
 import '../models/local_llm.dart';
 import 'language_model_service.dart';
+import 'local_inference_coordinator.dart';
 import 'local_llm/local_llm_coordinator.dart';
 import 'local_llm/mnn_local_llm_engine.dart';
-import 'note_read_aloud_service.dart';
-import 'realtime_dictation_service.dart';
-import 'speech_transcription_service.dart';
 
 /// Application-level entry point for all future local assistant features.
 class LocalAssistantService with WidgetsBindingObserver {
@@ -25,6 +23,8 @@ class LocalAssistantService with WidgetsBindingObserver {
   final _models = LanguageModelService.instance;
   static const _idleTimeout = Duration(minutes: 2);
   Timer? _idleUnloadTimer;
+  final _inference = LocalInferenceCoordinator.instance;
+  LocalInferenceLease? _inferenceLease;
 
   LocalLlmRuntimeSnapshot get snapshot => _coordinator.snapshot;
   Stream<LocalLlmRuntimeSnapshot> get snapshots => _coordinator.snapshots;
@@ -39,26 +39,35 @@ class LocalAssistantService with WidgetsBindingObserver {
     LocalLlmBackend backend = LocalLlmBackend.cpu,
   }) async {
     _idleUnloadTimer?.cancel();
-    _ensureHeavyAudioWorkIsIdle();
-    final selectedId = await _models.selectedModelId();
-    final descriptor = await _models.descriptor(selectedId);
-    await _coordinator.loadModel(
-      descriptor,
-      options: LocalLlmLoadOptions(
-        backend: backend,
-        threads: math.min(4, math.max(2, Platform.numberOfProcessors ~/ 2)),
-        contextTokens: contextTokens,
-        enableThinking: enableThinking,
-        enablePromptCache: true,
-      ),
+    _inferenceLease ??= _inference.acquire(
+      type: LocalInferenceTaskType.assistant,
+      ownerId: 'local-assistant',
     );
+    try {
+      final selectedId = await _models.selectedModelId();
+      final descriptor = await _models.descriptor(selectedId);
+      await _coordinator.loadModel(
+        descriptor,
+        options: LocalLlmLoadOptions(
+          backend: backend,
+          threads: math.min(4, math.max(2, Platform.numberOfProcessors ~/ 2)),
+          contextTokens: contextTokens,
+          enableThinking: enableThinking,
+          enablePromptCache: true,
+        ),
+      );
+    } catch (_) {
+      await _coordinator.unload();
+      _inferenceLease?.release();
+      _inferenceLease = null;
+      rethrow;
+    }
     _scheduleIdleUnload();
   }
 
   Stream<LocalLlmGenerationEvent> generate(
     LocalLlmGenerationRequest request,
   ) async* {
-    _ensureHeavyAudioWorkIsIdle();
     _idleUnloadTimer?.cancel();
     try {
       yield* _coordinator.generate(request);
@@ -69,10 +78,15 @@ class LocalAssistantService with WidgetsBindingObserver {
 
   Future<void> cancel() => _coordinator.cancel();
 
-  Future<void> unload() {
+  Future<void> unload() async {
     _idleUnloadTimer?.cancel();
     _idleUnloadTimer = null;
-    return _coordinator.unload();
+    try {
+      await _coordinator.unload();
+    } finally {
+      _inferenceLease?.release();
+      _inferenceLease = null;
+    }
   }
 
   @override
@@ -85,18 +99,6 @@ class LocalAssistantService with WidgetsBindingObserver {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
       unawaited(unload());
-    }
-  }
-
-  void _ensureHeavyAudioWorkIsIdle() {
-    if (RealtimeDictationService.instance.isActive) {
-      throw const LocalLlmException('请先结束正在进行的实时听写');
-    }
-    if (SpeechTranscriptionService.instance.jobs.any((job) => job.isRunning)) {
-      throw const LocalLlmException('请先等待正在进行的音频转写结束');
-    }
-    if (NoteReadAloudService.instance.isActive) {
-      throw const LocalLlmException('请先停止正在进行的笔记朗读');
     }
   }
 

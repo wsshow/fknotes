@@ -14,6 +14,7 @@ import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 
 import 'realtime_dictation_preferences_service.dart';
 import 'realtime_dictation_text_policy.dart';
+import 'local_inference_coordinator.dart';
 import 'speech_denoiser_model_service.dart';
 import 'speech_transcription_service.dart';
 import 'streaming_speech_model_service.dart';
@@ -40,6 +41,8 @@ class RealtimeDictationService extends ChangeNotifier {
   final _preferences = RealtimeDictationPreferencesService.instance;
   final _denoiserModels = SpeechDenoiserModelService.instance;
   final _transcription = SpeechTranscriptionService.instance;
+  final _inference = LocalInferenceCoordinator.instance;
+  LocalInferenceLease? _inferenceLease;
   AudioRecorder? _recorder;
   StreamSubscription<Uint8List>? _audioSubscription;
   StreamSubscription<dynamic>? _messageSubscription;
@@ -239,6 +242,10 @@ class RealtimeDictationService extends ChangeNotifier {
     _resetDebugAudioWindow();
     notifyListeners();
     try {
+      _inferenceLease = _inference.acquire(
+        type: LocalInferenceTaskType.liveDictation,
+        ownerId: 'live-dictation',
+      );
       final model = await _models.inspect(verifyIntegrity: true);
       _debugModelId = model.modelId;
       _debugModelName = model.displayName;
@@ -762,6 +769,8 @@ class RealtimeDictationService extends ChangeNotifier {
     _recorder = null;
     _recoveryPcm = BytesBuilder(copy: true);
     await _discardRefinementCapture();
+    _inferenceLease?.release();
+    _inferenceLease = null;
   }
 
   _PcmStats _pcmStats(Uint8List bytes) {

@@ -55,6 +55,15 @@ void main() {
     await _pumpHomePage(tester);
 
     expect(find.byTooltip('本地助手'), findsOneWidget);
+    final taskButton = find
+        .byKey(const Key('open-background-tasks'))
+        .hitTestable();
+    expect(taskButton, findsOneWidget);
+    await tester.tap(taskButton);
+    await tester.pumpAndSettle();
+    expect(find.text('后台任务'), findsOneWidget);
+    tester.state<NavigatorState>(find.byType(Navigator)).pop();
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('open-local-chat')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
