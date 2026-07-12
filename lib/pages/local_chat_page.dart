@@ -1123,7 +1123,7 @@ class _ChatBubble extends StatelessWidget {
             maxWidth: MediaQuery.sizeOf(context).width * .84,
           ),
           margin: const EdgeInsets.only(bottom: 14),
-          padding: const EdgeInsets.fromLTRB(14, 11, 14, 10),
+          padding: EdgeInsets.fromLTRB(14, 11, 14, user ? 10 : 8),
           decoration: BoxDecoration(
             color: user ? AppColors.moss : AppColors.surface,
             borderRadius: BorderRadius.only(
@@ -1173,7 +1173,7 @@ class _ChatBubble extends StatelessWidget {
                 ),
               ],
               if (!user && message.content.isNotEmpty) ...[
-                const SizedBox(height: 7),
+                const SizedBox(height: 3),
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -1184,17 +1184,14 @@ class _ChatBubble extends StatelessWidget {
                         fontSize: 10,
                       ),
                     ),
-                    if (message.status == LocalChatMessageStatus.stopped)
-                      const Padding(
-                        padding: EdgeInsets.only(right: 8),
-                        child: Text(
-                          '已停止',
-                          style: TextStyle(
-                            color: AppColors.muted,
-                            fontSize: 10,
-                          ),
-                        ),
+                    if (message.status == LocalChatMessageStatus.stopped) ...[
+                      const SizedBox(width: 8),
+                      const Text(
+                        '已停止',
+                        style: TextStyle(color: AppColors.muted, fontSize: 10),
                       ),
+                    ],
+                    const SizedBox(width: 6),
                     IconButton(
                       tooltip: '复制回答',
                       onPressed: () async {
@@ -1207,6 +1204,13 @@ class _ChatBubble extends StatelessWidget {
                           );
                         }
                       },
+                      style: IconButton.styleFrom(
+                        minimumSize: const Size(30, 30),
+                        maximumSize: const Size(30, 30),
+                        padding: EdgeInsets.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        visualDensity: VisualDensity.compact,
+                      ),
                       icon: const Icon(
                         Icons.copy_rounded,
                         size: 17,
@@ -1215,7 +1219,7 @@ class _ChatBubble extends StatelessWidget {
                     ),
                     if (generating)
                       const Padding(
-                        padding: EdgeInsets.only(left: 8),
+                        padding: EdgeInsets.only(left: 6),
                         child: Text(
                           '正在生成…',
                           style: TextStyle(
