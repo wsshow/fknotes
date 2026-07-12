@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:fknotes/l10n/generated/app_localizations.dart';
 import 'package:fknotes/pages/model_management_page.dart';
 import 'package:fknotes/services/file_storage_service.dart';
 import 'package:fknotes/services/local_model_manager.dart';
@@ -280,5 +281,29 @@ void main() {
     expect(find.text('视觉模型'), findsOneWidget);
     expect(find.text('ML Kit 中文文字识别'), findsOneWidget);
     expect(find.text('随应用提供'), findsOneWidget);
+  });
+
+  testWidgets('model catalog renders localized English metadata', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 3;
+    tester.view.physicalSize = const Size(1080, 2400);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        locale: Locale('en'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: ModelManagementPage(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Local models'), findsOneWidget);
+    expect(find.text('Language models'), findsOneWidget);
+    expect(find.text('Model download source'), findsOneWidget);
+    expect(find.text('Lightweight, fast local note assistant'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:fknotes/models/note_entry.dart';
+import 'package:fknotes/l10n/generated/app_localizations.dart';
 import 'package:fknotes/pages/home_page.dart';
 import 'package:fknotes/pages/local_chat_page.dart';
 import 'package:fknotes/pages/media_detail_page.dart';
@@ -141,6 +142,22 @@ void main() {
     expect(find.textContaining('版本号 2.3.4 (57)'), findsOneWidget);
     expect(find.textContaining('构建时间 未记录'), findsOneWidget);
     expect(find.text('重建数据索引'), findsNothing);
+  });
+
+  testWidgets('home navigation and settings render in English', (tester) async {
+    _usePhoneViewport(tester);
+    await _pumpHomePage(tester, language: AppLanguage.english);
+
+    expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Library'), findsOneWidget);
+    expect(find.text('Data'), findsOneWidget);
+
+    await tester.tap(find.text('Data'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Local data'), findsOneWidget);
+    expect(find.text('Preferences'), findsOneWidget);
+    expect(find.text('Cloud sync'), findsOneWidget);
   });
 
   testWidgets('tapping below the body editor focuses the final text block', (
@@ -663,6 +680,7 @@ void _usePhoneViewport(WidgetTester tester) {
 Future<void> _pumpHomePage(
   WidgetTester tester, {
   TextScaler textScaler = TextScaler.noScaling,
+  AppLanguage language = AppLanguage.simplifiedChinese,
 }) async {
   final appLock = AppLockController(
     preferencesStore: _DisabledAppLockPreferencesStore(),
@@ -671,20 +689,28 @@ Future<void> _pumpHomePage(
   );
   await appLock.initialize();
   addTearDown(appLock.dispose);
+  final localeController = AppLocaleController(
+    platformLocaleReader: () async => switch (language) {
+      AppLanguage.system => '',
+      AppLanguage.simplifiedChinese => 'zh-Hans',
+      AppLanguage.english => 'en',
+    },
+    platformLocaleWriter: (_) async {},
+    observePlatform: false,
+  );
+  await tester.runAsync(localeController.initialize);
+  addTearDown(localeController.dispose);
   await tester.pumpWidget(
     MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: appLock),
-        ChangeNotifierProvider(
-          create: (_) => AppLocaleController(
-            platformLocaleReader: () async => null,
-            platformLocaleWriter: (_) async {},
-            observePlatform: false,
-          ),
-        ),
+        ChangeNotifierProvider.value(value: localeController),
         ChangeNotifierProvider(create: (_) => NoteProvider()),
       ],
       child: MaterialApp(
+        locale: localeController.locale,
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(textScaler: textScaler),
           child: child!,

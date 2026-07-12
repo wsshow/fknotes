@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../app.dart';
@@ -10,6 +11,7 @@ import '../providers/app_lock_controller.dart';
 import '../providers/app_locale_controller.dart';
 import '../providers/note_provider.dart';
 import '../services/app_build_metadata.dart';
+import '../services/app_lock_preferences_service.dart';
 import '../services/backup_service.dart';
 import '../services/file_storage_service.dart';
 import '../widgets/app_feedback.dart';
@@ -74,9 +76,9 @@ class _HomePageState extends State<HomePage> {
                 heroTag: null,
                 onPressed: _showCaptureSheet,
                 icon: const Icon(Icons.add_rounded),
-                label: const Text(
-                  '新建',
-                  style: TextStyle(fontWeight: FontWeight.w600),
+                label: Text(
+                  context.l10n.createNew,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
               ),
         bottomNavigationBar: DecoratedBox(
@@ -98,21 +100,21 @@ class _HomePageState extends State<HomePage> {
                   provider.setScope(NoteScope.active);
                 }
               },
-              destinations: const [
+              destinations: [
                 NavigationDestination(
-                  icon: Icon(Icons.home_outlined),
-                  selectedIcon: Icon(Icons.home_outlined),
-                  label: '主页',
+                  icon: const Icon(Icons.home_outlined),
+                  selectedIcon: const Icon(Icons.home_outlined),
+                  label: context.l10n.home,
                 ),
                 NavigationDestination(
-                  icon: LibrarySpinesIcon(),
-                  selectedIcon: LibrarySpinesIcon(),
-                  label: '资料库',
+                  icon: const LibrarySpinesIcon(),
+                  selectedIcon: const LibrarySpinesIcon(),
+                  label: context.l10n.library,
                 ),
                 NavigationDestination(
-                  icon: Icon(Icons.pie_chart_outline_rounded),
-                  selectedIcon: Icon(Icons.pie_chart_outline_rounded),
-                  label: '数据',
+                  icon: const Icon(Icons.pie_chart_outline_rounded),
+                  selectedIcon: const Icon(Icons.pie_chart_outline_rounded),
+                  label: context.l10n.data,
                 ),
               ],
             ),
@@ -170,8 +172,8 @@ class _HomePageState extends State<HomePage> {
     if (!mounted) return;
     AppFeedback.action(
       context,
-      '已移到回收站',
-      actionLabel: '撤销',
+      context.l10n.movedToTrash,
+      actionLabel: context.l10n.undo,
       onAction: () => provider.restore(entry),
     );
   }
@@ -180,16 +182,16 @@ class _HomePageState extends State<HomePage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('永久删除？'),
-        content: const Text('笔记和关联文件将无法恢复。'),
+        title: Text(context.l10n.deletePermanentlyQuestion),
+        content: Text(context.l10n.deletePermanentlyDescription),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            child: Text(context.l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('永久删除'),
+            child: Text(context.l10n.deletePermanently),
           ),
         ],
       ),
@@ -200,6 +202,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _showCaptureSheet() {
+    final l10n = context.l10n;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -211,14 +214,14 @@ class _HomePageState extends State<HomePage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '捕捉此刻',
+                l10n.captureMoment,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: 4),
               Text(
-                '离线保存，你的内容只属于你',
+                l10n.capturePrivacyHint,
                 style: Theme.of(
                   context,
                 ).textTheme.bodyMedium?.copyWith(color: AppColors.muted),
@@ -240,49 +243,49 @@ class _HomePageState extends State<HomePage> {
                     children: [
                       _CaptureAction(
                         Icons.edit_note_rounded,
-                        '笔记',
+                        l10n.note,
                         AppColors.moss,
                         () => _afterSheetClose(sheetContext, _createTextNote),
                         width: itemWidth,
                       ),
                       _CaptureAction(
                         Icons.camera_alt_rounded,
-                        '拍照',
+                        l10n.photo,
                         const Color(0xFF9B654E),
                         () => _afterSheetClose(sheetContext, _takePhoto),
                         width: itemWidth,
                       ),
                       _CaptureAction(
                         Icons.image_rounded,
-                        '图片',
+                        l10n.image,
                         const Color(0xFF9B654E),
                         () => _afterSheetClose(sheetContext, _pickImage),
                         width: itemWidth,
                       ),
                       _CaptureAction(
                         Icons.mic_rounded,
-                        '录音',
+                        l10n.record,
                         const Color(0xFFA66742),
                         () => _afterSheetClose(sheetContext, _openRecorder),
                         width: itemWidth,
                       ),
                       _CaptureAction(
                         Icons.audio_file_rounded,
-                        '音频',
+                        l10n.audio,
                         const Color(0xFFA66742),
                         () => _afterSheetClose(sheetContext, _pickAudio),
                         width: itemWidth,
                       ),
                       _CaptureAction(
                         Icons.video_file_rounded,
-                        '视频',
+                        l10n.video,
                         const Color(0xFFA94F46),
                         () => _afterSheetClose(sheetContext, _pickVideo),
                         width: itemWidth,
                       ),
                       _CaptureAction(
                         Icons.upload_file_rounded,
-                        '文件',
+                        l10n.file,
                         const Color(0xFF986047),
                         () => _afterSheetClose(sheetContext, _pickDocument),
                         width: itemWidth,
@@ -315,8 +318,9 @@ class _HomePageState extends State<HomePage> {
         builder: (_) => const RecordAudioPage(returnAttachment: true),
       ),
     );
+    if (!mounted) return;
     if (attachment != null) {
-      await _createNoteWithAttachments('语音笔记', [attachment]);
+      await _createNoteWithAttachments(context.l10n.voiceNote, [attachment]);
     }
   }
 
@@ -356,7 +360,8 @@ class _HomePageState extends State<HomePage> {
     } catch (error) {
       if (!mounted) return;
       final message = error is PlatformException
-          ? error.message ?? '${type.label}导入失败'
+          ? error.message ??
+                context.l10n.importFailed(_noteTypeLabel(context.l10n, type))
           : error.toString();
       AppFeedback.error(context, message);
     }
@@ -445,8 +450,8 @@ class _OverviewTab extends StatelessWidget {
                   ),
                   const SizedBox(height: 30),
                   _SectionHeader(
-                    title: '最近更新',
-                    action: entries.isEmpty ? null : '更多',
+                    title: context.l10n.recentlyUpdated,
+                    action: entries.isEmpty ? null : context.l10n.more,
                     onTap: onOpenLibrary,
                   ),
                   const SizedBox(height: 10),
@@ -468,25 +473,28 @@ class _OverviewTab extends StatelessWidget {
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: AppColors.line),
                     ),
-                    child: const Row(
+                    child: Row(
                       children: [
-                        Icon(Icons.auto_awesome_rounded, color: AppColors.moss),
-                        SizedBox(width: 13),
+                        const Icon(
+                          Icons.auto_awesome_rounded,
+                          color: AppColors.moss,
+                        ),
+                        const SizedBox(width: 13),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                '从一个念头开始',
-                                style: TextStyle(
+                                context.l10n.startWithIdea,
+                                style: const TextStyle(
                                   fontFamily: 'serif',
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              SizedBox(height: 3),
+                              const SizedBox(height: 3),
                               Text(
-                                '点击“新建”，内容会安全留在本机。',
-                                style: TextStyle(
+                                context.l10n.createNoteEmptyHint,
+                                style: const TextStyle(
                                   fontSize: 12,
                                   color: AppColors.muted,
                                 ),
@@ -531,15 +539,15 @@ class _BrandHeader extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '非空笔记',
+              context.l10n.appTitle,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.w700,
                 letterSpacing: .2,
               ),
             ),
-            const Text(
-              '本地优先 · 私密可靠',
-              style: TextStyle(
+            Text(
+              context.l10n.appTagline,
+              style: const TextStyle(
                 fontSize: 11,
                 color: AppColors.muted,
                 fontWeight: FontWeight.w500,
@@ -551,7 +559,7 @@ class _BrandHeader extends StatelessWidget {
       BackgroundTaskCenterButton(provider: provider),
       IconButton.filledTonal(
         key: const Key('open-local-chat'),
-        tooltip: '本地助手',
+        tooltip: context.l10n.localAssistant,
         onPressed: onAssistant,
         style: IconButton.styleFrom(
           backgroundColor: AppColors.softGreen,
@@ -569,7 +577,7 @@ class _SearchButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
-    label: '搜索本地知识库',
+    label: context.l10n.searchLocalKnowledge,
     onTap: onTap,
     excludeSemantics: true,
     child: Material(
@@ -578,14 +586,17 @@ class _SearchButton extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(15),
-        child: const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 15, vertical: 14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
           child: Row(
             children: [
-              Icon(Icons.search_rounded, color: AppColors.muted),
-              SizedBox(width: 12),
+              const Icon(Icons.search_rounded, color: AppColors.muted),
+              const SizedBox(width: 12),
               Expanded(
-                child: Text('搜索笔记', style: TextStyle(color: AppColors.muted)),
+                child: Text(
+                  context.l10n.searchNotes,
+                  style: const TextStyle(color: AppColors.muted),
+                ),
               ),
             ],
           ),
@@ -603,16 +614,20 @@ class _LocalHero extends StatelessWidget {
     final adaptiveStats =
         MediaQuery.sizeOf(context).width < 380 ||
         MediaQuery.textScalerOf(context).scale(1) > 1.4;
-    final localOnly = const Row(
+    final localOnly = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.verified_user_outlined, size: 17, color: AppColors.moss),
-        SizedBox(width: 6),
+        const Icon(
+          Icons.verified_user_outlined,
+          size: 17,
+          color: AppColors.moss,
+        ),
+        const SizedBox(width: 6),
         Flexible(
           child: Text(
-            '仅保存在本机',
+            context.l10n.savedOnlyOnDevice,
             maxLines: 2,
-            style: TextStyle(
+            style: const TextStyle(
               color: AppColors.muted,
               fontSize: 12,
               height: 1.25,
@@ -624,7 +639,10 @@ class _LocalHero extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('所有笔记', style: Theme.of(context).textTheme.headlineMedium),
+        Text(
+          context.l10n.allNotes,
+          style: Theme.of(context).textTheme.headlineMedium,
+        ),
         const SizedBox(height: 18),
         if (adaptiveStats)
           Wrap(
@@ -632,8 +650,16 @@ class _LocalHero extends StatelessWidget {
             runSpacing: 14,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              _OverviewStat('${provider.activeEntries.length}', '条笔记'),
-              _OverviewStat('${provider.attachmentCount}', '个附件'),
+              _OverviewStat(
+                '${provider.activeEntries.length}',
+                context.l10n.noteCountShort(provider.activeEntries.length),
+                labelIncludesValue: true,
+              ),
+              _OverviewStat(
+                '${provider.attachmentCount}',
+                context.l10n.attachmentCountShort(provider.attachmentCount),
+                labelIncludesValue: true,
+              ),
               localOnly,
             ],
           )
@@ -641,11 +667,19 @@ class _LocalHero extends StatelessWidget {
           IntrinsicHeight(
             child: Row(
               children: [
-                _OverviewStat('${provider.activeEntries.length}', '条笔记'),
+                _OverviewStat(
+                  '${provider.activeEntries.length}',
+                  context.l10n.noteCountShort(provider.activeEntries.length),
+                  labelIncludesValue: true,
+                ),
                 const VerticalDivider(width: 28),
-                _OverviewStat('${provider.attachmentCount}', '个附件'),
+                _OverviewStat(
+                  '${provider.attachmentCount}',
+                  context.l10n.attachmentCountShort(provider.attachmentCount),
+                  labelIncludesValue: true,
+                ),
                 const VerticalDivider(width: 28),
-                const Expanded(
+                Expanded(
                   child: Align(
                     alignment: Alignment.centerRight,
                     child: Row(
@@ -659,7 +693,7 @@ class _LocalHero extends StatelessWidget {
                         SizedBox(width: 6),
                         Flexible(
                           child: Text(
-                            '仅保存在本机',
+                            context.l10n.savedOnlyOnDevice,
                             maxLines: 2,
                             style: TextStyle(
                               color: AppColors.muted,
@@ -685,7 +719,12 @@ class _LocalHero extends StatelessWidget {
 class _OverviewStat extends StatelessWidget {
   final String value;
   final String label;
-  const _OverviewStat(this.value, this.label);
+  final bool labelIncludesValue;
+  const _OverviewStat(
+    this.value,
+    this.label, {
+    this.labelIncludesValue = false,
+  });
 
   @override
   Widget build(BuildContext context) => Row(
@@ -703,7 +742,7 @@ class _OverviewStat extends StatelessWidget {
       ),
       const SizedBox(width: 5),
       Text(
-        label,
+        labelIncludesValue ? label.replaceFirst(value, '').trim() : label,
         style: const TextStyle(
           color: AppColors.muted,
           fontSize: 12,
@@ -778,7 +817,7 @@ class _QuickActions extends StatelessWidget {
           Expanded(
             child: _QuickAction(
               icon: Icons.notes_rounded,
-              label: '笔记',
+              label: context.l10n.note,
               onTap: onCreateText,
             ),
           ),
@@ -786,7 +825,7 @@ class _QuickActions extends StatelessWidget {
           Expanded(
             child: _QuickAction(
               icon: Icons.image_outlined,
-              label: '图片',
+              label: context.l10n.image,
               onTap: onPickImage,
             ),
           ),
@@ -794,7 +833,7 @@ class _QuickActions extends StatelessWidget {
           Expanded(
             child: _QuickAction(
               icon: Icons.mic_none_rounded,
-              label: '录音',
+              label: context.l10n.record,
               onTap: onRecordAudio,
             ),
           ),
@@ -802,7 +841,7 @@ class _QuickActions extends StatelessWidget {
           Expanded(
             child: _QuickAction(
               icon: Icons.description_outlined,
-              label: '文件',
+              label: context.l10n.file,
               onTap: onPickDocument,
             ),
           ),
@@ -825,7 +864,7 @@ class _QuickAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
-    label: '新建$label',
+    label: context.l10n.createType(label),
     onTap: onTap,
     excludeSemantics: true,
     child: Material(
@@ -883,7 +922,7 @@ class _LibraryTab extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        _scopeTitle(provider.scope),
+                        _scopeTitle(context.l10n, provider.scope),
                         style: Theme.of(context).textTheme.headlineMedium
                             ?.copyWith(
                               fontWeight: FontWeight.w700,
@@ -891,7 +930,7 @@ class _LibraryTab extends StatelessWidget {
                             ),
                       ),
                       Text(
-                        '${entries.length} 个条目',
+                        context.l10n.itemCount(entries.length),
                         style: const TextStyle(
                           color: AppColors.muted,
                           fontWeight: FontWeight.w600,
@@ -903,42 +942,42 @@ class _LibraryTab extends StatelessWidget {
                 IconButton.filledTonal(
                   onPressed: onSearch,
                   icon: const Icon(Icons.search_rounded),
-                  tooltip: '搜索',
+                  tooltip: context.l10n.search,
                 ),
                 if (provider.scope == NoteScope.trash &&
                     provider.trashCount > 0)
                   IconButton(
-                    tooltip: '清空回收站',
+                    tooltip: context.l10n.emptyTrash,
                     onPressed: () => _confirmEmptyTrash(context),
                     icon: const Icon(Icons.delete_sweep_outlined),
                   ),
                 AppAnchoredMenuButton<NoteSort>(
-                  tooltip: '排序',
+                  tooltip: context.l10n.sort,
                   icon: const Icon(Icons.swap_vert_rounded),
                   onSelected: provider.setSort,
                   actions: [
                     AppMenuAction(
                       value: NoteSort.updated,
                       icon: Icons.update_rounded,
-                      label: '最近更新',
+                      label: context.l10n.recentlyUpdated,
                       selected: provider.sort == NoteSort.updated,
                     ),
                     AppMenuAction(
                       value: NoteSort.created,
                       icon: Icons.schedule_rounded,
-                      label: '创建时间',
+                      label: context.l10n.creationTime,
                       selected: provider.sort == NoteSort.created,
                     ),
                     AppMenuAction(
                       value: NoteSort.title,
                       icon: Icons.sort_by_alpha_rounded,
-                      label: '标题',
+                      label: context.l10n.title,
                       selected: provider.sort == NoteSort.title,
                     ),
                     AppMenuAction(
                       value: NoteSort.size,
                       icon: Icons.data_usage_rounded,
-                      label: '文件大小',
+                      label: context.l10n.fileSize,
                       selected: provider.sort == NoteSort.size,
                     ),
                   ],
@@ -954,22 +993,22 @@ class _LibraryTab extends StatelessWidget {
               child: Row(
                 children: [
                   _ScopeChip(
-                    '全部',
+                    context.l10n.all,
                     provider.scope == NoteScope.active,
                     () => provider.setScope(NoteScope.active),
                   ),
                   _ScopeChip(
-                    '收藏',
+                    context.l10n.favorites,
                     provider.scope == NoteScope.favorites,
                     () => provider.setScope(NoteScope.favorites),
                   ),
                   _ScopeChip(
-                    '归档',
+                    context.l10n.archive,
                     provider.scope == NoteScope.archived,
                     () => provider.setScope(NoteScope.archived),
                   ),
                   _ScopeChip(
-                    '回收站',
+                    context.l10n.trash,
                     provider.scope == NoteScope.trash,
                     () => provider.setScope(NoteScope.trash),
                   ),
@@ -1000,7 +1039,7 @@ class _LibraryTab extends StatelessWidget {
                 : entries.isEmpty
                 ? EmptyState(
                     icon: _scopeIcon(provider.scope),
-                    message: _emptyMessage(provider.scope),
+                    message: _emptyMessage(context.l10n, provider.scope),
                   )
                 : RefreshIndicator(
                     onRefresh: provider.loadEntries,
@@ -1017,39 +1056,41 @@ class _LibraryTab extends StatelessWidget {
     );
   }
 
-  static String _scopeTitle(NoteScope scope) => switch (scope) {
-    NoteScope.active => '资料库',
-    NoteScope.favorites => '收藏',
-    NoteScope.archived => '归档',
-    NoteScope.trash => '回收站',
-  };
+  static String _scopeTitle(AppLocalizations l10n, NoteScope scope) =>
+      switch (scope) {
+        NoteScope.active => l10n.library,
+        NoteScope.favorites => l10n.favorites,
+        NoteScope.archived => l10n.archive,
+        NoteScope.trash => l10n.trash,
+      };
   static IconData _scopeIcon(NoteScope scope) => switch (scope) {
     NoteScope.active => Icons.folder_open_rounded,
     NoteScope.favorites => Icons.star_outline_rounded,
     NoteScope.archived => Icons.archive_outlined,
     NoteScope.trash => Icons.delete_outline_rounded,
   };
-  static String _emptyMessage(NoteScope scope) => switch (scope) {
-    NoteScope.active => '当前筛选下没有内容',
-    NoteScope.favorites => '收藏的内容会出现在这里',
-    NoteScope.archived => '归档箱是空的',
-    NoteScope.trash => '回收站是空的',
-  };
+  static String _emptyMessage(AppLocalizations l10n, NoteScope scope) =>
+      switch (scope) {
+        NoteScope.active => l10n.emptyActive,
+        NoteScope.favorites => l10n.emptyFavorites,
+        NoteScope.archived => l10n.emptyArchive,
+        NoteScope.trash => l10n.emptyTrashDescription,
+      };
 
   Future<void> _confirmEmptyTrash(BuildContext context) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('清空回收站？'),
-        content: Text('将永久删除 ${provider.trashCount} 条内容和关联文件。'),
+        title: Text(context.l10n.emptyTrashQuestion),
+        content: Text(context.l10n.emptyTrashConfirmation(provider.trashCount)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            child: Text(context.l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('清空'),
+            child: Text(context.l10n.clear),
           ),
         ],
       ),
@@ -1100,7 +1141,11 @@ class _TypeChip extends StatelessWidget {
     child: Padding(
       padding: const EdgeInsets.only(right: 8),
       child: FilterChip(
-        label: Text(type?.label ?? '所有类型'),
+        label: Text(
+          type == null
+              ? context.l10n.allTypes
+              : _noteTypeLabel(context.l10n, type!),
+        ),
         avatar: type == null
             ? null
             : Icon(
@@ -1163,7 +1208,7 @@ class _DataTabState extends State<_DataTab> {
       if (mounted) {
         setState(
           () => _appBuildMetadata = const AppBuildMetadata(
-            version: '暂不可用',
+            version: '',
             buildNumber: '',
             buildTime: null,
           ),
@@ -1183,16 +1228,16 @@ class _DataTabState extends State<_DataTab> {
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 140),
         children: [
           Text(
-            '本地数据',
+            l10n.localData,
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
               fontWeight: FontWeight.w700,
               letterSpacing: -.4,
             ),
           ),
           const SizedBox(height: 6),
-          const Text(
-            '默认只保存在本机；是否同步完全由你决定。',
-            style: TextStyle(color: AppColors.muted),
+          Text(
+            l10n.localDataSubtitle,
+            style: const TextStyle(color: AppColors.muted),
           ),
           const SizedBox(height: 20),
           Container(
@@ -1205,9 +1250,9 @@ class _DataTabState extends State<_DataTab> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Row(
+                Row(
                   children: [
-                    DecoratedBox(
+                    const DecoratedBox(
                       decoration: BoxDecoration(
                         color: AppColors.softGreen,
                         shape: BoxShape.circle,
@@ -1221,22 +1266,31 @@ class _DataTabState extends State<_DataTab> {
                         ),
                       ),
                     ),
-                    SizedBox(width: 10),
-                    Text(
-                      '本地优先',
-                      style: TextStyle(
-                        color: AppColors.ink,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    Spacer(),
-                    Text(
-                      '离线安全',
-                      style: TextStyle(
-                        color: AppColors.moss,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 12,
+                        runSpacing: 4,
+                        children: [
+                          Text(
+                            l10n.localFirst,
+                            style: const TextStyle(
+                              color: AppColors.ink,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Text(
+                            l10n.offlineSecure,
+                            style: const TextStyle(
+                              color: AppColors.moss,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -1244,13 +1298,19 @@ class _DataTabState extends State<_DataTab> {
                 const SizedBox(height: 18),
                 Row(
                   children: [
-                    _DataStat('${widget.provider.allEntries.length}', '总条目'),
-                    _DataStat('${widget.provider.attachmentCount}', '附件'),
+                    _DataStat(
+                      '${widget.provider.allEntries.length}',
+                      l10n.totalItems,
+                    ),
+                    _DataStat(
+                      '${widget.provider.attachmentCount}',
+                      l10n.attachments,
+                    ),
                     _DataStat(
                       _formatBytes(
                         _actualSize ?? widget.provider.totalFileSize,
                       ),
-                      '资料占用',
+                      l10n.userDataUsage,
                     ),
                   ],
                 ),
@@ -1259,7 +1319,7 @@ class _DataTabState extends State<_DataTab> {
           ),
           const SizedBox(height: 22),
           Text(
-            l10n.language,
+            l10n.preferences,
             style: Theme.of(
               context,
             ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
@@ -1277,7 +1337,7 @@ class _DataTabState extends State<_DataTab> {
           ),
           const SizedBox(height: 22),
           Text(
-            '统一存储',
+            l10n.unifiedStorage,
             style: Theme.of(
               context,
             ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
@@ -1287,22 +1347,22 @@ class _DataTabState extends State<_DataTab> {
             children: [
               _SettingRow(
                 icon: Icons.cloud_sync_outlined,
-                title: '云同步',
-                subtitle: '手动同步用户数据，支持 S3 和 WebDAV',
+                title: l10n.cloudSync,
+                subtitle: l10n.cloudSyncSubtitle,
                 onTap: _openCloudSync,
               ),
               const Divider(height: 1),
               _SettingRow(
                 icon: Icons.folder_rounded,
-                title: '应用私有存储',
-                subtitle: '笔记、聊天、附件和缩略图均安全保存在本机',
+                title: l10n.privateAppStorage,
+                subtitle: l10n.privateAppStorageSubtitle,
                 showChevron: false,
               ),
               const Divider(height: 1),
               _SettingRow(
                 icon: Icons.memory_rounded,
-                title: '本地模型',
-                subtitle: '下载、导入和移除设备端识别模型',
+                title: l10n.localModels,
+                subtitle: l10n.localModelsSubtitle,
                 onTap: () async {
                   await Navigator.push(
                     context,
@@ -1317,7 +1377,7 @@ class _DataTabState extends State<_DataTab> {
           ),
           const SizedBox(height: 22),
           Text(
-            '备份与迁移',
+            l10n.backupAndMigration,
             style: Theme.of(
               context,
             ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
@@ -1327,22 +1387,22 @@ class _DataTabState extends State<_DataTab> {
             children: [
               _SettingRow(
                 icon: Icons.ios_share_rounded,
-                title: '导出完整备份',
-                subtitle: '通过系统面板保存，包含所有笔记和附件',
+                title: l10n.exportCompleteBackup,
+                subtitle: l10n.exportCompleteBackupSubtitle,
                 onTap: _backupBusy ? null : _exportBackup,
               ),
               const Divider(height: 1),
               _SettingRow(
                 icon: Icons.settings_backup_restore_rounded,
-                title: '从备份恢复',
-                subtitle: '恢复前会进行完整性检查',
+                title: l10n.restoreFromBackup,
+                subtitle: l10n.restoreFromBackupSubtitle,
                 onTap: _backupBusy ? null : _restoreBackup,
               ),
             ],
           ),
           const SizedBox(height: 22),
           Text(
-            '整理与安全',
+            l10n.organizationAndSecurity,
             style: Theme.of(
               context,
             ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
@@ -1352,10 +1412,12 @@ class _DataTabState extends State<_DataTab> {
             children: [
               _SettingRow(
                 icon: Icons.lock_outline_rounded,
-                title: '应用锁',
+                title: l10n.appLock,
                 subtitle: appLock.enabled
-                    ? '已开启 · 离开应用 ${appLock.timeout.label}锁定'
-                    : '使用系统指纹、人脸或锁屏密码',
+                    ? l10n.appLockEnabledSubtitle(
+                        _appLockTimeoutLabel(l10n, appLock.timeout),
+                      )
+                    : l10n.appLockDisabledSubtitle,
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -1366,8 +1428,8 @@ class _DataTabState extends State<_DataTab> {
               const Divider(height: 1),
               _SettingRow(
                 icon: Icons.archive_outlined,
-                title: '归档',
-                subtitle: '${widget.provider.archiveCount} 条内容',
+                title: l10n.archive,
+                subtitle: l10n.contentCount(widget.provider.archiveCount),
                 onTap: () {
                   widget.provider.setScope(NoteScope.archived);
                   widget.onOpenLibrary();
@@ -1376,8 +1438,8 @@ class _DataTabState extends State<_DataTab> {
               const Divider(height: 1),
               _SettingRow(
                 icon: Icons.delete_outline_rounded,
-                title: '回收站',
-                subtitle: '${widget.provider.trashCount} 条内容',
+                title: l10n.trash,
+                subtitle: l10n.contentCount(widget.provider.trashCount),
                 onTap: () {
                   widget.provider.setScope(NoteScope.trash);
                   widget.onOpenLibrary();
@@ -1387,7 +1449,7 @@ class _DataTabState extends State<_DataTab> {
           ),
           const SizedBox(height: 22),
           Text(
-            '关于',
+            l10n.about,
             style: Theme.of(
               context,
             ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
@@ -1397,19 +1459,19 @@ class _DataTabState extends State<_DataTab> {
             children: [
               _SettingRow(
                 icon: Icons.info_outline_rounded,
-                title: '非空笔记',
+                title: l10n.appTitle,
                 subtitle: _appBuildMetadata == null
-                    ? '正在读取版本信息…'
-                    : '${_appBuildMetadata!.versionLabel}\n${_appBuildMetadata!.buildTimeLabel}',
+                    ? l10n.loadingVersion
+                    : _buildMetadataSubtitle(l10n, _appBuildMetadata!),
                 showChevron: false,
               ),
             ],
           ),
           const SizedBox(height: 24),
-          const Center(
+          Center(
             child: Text(
-              '非空笔记  ·  本地优先，同步由你掌控',
-              style: TextStyle(
+              l10n.footerTagline,
+              style: const TextStyle(
                 fontSize: 12,
                 color: AppColors.muted,
                 fontWeight: FontWeight.w600,
@@ -1480,11 +1542,11 @@ class _DataTabState extends State<_DataTab> {
       );
       await widget.provider.loadEntries();
       if (exported && mounted) {
-        AppFeedback.success(context, '备份已交给系统保存');
+        AppFeedback.success(context, context.l10n.backupExported);
       }
     } catch (error) {
       if (mounted) {
-        AppFeedback.error(context, '导出失败：$error');
+        AppFeedback.error(context, context.l10n.exportFailed('$error'));
       }
     } finally {
       if (mounted) setState(() => _backupBusy = false);
@@ -1504,16 +1566,16 @@ class _DataTabState extends State<_DataTab> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('恢复完整备份？'),
-        content: const Text('当前内容将被备份中的内容替换。建议先导出一份当前数据。'),
+        title: Text(context.l10n.restoreCompleteBackupQuestion),
+        content: Text(context.l10n.restoreCompleteBackupDescription),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            child: Text(context.l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('选择备份'),
+            child: Text(context.l10n.chooseBackup),
           ),
         ],
       ),
@@ -1526,12 +1588,12 @@ class _DataTabState extends State<_DataTab> {
         await widget.provider.loadEntries();
         await _refreshSize();
         if (mounted) {
-          AppFeedback.success(context, '备份已安全恢复');
+          AppFeedback.success(context, context.l10n.backupRestored);
         }
       }
     } catch (error) {
       if (mounted) {
-        AppFeedback.error(context, '恢复失败：$error');
+        AppFeedback.error(context, context.l10n.restoreFailed('$error'));
       }
     } finally {
       if (mounted) setState(() => _backupBusy = false);
@@ -1568,6 +1630,38 @@ IconData _appLanguageIcon(AppLanguage language) => switch (language) {
   AppLanguage.simplifiedChinese => Icons.translate_rounded,
   AppLanguage.english => Icons.language_rounded,
 };
+
+String _noteTypeLabel(AppLocalizations l10n, NoteType type) => switch (type) {
+  NoteType.text => l10n.note,
+  NoteType.image => l10n.image,
+  NoteType.audio => l10n.audio,
+  NoteType.video => l10n.video,
+  NoteType.document => l10n.file,
+};
+
+String _appLockTimeoutLabel(AppLocalizations l10n, AppLockTimeout timeout) =>
+    switch (timeout) {
+      AppLockTimeout.immediately => l10n.lockImmediately,
+      AppLockTimeout.oneMinute => l10n.lockAfterOneMinute,
+      AppLockTimeout.fiveMinutes => l10n.lockAfterFiveMinutes,
+      AppLockTimeout.fifteenMinutes => l10n.lockAfterFifteenMinutes,
+    };
+
+String _buildMetadataSubtitle(
+  AppLocalizations l10n,
+  AppBuildMetadata metadata,
+) {
+  if (metadata.version.isEmpty) return l10n.unavailable;
+  final version = metadata.buildNumber.isEmpty
+      ? l10n.versionNumber(metadata.version)
+      : l10n.versionNumberWithBuild(metadata.version, metadata.buildNumber);
+  final time = metadata.buildTime == null
+      ? l10n.buildTimeUnrecorded
+      : l10n.buildTime(
+          DateFormat.yMd(l10n.localeName).add_Hm().format(metadata.buildTime!),
+        );
+  return '$version\n$time';
+}
 
 class _DataStat extends StatelessWidget {
   final String value;
@@ -1690,7 +1784,7 @@ class _CaptureAction extends StatelessWidget {
     width: width,
     child: Semantics(
       button: true,
-      label: '新建$label',
+      label: context.l10n.createType(label),
       onTap: onTap,
       excludeSemantics: true,
       child: InkWell(

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../app.dart';
+import '../l10n/generated/app_localizations.dart';
+import '../l10n/l10n.dart';
+import '../l10n/local_model_l10n.dart';
 import '../providers/note_provider.dart';
 import '../services/background_task_center.dart';
 import '../services/local_assistant_service.dart';
@@ -28,7 +31,9 @@ class BackgroundTaskCenterButton extends StatelessWidget {
           label: Text('$count'),
           child: IconButton(
             key: const Key('open-background-tasks'),
-            tooltip: count == 0 ? '后台任务' : '后台任务 · $count 项',
+            tooltip: count == 0
+                ? context.l10n.backgroundTasks
+                : context.l10n.backgroundTaskCount(count),
             onPressed: () => showModalBottomSheet<void>(
               context: context,
               useSafeArea: true,
@@ -73,7 +78,7 @@ class _BackgroundTaskSheet extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '后台任务',
+                      context.l10n.backgroundTasks,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
@@ -81,8 +86,11 @@ class _BackgroundTaskSheet extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       items.isEmpty
-                          ? '当前没有正在运行或需要处理的任务'
-                          : '${center.activeCount} 项进行中 · ${center.failedCount} 项需要处理',
+                          ? context.l10n.noBackgroundTasks
+                          : context.l10n.backgroundTaskSummary(
+                              center.activeCount,
+                              center.failedCount,
+                            ),
                       style: const TextStyle(color: AppColors.muted),
                     ),
                   ],
@@ -91,19 +99,19 @@ class _BackgroundTaskSheet extends StatelessWidget {
               const Divider(height: 1),
               Expanded(
                 child: items.isEmpty
-                    ? const Center(
+                    ? Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.task_alt_rounded,
                               size: 48,
                               color: AppColors.muted,
                             ),
-                            SizedBox(height: 12),
+                            const SizedBox(height: 12),
                             Text(
-                              '所有任务均已完成',
-                              style: TextStyle(color: AppColors.muted),
+                              context.l10n.allTasksComplete,
+                              style: const TextStyle(color: AppColors.muted),
                             ),
                           ],
                         ),
@@ -162,7 +170,7 @@ class _BackgroundTaskSheet extends StatelessWidget {
       }
     } catch (error) {
       if (!context.mounted) return;
-      AppFeedback.error(context, '任务操作失败：$error');
+      AppFeedback.error(context, context.l10n.taskActionFailed('$error'));
     }
   }
 }
@@ -176,6 +184,7 @@ class _TaskCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final failed = item.state == BackgroundTaskState.failed;
+    final title = _localizedTaskTitle(context.l10n, item);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -196,20 +205,20 @@ class _TaskCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  item.title,
+                  title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  item.description,
+                  _localizedTaskDescription(context.l10n, item.description),
                   style: const TextStyle(color: AppColors.muted, fontSize: 12),
                 ),
                 if (item.progress != null && !failed) ...[
                   const SizedBox(height: 9),
                   Semantics(
-                    label: '${item.title}进度',
+                    label: context.l10n.taskProgress(title),
                     value: '${(item.progress! * 100).round()}%',
                     liveRegion: true,
                     child: LinearProgressIndicator(value: item.progress),
@@ -221,7 +230,7 @@ class _TaskCard extends StatelessWidget {
           const SizedBox(width: 8),
           TextButton(
             onPressed: item.cancelable || failed ? onAction : null,
-            child: Text(failed ? '移除' : '取消'),
+            child: Text(failed ? context.l10n.remove : context.l10n.cancel),
           ),
         ],
       ),
@@ -235,3 +244,44 @@ class _TaskCard extends StatelessWidget {
     BackgroundTaskKind.inference => Icons.memory_rounded,
   };
 }
+
+String _localizedTaskTitle(AppLocalizations l10n, BackgroundTaskItem item) =>
+    switch (item.kind) {
+      BackgroundTaskKind.model => localizedModelName(
+        l10n,
+        LocalModelManager.instance.modelOf(item.id),
+      ),
+      BackgroundTaskKind.attachment => item.title,
+      BackgroundTaskKind.transcription => l10n.audioTranscription,
+      BackgroundTaskKind.inference => switch (item.resourceType) {
+        'liveDictation' => l10n.liveDictation,
+        'readAloud' => l10n.readAloud,
+        'assistant' => l10n.localAssistant,
+        _ => item.title,
+      },
+    };
+
+String _localizedTaskDescription(AppLocalizations l10n, String description) =>
+    switch (description) {
+      '正在连接下载源' => l10n.connectingModelSource,
+      '正在下载模型' => l10n.downloadingModel,
+      '正在导入模型' => l10n.importingModel,
+      '等待安装资源' => l10n.waitingToInstall,
+      '正在校验并安装' => l10n.verifyingAndInstalling,
+      '正在取消' => l10n.canceling,
+      '已完成' => l10n.completed,
+      '失败' => l10n.failed,
+      '已取消' => l10n.canceled,
+      '模型任务失败' => l10n.modelTaskFailed,
+      '正在导入附件' => l10n.importingAttachment,
+      '正在保存到笔记' => l10n.savingToNote,
+      '附件导入失败' => l10n.attachmentImportFailed,
+      '转写失败' => l10n.transcriptionFailed,
+      '正在准备转写' => l10n.preparingTranscription,
+      '正在解码音频' => l10n.decodingAudio,
+      '正在区分说话人' => l10n.identifyingSpeakers,
+      '正在识别语音' => l10n.recognizingSpeech,
+      '正在保存转写' => l10n.savingTranscript,
+      '正在使用本地推理资源' => l10n.localInferenceInUse,
+      _ => description,
+    };

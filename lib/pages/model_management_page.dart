@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../app.dart';
+import '../l10n/generated/app_localizations.dart';
+import '../l10n/l10n.dart';
+import '../l10n/local_model_l10n.dart';
 import '../models/local_model.dart';
 import '../services/model_download_source_policy.dart';
 import '../services/local_model_manager.dart';
@@ -68,9 +71,9 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
     return Scaffold(
       backgroundColor: AppColors.canvas,
       appBar: AppBar(
-        title: const Text(
-          '本地模型',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+        title: Text(
+          context.l10n.localModelsPageTitle,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
         ),
       ),
       body: SafeArea(
@@ -89,19 +92,22 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
                 color: AppColors.softGreen,
                 borderRadius: BorderRadius.circular(15),
               ),
-              child: const Row(
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.lock_outline_rounded,
                     size: 19,
                     color: AppColors.moss,
                   ),
-                  SizedBox(width: 9),
+                  const SizedBox(width: 9),
                   Expanded(
                     child: Text(
-                      '模型只在用户下载时联网，且不会进入笔记备份；用户数据仅在手动云同步时上传。',
-                      style: TextStyle(color: AppColors.muted, height: 1.55),
+                      context.l10n.modelPrivacyHint,
+                      style: const TextStyle(
+                        color: AppColors.muted,
+                        height: 1.55,
+                      ),
                     ),
                   ),
                 ],
@@ -115,11 +121,11 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
               onTap: _chooseDownloadSource,
             ),
             const SizedBox(height: 26),
-            _sectionTitle('语言模型'),
+            _sectionTitle(context.l10n.languageModels),
             const SizedBox(height: 6),
-            const Text(
-              '由用户下载并选择本地助手使用的模型，默认上下文为 4096。',
-              style: TextStyle(color: AppColors.muted, height: 1.45),
+            Text(
+              context.l10n.languageModelsDescription,
+              style: const TextStyle(color: AppColors.muted, height: 1.45),
             ),
             const SizedBox(height: 12),
             for (var index = 0; index < language.length; index++) ...[
@@ -140,7 +146,7 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
               if (index != language.length - 1) const SizedBox(height: 12),
             ],
             const SizedBox(height: 26),
-            _sectionTitle('实时听写设置'),
+            _sectionTitle(context.l10n.liveDictationSettings),
             const SizedBox(height: 12),
             _HotwordsCard(preferences: _preferences, onTap: _editHotwords),
             const SizedBox(height: 12),
@@ -157,7 +163,7 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
               onChanged: _setNoiseSuppressionEnabled,
             ),
             const SizedBox(height: 26),
-            _sectionTitle('语音模型'),
+            _sectionTitle(context.l10n.speechModels),
             const SizedBox(height: 12),
             for (var index = 0; index < speech.length; index++) ...[
               _ModelCard(
@@ -178,7 +184,7 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
             ],
             if (vision.isNotEmpty) ...[
               const SizedBox(height: 26),
-              _sectionTitle('视觉模型'),
+              _sectionTitle(context.l10n.visionModels),
               const SizedBox(height: 12),
               for (var index = 0; index < vision.length; index++) ...[
                 _ModelCard(
@@ -220,15 +226,15 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '模型下载源',
+              context.l10n.modelDownloadSource,
               style: Theme.of(
                 context,
               ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 6),
-            const Text(
-              '所有模式都会在首选节点不可用时安全回退；模型仍通过固定版本和 SHA-256 校验。',
-              style: TextStyle(color: AppColors.muted, height: 1.45),
+            Text(
+              context.l10n.downloadSourceSecurityDescription,
+              style: const TextStyle(color: AppColors.muted, height: 1.45),
             ),
             const SizedBox(height: 10),
             for (final preference in ModelDownloadSourcePreference.values)
@@ -236,8 +242,10 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
                 key: Key('download-source-${preference.name}'),
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(_downloadSourceIcon(preference)),
-                title: Text(_downloadSourceTitle(preference)),
-                subtitle: Text(_downloadSourceDescription(preference)),
+                title: Text(_downloadSourceTitle(context.l10n, preference)),
+                subtitle: Text(
+                  _downloadSourceDescription(context.l10n, preference),
+                ),
                 trailing: _sourcePolicy.preference == preference
                     ? const Icon(Icons.check_circle_rounded)
                     : null,
@@ -251,7 +259,9 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
     try {
       await _sourcePolicy.setPreference(selected);
     } catch (_) {
-      if (mounted) AppFeedback.error(context, '下载源设置保存失败');
+      if (mounted) {
+        AppFeedback.error(context, context.l10n.downloadSourceSaveFailed);
+      }
     }
   }
 
@@ -259,24 +269,36 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
     final installation = _manager.installationOf(model.id);
     final remaining = (model.downloadSizeBytes - installation.partialSizeBytes)
         .clamp(0, model.downloadSizeBytes);
+    final l10n = context.l10n;
+    final description = [
+      l10n.modelDownloadDescription(
+        localizedModelName(l10n, model),
+        _formatBytes(remaining),
+      ),
+      if (model.recommendedMemoryBytes > 0)
+        l10n.modelMemoryRecommendation(
+          _formatMemory(model.recommendedMemoryBytes),
+        ),
+      if (model.task == LocalModelTask.textToSpeech)
+        l10n.ttsStorageRecommendation,
+    ].join('\n\n');
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(installation.partialSizeBytes > 0 ? '继续下载模型？' : '下载模型？'),
-        content: Text(
-          '${model.name}\n还需下载约 ${_formatBytes(remaining)}，建议使用 Wi-Fi。\n\n'
-          '下载中可离开此页面；中断后会保留进度。'
-          '${model.recommendedMemoryBytes > 0 ? '\n\n建议设备至少具备 ${_formatMemory(model.recommendedMemoryBytes)} 运行内存；内存不足可能加载失败或被系统终止。' : ''}'
-          '${model.task == LocalModelTask.textToSpeech ? '\n\n解压安装时请预留约 600 MB 可用空间。' : ''}',
+        title: Text(
+          installation.partialSizeBytes > 0
+              ? context.l10n.continueModelDownloadQuestion
+              : context.l10n.downloadModelQuestion,
         ),
+        content: Text(description),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            child: Text(context.l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('开始下载'),
+            child: Text(context.l10n.startDownload),
           ),
         ],
       ),
@@ -289,16 +311,20 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('移除${model.name}？'),
-        content: Text('将释放约 ${_formatBytes(size)} 空间。已经生成的笔记内容不会被删除。'),
+        title: Text(
+          context.l10n.removeModelQuestion(
+            localizedModelName(context.l10n, model),
+          ),
+        ),
+        content: Text(context.l10n.removeModelDescription(_formatBytes(size))),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            child: Text(context.l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('移除模型'),
+            child: Text(context.l10n.removeModel),
           ),
         ],
       ),
@@ -359,8 +385,8 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
     AppFeedback.success(
       context,
       result.hotwordsEnabled
-          ? '已保存 ${result.hotwords.length} 个热词'
-          : '已关闭实时听写热词',
+          ? context.l10n.hotwordsSaved(result.hotwords.length)
+          : context.l10n.hotwordsDisabled,
     );
   }
 
@@ -376,7 +402,7 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
       setState(() => _preferences = saved);
     } catch (_) {
       if (mounted) {
-        AppFeedback.error(context, '设置保存失败，请检查设备存储空间');
+        AppFeedback.error(context, context.l10n.settingsSaveFailed);
       }
     }
   }
@@ -393,7 +419,7 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
       setState(() => _preferences = saved);
     } catch (_) {
       if (mounted) {
-        AppFeedback.error(context, '设置保存失败，请检查设备存储空间');
+        AppFeedback.error(context, context.l10n.settingsSaveFailed);
       }
     }
   }
@@ -409,22 +435,45 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(model.name, style: Theme.of(context).textTheme.titleLarge),
+              Text(
+                localizedModelName(context.l10n, model),
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
               const SizedBox(height: 8),
-              Text(model.description, style: const TextStyle(height: 1.55)),
+              Text(
+                localizedModelDescription(context.l10n, model),
+                style: const TextStyle(height: 1.55),
+              ),
               const SizedBox(height: 18),
-              _DetailRow('用途', model.summary),
-              _DetailRow('引擎', model.engine),
+              _DetailRow(
+                context.l10n.purpose,
+                localizedModelSummary(context.l10n, model),
+              ),
+              _DetailRow(context.l10n.engine, model.engine),
               if (model.languages.isNotEmpty)
-                _DetailRow('语言', model.languages.join('、')),
-              if (model.version.isNotEmpty) _DetailRow('版本', model.version),
+                _DetailRow(
+                  context.l10n.supportedLanguages,
+                  localizedModelLanguages(context.l10n, model),
+                ),
+              if (model.version.isNotEmpty)
+                _DetailRow(
+                  context.l10n.version,
+                  localizedModelVersion(context.l10n, model),
+                ),
               if (model.recommendedMemoryBytes > 0)
                 _DetailRow(
-                  '建议内存',
-                  '${_formatMemory(model.recommendedMemoryBytes)} 及以上',
+                  context.l10n.recommendedMemory,
+                  context.l10n.memoryAndAbove(
+                    _formatMemory(model.recommendedMemoryBytes),
+                  ),
                 ),
-              if (model.source.isNotEmpty) _DetailRow('来源', model.source),
-              if (model.license.isNotEmpty) _DetailRow('许可', model.license),
+              if (model.source.isNotEmpty)
+                _DetailRow(
+                  context.l10n.source,
+                  localizedModelSource(context.l10n, model),
+                ),
+              if (model.license.isNotEmpty)
+                _DetailRow(context.l10n.license, model.license),
             ],
           ),
         ),
@@ -489,7 +538,7 @@ class _HotwordsSheetState extends State<_HotwordsSheet> {
       if (mounted) {
         setState(() {
           _saving = false;
-          _validationMessage = '保存失败，请检查设备存储空间';
+          _validationMessage = context.l10n.saveFailedStorage;
         });
       }
     }
@@ -515,15 +564,15 @@ class _HotwordsSheetState extends State<_HotwordsSheet> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '实时听写热词',
+                  context.l10n.liveDictationHotwords,
                   style: Theme.of(
                     context,
                   ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 6),
-                const Text(
-                  '每行输入一个人名、产品名或专业术语；留空即关闭。热词从下一次听写开始生效。',
-                  style: TextStyle(color: AppColors.muted, height: 1.45),
+                Text(
+                  context.l10n.hotwordsDescription,
+                  style: const TextStyle(color: AppColors.muted, height: 1.45),
                 ),
                 const SizedBox(height: 14),
                 Flexible(
@@ -539,8 +588,8 @@ class _HotwordsSheetState extends State<_HotwordsSheet> {
                           maxLines: 8,
                           autofocus: true,
                           decoration: InputDecoration(
-                            hintText: '非空笔记\nFKNotes\nsherpa onnx',
-                            labelText: '热词列表',
+                            hintText: context.l10n.hotwordsHint,
+                            labelText: context.l10n.hotwordsList,
                             errorText: _validationMessage,
                             alignLabelWithHint: true,
                             border: const OutlineInputBorder(),
@@ -549,7 +598,7 @@ class _HotwordsSheetState extends State<_HotwordsSheet> {
                         const SizedBox(height: 18),
                         Row(
                           children: [
-                            const Expanded(child: Text('增强强度')),
+                            Expanded(child: Text(context.l10n.boostStrength)),
                             Text(
                               _score.toStringAsFixed(1),
                               style: const TextStyle(
@@ -571,9 +620,9 @@ class _HotwordsSheetState extends State<_HotwordsSheet> {
                               ? null
                               : (value) => setState(() => _score = value),
                         ),
-                        const Text(
-                          '过高的强度可能把发音相近的普通词误判为热词，建议先使用 2.0。',
-                          style: TextStyle(
+                        Text(
+                          context.l10n.hotwordsStrengthWarning,
+                          style: const TextStyle(
                             color: AppColors.muted,
                             fontSize: 12,
                             height: 1.45,
@@ -591,7 +640,7 @@ class _HotwordsSheetState extends State<_HotwordsSheet> {
                         onPressed: _saving
                             ? null
                             : () => Navigator.pop(context),
-                        child: const Text('取消'),
+                        child: Text(context.l10n.cancel),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -599,7 +648,9 @@ class _HotwordsSheetState extends State<_HotwordsSheet> {
                       child: FilledButton(
                         key: const Key('save-live-dictation-hotwords'),
                         onPressed: _saving ? null : _save,
-                        child: Text(_saving ? '保存中…' : '保存'),
+                        child: Text(
+                          _saving ? context.l10n.saving : context.l10n.save,
+                        ),
                       ),
                     ),
                   ],
@@ -639,18 +690,21 @@ class _TwoPassCard extends StatelessWidget {
           child: const Icon(Icons.auto_fix_high_rounded, color: AppColors.moss),
         ),
         const SizedBox(width: 12),
-        const Expanded(
+        Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '结束后精修',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                context.l10n.finalRefinement,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-              SizedBox(height: 4),
+              const SizedBox(height: 4),
               Text(
-                '使用 SenseVoice 二次识别，仅在质量检查通过时替换（默认关闭）',
-                style: TextStyle(color: AppColors.muted),
+                context.l10n.finalRefinementDescription,
+                style: const TextStyle(color: AppColors.muted),
               ),
             ],
           ),
@@ -703,13 +757,18 @@ class _NoiseSuppressionCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                '实时降噪',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              Text(
+                context.l10n.liveNoiseSuppression,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const SizedBox(height: 4),
               Text(
-                modelInstalled ? '先抑制环境噪声，再送入流式识别' : '请先安装下方的 DPDFNet 实时降噪模型',
+                modelInstalled
+                    ? context.l10n.liveNoiseSuppressionDescription
+                    : context.l10n.installDenoiserFirst,
                 style: const TextStyle(color: AppColors.muted),
               ),
             ],
@@ -763,16 +822,21 @@ class _HotwordsCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    '热词增强',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  Text(
+                    context.l10n.hotwordBoost,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     preferences.hotwordsEnabled
-                        ? '${preferences.hotwords.length} 个热词 · 强度 '
-                              '${preferences.hotwordsScore.toStringAsFixed(1)}'
-                        : '优先识别人名、品牌与专业术语',
+                        ? context.l10n.hotwordSummary(
+                            preferences.hotwords.length,
+                            preferences.hotwordsScore.toStringAsFixed(1),
+                          )
+                        : context.l10n.hotwordBoostDescription,
                     style: const TextStyle(color: AppColors.muted),
                   ),
                 ],
@@ -802,8 +866,12 @@ class _DownloadSourceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final effective = preference == ModelDownloadSourcePreference.automatic
-        ? '自动选择 · ${automaticPrefersMainland ? '国内镜像优先' : '官方源优先'}'
-        : _downloadSourceTitle(preference);
+        ? context.l10n.downloadSourceEffective(
+            automaticPrefersMainland
+                ? context.l10n.mainlandMirror
+                : context.l10n.officialSource,
+          )
+        : _downloadSourceTitle(context.l10n, preference);
     final lastUsed = lastUsedSourceLabel;
     return Material(
       color: AppColors.surface,
@@ -825,12 +893,14 @@ class _DownloadSourceCard extends StatelessWidget {
             child: Icon(Icons.cloud_download_outlined, color: AppColors.moss),
           ),
         ),
-        title: const Text(
-          '模型下载源',
-          style: TextStyle(fontWeight: FontWeight.w700),
+        title: Text(
+          context.l10n.modelDownloadSource,
+          style: const TextStyle(fontWeight: FontWeight.w700),
         ),
         subtitle: Text(
-          lastUsed == null ? effective : '$effective\n最近使用：$lastUsed',
+          lastUsed == null
+              ? effective
+              : '$effective\n${context.l10n.lastUsedSource(lastUsed)}',
           style: const TextStyle(color: AppColors.muted, height: 1.4),
         ),
         trailing: const Icon(Icons.chevron_right_rounded),
@@ -839,26 +909,42 @@ class _DownloadSourceCard extends StatelessWidget {
   }
 }
 
-String _downloadSourceTitle(ModelDownloadSourcePreference preference) =>
-    switch (preference) {
-      ModelDownloadSourcePreference.automatic => '自动选择',
-      ModelDownloadSourcePreference.officialFirst => '优先官方源',
-      ModelDownloadSourcePreference.mainlandFirst => '优先国内镜像',
-    };
+String _downloadSourceTitle(
+  AppLocalizations l10n,
+  ModelDownloadSourcePreference preference,
+) => switch (preference) {
+  ModelDownloadSourcePreference.automatic => l10n.downloadSourceAutomatic,
+  ModelDownloadSourcePreference.officialFirst =>
+    l10n.downloadSourceOfficialFirst,
+  ModelDownloadSourcePreference.mainlandFirst =>
+    l10n.downloadSourceMainlandFirst,
+};
 
-String _downloadSourceDescription(ModelDownloadSourcePreference preference) =>
-    switch (preference) {
-      ModelDownloadSourcePreference.automatic => '结合设备区域和实际连接结果动态选择',
-      ModelDownloadSourcePreference.officialFirst =>
-        '优先 Hugging Face 或 GitHub 官方节点',
-      ModelDownloadSourcePreference.mainlandFirst => '优先国内镜像或 ModelScope 节点',
-    };
+String _downloadSourceDescription(
+  AppLocalizations l10n,
+  ModelDownloadSourcePreference preference,
+) => switch (preference) {
+  ModelDownloadSourcePreference.automatic =>
+    l10n.downloadSourceAutomaticDescription,
+  ModelDownloadSourcePreference.officialFirst =>
+    l10n.downloadSourceOfficialDescription,
+  ModelDownloadSourcePreference.mainlandFirst =>
+    l10n.downloadSourceMainlandDescription,
+};
 
 IconData _downloadSourceIcon(ModelDownloadSourcePreference preference) =>
     switch (preference) {
       ModelDownloadSourcePreference.automatic => Icons.auto_mode_rounded,
       ModelDownloadSourcePreference.officialFirst => Icons.public_rounded,
       ModelDownloadSourcePreference.mainlandFirst => Icons.speed_rounded,
+    };
+
+String _localizedDownloadSourceLabel(AppLocalizations l10n, String label) =>
+    switch (label) {
+      '第三方国内镜像' => l10n.thirdPartyMainlandMirror,
+      'GitHub 官方源' => l10n.githubOfficialSource,
+      'ModelScope 魔搭' => l10n.modelScopeSource,
+      _ => label,
     };
 
 class _ModelSummary extends StatelessWidget {
@@ -894,7 +980,7 @@ class _ModelSummary extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '$installedCount 个模型可用',
+                context.l10n.installedModelCount(installedCount),
                 style: const TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
@@ -902,7 +988,9 @@ class _ModelSummary extends StatelessWidget {
               ),
               const SizedBox(height: 3),
               Text(
-                '可选模型占用 ${_formatBytes(installedSizeBytes)}',
+                context.l10n.optionalModelsUsage(
+                  _formatBytes(installedSizeBytes),
+                ),
                 style: const TextStyle(color: AppColors.muted),
               ),
             ],
@@ -985,49 +1073,54 @@ class _ModelCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            definition.name,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        if (definition.recommended) ...[
-                          const SizedBox(width: 7),
-                          const _StatusBadge(label: '推荐'),
-                        ],
-                        if (selectedForLiveDictation &&
-                            definition.task ==
-                                LocalModelTask.liveDictation) ...[
-                          const SizedBox(width: 7),
-                          _StatusBadge(
-                            label: '当前听写',
-                            installed: installation.installed,
-                          ),
-                        ],
-                        if (selectedForAssistant &&
+                    Text(
+                      localizedModelName(context.l10n, definition),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (definition.recommended ||
+                        (selectedForLiveDictation &&
+                            definition.task == LocalModelTask.liveDictation) ||
+                        (selectedForAssistant &&
                             installation.installed &&
                             definition.category ==
-                                LocalModelCategory.language) ...[
-                          const SizedBox(width: 7),
-                          const _StatusBadge(label: '当前助手', installed: true),
+                                LocalModelCategory.language)) ...[
+                      const SizedBox(height: 7),
+                      Wrap(
+                        spacing: 7,
+                        runSpacing: 7,
+                        children: [
+                          if (definition.recommended)
+                            _StatusBadge(label: context.l10n.recommended),
+                          if (selectedForLiveDictation &&
+                              definition.task == LocalModelTask.liveDictation)
+                            _StatusBadge(
+                              label: context.l10n.currentDictation,
+                              installed: installation.installed,
+                            ),
+                          if (selectedForAssistant &&
+                              installation.installed &&
+                              definition.category ==
+                                  LocalModelCategory.language)
+                            _StatusBadge(
+                              label: context.l10n.currentAssistant,
+                              installed: true,
+                            ),
                         ],
-                      ],
-                    ),
+                      ),
+                    ],
                     const SizedBox(height: 4),
                     Text(
-                      definition.summary,
+                      localizedModelSummary(context.l10n, definition),
                       style: const TextStyle(color: AppColors.muted),
                     ),
                   ],
                 ),
               ),
               IconButton(
-                tooltip: '模型详情',
+                tooltip: context.l10n.modelDetails,
                 onPressed: onDetails,
                 icon: const Icon(Icons.info_outline_rounded, size: 21),
               ),
@@ -1043,11 +1136,17 @@ class _ModelCard extends StatelessWidget {
                 _MetaChip(label: _formatBytes(definition.downloadSizeBytes)),
               if (definition.recommendedMemoryBytes > 0)
                 _MetaChip(
-                  label:
-                      '${_formatMemory(definition.recommendedMemoryBytes)}+ 内存',
+                  label: context.l10n.memoryBadge(
+                    _formatMemory(definition.recommendedMemoryBytes),
+                  ),
                 ),
               if (definition.languages.isNotEmpty)
-                _MetaChip(label: definition.languages.take(2).join(' / ')),
+                _MetaChip(
+                  label: localizedModelLanguages(
+                    context.l10n,
+                    definition,
+                  ).split(RegExp(r', |、')).take(2).join(' / '),
+                ),
             ],
           ),
           if (running) ...[
@@ -1062,7 +1161,7 @@ class _ModelCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    _transferDescription(transfer!),
+                    _transferDescription(context, transfer!),
                     style: const TextStyle(
                       color: AppColors.muted,
                       fontSize: 12,
@@ -1072,15 +1171,21 @@ class _ModelCard extends StatelessWidget {
                 if (transfer!.status == ModelTransferStatus.verifying ||
                     transfer!.status == ModelTransferStatus.canceling ||
                     !transfer!.cancelable)
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     child: Text(
-                      '请稍候',
-                      style: TextStyle(color: AppColors.muted, fontSize: 12),
+                      context.l10n.pleaseWait,
+                      style: const TextStyle(
+                        color: AppColors.muted,
+                        fontSize: 12,
+                      ),
                     ),
                   )
                 else
-                  TextButton(onPressed: onCancel, child: const Text('取消')),
+                  TextButton(
+                    onPressed: onCancel,
+                    child: Text(context.l10n.cancel),
+                  ),
               ],
             ),
           ] else ...[
@@ -1090,7 +1195,7 @@ class _ModelCard extends StatelessWidget {
           if (transfer?.status == ModelTransferStatus.failed) ...[
             const SizedBox(height: 9),
             Text(
-              transfer?.errorMessage ?? '模型下载失败',
+              transfer?.errorMessage ?? context.l10n.modelDownloadFailed,
               style: const TextStyle(color: AppColors.coral, fontSize: 12),
             ),
           ],
@@ -1101,40 +1206,46 @@ class _ModelCard extends StatelessWidget {
 
   Widget _actions(BuildContext context) {
     if (definition.availability == LocalModelAvailability.builtIn) {
-      return const Align(
+      return Align(
         alignment: Alignment.centerRight,
-        child: _StatusBadge(label: '随应用提供', installed: true),
+        child: _StatusBadge(
+          label: context.l10n.bundledWithApp,
+          installed: true,
+        ),
       );
     }
     if (definition.availability == LocalModelAvailability.planned) {
-      return const Align(
+      return Align(
         alignment: Alignment.centerRight,
-        child: _StatusBadge(label: '即将支持'),
+        child: _StatusBadge(label: context.l10n.comingSoon),
       );
     }
     if (installation.installed) {
-      return Row(
+      return Wrap(
+        alignment: WrapAlignment.end,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 8,
+        runSpacing: 8,
         children: [
-          const _StatusBadge(label: '已安装', installed: true),
-          const Spacer(),
+          _StatusBadge(label: context.l10n.installed, installed: true),
           if (definition.task == LocalModelTask.liveDictation &&
               !selectedForLiveDictation)
             TextButton.icon(
               onPressed: onSelect,
               icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
-              label: const Text('用于听写'),
+              label: Text(context.l10n.useForDictation),
             ),
           if (definition.category == LocalModelCategory.language &&
               !selectedForAssistant)
             TextButton.icon(
               onPressed: onSelect,
               icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
-              label: const Text('用于助手'),
+              label: Text(context.l10n.useForAssistant),
             ),
           TextButton.icon(
             onPressed: onRemove,
             icon: const Icon(Icons.delete_outline_rounded, size: 19),
-            label: const Text('移除'),
+            label: Text(context.l10n.remove),
           ),
         ],
       );
@@ -1143,42 +1254,57 @@ class _ModelCard extends StatelessWidget {
         installation.partialSizeBytes > 0 ||
         transfer?.status == ModelTransferStatus.canceled ||
         transfer?.status == ModelTransferStatus.failed;
-    return Row(
+    return Wrap(
+      alignment: WrapAlignment.end,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 8,
+      runSpacing: 8,
       children: [
         TextButton.icon(
           onPressed: onImport,
           icon: const Icon(Icons.folder_open_rounded, size: 19),
-          label: const Text('从文件导入'),
+          label: Text(context.l10n.importFromFile),
         ),
-        const Spacer(),
         FilledButton.icon(
           onPressed: onDownload,
           icon: const Icon(Icons.download_rounded, size: 19),
-          label: Text(canContinue ? '继续下载' : '下载'),
+          label: Text(
+            canContinue ? context.l10n.continueDownload : context.l10n.download,
+          ),
         ),
       ],
     );
   }
 
-  String _transferDescription(ModelTransferState state) {
+  String _transferDescription(BuildContext context, ModelTransferState state) {
     if (state.status == ModelTransferStatus.canceling) {
-      return '正在取消并保留已下载内容…';
+      return context.l10n.cancelingDownload;
     }
     if (state.status == ModelTransferStatus.connecting) {
-      final source = state.sourceLabel.isEmpty ? '' : ' · ${state.sourceLabel}';
-      return '正在连接下载节点$source';
+      final source = state.sourceLabel.isEmpty
+          ? ''
+          : ' · ${_localizedDownloadSourceLabel(context.l10n, state.sourceLabel)}';
+      return context.l10n.connectingDownloadSource(source);
     }
     if (state.status == ModelTransferStatus.verifying) {
-      return '已下载 ${_formatBytes(state.transferredBytes)} · 正在完成安装';
+      return context.l10n.downloadedInstalling(
+        _formatBytes(state.transferredBytes),
+      );
     }
     if (state.status == ModelTransferStatus.waitingToInstall) {
-      return '已下载 ${_formatBytes(state.transferredBytes)} · 等待安装';
+      return context.l10n.downloadedWaitingInstall(
+        _formatBytes(state.transferredBytes),
+      );
     }
-    final verb = state.status == ModelTransferStatus.importing ? '已导入' : '已下载';
+    final verb = state.status == ModelTransferStatus.importing
+        ? context.l10n.importedVerb
+        : context.l10n.downloadedVerb;
     final speed = state.bytesPerSecond <= 0
-        ? '等待首个数据包…'
+        ? context.l10n.waitingFirstPacket
         : '${_formatBytes(state.bytesPerSecond.round())}/s';
-    final source = state.sourceLabel.isEmpty ? '' : ' · ${state.sourceLabel}';
+    final source = state.sourceLabel.isEmpty
+        ? ''
+        : ' · ${_localizedDownloadSourceLabel(context.l10n, state.sourceLabel)}';
     return '$verb ${_formatBytes(state.transferredBytes)} / '
         '${_formatBytes(state.totalBytes)}$source · $speed';
   }

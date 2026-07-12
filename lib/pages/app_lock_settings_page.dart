@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../app.dart';
+import '../l10n/generated/app_localizations.dart';
+import '../l10n/l10n.dart';
 import '../providers/app_lock_controller.dart';
 import '../services/app_lock_preferences_service.dart';
 import '../widgets/app_feedback.dart';
@@ -20,7 +22,7 @@ class _AppLockSettingsPageState extends State<AppLockSettingsPage> {
   Widget build(BuildContext context) {
     final controller = context.watch<AppLockController>();
     return Scaffold(
-      appBar: AppBar(title: const Text('应用锁')),
+      appBar: AppBar(title: Text(context.l10n.appLock)),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
         children: [
@@ -31,10 +33,10 @@ class _AppLockSettingsPageState extends State<AppLockSettingsPage> {
               borderRadius: BorderRadius.circular(18),
               border: Border.all(color: AppColors.line),
             ),
-            child: const Row(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                DecoratedBox(
+                const DecoratedBox(
                   decoration: BoxDecoration(
                     color: AppColors.softGreen,
                     shape: BoxShape.circle,
@@ -48,22 +50,22 @@ class _AppLockSettingsPageState extends State<AppLockSettingsPage> {
                     ),
                   ),
                 ),
-                SizedBox(width: 14),
+                const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '使用系统身份验证',
-                        style: TextStyle(
+                        context.l10n.systemAuthentication,
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      SizedBox(height: 5),
+                      const SizedBox(height: 5),
                       Text(
-                        '通过设备已有的指纹、人脸识别或锁屏密码解锁。非空笔记不会读取或保存你的生物特征。',
-                        style: TextStyle(
+                        context.l10n.systemAuthenticationDescription,
+                        style: const TextStyle(
                           color: AppColors.muted,
                           fontSize: 13,
                           height: 1.5,
@@ -81,12 +83,14 @@ class _AppLockSettingsPageState extends State<AppLockSettingsPage> {
               key: const Key('app-lock-enabled-switch'),
               value: controller.enabled,
               onChanged: _busy ? null : _setEnabled,
-              title: const Text(
-                '启用应用锁',
-                style: TextStyle(fontWeight: FontWeight.w600),
+              title: Text(
+                context.l10n.enableAppLock,
+                style: const TextStyle(fontWeight: FontWeight.w600),
               ),
               subtitle: Text(
-                controller.enabled ? '打开应用时会验证设备身份' : '默认关闭，不影响现有数据',
+                controller.enabled
+                    ? context.l10n.appLockEnabledDescription
+                    : context.l10n.appLockDisabledDescription,
               ),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 16,
@@ -97,7 +101,7 @@ class _AppLockSettingsPageState extends State<AppLockSettingsPage> {
           if (controller.enabled) ...[
             const SizedBox(height: 24),
             Text(
-              '离开应用后自动锁定',
+              context.l10n.autoLockAfterLeaving,
               style: Theme.of(
                 context,
               ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
@@ -130,13 +134,17 @@ class _AppLockSettingsPageState extends State<AppLockSettingsPage> {
               key: const Key('app-lock-lock-now-button'),
               onPressed: _busy ? null : controller.lockNow,
               icon: const Icon(Icons.lock_outline_rounded),
-              label: const Text('立即锁定'),
+              label: Text(context.l10n.lockNow),
             ),
           ],
           const SizedBox(height: 18),
-          const Text(
-            '应用锁用于阻止他人在已解锁设备上直接查看内容，不会加密数据库、附件或已经导出的备份。',
-            style: TextStyle(color: AppColors.muted, fontSize: 12, height: 1.5),
+          Text(
+            context.l10n.appLockLimitDescription,
+            style: const TextStyle(
+              color: AppColors.muted,
+              fontSize: 12,
+              height: 1.5,
+            ),
           ),
         ],
       ),
@@ -149,7 +157,10 @@ class _AppLockSettingsPageState extends State<AppLockSettingsPage> {
     if (!mounted) return;
     setState(() => _busy = false);
     if (!result.authenticated) {
-      AppFeedback.error(context, result.message);
+      AppFeedback.error(
+        context,
+        _localizeLockMessage(context.l10n, result.message),
+      );
     }
   }
 
@@ -159,7 +170,7 @@ class _AppLockSettingsPageState extends State<AppLockSettingsPage> {
     if (!mounted) return;
     setState(() => _busy = false);
     if (message != null) {
-      AppFeedback.error(context, message);
+      AppFeedback.error(context, _localizeLockMessage(context.l10n, message));
     }
   }
 }
@@ -195,9 +206,30 @@ class _TimeoutTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListTile(
     onTap: onTap,
-    title: Text(value.label),
+    title: Text(_timeoutLabel(context.l10n, value)),
     trailing: selected
         ? const Icon(Icons.check_rounded, color: AppColors.moss)
         : null,
   );
+}
+
+String _timeoutLabel(AppLocalizations l10n, AppLockTimeout timeout) =>
+    switch (timeout) {
+      AppLockTimeout.immediately => l10n.lockImmediately,
+      AppLockTimeout.oneMinute => l10n.lockAfterOneMinute,
+      AppLockTimeout.fiveMinutes => l10n.lockAfterFiveMinutes,
+      AppLockTimeout.fifteenMinutes => l10n.lockAfterFifteenMinutes,
+    };
+
+String _localizeLockMessage(AppLocalizations l10n, String message) {
+  // Controller error codes will replace these legacy strings when the native
+  // authentication layer is migrated; keep current releases bilingual now.
+  if (l10n.localeName.startsWith('zh')) return message;
+  return switch (message) {
+    '请先在系统设置中配置锁屏密码、指纹或人脸识别' =>
+      'Set up a screen lock, fingerprint, or face unlock in system settings first.',
+    '应用锁设置保存失败，请检查设备存储空间' =>
+      'Could not save App lock settings. Check available storage.',
+    _ => message,
+  };
 }

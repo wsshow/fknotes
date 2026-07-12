@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../app.dart';
+import '../l10n/l10n.dart';
 import '../models/cloud_sync.dart';
 import '../providers/note_provider.dart';
 import '../services/cloud_sync_service.dart';
@@ -130,11 +131,11 @@ class _CloudSyncPageState extends State<CloudSyncPage> {
     child: Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          tooltip: '返回',
+          tooltip: context.l10n.back,
           onPressed: _busy ? null : () => Navigator.pop(context, _restoredData),
           icon: const Icon(Icons.arrow_back_rounded),
         ),
-        title: const Text('云同步'),
+        title: Text(context.l10n.cloudSync),
       ),
       body: _settings == null
           ? const Center(child: CircularProgressIndicator())
@@ -144,7 +145,7 @@ class _CloudSyncPageState extends State<CloudSyncPage> {
                 _InfoCard(settings: _settings!),
                 const SizedBox(height: 22),
                 Text(
-                  '同步方式',
+                  context.l10n.syncMethod,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
@@ -179,13 +180,13 @@ class _CloudSyncPageState extends State<CloudSyncPage> {
                 OutlinedButton.icon(
                   onPressed: _busy ? null : _save,
                   icon: const Icon(Icons.save_outlined),
-                  label: const Text('保存配置'),
+                  label: Text(context.l10n.saveConfiguration),
                 ),
                 const SizedBox(height: 10),
                 OutlinedButton.icon(
                   onPressed: _busy ? null : _testConnection,
                   icon: const Icon(Icons.network_check_rounded),
-                  label: const Text('测试连接'),
+                  label: Text(context.l10n.testConnection),
                 ),
                 const SizedBox(height: 10),
                 FilledButton.icon(
@@ -199,13 +200,15 @@ class _CloudSyncPageState extends State<CloudSyncPage> {
                           ),
                         )
                       : const Icon(Icons.sync_rounded),
-                  label: Text(_busy ? '正在同步…' : '立即同步'),
+                  label: Text(
+                    _busy ? context.l10n.syncing : context.l10n.syncNow,
+                  ),
                 ),
                 const SizedBox(height: 12),
-                const Text(
-                  '同步期间请保持应用在前台。只有手动点击“立即同步”才会连接云端。',
+                Text(
+                  context.l10n.manualSyncForegroundHint,
                   textAlign: TextAlign.center,
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: AppColors.muted,
                     fontSize: 12,
                     height: 1.45,
@@ -221,14 +224,14 @@ class _CloudSyncPageState extends State<CloudSyncPage> {
     children: [
       _field(
         controller: _webDavUrl,
-        label: '服务器地址',
+        label: context.l10n.serverAddress,
         hint: 'https://example.com/dav/',
         keyboardType: TextInputType.url,
       ),
-      _field(controller: _webDavUsername, label: '用户名'),
+      _field(controller: _webDavUsername, label: context.l10n.username),
       _field(
         controller: _webDavPassword,
-        label: '密码或应用专用密码',
+        label: context.l10n.passwordOrAppPassword,
         obscureText: !_showWebDavPassword,
         suffix: _visibilityButton(
           _showWebDavPassword,
@@ -237,7 +240,7 @@ class _CloudSyncPageState extends State<CloudSyncPage> {
       ),
       _field(
         controller: _webDavFolder,
-        label: '远程目录',
+        label: context.l10n.remoteDirectory,
         hint: 'FKNotes',
         textInputAction: TextInputAction.done,
       ),
@@ -274,11 +277,15 @@ class _CloudSyncPageState extends State<CloudSyncPage> {
           () => setState(() => _showS3Secret = !_showS3Secret),
         ),
       ),
-      _field(controller: _s3Prefix, label: '对象前缀', hint: 'FKNotes'),
+      _field(
+        controller: _s3Prefix,
+        label: context.l10n.objectPrefix,
+        hint: 'FKNotes',
+      ),
       SwitchListTile.adaptive(
         contentPadding: EdgeInsets.zero,
-        title: const Text('Path-style 地址'),
-        subtitle: const Text('MinIO、多数兼容 S3 的对象存储通常需要开启'),
+        title: Text(context.l10n.pathStyleAddress),
+        subtitle: Text(context.l10n.pathStyleDescription),
         value: _pathStyle,
         onChanged: _busy ? null : (value) => setState(() => _pathStyle = value),
       ),
@@ -313,7 +320,7 @@ class _CloudSyncPageState extends State<CloudSyncPage> {
   );
 
   Widget _visibilityButton(bool visible, VoidCallback onPressed) => IconButton(
-    tooltip: visible ? '隐藏' : '显示',
+    tooltip: visible ? context.l10n.hide : context.l10n.show,
     onPressed: _busy ? null : onPressed,
     icon: Icon(
       visible ? Icons.visibility_off_outlined : Icons.visibility_outlined,
@@ -328,7 +335,7 @@ class _CloudSyncPageState extends State<CloudSyncPage> {
       final saved = await _service.saveConfiguration(candidate);
       if (!mounted) return;
       setState(() => _settings = saved);
-      _message('云同步配置已保存在本机');
+      _message(context.l10n.cloudConfigurationSaved);
     });
   }
 
@@ -336,7 +343,7 @@ class _CloudSyncPageState extends State<CloudSyncPage> {
     await _perform(() async {
       final candidate = _candidate();
       await _service.testConnection(candidate);
-      if (mounted) _message('连接成功，云端读写权限正常');
+      if (mounted) _message(context.l10n.connectionSuccessful);
     });
   }
 
@@ -360,26 +367,26 @@ class _CloudSyncPageState extends State<CloudSyncPage> {
     context: context,
     barrierDismissible: false,
     builder: (context) => AlertDialog(
-      title: const Text('检测到同步冲突'),
+      title: Text(context.l10n.syncConflictDetected),
       content: Text(
-        '本机数据与云端数据都可能有变更。\n\n'
-        '云端版本：${_formatDate(remote.createdAt.toLocal())}\n'
-        '请选择要保留的一份；另一份将被覆盖。',
+        context.l10n.syncConflictDescription(
+          _formatDate(context, remote.createdAt.toLocal()),
+        ),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('暂不处理'),
+          child: Text(context.l10n.notNow),
         ),
         TextButton(
           onPressed: () =>
               Navigator.pop(context, CloudSyncConflictResolution.useRemote),
-          child: const Text('使用云端'),
+          child: Text(context.l10n.useCloudVersion),
         ),
         FilledButton(
           onPressed: () =>
               Navigator.pop(context, CloudSyncConflictResolution.keepLocal),
-          child: const Text('保留本机'),
+          child: Text(context.l10n.keepLocalVersion),
         ),
       ],
     ),
@@ -394,10 +401,10 @@ class _CloudSyncPageState extends State<CloudSyncPage> {
     if (!mounted) return;
     setState(() => _settings = refreshed);
     _message(switch (result.type) {
-      CloudSyncResultType.uploaded => '本机数据已同步到云端',
-      CloudSyncResultType.downloaded => '已使用云端数据更新本机',
-      CloudSyncResultType.unchanged => '本机与云端数据已经一致',
-      CloudSyncResultType.conflict => '同步冲突尚未处理',
+      CloudSyncResultType.uploaded => context.l10n.syncedLocalToCloud,
+      CloudSyncResultType.downloaded => context.l10n.updatedFromCloud,
+      CloudSyncResultType.unchanged => context.l10n.cloudAlreadyUpToDate,
+      CloudSyncResultType.conflict => context.l10n.syncConflictUnresolved,
     });
   }
 
@@ -422,17 +429,19 @@ class _CloudSyncPageState extends State<CloudSyncPage> {
   }
 
   String _friendlyError(Object error) {
-    if (error is HandshakeException) return 'HTTPS 证书验证失败，请检查服务器证书';
-    if (error is SocketException) return '无法连接云端，请检查网络和服务器地址';
-    if (error is TimeoutException) return error.message ?? '连接云端超时';
+    if (error is HandshakeException) return context.l10n.httpsCertificateFailed;
+    if (error is SocketException) return context.l10n.cloudConnectionFailed;
+    if (error is TimeoutException) {
+      return error.message ?? context.l10n.cloudConnectionTimeout;
+    }
     return error.toString().replaceFirst(
       RegExp(r'^(Bad state|StateError|Exception|FormatException):\s*'),
       '',
     );
   }
 
-  String _formatDate(DateTime value) =>
-      DateFormat('yyyy-MM-dd HH:mm').format(value);
+  String _formatDate(BuildContext context, DateTime value) =>
+      DateFormat.yMd(context.l10n.localeName).add_Hm().format(value);
 }
 
 class _InfoCard extends StatelessWidget {
@@ -465,19 +474,22 @@ class _InfoCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                '仅手动同步用户数据',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+              Text(
+                context.l10n.manualUserDataSync,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                ),
               ),
               const SizedBox(height: 5),
-              const Text(
-                '包含笔记、聊天和附件；不包含模型、缓存、应用锁和云端账号配置。',
-                style: TextStyle(color: AppColors.muted, height: 1.45),
+              Text(
+                context.l10n.syncScopeDescription,
+                style: const TextStyle(color: AppColors.muted, height: 1.45),
               ),
               const SizedBox(height: 5),
-              const Text(
-                '云端归档不额外加密，请使用 HTTPS 与可信存储。',
-                style: TextStyle(
+              Text(
+                context.l10n.cloudEncryptionWarning,
+                style: const TextStyle(
                   color: AppColors.muted,
                   fontSize: 12,
                   height: 1.4,
@@ -486,7 +498,11 @@ class _InfoCard extends StatelessWidget {
               if (settings.lastSyncedAt != null) ...[
                 const SizedBox(height: 8),
                 Text(
-                  '上次同步：${DateFormat('yyyy-MM-dd HH:mm').format(settings.lastSyncedAt!.toLocal())}',
+                  context.l10n.lastSyncedAt(
+                    DateFormat.yMd(
+                      context.l10n.localeName,
+                    ).add_Hm().format(settings.lastSyncedAt!.toLocal()),
+                  ),
                   style: const TextStyle(
                     color: AppColors.moss,
                     fontSize: 12,
