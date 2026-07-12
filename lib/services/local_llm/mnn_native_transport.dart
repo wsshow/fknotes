@@ -118,6 +118,7 @@ class FfiMnnNativeTransport implements MnnNativeTransport {
   final _events = StreamController<MnnNativeEvent>.broadcast();
   late final NativeCallable<_NativeEventCallback> _callback;
   _MnnBindings? _bindings;
+  final Map<int, MnnUtf8StreamDecoder> _textDecoders = {};
 
   FfiMnnNativeTransport() {
     _callback = NativeCallable<_NativeEventCallback>.listener(
@@ -231,23 +232,83 @@ class FfiMnnNativeTransport implements MnnNativeTransport {
     int dataSize,
   ) {
     final bindings = _bindings;
-    var payload = '';
+    late final List<int> bytes;
     try {
-      if (data.address != 0 && dataSize > 0) {
-        payload = utf8.decode(data.asTypedList(dataSize), allowMalformed: true);
-      }
+      bytes = data.address != 0 && dataSize > 0
+          ? List<int>.of(data.asTypedList(dataSize))
+          : const [];
     } finally {
       if (data.address != 0) bindings?.free(data.cast());
     }
     if (eventType < 0 || eventType >= MnnNativeEventType.values.length) {
       return;
     }
+    final type = MnnNativeEventType.values[eventType];
+    if (type == MnnNativeEventType.textDelta) {
+      try {
+        final payload = _textDecoders
+            .putIfAbsent(requestId, MnnUtf8StreamDecoder.new)
+            .add(bytes);
+        if (payload.isNotEmpty) {
+          _events.add(
+            MnnNativeEvent(
+              requestId: requestId,
+              type: MnnNativeEventType.textDelta,
+              data: payload,
+            ),
+          );
+        }
+      } on FormatException {
+        _textDecoders.remove(requestId);
+        _events.add(
+          MnnNativeEvent(
+            requestId: requestId,
+            type: MnnNativeEventType.error,
+            data: 'MNN 返回了无效的 UTF-8 文本',
+          ),
+        );
+      }
+      return;
+    }
+    final decoder = _textDecoders.remove(requestId);
+    if (type == MnnNativeEventType.completed && decoder != null) {
+      try {
+        final finalText = decoder.close();
+        if (finalText.isNotEmpty) {
+          _events.add(
+            MnnNativeEvent(
+              requestId: requestId,
+              type: MnnNativeEventType.textDelta,
+              data: finalText,
+            ),
+          );
+        }
+      } on FormatException {
+        _events.add(
+          MnnNativeEvent(
+            requestId: requestId,
+            type: MnnNativeEventType.error,
+            data: 'MNN 输出在 UTF-8 字符中间意外结束',
+          ),
+        );
+        return;
+      }
+    }
+    String payload;
+    try {
+      payload = utf8.decode(bytes, allowMalformed: false);
+    } on FormatException {
+      _events.add(
+        MnnNativeEvent(
+          requestId: requestId,
+          type: MnnNativeEventType.error,
+          data: 'MNN 返回了无法解码的事件数据',
+        ),
+      );
+      return;
+    }
     _events.add(
-      MnnNativeEvent(
-        requestId: requestId,
-        type: MnnNativeEventType.values[eventType],
-        data: payload,
-      ),
+      MnnNativeEvent(requestId: requestId, type: type, data: payload),
     );
   }
 
@@ -263,6 +324,53 @@ class FfiMnnNativeTransport implements MnnNativeTransport {
     LocalLlmBackend.vulkan => 'vulkan',
     LocalLlmBackend.metal => 'metal',
   };
+}
+
+/// Incrementally decodes UTF-8 without replacing a character that straddles
+/// native callback boundaries.
+class MnnUtf8StreamDecoder {
+  final List<int> _pending = [];
+  bool _closed = false;
+
+  String add(List<int> bytes) {
+    if (_closed) throw StateError('UTF-8 decoder is already closed');
+    _pending.addAll(bytes);
+    final completeLength = _completePrefixLength(_pending);
+    if (completeLength == 0) return '';
+    final complete = _pending.sublist(0, completeLength);
+    _pending.removeRange(0, completeLength);
+    return utf8.decode(complete, allowMalformed: false);
+  }
+
+  String close() {
+    if (_closed) return '';
+    _closed = true;
+    if (_pending.isEmpty) return '';
+    final completeLength = _completePrefixLength(_pending);
+    if (completeLength != _pending.length) {
+      throw const FormatException('Incomplete UTF-8 character');
+    }
+    final result = utf8.decode(_pending, allowMalformed: false);
+    _pending.clear();
+    return result;
+  }
+
+  static int _completePrefixLength(List<int> bytes) {
+    if (bytes.isEmpty) return 0;
+    var start = bytes.length - 1;
+    while (start > 0 && (bytes[start] & 0xC0) == 0x80) {
+      start--;
+    }
+    final lead = bytes[start];
+    final expected = (lead & 0xE0) == 0xC0
+        ? 2
+        : (lead & 0xF0) == 0xE0
+        ? 3
+        : (lead & 0xF8) == 0xF0
+        ? 4
+        : 1;
+    return bytes.length - start < expected ? start : bytes.length;
+  }
 }
 
 class _MnnBindings {

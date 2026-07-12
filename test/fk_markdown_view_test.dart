@@ -108,4 +108,23 @@ void main() {
     expect(find.text('这个链接地址无效或使用了不受支持的协议'), findsOneWidget);
     expect(find.text('打开外部链接？'), findsNothing);
   });
+
+  testWidgets('incomplete streaming Markdown remains renderable', (
+    tester,
+  ) async {
+    Widget app(String data) => MaterialApp(
+      home: Scaffold(body: FkMarkdownView(data: data)),
+    );
+
+    await tester.pumpWidget(app('## 代码示例\n\n```dart\nfinal value ='));
+    expect(find.text('代码示例'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(
+      app('## 代码示例\n\n```dart\nfinal value = 1;\n```\n\n> 完成'),
+    );
+    expect(find.textContaining('final value = 1;'), findsOneWidget);
+    expect(find.text('完成'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

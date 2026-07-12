@@ -28,7 +28,11 @@ void main() {
     );
 
     expect(request.messages.first.role, LocalLlmRole.system);
-    expect(request.messages.first.content, '你是一位严谨的代码审查员');
+    expect(request.messages.first.content, contains('你是一位严谨的代码审查员'));
+    expect(
+      request.messages.first.content,
+      contains('GitHub Flavored Markdown'),
+    );
     expect(request.messages.map((item) => item.role), [
       LocalLlmRole.system,
       LocalLlmRole.user,
@@ -69,7 +73,10 @@ void main() {
       ],
     );
 
-    expect(request.messages.map((item) => item.content), ['继续', '重新回答']);
+    expect(request.messages.skip(1).map((item) => item.content), [
+      '继续',
+      '重新回答',
+    ]);
   });
 
   test('preserves image inputs for a future multimodal runtime', () {
@@ -95,11 +102,11 @@ void main() {
       ],
     );
 
-    expect(request.messages.single.attachments, hasLength(1));
+    expect(request.messages.last.attachments, hasLength(1));
     expect(
-      request.messages.single.attachments.single.path,
+      request.messages.last.attachments.single.path,
       'assistant/example.jpg',
     );
-    expect(request.messages.single.attachments.single.mimeType, 'image/jpeg');
+    expect(request.messages.last.attachments.single.mimeType, 'image/jpeg');
   });
 }

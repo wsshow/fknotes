@@ -62,6 +62,32 @@ std::string json_escape(const std::string& value) {
     return output.str();
 }
 
+// MNN's generated string is cumulative UTF-8, but an individual token may
+// contribute only part of a multi-byte character. Never publish the incomplete
+// suffix to Dart: decoding each byte fragment independently would turn one
+// Chinese character into multiple U+FFFD replacement characters.
+std::size_t complete_utf8_prefix_size(const std::string& value) {
+    if (value.empty()) {
+        return 0;
+    }
+    const std::size_t end = value.size();
+    std::size_t start = end - 1;
+    while (start > 0 &&
+           (static_cast<unsigned char>(value[start]) & 0xC0) == 0x80) {
+        --start;
+    }
+    const unsigned char lead = static_cast<unsigned char>(value[start]);
+    std::size_t expected = 1;
+    if ((lead & 0xE0) == 0xC0) {
+        expected = 2;
+    } else if ((lead & 0xF0) == 0xE0) {
+        expected = 3;
+    } else if ((lead & 0xF8) == 0xF0) {
+        expected = 4;
+    }
+    return end - start < expected ? start : end;
+}
+
 #if defined(FKNOTES_MNN_RUNTIME)
 
 using MNN::Transformer::ChatMessage;
@@ -191,13 +217,17 @@ public:
                 if (context == nullptr) {
                     break;
                 }
-                if (context->generate_str.size() > emitted_bytes) {
+                const std::size_t complete_bytes =
+                    complete_utf8_prefix_size(context->generate_str);
+                if (complete_bytes > emitted_bytes) {
                     emit_event(
                         callback,
                         request_id,
                         FK_MNN_EVENT_TEXT_DELTA,
-                        context->generate_str.substr(emitted_bytes));
-                    emitted_bytes = context->generate_str.size();
+                        context->generate_str.substr(
+                            emitted_bytes,
+                            complete_bytes - emitted_bytes));
+                    emitted_bytes = complete_bytes;
                 }
                 if (context->status == LlmStatus::NORMAL_FINISHED) {
                     natural_end = true;
@@ -221,6 +251,14 @@ public:
             }
             if (context != nullptr && context->status == LlmStatus::INTERNAL_ERROR) {
                 finish_generation(callback, request_id, FK_MNN_EVENT_ERROR, "MNN 推理过程中发生内部错误");
+                return;
+            }
+            if (context != nullptr && context->generate_str.size() != emitted_bytes) {
+                finish_generation(
+                    callback,
+                    request_id,
+                    FK_MNN_EVENT_ERROR,
+                    "MNN 输出包含未完成的 UTF-8 字符");
                 return;
             }
             const char* reason = natural_end ? "completed" :
