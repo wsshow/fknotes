@@ -7,6 +7,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 
 import 'file_storage_service.dart';
+import 'model_download_source_policy.dart';
 import 'model_download_transport.dart';
 import 'model_install_coordinator.dart';
 import 'speech_model_service.dart';
@@ -180,28 +181,32 @@ class SpeechDenoiserModelService {
     void Function(SpeechModelImportProgress progress)? onProgress,
     bool Function()? shouldCancel,
   ) async {
+    final sourcePolicy = ModelDownloadSourcePolicy.instance;
     await ModelDownloadTransport.instance.download(
-      sources: [
-        ModelDownloadSource(
-          uri: Uri.parse(
-            'https://hf-mirror.com/$_mirrorRepository/resolve/'
-            '$_mirrorRevision/$modelFileName?download=true',
-          ),
-          label: 'Hugging Face 国内镜像',
-        ),
+      sources: sourcePolicy.order([
         ModelDownloadSource(
           uri: Uri.parse(
             'https://huggingface.co/$_mirrorRepository/resolve/'
             '$_mirrorRevision/$modelFileName?download=true',
           ),
           label: 'Hugging Face',
+          kind: ModelDownloadSourceKind.official,
+        ),
+        ModelDownloadSource(
+          uri: Uri.parse(
+            'https://hf-mirror.com/$_mirrorRepository/resolve/'
+            '$_mirrorRevision/$modelFileName?download=true',
+          ),
+          label: '第三方国内镜像',
+          kind: ModelDownloadSourceKind.mainlandMirror,
         ),
         ModelDownloadSource(uri: Uri.parse(_downloadUrl), label: 'GitHub 官方源'),
-      ],
+      ]),
       partial: File(_partialPath),
       expectedBytes: downloadSizeBytes,
       userAgent: 'fknotes/$modelId',
       shouldCancel: shouldCancel,
+      onSourceSelected: sourcePolicy.reportSuccessfulSource,
       onProgress: (event) => onProgress?.call(
         SpeechModelImportProgress(
           event.transferredBytes,

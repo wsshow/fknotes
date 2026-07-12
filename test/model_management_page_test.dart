@@ -130,6 +130,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('本地模型'), findsOneWidget);
+    expect(
+      find.byKey(const Key('model-download-source-setting')),
+      findsOneWidget,
+    );
+    expect(find.text('模型下载源'), findsOneWidget);
     expect(find.text('语言模型'), findsOneWidget);
     expect(find.text('MiniCPM5 1B INT4'), findsOneWidget);
     expect(find.text('Qwen3.5 2B INT4'), findsOneWidget);

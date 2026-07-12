@@ -8,6 +8,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 
 import 'file_storage_service.dart';
+import 'model_download_source_policy.dart';
 import 'model_download_transport.dart';
 import 'model_install_coordinator.dart';
 import 'speech_model_service.dart';
@@ -241,6 +242,7 @@ class SpeakerDiarizationModelService {
     Object? lastError;
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
+        final sourcePolicy = ModelDownloadSourcePolicy.instance;
         await _downloadAsset(
           sources: [
             ModelDownloadSource(
@@ -255,31 +257,34 @@ class SpeakerDiarizationModelService {
           shouldCancel: shouldCancel,
         );
         await _downloadAsset(
-          sources: [
-            ModelDownloadSource(
-              uri: Uri.parse(
-                'https://hf-mirror.com/$_embeddingMirrorRepository/resolve/'
-                '$_embeddingMirrorRevision/$embeddingFileName?download=true',
-              ),
-              label: 'Hugging Face 国内镜像',
-            ),
+          sources: sourcePolicy.order([
             ModelDownloadSource(
               uri: Uri.parse(
                 'https://huggingface.co/$_embeddingMirrorRepository/resolve/'
                 '$_embeddingMirrorRevision/$embeddingFileName?download=true',
               ),
               label: 'Hugging Face',
+              kind: ModelDownloadSourceKind.official,
+            ),
+            ModelDownloadSource(
+              uri: Uri.parse(
+                'https://hf-mirror.com/$_embeddingMirrorRepository/resolve/'
+                '$_embeddingMirrorRevision/$embeddingFileName?download=true',
+              ),
+              label: '第三方国内镜像',
+              kind: ModelDownloadSourceKind.mainlandMirror,
             ),
             ModelDownloadSource(
               uri: Uri.parse(_embeddingUrl),
               label: 'GitHub 官方源',
             ),
-          ],
+          ]),
           path: _embeddingPartial,
           expectedBytes: embeddingBytes,
           baseBytes: segmentationArchiveBytes,
           onProgress: onProgress,
           shouldCancel: shouldCancel,
+          onSourceSelected: sourcePolicy.reportSuccessfulSource,
         );
         return await _install(
           File(_segmentationPartial),
@@ -306,6 +311,7 @@ class SpeakerDiarizationModelService {
     required int baseBytes,
     void Function(SpeechModelImportProgress progress)? onProgress,
     bool Function()? shouldCancel,
+    void Function(ModelDownloadSource source)? onSourceSelected,
   }) async {
     await ModelDownloadTransport.instance.download(
       sources: sources,
@@ -313,6 +319,7 @@ class SpeakerDiarizationModelService {
       expectedBytes: expectedBytes,
       userAgent: 'fknotes/$modelId',
       shouldCancel: shouldCancel,
+      onSourceSelected: onSourceSelected,
       onProgress: (event) => onProgress?.call(
         SpeechModelImportProgress(
           baseBytes + event.transferredBytes,

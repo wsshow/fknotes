@@ -5,11 +5,18 @@ class ModelDownloadCanceled implements Exception {
   const ModelDownloadCanceled();
 }
 
+enum ModelDownloadSourceKind { official, mainlandMirror, alternative }
+
 class ModelDownloadSource {
   final Uri uri;
   final String label;
+  final ModelDownloadSourceKind kind;
 
-  const ModelDownloadSource({required this.uri, required this.label});
+  const ModelDownloadSource({
+    required this.uri,
+    required this.label,
+    this.kind = ModelDownloadSourceKind.alternative,
+  });
 }
 
 class ModelDownloadEvent {
@@ -51,6 +58,7 @@ class ModelDownloadTransport {
     required String userAgent,
     required void Function(ModelDownloadEvent event) onProgress,
     bool Function()? shouldCancel,
+    void Function(ModelDownloadSource source)? onSourceSelected,
   }) async {
     if (sources.isEmpty) throw ArgumentError.value(sources, 'sources');
     Object? lastError;
@@ -64,6 +72,7 @@ class ModelDownloadTransport {
           onProgress: onProgress,
           shouldCancel: shouldCancel,
         );
+        onSourceSelected?.call(source);
         return source.label;
       } on ModelDownloadCanceled {
         rethrow;

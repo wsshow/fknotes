@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 
 import '../models/local_llm.dart';
 import 'file_storage_service.dart';
+import 'model_download_source_policy.dart';
 import 'model_download_transport.dart';
 import 'model_install_coordinator.dart';
 import 'speech_model_service.dart';
@@ -681,26 +682,30 @@ class LanguageModelService {
 
     for (final definition in spec.files) {
       final path = '${spec.revision}/${definition.name}?download=true';
+      final sourcePolicy = ModelDownloadSourcePolicy.instance;
       await ModelDownloadTransport.instance.download(
-        sources: [
-          ModelDownloadSource(
-            uri: Uri.parse(
-              'https://hf-mirror.com/${spec.repository}/resolve/$path',
-            ),
-            label: 'Hugging Face 国内镜像',
-          ),
+        sources: sourcePolicy.order([
           ModelDownloadSource(
             uri: Uri.parse(
               'https://huggingface.co/${spec.repository}/resolve/$path',
             ),
             label: 'Hugging Face',
+            kind: ModelDownloadSourceKind.official,
           ),
-        ],
+          ModelDownloadSource(
+            uri: Uri.parse(
+              'https://hf-mirror.com/${spec.repository}/resolve/$path',
+            ),
+            label: '第三方国内镜像',
+            kind: ModelDownloadSourceKind.mainlandMirror,
+          ),
+        ]),
         partial: File(_partialPath(spec, definition)),
         expectedBytes: definition.sizeBytes,
         userAgent: 'fknotes/${spec.id}',
         onProgress: (event) => report(definition.name, event),
         shouldCancel: shouldCancel,
+        onSourceSelected: sourcePolicy.reportSuccessfulSource,
       );
     }
     if (shouldCancel?.call() == true) throw const ModelDownloadCanceled();

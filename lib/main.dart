@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'services/file_storage_service.dart';
+import 'services/model_download_source_policy.dart';
 import 'widgets/brand_mark.dart';
 import 'app.dart';
 
@@ -21,6 +22,7 @@ Future<void> main() async {
     // Do all required startup work before Flutter draws its first frame. The
     // native splash remains visible, so there is no second loading screen.
     await FileStorageService.instance.init();
+    await ModelDownloadSourcePolicy.instance.load();
   } catch (_) {
     runApp(const _InitializationFailureApp());
     return;

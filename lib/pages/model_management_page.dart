@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../app.dart';
 import '../models/local_model.dart';
+import '../services/model_download_source_policy.dart';
 import '../services/local_model_manager.dart';
 import '../services/realtime_dictation_preferences_service.dart';
 import '../widgets/app_feedback.dart';
@@ -19,6 +20,7 @@ class ModelManagementPage extends StatefulWidget {
 
 class _ModelManagementPageState extends State<ModelManagementPage> {
   final _manager = LocalModelManager.instance;
+  final _sourcePolicy = ModelDownloadSourcePolicy.instance;
   final _dictationPreferences = RealtimeDictationPreferencesService.instance;
   RealtimeDictationPreferences _preferences =
       const RealtimeDictationPreferences();
@@ -27,10 +29,12 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
   void initState() {
     super.initState();
     _manager.addListener(_changed);
+    _sourcePolicy.addListener(_changed);
     // Model files may have been replaced by an app upgrade or removed outside
     // this page. Always validate the on-disk runtime instead of showing a
     // possibly stale singleton snapshot.
     unawaited(_manager.initialize(force: true));
+    unawaited(_sourcePolicy.load());
     unawaited(_loadDictationPreferences());
   }
 
@@ -46,6 +50,7 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
   @override
   void dispose() {
     _manager.removeListener(_changed);
+    _sourcePolicy.removeListener(_changed);
     super.dispose();
   }
 
@@ -101,6 +106,13 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
                   ),
                 ],
               ),
+            ),
+            const SizedBox(height: 12),
+            _DownloadSourceCard(
+              preference: _sourcePolicy.preference,
+              automaticPrefersMainland: _sourcePolicy.regionPrefersMainland,
+              lastUsedSourceLabel: _sourcePolicy.lastUsedSourceLabel,
+              onTap: _chooseDownloadSource,
             ),
             const SizedBox(height: 26),
             _sectionTitle('语言模型'),
@@ -195,6 +207,53 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
       context,
     ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
   );
+
+  Future<void> _chooseDownloadSource() async {
+    final selected = await showModalBottomSheet<ModelDownloadSourcePreference>(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (context) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '模型下载源',
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              '所有模式都会在首选节点不可用时安全回退；模型仍通过固定版本和 SHA-256 校验。',
+              style: TextStyle(color: AppColors.muted, height: 1.45),
+            ),
+            const SizedBox(height: 10),
+            for (final preference in ModelDownloadSourcePreference.values)
+              ListTile(
+                key: Key('download-source-${preference.name}'),
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(_downloadSourceIcon(preference)),
+                title: Text(_downloadSourceTitle(preference)),
+                subtitle: Text(_downloadSourceDescription(preference)),
+                trailing: _sourcePolicy.preference == preference
+                    ? const Icon(Icons.check_circle_rounded)
+                    : null,
+                onTap: () => Navigator.pop(context, preference),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected == null || !mounted) return;
+    try {
+      await _sourcePolicy.setPreference(selected);
+    } catch (_) {
+      if (mounted) AppFeedback.error(context, '下载源设置保存失败');
+    }
+  }
 
   Future<void> _confirmDownload(LocalModelDefinition model) async {
     final installation = _manager.installationOf(model.id);
@@ -726,6 +785,81 @@ class _HotwordsCard extends StatelessWidget {
     ),
   );
 }
+
+class _DownloadSourceCard extends StatelessWidget {
+  final ModelDownloadSourcePreference preference;
+  final bool automaticPrefersMainland;
+  final String? lastUsedSourceLabel;
+  final VoidCallback onTap;
+
+  const _DownloadSourceCard({
+    required this.preference,
+    required this.automaticPrefersMainland,
+    required this.lastUsedSourceLabel,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final effective = preference == ModelDownloadSourcePreference.automatic
+        ? '自动选择 · ${automaticPrefersMainland ? '国内镜像优先' : '官方源优先'}'
+        : _downloadSourceTitle(preference);
+    final lastUsed = lastUsedSourceLabel;
+    return Material(
+      color: AppColors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(15),
+        side: const BorderSide(color: AppColors.line),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: ListTile(
+        key: const Key('model-download-source-setting'),
+        onTap: onTap,
+        leading: const DecoratedBox(
+          decoration: BoxDecoration(
+            color: AppColors.softBlue,
+            shape: BoxShape.circle,
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(9),
+            child: Icon(Icons.cloud_download_outlined, color: AppColors.moss),
+          ),
+        ),
+        title: const Text(
+          '模型下载源',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        subtitle: Text(
+          lastUsed == null ? effective : '$effective\n最近使用：$lastUsed',
+          style: const TextStyle(color: AppColors.muted, height: 1.4),
+        ),
+        trailing: const Icon(Icons.chevron_right_rounded),
+      ),
+    );
+  }
+}
+
+String _downloadSourceTitle(ModelDownloadSourcePreference preference) =>
+    switch (preference) {
+      ModelDownloadSourcePreference.automatic => '自动选择',
+      ModelDownloadSourcePreference.officialFirst => '优先官方源',
+      ModelDownloadSourcePreference.mainlandFirst => '优先国内镜像',
+    };
+
+String _downloadSourceDescription(ModelDownloadSourcePreference preference) =>
+    switch (preference) {
+      ModelDownloadSourcePreference.automatic => '结合设备区域和实际连接结果动态选择',
+      ModelDownloadSourcePreference.officialFirst =>
+        '优先 Hugging Face 或 GitHub 官方节点',
+      ModelDownloadSourcePreference.mainlandFirst => '优先国内镜像或 ModelScope 节点',
+    };
+
+IconData _downloadSourceIcon(ModelDownloadSourcePreference preference) =>
+    switch (preference) {
+      ModelDownloadSourcePreference.automatic => Icons.auto_mode_rounded,
+      ModelDownloadSourcePreference.officialFirst => Icons.public_rounded,
+      ModelDownloadSourcePreference.mainlandFirst => Icons.speed_rounded,
+    };
 
 class _ModelSummary extends StatelessWidget {
   final int installedCount;
