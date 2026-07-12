@@ -23,7 +23,24 @@ void main() {
       onCreate: (db, version) => db.execute('''
         CREATE TABLE entries (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          content TEXT
+          type TEXT NOT NULL DEFAULT 'text',
+          title TEXT NOT NULL DEFAULT '',
+          content TEXT,
+          file_path TEXT,
+          file_name TEXT,
+          file_size INTEGER,
+          mime_type TEXT,
+          thumbnail_path TEXT,
+          duration_ms INTEGER,
+          ocr_text TEXT,
+          tags TEXT NOT NULL DEFAULT '',
+          is_favorite INTEGER NOT NULL DEFAULT 0,
+          is_pinned INTEGER NOT NULL DEFAULT 0,
+          is_archived INTEGER NOT NULL DEFAULT 0,
+          is_deleted INTEGER NOT NULL DEFAULT 0,
+          deleted_at TEXT,
+          created_at TEXT NOT NULL DEFAULT '2026-01-01T00:00:00.000',
+          updated_at TEXT NOT NULL DEFAULT '2026-01-01T00:00:00.000'
         )
       '''),
     );
@@ -57,8 +74,14 @@ void main() {
       );
       expect(
         chatTables.map((row) => row['name']),
-        containsAll(['chat_sessions', 'chat_messages']),
+        containsAll(['chat_sessions', 'chat_messages', 'search_fts']),
       );
+      final searchRows = await db.query(
+        'search_fts',
+        where: 'kind = ? AND body = ?',
+        whereArgs: ['note', '旧笔记正文'],
+      );
+      expect(searchRows, hasLength(1));
     },
   );
 }

@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../app.dart';
-import '../models/note_entry.dart';
-import '../services/note_service.dart';
+import '../services/search_service.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/note_card.dart';
+import 'local_chat_page.dart';
 import 'note_editor_page.dart';
 
 class SearchPage extends StatefulWidget {
@@ -19,17 +19,16 @@ class SearchPage extends StatefulWidget {
 class _SearchPageState extends State<SearchPage> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
-  final _service = NoteService.instance;
+  final _service = SearchService.instance;
   Timer? _debounce;
-  List<NoteEntry> _results = const [];
-  NoteType? _type;
+  List<LocalSearchResult> _results = const [];
+  LocalSearchFilter _filter = LocalSearchFilter.all;
   bool _searching = false;
   int _requestId = 0;
 
   String get _query => _controller.text.trim();
-  List<NoteEntry> get _visibleResults => _type == null
-      ? _results
-      : _results.where((entry) => entry.containsType(_type!)).toList();
+  List<LocalSearchResult> get _visibleResults =>
+      _results.where((result) => result.matches(_filter)).toList();
 
   @override
   void initState() {
@@ -65,7 +64,7 @@ class _SearchPageState extends State<SearchPage> {
 
   Future<void> _search(String query) async {
     final request = ++_requestId;
-    final results = await _service.searchLike(query);
+    final results = await _service.search(query);
     if (!mounted || request != _requestId || query != _query) return;
     setState(() {
       _results = results;
@@ -73,11 +72,22 @@ class _SearchPageState extends State<SearchPage> {
     });
   }
 
-  Future<void> _open(NoteEntry entry) async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => NoteEditorPage(existingEntry: entry)),
-    );
+  Future<void> _open(LocalSearchResult result) async {
+    if (result.note != null) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => NoteEditorPage(existingEntry: result.note),
+        ),
+      );
+    } else if (result.chatSessionId != null) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => LocalChatPage(initialSessionId: result.chatSessionId),
+        ),
+      );
+    }
     if (_query.isNotEmpty) await _search(_query);
   }
 
@@ -151,17 +161,19 @@ class _SearchPageState extends State<SearchPage> {
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 children: [
-                  _FilterChip(
-                    label: '全部',
-                    selected: _type == null,
-                    onTap: () => setState(() => _type = null),
-                  ),
-                  for (final type in NoteType.values)
+                  for (final filter in LocalSearchFilter.values)
                     _FilterChip(
-                      label: type.label,
-                      icon: NoteCard.iconForType(type),
-                      selected: _type == type,
-                      onTap: () => setState(() => _type = type),
+                      label: filter.label,
+                      icon: switch (filter) {
+                        LocalSearchFilter.all => null,
+                        LocalSearchFilter.notes => Icons.note_outlined,
+                        LocalSearchFilter.attachments =>
+                          Icons.attach_file_rounded,
+                        LocalSearchFilter.conversations =>
+                          Icons.chat_bubble_outline_rounded,
+                      },
+                      selected: _filter == filter,
+                      onTap: () => setState(() => _filter = filter),
                     ),
                 ],
               ),
@@ -188,7 +200,7 @@ class _SearchPageState extends State<SearchPage> {
           ),
           const SizedBox(height: 8),
           const Text(
-            '标题、正文、标签、文件名、OCR 和语音转写均会被检索。',
+            '标题、正文、标签、附件、OCR、语音转写和本地对话均会被检索。',
             style: TextStyle(color: AppColors.muted, height: 1.5),
           ),
           const SizedBox(height: 24),
@@ -212,6 +224,13 @@ class _SearchPageState extends State<SearchPage> {
             subtitle: '找到录音里说过的内容',
             color: AppColors.softAmber,
           ),
+          const SizedBox(height: 12),
+          const _SearchCapability(
+            icon: Icons.forum_outlined,
+            title: '本地对话',
+            subtitle: '搜索角色设定和历史消息',
+            color: AppColors.softGreen,
+          ),
         ],
       );
     }
@@ -231,7 +250,9 @@ class _SearchPageState extends State<SearchPage> {
       return EmptyState(
         icon: Icons.search_off_rounded,
         message: '没有找到“$_query”',
-        description: _type == null ? '试试更短的关键词' : '可以切换到其他内容类型',
+        description: _filter == LocalSearchFilter.all
+            ? '试试更短的关键词'
+            : '可以切换到其他搜索范围',
       );
     }
 
@@ -252,12 +273,8 @@ class _SearchPageState extends State<SearchPage> {
             ),
           );
         }
-        final entry = results[index - 1];
-        return _SearchHitCard(
-          entry: entry,
-          query: _query,
-          onTap: () => _open(entry),
-        );
+        final result = results[index - 1];
+        return _SearchHitCard(result: result, onTap: () => _open(result));
       },
     );
   }
@@ -357,31 +374,16 @@ class _SearchCapability extends StatelessWidget {
 }
 
 class _SearchHitCard extends StatelessWidget {
-  final NoteEntry entry;
-  final String query;
+  final LocalSearchResult result;
   final VoidCallback onTap;
-  const _SearchHitCard({
-    required this.entry,
-    required this.query,
-    required this.onTap,
-  });
-
-  String get _source {
-    final q = query.toLowerCase();
-    if (entry.title.toLowerCase().contains(q)) return '标题命中';
-    if (entry.tags.any((tag) => tag.toLowerCase().contains(q))) return '标签命中';
-    if (entry.aggregateOcr.toLowerCase().contains(q)) return 'OCR 命中';
-    if (entry.allAttachments.any(
-      (item) => item.fileName.toLowerCase().contains(q),
-    )) {
-      return '文件名命中';
-    }
-    return '正文命中';
-  }
+  const _SearchHitCard({required this.result, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final color = NoteCard.colorForType(entry.primaryType);
+    final note = result.note;
+    final color = note == null
+        ? AppColors.moss
+        : NoteCard.colorForType(note.primaryType);
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -401,7 +403,9 @@ class _SearchHitCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(11),
                     ),
                     child: Icon(
-                      NoteCard.iconForType(entry.primaryType),
+                      note == null
+                          ? Icons.chat_bubble_outline_rounded
+                          : NoteCard.iconForType(note.primaryType),
                       color: color,
                       size: 19,
                     ),
@@ -409,7 +413,7 @@ class _SearchHitCard extends StatelessWidget {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      entry.title.isEmpty ? '无标题' : entry.title,
+                      result.title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -424,10 +428,10 @@ class _SearchHitCard extends StatelessWidget {
                   ),
                 ],
               ),
-              if (entry.previewText.isNotEmpty) ...[
+              if (result.snippet.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Text(
-                  entry.previewText.replaceAll('\n', ' '),
+                  result.snippet,
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: AppColors.muted, height: 1.5),
@@ -441,7 +445,7 @@ class _SearchHitCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(9),
                 ),
                 child: Text(
-                  _source,
+                  result.sourceLabel,
                   style: const TextStyle(
                     fontSize: 11,
                     color: AppColors.moss,

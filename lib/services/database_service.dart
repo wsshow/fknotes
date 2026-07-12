@@ -17,7 +17,7 @@ class DatabaseService {
     final path = p.join(FileStorageService.instance.baseDir, 'fknotes.db');
     return openDatabase(
       path,
-      version: 5,
+      version: 6,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -52,6 +52,7 @@ class DatabaseService {
     await _createAttachmentsTable(db);
     await _createChatTables(db);
     await _createIndexes(db);
+    await _createSearchIndex(db);
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -95,6 +96,9 @@ class DatabaseService {
     }
     if (oldVersion < 5) {
       await _createChatTables(db);
+    }
+    if (oldVersion < 6) {
+      await _createSearchIndex(db);
     }
   }
 
@@ -167,6 +171,168 @@ class DatabaseService {
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_attachments_type ON attachments(type)',
     );
+  }
+
+  Future<void> _createSearchIndex(Database db) async {
+    try {
+      await db.execute('''
+        CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(
+          kind UNINDEXED,
+          source_id UNINDEXED,
+          parent_id UNINDEXED,
+          title,
+          body,
+          metadata,
+          tokenize = 'trigram case_sensitive 0'
+        )
+      ''');
+    } on DatabaseException {
+      try {
+        await db.execute('''
+          CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(
+            kind UNINDEXED,
+            source_id UNINDEXED,
+            parent_id UNINDEXED,
+            title,
+            body,
+            metadata,
+            tokenize = 'unicode61 remove_diacritics 2'
+          )
+        ''');
+      } on DatabaseException {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS search_fts (
+            kind TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            parent_id TEXT NOT NULL,
+            title TEXT NOT NULL DEFAULT '',
+            body TEXT NOT NULL DEFAULT '',
+            metadata TEXT NOT NULL DEFAULT ''
+          )
+        ''');
+      }
+    }
+    for (final trigger in [
+      'entries_search_ai',
+      'entries_search_au',
+      'entries_search_ad',
+      'attachments_search_ai',
+      'attachments_search_au',
+      'attachments_search_ad',
+      'chat_sessions_search_ai',
+      'chat_sessions_search_au',
+      'chat_sessions_search_ad',
+      'chat_messages_search_ai',
+      'chat_messages_search_au',
+      'chat_messages_search_ad',
+    ]) {
+      await db.execute('DROP TRIGGER IF EXISTS $trigger');
+    }
+    await db.execute('''
+      CREATE TRIGGER entries_search_ai AFTER INSERT ON entries BEGIN
+        INSERT INTO search_fts(kind, source_id, parent_id, title, body, metadata)
+        VALUES('note', NEW.id, '', NEW.title, COALESCE(NEW.content, ''),
+          COALESCE(NEW.tags, '') || ' ' || COALESCE(NEW.ocr_text, '') || ' ' ||
+          COALESCE(NEW.file_name, ''));
+      END
+    ''');
+    await db.execute('''
+      CREATE TRIGGER entries_search_au AFTER UPDATE ON entries BEGIN
+        DELETE FROM search_fts WHERE kind = 'note' AND source_id = OLD.id;
+        INSERT INTO search_fts(kind, source_id, parent_id, title, body, metadata)
+        VALUES('note', NEW.id, '', NEW.title, COALESCE(NEW.content, ''),
+          COALESCE(NEW.tags, '') || ' ' || COALESCE(NEW.ocr_text, '') || ' ' ||
+          COALESCE(NEW.file_name, ''));
+      END
+    ''');
+    await db.execute('''
+      CREATE TRIGGER entries_search_ad AFTER DELETE ON entries BEGIN
+        DELETE FROM search_fts WHERE kind = 'note' AND source_id = OLD.id;
+      END
+    ''');
+    await db.execute('''
+      CREATE TRIGGER attachments_search_ai AFTER INSERT ON attachments BEGIN
+        INSERT INTO search_fts(kind, source_id, parent_id, title, body, metadata)
+        VALUES('attachment', NEW.id, NEW.note_id, NEW.file_name,
+          COALESCE(NEW.ocr_text, '') || ' ' || COALESCE(NEW.transcript, ''),
+          NEW.type || ' ' || NEW.mime_type);
+      END
+    ''');
+    await db.execute('''
+      CREATE TRIGGER attachments_search_au AFTER UPDATE ON attachments BEGIN
+        DELETE FROM search_fts WHERE kind = 'attachment' AND source_id = OLD.id;
+        INSERT INTO search_fts(kind, source_id, parent_id, title, body, metadata)
+        VALUES('attachment', NEW.id, NEW.note_id, NEW.file_name,
+          COALESCE(NEW.ocr_text, '') || ' ' || COALESCE(NEW.transcript, ''),
+          NEW.type || ' ' || NEW.mime_type);
+      END
+    ''');
+    await db.execute('''
+      CREATE TRIGGER attachments_search_ad AFTER DELETE ON attachments BEGIN
+        DELETE FROM search_fts WHERE kind = 'attachment' AND source_id = OLD.id;
+      END
+    ''');
+    await db.execute('''
+      CREATE TRIGGER chat_sessions_search_ai AFTER INSERT ON chat_sessions BEGIN
+        INSERT INTO search_fts(kind, source_id, parent_id, title, body, metadata)
+        VALUES('chat_session', NEW.id, '', NEW.title, NEW.system_prompt, '');
+      END
+    ''');
+    await db.execute('''
+      CREATE TRIGGER chat_sessions_search_au AFTER UPDATE ON chat_sessions BEGIN
+        DELETE FROM search_fts WHERE kind = 'chat_session' AND source_id = OLD.id;
+        INSERT INTO search_fts(kind, source_id, parent_id, title, body, metadata)
+        VALUES('chat_session', NEW.id, '', NEW.title, NEW.system_prompt, '');
+      END
+    ''');
+    await db.execute('''
+      CREATE TRIGGER chat_sessions_search_ad AFTER DELETE ON chat_sessions BEGIN
+        DELETE FROM search_fts WHERE kind = 'chat_session' AND source_id = OLD.id;
+      END
+    ''');
+    await db.execute('''
+      CREATE TRIGGER chat_messages_search_ai AFTER INSERT ON chat_messages BEGIN
+        INSERT INTO search_fts(kind, source_id, parent_id, title, body, metadata)
+        VALUES('chat_message', NEW.id, NEW.session_id, '', NEW.content, NEW.role);
+      END
+    ''');
+    await db.execute('''
+      CREATE TRIGGER chat_messages_search_au AFTER UPDATE ON chat_messages BEGIN
+        DELETE FROM search_fts WHERE kind = 'chat_message' AND source_id = OLD.id;
+        INSERT INTO search_fts(kind, source_id, parent_id, title, body, metadata)
+        VALUES('chat_message', NEW.id, NEW.session_id, '', NEW.content, NEW.role);
+      END
+    ''');
+    await db.execute('''
+      CREATE TRIGGER chat_messages_search_ad AFTER DELETE ON chat_messages BEGIN
+        DELETE FROM search_fts WHERE kind = 'chat_message' AND source_id = OLD.id;
+      END
+    ''');
+    await db.delete('search_fts');
+    await db.execute('''
+      INSERT INTO search_fts(kind, source_id, parent_id, title, body, metadata)
+      SELECT 'note', id, '', title, COALESCE(content, ''),
+        COALESCE(tags, '') || ' ' || COALESCE(ocr_text, '') || ' ' ||
+        COALESCE(file_name, '')
+      FROM entries
+    ''');
+    await db.execute('''
+      INSERT INTO search_fts(kind, source_id, parent_id, title, body, metadata)
+      SELECT 'attachment', id, note_id, file_name,
+        COALESCE(ocr_text, '') || ' ' || COALESCE(transcript, ''),
+        type || ' ' || mime_type
+      FROM attachments
+    ''');
+    await db.execute('''
+      INSERT INTO search_fts(kind, source_id, parent_id, title, body, metadata)
+      SELECT 'chat_session', id, '', title, system_prompt, ''
+      FROM chat_sessions
+    ''');
+    await db.execute('''
+      INSERT INTO search_fts(kind, source_id, parent_id, title, body, metadata)
+      SELECT 'chat_message', id, session_id, '', content, role
+      FROM chat_messages
+    ''');
   }
 
   Future<void> close() async {

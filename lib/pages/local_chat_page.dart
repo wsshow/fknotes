@@ -15,7 +15,9 @@ import '../widgets/fk_markdown_view.dart';
 import 'model_management_page.dart';
 
 class LocalChatPage extends StatefulWidget {
-  const LocalChatPage({super.key});
+  final String? initialSessionId;
+
+  const LocalChatPage({super.key, this.initialSessionId});
 
   @override
   State<LocalChatPage> createState() => _LocalChatPageState();
@@ -58,9 +60,21 @@ class _LocalChatPageState extends State<LocalChatPage> {
       final selectedId = await _models.selectedModelId();
       final model = await _models.inspect(selectedId);
       if (!mounted) return;
+      LocalChatSession? initialSession;
+      final initialSessionId = widget.initialSessionId;
+      if (initialSessionId != null) {
+        for (final session in sessions) {
+          if (session.id == initialSessionId) {
+            initialSession = session;
+            break;
+          }
+        }
+      }
       setState(() {
         _sessions = sessions;
-        _session = sessions.isEmpty ? _store.createSession() : sessions.first;
+        _session =
+            initialSession ??
+            (sessions.isEmpty ? _store.createSession() : sessions.first);
         _modelName = _models.displayName(selectedId);
         _modelInstalled = model.installed;
         _loading = false;
