@@ -53,7 +53,10 @@ class LocalAssistantService with WidgetsBindingObserver {
           threads: math.min(4, math.max(2, Platform.numberOfProcessors ~/ 2)),
           contextTokens: contextTokens,
           enableThinking: enableThinking,
-          enablePromptCache: true,
+          // A chat request contains the complete conversation. Reusing MNN's
+          // native prompt cache across requests is unsafe for some model
+          // families (notably Gemma 4) and can crash below the Dart boundary.
+          enablePromptCache: false,
         ),
       );
     } catch (_) {

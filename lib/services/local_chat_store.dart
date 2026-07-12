@@ -191,7 +191,7 @@ class LocalChatStore {
             updatedAt: DateTime.parse(row['updated_at'] as String),
           ),
         )
-        .toList(growable: false);
+        .toList();
   }
 
   Future<void> saveSession(LocalChatSession session) {

@@ -93,7 +93,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
         }
       }
       setState(() {
-        _sessions = sessions;
+        _sessions = List<LocalChatSession>.of(sessions);
         _personas = personas;
         _session =
             initialSession ??
@@ -816,7 +816,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
     final sessions = await _store.loadSessions();
     if (!mounted) return;
     setState(() {
-      _sessions = sessions;
+      _sessions = List<LocalChatSession>.of(sessions);
       _session = sessions.isEmpty ? _store.createSession() : sessions.first;
       _generationError = null;
       _autoFollowOutput = true;
@@ -827,13 +827,13 @@ class _LocalChatPageState extends State<LocalChatPage> {
   Future<void> _persist() async {
     try {
       await _store.saveSession(_session);
-      final index = _sessions.indexWhere((item) => item.id == _session.id);
-      if (index < 0) {
-        _sessions.insert(0, _session);
-      } else {
-        _sessions[index] = _session;
-      }
-      _sessions.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      // Rebuild the collection instead of mutating a list returned by a
+      // persistence adapter. Database/query implementations are free to
+      // return fixed-length lists; UI state must own its growable copy.
+      _sessions = <LocalChatSession>[
+        _session,
+        ..._sessions.where((item) => item.id != _session.id),
+      ]..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     } catch (error) {
       _generationError = '无法保存聊天记录：${_cleanError(error)}';
       if (mounted) setState(() {});

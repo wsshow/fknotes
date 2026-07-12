@@ -286,6 +286,14 @@ public:
                 finish_generation(callback, request_id, FK_MNN_EVENT_ERROR, "MNN 模型尚未加载");
                 return;
             }
+            const auto finish_request = [this, llm, callback, request_id](
+                int32_t event_type,
+                const std::string& data = std::string()) {
+                // Clear terminal status, generated text and KV state before
+                // Dart is told that another request may start.
+                llm->reset();
+                finish_generation(callback, request_id, event_type, data);
+            };
             std::ostringstream sampling;
             sampling << "{\"sampler_type\":\"mixed\",\"temperature\":" << temperature
                      << ",\"topP\":" << top_p << ",\"topK\":" << top_k
@@ -293,9 +301,17 @@ public:
             llm->set_config(sampling.str());
             std::string preparation_error;
             if (!prepare_multimodal_messages(messages, attachments, preparation_error)) {
-                finish_generation(callback, request_id, FK_MNN_EVENT_ERROR, preparation_error);
+                finish_request(FK_MNN_EVENT_ERROR, preparation_error);
                 return;
             }
+
+            // Every Dart request contains the complete conversation. Do not
+            // let KV state or a terminal status from the previous response
+            // leak into this request. MNN's prompt-cache reconciliation is not
+            // safe for every chat template (Gemma 4 can abort in libMNN on the
+            // second turn), while reset + full prefill has deterministic
+            // ownership and failure boundaries.
+            llm->reset();
 
             int64_t request_vision_us = 0;
             int64_t request_audio_us = 0;
@@ -310,11 +326,6 @@ public:
                     has_image = has_image || is_image_mime(attachment.mime_type);
                     has_audio = has_audio || is_audio_mime(attachment.mime_type);
                 }
-                // MNN's text ChatMessages path owns prompt-cache prefix
-                // reconciliation. The multimodal token path bypasses it, so
-                // explicitly discard stale KV state before prefilling the full
-                // templated conversation.
-                llm->reset();
                 const LlmContext* before = llm->getContext();
                 const int64_t vision_before = before ? before->vision_us : 0;
                 const int64_t audio_before = before ? before->audio_us : 0;
@@ -330,23 +341,19 @@ public:
                 request_pixels_mp = processed ? processed->pixels_mp - pixels_before : 0.0f;
                 request_audio_input_s = processed ? processed->audio_input_s - audio_input_before : 0.0f;
                 if (has_image && request_pixels_mp <= 0.0f) {
-                    finish_generation(
-                        callback,
-                        request_id,
+                    finish_request(
                         FK_MNN_EVENT_ERROR,
                         "当前模型没有成功处理图片，请确认视觉模型文件完整且模型支持图片理解");
                     return;
                 }
                 if (has_audio && request_audio_input_s <= 0.0f) {
-                    finish_generation(
-                        callback,
-                        request_id,
+                    finish_request(
                         FK_MNN_EVENT_ERROR,
                         "当前模型没有成功处理音频，请确认音频模型文件完整且模型支持音频理解");
                     return;
                 }
                 if (input_ids.empty()) {
-                    finish_generation(callback, request_id, FK_MNN_EVENT_ERROR, "多模态提示词编码失败");
+                    finish_request(FK_MNN_EVENT_ERROR, "多模态提示词编码失败");
                     return;
                 }
                 llm->response(input_ids, nullptr, nullptr, 0);
@@ -391,17 +398,15 @@ public:
 
             const LlmContext* context = llm->getContext();
             if (cancel_requested_.load()) {
-                finish_generation(callback, request_id, FK_MNN_EVENT_CANCELED);
+                finish_request(FK_MNN_EVENT_CANCELED);
                 return;
             }
             if (context != nullptr && context->status == LlmStatus::INTERNAL_ERROR) {
-                finish_generation(callback, request_id, FK_MNN_EVENT_ERROR, "MNN 推理过程中发生内部错误");
+                finish_request(FK_MNN_EVENT_ERROR, "MNN 推理过程中发生内部错误");
                 return;
             }
             if (context != nullptr && context->generate_str.size() != emitted_bytes) {
-                finish_generation(
-                    callback,
-                    request_id,
+                finish_request(
                     FK_MNN_EVENT_ERROR,
                     "MNN 输出包含未完成的 UTF-8 字符");
                 return;
@@ -420,7 +425,7 @@ public:
                     << ",\"imageMegapixels\":" << request_pixels_mp
                     << ",\"audioInputSeconds\":" << request_audio_input_s
                     << "}";
-            finish_generation(callback, request_id, FK_MNN_EVENT_COMPLETED, metrics.str());
+            finish_request(FK_MNN_EVENT_COMPLETED, metrics.str());
         }).detach();
         return true;
     }

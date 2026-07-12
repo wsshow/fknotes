@@ -54,6 +54,10 @@ void main() {
     expect(restored.single.personaId, persona.id);
     expect(restored.single.messages.last.content, '可以从西湖开始。');
     expect(restored.single.title, '帮我规划杭州的周末旅行');
+
+    // Chat UI owns and reorders this collection after every saved turn.
+    // Loading must never expose a fixed-length outer list.
+    expect(() => restored.add(store.createSession()), returnsNormally);
   });
 
   test('manages reusable personas and safely resets deleted roles', () async {
@@ -81,6 +85,33 @@ void main() {
     expect(
       (await store.loadPersonas()).any((item) => item.id == persona.id),
       isFalse,
+    );
+  });
+
+  test('persists consecutive turns after reloading a session', () async {
+    var session = store.createSession().copyWith(
+      messages: [
+        store.createMessage(role: LocalChatRole.user, content: '第一问'),
+        store.createMessage(role: LocalChatRole.assistant, content: '第一答'),
+      ],
+    );
+    await store.saveSession(session);
+
+    session = (await store.loadSessions()).single;
+    session = session.copyWith(
+      messages: [
+        ...session.messages,
+        store.createMessage(role: LocalChatRole.user, content: '第二问'),
+        store.createMessage(role: LocalChatRole.assistant, content: '第二答'),
+      ],
+      updatedAt: DateTime.now(),
+    );
+    await store.saveSession(session);
+
+    final restored = (await store.loadSessions()).single;
+    expect(
+      restored.messages.map((message) => message.content),
+      ['第一问', '第一答', '第二问', '第二答'],
     );
   });
 
