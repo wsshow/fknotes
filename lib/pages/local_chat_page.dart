@@ -404,13 +404,12 @@ class _LocalChatPageState extends State<LocalChatPage> {
   }
 
   Future<void> _editSystemPrompt() async {
-    final controller = TextEditingController(text: _session.systemPrompt);
     final result = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      builder: (context) => _SystemPromptSheet(controller: controller),
+      builder: (context) =>
+          _SystemPromptSheet(initialValue: _session.systemPrompt),
     );
-    controller.dispose();
     if (result == null || !mounted) return;
     _session = _session.copyWith(
       systemPrompt: result.trim(),
@@ -878,104 +877,134 @@ class _LoadFailure extends StatelessWidget {
   const _LoadFailure({required this.message, required this.onRetry});
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => SingleChildScrollView(
       padding: const EdgeInsets.all(28),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.error_outline_rounded, color: AppColors.coral),
-          const SizedBox(height: 10),
-          Text(message, textAlign: TextAlign.center),
-          const SizedBox(height: 12),
-          OutlinedButton(onPressed: onRetry, child: const Text('重新读取')),
-        ],
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight: (constraints.maxHeight - 56).clamp(0, double.infinity),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline_rounded, color: AppColors.coral),
+              const SizedBox(height: 10),
+              Text(message, textAlign: TextAlign.center),
+              const SizedBox(height: 12),
+              OutlinedButton(onPressed: onRetry, child: const Text('重新读取')),
+            ],
+          ),
+        ),
       ),
     ),
   );
 }
 
 class _SystemPromptSheet extends StatefulWidget {
-  final TextEditingController controller;
-  const _SystemPromptSheet({required this.controller});
+  final String initialValue;
+  const _SystemPromptSheet({required this.initialValue});
 
   @override
   State<_SystemPromptSheet> createState() => _SystemPromptSheetState();
 }
 
 class _SystemPromptSheetState extends State<_SystemPromptSheet> {
+  late final TextEditingController _controller;
+
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.fromLTRB(
-      20,
-      12,
-      20,
-      MediaQuery.viewInsetsOf(context).bottom + 20,
-    ),
-    child: SafeArea(
-      top: false,
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '角色设定',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 5),
-            const Text(
-              '系统提示词只对当前对话生效并保存在本机；留空表示不设定角色。',
-              style: TextStyle(color: AppColors.muted, fontSize: 12),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              key: const Key('local-chat-system-prompt'),
-              controller: widget.controller,
-              autofocus: true,
-              minLines: 5,
-              maxLines: 9,
-              maxLength: 2000,
-              onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                hintText: '例如：你是一位耐心的英语口语教练……',
-                alignLabelWithHint: true,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Row(
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialValue);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _dismiss([String? result]) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    Navigator.pop(context, result);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    final availableHeight =
+        MediaQuery.sizeOf(context).height - keyboardInset - 32;
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      padding: EdgeInsets.only(bottom: keyboardInset),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          child: SizedBox(
+            height: availableHeight.clamp(240, 520),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TextButton.icon(
-                  onPressed: () {
-                    widget.controller.text = LocalChatStore.defaultSystemPrompt;
-                    widget.controller.selection = TextSelection.collapsed(
-                      offset: widget.controller.text.length,
-                    );
-                    setState(() {});
-                  },
-                  icon: const Icon(Icons.restore_rounded),
-                  label: const Text('恢复默认'),
+                Text(
+                  '角色设定',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
                 ),
-                const Spacer(),
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('取消'),
+                const SizedBox(height: 5),
+                const Text(
+                  '系统提示词只对当前对话生效并保存在本机；留空表示不设定角色。',
+                  style: TextStyle(color: AppColors.muted, fontSize: 12),
                 ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: () =>
-                      Navigator.pop(context, widget.controller.text),
-                  child: const Text('保存设定'),
+                const SizedBox(height: 14),
+                Expanded(
+                  child: TextField(
+                    key: const Key('local-chat-system-prompt'),
+                    controller: _controller,
+                    autofocus: true,
+                    minLines: null,
+                    maxLines: null,
+                    expands: true,
+                    maxLength: 2000,
+                    onChanged: (_) => setState(() {}),
+                    decoration: const InputDecoration(
+                      hintText: '例如：你是一位耐心的英语口语教练……',
+                      alignLabelWithHint: true,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    TextButton.icon(
+                      onPressed: () {
+                        _controller.text = LocalChatStore.defaultSystemPrompt;
+                        _controller.selection = TextSelection.collapsed(
+                          offset: _controller.text.length,
+                        );
+                        setState(() {});
+                      },
+                      icon: const Icon(Icons.restore_rounded),
+                      label: const Text('恢复默认'),
+                    ),
+                    const Spacer(),
+                    TextButton(onPressed: _dismiss, child: const Text('取消')),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: () => _dismiss(_controller.text),
+                      child: const Text('保存设定'),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _ChatHistorySheet extends StatelessWidget {
