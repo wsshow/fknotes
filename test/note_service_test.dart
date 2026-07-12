@@ -5,6 +5,7 @@ import 'package:fknotes/services/database_service.dart';
 import 'package:fknotes/services/file_storage_service.dart';
 import 'package:fknotes/services/note_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
@@ -161,4 +162,26 @@ void main() {
       contains(id),
     );
   });
+
+  test(
+    'database integrity validation checks referenced attachment files',
+    () async {
+      for (final relative in [
+        'images/a.jpg',
+        'images/c.jpg',
+        'audio/meeting.m4a',
+      ]) {
+        final file = File(p.join(storageDirectory.path, relative));
+        await file.parent.create(recursive: true);
+        await file.writeAsBytes([1]);
+      }
+
+      await expectLater(DatabaseService.instance.validateUserData(), completes);
+      await File(p.join(storageDirectory.path, 'audio/meeting.m4a')).delete();
+      await expectLater(
+        DatabaseService.instance.validateUserData(),
+        throwsFormatException,
+      );
+    },
+  );
 }

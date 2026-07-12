@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
@@ -170,5 +172,47 @@ class DatabaseService {
   Future<void> close() async {
     await _database?.close();
     _database = null;
+  }
+
+  Future<void> validateUserData() async {
+    final db = await database;
+    final quickCheck = await db.rawQuery('PRAGMA quick_check');
+    if (quickCheck.isEmpty ||
+        quickCheck.first.values.firstOrNull?.toString().toLowerCase() != 'ok') {
+      throw const FormatException('备份数据库完整性检查失败');
+    }
+    if ((await db.rawQuery('PRAGMA foreign_key_check')).isNotEmpty) {
+      throw const FormatException('备份数据库关联关系损坏');
+    }
+    final tables = (await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table'",
+    )).map((row) => row['name']).whereType<String>().toSet();
+    const requiredTables = {
+      'entries',
+      'attachments',
+      'chat_sessions',
+      'chat_messages',
+    };
+    if (!tables.containsAll(requiredTables)) {
+      throw const FormatException('备份数据库结构不完整');
+    }
+
+    final attachments = await db.query(
+      'attachments',
+      columns: ['file_path', 'thumbnail_path'],
+    );
+    for (final attachment in attachments) {
+      final filePath = attachment['file_path'] as String? ?? '';
+      final absoluteFile = File(
+        FileStorageService.instance.absolutePath(filePath),
+      );
+      if (!await absoluteFile.exists()) {
+        throw FormatException('备份缺少附件：$filePath');
+      }
+      final thumbnailPath = attachment['thumbnail_path'] as String?;
+      if (thumbnailPath != null && thumbnailPath.isNotEmpty) {
+        FileStorageService.instance.absolutePath(thumbnailPath);
+      }
+    }
   }
 }

@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
 
 import 'package:archive/archive_io.dart';
+import 'package:crypto/crypto.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -14,6 +16,12 @@ class BackupService {
   BackupService._();
   static final BackupService instance = BackupService._();
 
+  static const _manifestName = 'fknotes-backup.json';
+  static const _backupFormatVersion = 1;
+  static const _maxArchiveFiles = 100000;
+  static const _maxExpandedBytes = 128 * 1024 * 1024 * 1024;
+  static const _appLockPath = 'settings/app-lock.json';
+
   static const _managedRoots = {
     'images',
     'audio',
@@ -22,6 +30,7 @@ class BackupService {
     'thumbnails',
     'exports',
     'assistant',
+    'settings',
     'fknotes.db',
     'fknotes.db-journal',
     'fknotes.db-shm',
@@ -36,26 +45,61 @@ class BackupService {
         'fknotes_${now.year}${_two(now.month)}${_two(now.day)}_${_two(now.hour)}${_two(now.minute)}.fknotes.zip';
     await DatabaseService.instance.close();
     try {
-      final sourceArchive = createArchiveFromDirectory(
-        Directory(_storage.baseDir),
-        includeDirName: false,
-      );
-      final archive = Archive();
-      for (final entry in sourceArchive) {
-        // Empty folders can be recreated from file paths. Omitting directory
-        // records also avoids non-standard zero-byte compressed entries.
-        if (entry.isFile && _isManagedPath(_safeName(entry.name))) {
-          archive.add(entry);
-        }
-      }
-      final bytes = ZipEncoder().encode(archive);
       final exportDir = Directory(
         p.join((await getTemporaryDirectory()).path, 'fknotes_exports'),
       );
       if (await exportDir.exists()) await exportDir.delete(recursive: true);
       await exportDir.create(recursive: true);
       final output = File(p.join(exportDir.path, name));
-      await output.writeAsBytes(bytes, flush: true);
+      final root = Directory(_storage.baseDir);
+      final files = <({File file, String relative})>[];
+      await for (final entity in root.list(
+        recursive: true,
+        followLinks: false,
+      )) {
+        if (entity is! File) continue;
+        final relative = _safeName(
+          p.posix.fromUri(p.toUri(p.relative(entity.path, from: root.path))),
+        );
+        if (_isIncludedBackupPath(relative)) {
+          files.add((file: entity, relative: relative));
+        }
+      }
+      files.sort((left, right) => left.relative.compareTo(right.relative));
+      final encoder = ZipFileEncoder()..create(output.path);
+      var encoderOpen = true;
+      try {
+        final manifestFiles = <String, Object?>{};
+        for (final item in files) {
+          final size = await item.file.length();
+          final digest = await sha256.bind(item.file.openRead()).first;
+          manifestFiles[item.relative] = {
+            'size': size,
+            'sha256': digest.toString(),
+          };
+          await encoder.addFile(item.file, item.relative);
+        }
+        encoder.addArchiveFile(
+          ArchiveFile.string(
+            _manifestName,
+            jsonEncode({
+              'formatVersion': _backupFormatVersion,
+              'createdAt': now.toUtc().toIso8601String(),
+              'files': manifestFiles,
+            }),
+          ),
+        );
+        await encoder.close();
+        encoderOpen = false;
+      } finally {
+        if (encoderOpen) {
+          try {
+            await encoder.close();
+          } catch (_) {
+            // Preserve the original export failure.
+          }
+        }
+      }
 
       // Android does not implement file_selector's save-location API. The
       // native share sheet includes Files/Drive and works consistently across
@@ -80,16 +124,49 @@ class BackupService {
     const group = XTypeGroup(label: 'FK Notes Backup', extensions: ['zip']);
     final selected = await openFile(acceptedTypeGroups: [group]);
     if (selected == null) return false;
-    final archive = ZipDecoder().decodeBytes(
-      await selected.readAsBytes(),
-      verify: true,
-    );
-    final files = archive.where((entry) => entry.isFile).toList();
-    final names = files.map((entry) => _safeName(entry.name)).toList();
-    if (!names.contains('fknotes.db')) {
+    final input = InputFileStream(selected.path);
+    late final Archive archive;
+    try {
+      archive = ZipDecoder().decodeStream(input, verify: true);
+    } catch (_) {
+      await input.close();
+      rethrow;
+    }
+    final entries = archive.where((entry) => entry.isFile).toList();
+    if (entries.length > _maxArchiveFiles ||
+        entries.fold<int>(0, (sum, entry) => sum + entry.size) >
+            _maxExpandedBytes) {
+      await input.close();
+      throw const FormatException('备份文件数量或容量异常');
+    }
+    final names = entries.map((entry) => _safeName(entry.name)).toList();
+    if (names.toSet().length != names.length) {
+      await input.close();
+      throw const FormatException('备份中包含重复路径');
+    }
+    final manifestIndex = names.indexOf(_manifestName);
+    Map<String, Object?>? manifest;
+    try {
+      manifest = manifestIndex < 0
+          ? null
+          : _decodeManifest(entries[manifestIndex]);
+    } catch (_) {
+      await input.close();
+      rethrow;
+    }
+    final files = <ArchiveFile>[];
+    final fileNames = <String>[];
+    for (var index = 0; index < entries.length; index++) {
+      if (index == manifestIndex) continue;
+      files.add(entries[index]);
+      fileNames.add(names[index]);
+    }
+    if (!fileNames.contains('fknotes.db')) {
+      await input.close();
       throw const FormatException('这不是有效的非空笔记备份');
     }
-    if (names.any((name) => !_isManagedPath(name))) {
+    if (fileNames.any((name) => !_isIncludedBackupPath(name))) {
+      await input.close();
       throw const FormatException('备份中包含不属于非空笔记的数据');
     }
 
@@ -98,28 +175,96 @@ class BackupService {
     final previous = Directory('${root.path}.fknotes-previous');
     if (await previous.exists()) await previous.delete(recursive: true);
     await previous.create(recursive: true);
-    await _moveManagedData(root, previous);
-    await root.create(recursive: true);
+    var moveCompleted = false;
     try {
+      await _moveManagedData(root, previous);
+      moveCompleted = true;
+      await root.create(recursive: true);
       for (var index = 0; index < files.length; index++) {
         final entry = files[index];
-        final relative = names[index];
+        final relative = fileNames[index];
         final output = File(p.join(root.path, relative));
         await output.parent.create(recursive: true);
-        final bytes = entry.readBytes();
-        if (bytes == null) throw const FormatException('备份文件不完整');
-        await output.writeAsBytes(bytes, flush: true);
+        final stream = OutputFileStream(output.path);
+        try {
+          entry.writeContent(stream);
+        } finally {
+          stream.closeSync();
+        }
       }
+      await _preserveDeviceOnlySettings(previous, root);
       await _storage.init();
-      await previous.delete(recursive: true);
+      if (manifest != null) await _validateManifest(manifest, root, fileNames);
+      await DatabaseService.instance.validateUserData();
+      try {
+        await previous.delete(recursive: true);
+      } on FileSystemException {
+        // The restored data is already validated; stale rollback data can be
+        // removed on the next restore attempt.
+      }
       return true;
     } catch (_) {
-      await _deleteManagedData(root);
+      await DatabaseService.instance.close();
+      if (moveCompleted) await _deleteManagedData(root);
       await _moveManagedData(previous, root);
       if (await previous.exists()) await previous.delete(recursive: true);
       await _storage.init();
+      await DatabaseService.instance.database;
       rethrow;
+    } finally {
+      await input.close();
     }
+  }
+
+  Map<String, Object?> _decodeManifest(ArchiveFile entry) {
+    if (entry.size > 1024 * 1024) {
+      throw const FormatException('备份清单异常');
+    }
+    final bytes = entry.readBytes();
+    if (bytes == null) throw const FormatException('备份清单不完整');
+    final decoded = jsonDecode(utf8.decode(bytes));
+    if (decoded is! Map || decoded['formatVersion'] != _backupFormatVersion) {
+      throw const FormatException('不支持的备份版本');
+    }
+    return Map<String, Object?>.from(decoded);
+  }
+
+  Future<void> _validateManifest(
+    Map<String, Object?> manifest,
+    Directory root,
+    List<String> fileNames,
+  ) async {
+    final rawFiles = manifest['files'];
+    if (rawFiles is! Map ||
+        rawFiles.length != fileNames.length ||
+        !rawFiles.keys.toSet().containsAll(fileNames)) {
+      throw const FormatException('备份清单与文件不匹配');
+    }
+    for (final relative in fileNames) {
+      final metadata = rawFiles[relative];
+      if (metadata is! Map) throw const FormatException('备份清单损坏');
+      final file = File(p.join(root.path, relative));
+      final expectedSize = metadata['size'];
+      final expectedDigest = metadata['sha256'];
+      if (expectedSize is! int ||
+          expectedDigest is! String ||
+          await file.length() != expectedSize ||
+          (await sha256.bind(file.openRead()).first).toString() !=
+              expectedDigest) {
+        throw FormatException('备份文件校验失败：$relative');
+      }
+    }
+  }
+
+  Future<void> _preserveDeviceOnlySettings(
+    Directory previous,
+    Directory root,
+  ) async {
+    final source = File(p.join(previous.path, _appLockPath));
+    if (!await source.exists()) return;
+    final destination = File(p.join(root.path, _appLockPath));
+    await destination.parent.create(recursive: true);
+    await source.copy(destination.path);
   }
 
   String _safeName(String value) {
@@ -136,6 +281,9 @@ class BackupService {
     final rootName = p.posix.split(relativePath).firstOrNull;
     return rootName != null && _managedRoots.contains(rootName);
   }
+
+  bool _isIncludedBackupPath(String relativePath) =>
+      relativePath != _appLockPath && _isManagedPath(relativePath);
 
   Future<void> _moveManagedData(Directory source, Directory target) async {
     await target.create(recursive: true);

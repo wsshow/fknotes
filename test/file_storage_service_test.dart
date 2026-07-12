@@ -35,4 +35,19 @@ void main() {
     expect(await FileStorageService.instance.userDataSize(), 41);
     expect(await FileStorageService.instance.storageSize(), greaterThan(41));
   });
+
+  test('managed paths cannot escape application storage', () {
+    expect(
+      () => FileStorageService.instance.absolutePath('../outside.txt'),
+      throwsFormatException,
+    );
+    expect(
+      () => FileStorageService.instance.absolutePath('/tmp/outside.txt'),
+      throwsFormatException,
+    );
+    expect(
+      FileStorageService.instance.absolutePath('images/safe.jpg'),
+      p.join(root.path, 'images', 'safe.jpg'),
+    );
+  });
 }

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
@@ -376,24 +378,33 @@ class NoteProvider extends ChangeNotifier {
 
   Future<void> deletePermanently(NoteEntry entry) async {
     if (entry.id == null) return;
-    await _deleteAttachmentFiles(entry);
     await _notes.deleteEntry(entry.id!);
-    await loadEntries();
+    _entries.removeWhere((item) => item.id == entry.id);
+    notifyListeners();
+    await _deleteAttachmentFilesBestEffort(entry);
   }
 
   Future<void> emptyTrash() async {
     final trashed = _entries.where((e) => e.isDeleted).toList();
     for (final entry in trashed) {
-      await _deleteAttachmentFiles(entry);
       if (entry.id != null) await _notes.deleteEntry(entry.id!);
+      _entries.removeWhere((item) => item.id == entry.id);
+      notifyListeners();
+      await _deleteAttachmentFilesBestEffort(entry);
     }
-    await loadEntries();
   }
 
-  Future<void> _deleteAttachmentFiles(NoteEntry entry) async {
+  Future<void> _deleteAttachmentFilesBestEffort(NoteEntry entry) async {
     for (final attachment in entry.allAttachments) {
-      await _storage.deleteFile(attachment.filePath);
-      await _storage.deleteFile(attachment.thumbnailPath);
+      try {
+        await _storage.deleteFile(attachment.filePath);
+        await _storage.deleteFile(attachment.thumbnailPath);
+      } on FileSystemException {
+        // Database deletion is authoritative. A later orphan sweep can safely
+        // reclaim a file that the platform still has open.
+      } on FormatException {
+        // Never follow an invalid path found in restored or legacy metadata.
+      }
     }
   }
 

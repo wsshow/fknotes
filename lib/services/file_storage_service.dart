@@ -60,7 +60,18 @@ class FileStorageService {
 
   /// Get absolute path from relative file path
   String absolutePath(String relativePath) {
-    return p.join(_baseDir, relativePath);
+    final normalized = p.normalize(relativePath);
+    if (relativePath.trim().isEmpty ||
+        p.isAbsolute(relativePath) ||
+        normalized == '..' ||
+        normalized.startsWith('..${p.separator}')) {
+      throw const FormatException('文件路径不安全');
+    }
+    final resolved = p.normalize(p.join(_baseDir, normalized));
+    if (!p.isWithin(_baseDir, resolved)) {
+      throw const FormatException('文件路径不安全');
+    }
+    return resolved;
   }
 
   /// Copy a file into the Feikong storage and return relative path
