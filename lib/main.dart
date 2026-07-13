@@ -1,5 +1,10 @@
+import 'dart:async';
+import 'dart:ui';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'debug/app_diagnostics.dart';
 import 'l10n/generated/app_localizations.dart';
 import 'l10n/l10n.dart';
 import 'providers/app_locale_controller.dart';
@@ -8,8 +13,34 @@ import 'services/model_download_source_policy.dart';
 import 'widgets/brand_mark.dart';
 import 'app.dart';
 
-Future<void> main() async {
+void main() {
+  runZonedGuarded(_startApplication, (error, stackTrace) {
+    if (kDebugMode) {
+      AppDiagnostics.error(
+        AppLogCategory.application,
+        'uncaught_zone_error',
+        error: error,
+        stackTrace: stackTrace,
+        fatal: true,
+      );
+    }
+  });
+}
+
+Future<void> _startApplication() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (kDebugMode) {
+    await AppDiagnostics.instance.initialize();
+    _installDebugErrorHandlers();
+    AppDiagnostics.info(
+      AppLogCategory.application,
+      'startup_started',
+      data: {
+        'buildMode': 'debug',
+        'locale': PlatformDispatcher.instance.locale.toLanguageTag(),
+      },
+    );
+  }
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -27,11 +58,51 @@ Future<void> main() async {
     await FileStorageService.instance.init();
     await ModelDownloadSourcePolicy.instance.load();
     await AppLocaleController.instance.initialize();
-  } catch (_) {
+  } catch (error, stackTrace) {
+    if (kDebugMode) {
+      AppDiagnostics.error(
+        AppLogCategory.application,
+        'startup_initialization_failed',
+        error: error,
+        stackTrace: stackTrace,
+        fatal: true,
+      );
+    }
     runApp(const _InitializationFailureApp());
     return;
   }
+  if (kDebugMode) {
+    AppDiagnostics.info(AppLogCategory.application, 'startup_completed');
+  }
   runApp(const FkNotesApp());
+}
+
+void _installDebugErrorHandlers() {
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    AppDiagnostics.error(
+      AppLogCategory.application,
+      'flutter_framework_error',
+      data: {
+        'library': details.library,
+        'context': details.context?.toDescription(),
+        'silent': details.silent,
+      },
+      error: details.exception,
+      stackTrace: details.stack,
+      fatal: false,
+    );
+  };
+  PlatformDispatcher.instance.onError = (error, stackTrace) {
+    AppDiagnostics.error(
+      AppLogCategory.application,
+      'platform_dispatcher_error',
+      error: error,
+      stackTrace: stackTrace,
+      fatal: true,
+    );
+    return true;
+  };
 }
 
 class _InitializationFailureApp extends StatelessWidget {

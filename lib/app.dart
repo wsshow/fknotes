@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -9,6 +10,7 @@ import 'providers/app_lock_controller.dart';
 import 'providers/app_locale_controller.dart';
 import 'providers/note_provider.dart';
 import 'widgets/app_lock_gate.dart';
+import 'debug/debug_navigation.dart';
 
 class AppColors {
   static const ink = Color(0xFF28231F);
@@ -96,6 +98,9 @@ class FkNotesApp extends StatelessWidget {
           supportedLocales: AppLocalizations.supportedLocales,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           debugShowCheckedModeBanner: false,
+          navigatorObservers: kDebugMode
+              ? createDebugNavigatorObservers()
+              : const [],
           theme: ThemeData(
             useMaterial3: true,
             colorScheme: scheme,
