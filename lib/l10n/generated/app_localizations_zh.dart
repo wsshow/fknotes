@@ -377,6 +377,102 @@ class AppLocalizationsZh extends AppLocalizations {
   String get languageModelsDescription => '由用户下载并选择本地助手使用的模型，默认上下文为 4096。';
 
   @override
+  String get discoverMnnModels => '发现 MNN 模型';
+
+  @override
+  String get discoverMnnModelsDescription =>
+      '直接浏览从 taobao-mnn Collections 同步的公开语言模型。';
+
+  @override
+  String get browseModels => '浏览模型';
+
+  @override
+  String get refreshCatalog => '刷新目录';
+
+  @override
+  String get syncingModelCatalog => '正在同步模型目录…';
+
+  @override
+  String modelCatalogSyncFailed(String error) {
+    return '无法刷新模型目录：$error';
+  }
+
+  @override
+  String get cachedCatalogInUse => '正在显示上次成功同步的目录';
+
+  @override
+  String get searchMnnModels => '搜索 MNN 模型';
+
+  @override
+  String get noMnnModelsFound => '没有匹配的 MNN 模型';
+
+  @override
+  String get officialMnnCollection => 'taobao-mnn 官方 Collection';
+
+  @override
+  String downloadCount(int count) {
+    return '$count 次下载';
+  }
+
+  @override
+  String get checkingModelCompatibility => '正在检查模型兼容性…';
+
+  @override
+  String get modelCompatibilityPassed => 'MNN 文件与运行配置检查通过';
+
+  @override
+  String modelCompatibilityFailed(String error) {
+    return '无法添加该模型：$error';
+  }
+
+  @override
+  String get pinnedCommit => '固定 commit';
+
+  @override
+  String get modelFileCount => '模型文件';
+
+  @override
+  String fileCountValue(int count) {
+    return '$count 个文件';
+  }
+
+  @override
+  String get modelCapabilities => '模型能力';
+
+  @override
+  String get textGenerationCapability => '文本生成';
+
+  @override
+  String get imageInputCapability => '图片输入';
+
+  @override
+  String get audioInputCapability => '音频输入';
+
+  @override
+  String get reasoningCapability => '思考推理';
+
+  @override
+  String get toolCallingCapability => '工具调用';
+
+  @override
+  String get addAndDownloadModel => '添加并下载';
+
+  @override
+  String get modelAddedToManager => '模型已添加到本地模型';
+
+  @override
+  String get recommendedModelsAlreadyListed => 'FKNotes 推荐模型已在上一页中显示。';
+
+  @override
+  String remoteMnnModelSummary(String collection) {
+    return '来自 $collection 的官方模型';
+  }
+
+  @override
+  String get remoteMnnModelDescription =>
+      '从 taobao-mnn Collections 同步；安装前会校验仓库版本和每个模型文件。';
+
+  @override
   String get liveDictationSettings => '实时听写设置';
 
   @override

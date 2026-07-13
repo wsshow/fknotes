@@ -40,6 +40,7 @@ class TaobaoMnnCatalogService {
   List<TaobaoMnnCatalogEntry> _entries = const [];
   final Map<String, TaobaoMnnModelSpec> _details = {};
   DateTime? _lastSyncedAt;
+  bool _cacheLoaded = false;
 
   List<TaobaoMnnCatalogEntry> get entries => List.unmodifiable(_entries);
   List<TaobaoMnnModelSpec> get cachedDetails =>
@@ -54,6 +55,7 @@ class TaobaoMnnCatalogService {
       File(p.join(_cacheDirectory, 'taobao-mnn-details.json'));
 
   Future<void> loadCache() async {
+    if (_cacheLoaded) return;
     _entries = await _readCatalogCache();
     _details
       ..clear()
@@ -62,6 +64,7 @@ class TaobaoMnnCatalogService {
           (detail) => MapEntry(detail.id, detail),
         ),
       );
+    _cacheLoaded = true;
   }
 
   Future<List<TaobaoMnnCatalogEntry>> sync() async {
@@ -121,6 +124,7 @@ class TaobaoMnnCatalogService {
       );
     }
     _entries = entries;
+    _cacheLoaded = true;
     _lastSyncedAt = DateTime.now();
     await _writeJson(_catalogFile, {
       'version': _catalogVersion,
@@ -174,12 +178,21 @@ class TaobaoMnnCatalogService {
         throw TaobaoMnnCatalogException('Missing file size: $name');
       }
       final lfs = raw['lfs'];
+      final sha256 = lfs is Map ? lfs['sha256'] as String? : null;
+      final gitBlobId = raw['blobId'] as String?;
+      final validSha256 =
+          sha256 != null && RegExp(r'^[a-f0-9]{64}$').hasMatch(sha256);
+      final validGitBlob =
+          gitBlobId != null && RegExp(r'^[a-f0-9]{40}$').hasMatch(gitBlobId);
+      if (!validSha256 && !validGitBlob) {
+        throw TaobaoMnnCatalogException('Missing verification metadata: $name');
+      }
       files.add(
         TaobaoMnnModelFile(
           name: name,
           sizeBytes: size,
-          sha256: lfs is Map ? lfs['sha256'] as String? : null,
-          gitBlobId: raw['blobId'] as String?,
+          sha256: validSha256 ? sha256 : null,
+          gitBlobId: validGitBlob ? gitBlobId : null,
         ),
       );
     }
@@ -194,7 +207,7 @@ class TaobaoMnnCatalogService {
       revision,
       'llm_config.json',
     );
-    _validateConfigReferences(config, files);
+    _validateConfigReferences(config, runtimeConfig, files);
     final names = files.map((file) => file.name).toSet();
     final isVisual =
         runtimeConfig['is_visual'] == true ||
@@ -290,26 +303,45 @@ class TaobaoMnnCatalogService {
 
   static void _validateConfigReferences(
     Map<String, Object?> config,
+    Map<String, Object?> runtimeConfig,
     List<TaobaoMnnModelFile> files,
   ) {
     final names = files.map((file) => file.name).toSet();
-    for (final key in [
-      'llm_model',
-      'llm_weight',
-      'embedding_file',
-      'tokenizer_file',
-    ]) {
+    for (final key in ['llm_model', 'llm_weight', 'tokenizer_file']) {
       final value = config[key];
       if (value is String &&
           (value != p.basename(value) || !names.contains(value))) {
         throw TaobaoMnnCatalogException('Invalid model reference: $key');
       }
     }
+    final embedding = config['embedding_file'];
+    final pleEmbedding = runtimeConfig['ple_embed_file'];
+    final hasEmbedding = embedding is String && names.contains(embedding);
+    final hasPleEmbedding =
+        pleEmbedding is String &&
+        pleEmbedding == p.basename(pleEmbedding) &&
+        names.contains(pleEmbedding);
+    if (embedding is String && !hasEmbedding && !hasPleEmbedding) {
+      throw const TaobaoMnnCatalogException(
+        'Invalid model reference: embedding_file',
+      );
+    }
     if (config['llm_model'] != 'llm.mnn' ||
         config['llm_weight'] != 'llm.mnn.weight') {
       throw const TaobaoMnnCatalogException(
         'Unsupported MNN runtime configuration',
       );
+    }
+    for (final capability in const [
+      ('is_visual', 'visual.mnn', 'visual.mnn.weight'),
+      ('is_audio', 'audio.mnn', 'audio.mnn.weight'),
+    ]) {
+      if (runtimeConfig[capability.$1] == true &&
+          (!names.contains(capability.$2) || !names.contains(capability.$3))) {
+        throw TaobaoMnnCatalogException(
+          'Incomplete ${capability.$1} model files',
+        );
+      }
     }
   }
 

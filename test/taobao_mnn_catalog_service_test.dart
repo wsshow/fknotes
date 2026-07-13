@@ -176,6 +176,42 @@ void main() {
       throwsA(isA<TaobaoMnnCatalogException>()),
     );
   });
+
+  test('inspect rejects files that cannot be integrity-checked', () async {
+    final service = TaobaoMnnCatalogService(
+      cacheDirectory: cache.path,
+      httpGet: (uri) async => _jsonBytes({
+        'author': 'taobao-mnn',
+        'private': false,
+        'gated': false,
+        'disabled': false,
+        'sha': '1234567890abcdef1234567890abcdef12345678',
+        'siblings': [
+          _file('config.json', 10),
+          _file('llm_config.json', 10, blobId: _repeat('a', 40)),
+          _file('llm.mnn', 10, sha256: _repeat('b', 64)),
+          _file('llm.mnn.weight', 10, sha256: _repeat('c', 64)),
+          _file('tokenizer.txt', 10, blobId: _repeat('d', 40)),
+        ],
+      }),
+    );
+
+    await expectLater(
+      service.inspect(
+        const TaobaoMnnCatalogEntry(
+          repository: 'taobao-mnn/Unverifiable-MNN',
+          collection: 'Test-MNN',
+        ),
+      ),
+      throwsA(
+        isA<TaobaoMnnCatalogException>().having(
+          (error) => error.message,
+          'message',
+          contains('verification metadata'),
+        ),
+      ),
+    );
+  });
 }
 
 Map<String, Object?> _file(

@@ -782,6 +782,174 @@ abstract class AppLocalizations {
   /// **'由用户下载并选择本地助手使用的模型，默认上下文为 4096。'**
   String get languageModelsDescription;
 
+  /// No description provided for @discoverMnnModels.
+  ///
+  /// In zh, this message translates to:
+  /// **'发现 MNN 模型'**
+  String get discoverMnnModels;
+
+  /// No description provided for @discoverMnnModelsDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'直接浏览从 taobao-mnn Collections 同步的公开语言模型。'**
+  String get discoverMnnModelsDescription;
+
+  /// No description provided for @browseModels.
+  ///
+  /// In zh, this message translates to:
+  /// **'浏览模型'**
+  String get browseModels;
+
+  /// No description provided for @refreshCatalog.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新目录'**
+  String get refreshCatalog;
+
+  /// No description provided for @syncingModelCatalog.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在同步模型目录…'**
+  String get syncingModelCatalog;
+
+  /// No description provided for @modelCatalogSyncFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法刷新模型目录：{error}'**
+  String modelCatalogSyncFailed(String error);
+
+  /// No description provided for @cachedCatalogInUse.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在显示上次成功同步的目录'**
+  String get cachedCatalogInUse;
+
+  /// No description provided for @searchMnnModels.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索 MNN 模型'**
+  String get searchMnnModels;
+
+  /// No description provided for @noMnnModelsFound.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有匹配的 MNN 模型'**
+  String get noMnnModelsFound;
+
+  /// No description provided for @officialMnnCollection.
+  ///
+  /// In zh, this message translates to:
+  /// **'taobao-mnn 官方 Collection'**
+  String get officialMnnCollection;
+
+  /// No description provided for @downloadCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 次下载'**
+  String downloadCount(int count);
+
+  /// No description provided for @checkingModelCompatibility.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在检查模型兼容性…'**
+  String get checkingModelCompatibility;
+
+  /// No description provided for @modelCompatibilityPassed.
+  ///
+  /// In zh, this message translates to:
+  /// **'MNN 文件与运行配置检查通过'**
+  String get modelCompatibilityPassed;
+
+  /// No description provided for @modelCompatibilityFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法添加该模型：{error}'**
+  String modelCompatibilityFailed(String error);
+
+  /// No description provided for @pinnedCommit.
+  ///
+  /// In zh, this message translates to:
+  /// **'固定 commit'**
+  String get pinnedCommit;
+
+  /// No description provided for @modelFileCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'模型文件'**
+  String get modelFileCount;
+
+  /// No description provided for @fileCountValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 个文件'**
+  String fileCountValue(int count);
+
+  /// No description provided for @modelCapabilities.
+  ///
+  /// In zh, this message translates to:
+  /// **'模型能力'**
+  String get modelCapabilities;
+
+  /// No description provided for @textGenerationCapability.
+  ///
+  /// In zh, this message translates to:
+  /// **'文本生成'**
+  String get textGenerationCapability;
+
+  /// No description provided for @imageInputCapability.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片输入'**
+  String get imageInputCapability;
+
+  /// No description provided for @audioInputCapability.
+  ///
+  /// In zh, this message translates to:
+  /// **'音频输入'**
+  String get audioInputCapability;
+
+  /// No description provided for @reasoningCapability.
+  ///
+  /// In zh, this message translates to:
+  /// **'思考推理'**
+  String get reasoningCapability;
+
+  /// No description provided for @toolCallingCapability.
+  ///
+  /// In zh, this message translates to:
+  /// **'工具调用'**
+  String get toolCallingCapability;
+
+  /// No description provided for @addAndDownloadModel.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加并下载'**
+  String get addAndDownloadModel;
+
+  /// No description provided for @modelAddedToManager.
+  ///
+  /// In zh, this message translates to:
+  /// **'模型已添加到本地模型'**
+  String get modelAddedToManager;
+
+  /// No description provided for @recommendedModelsAlreadyListed.
+  ///
+  /// In zh, this message translates to:
+  /// **'FKNotes 推荐模型已在上一页中显示。'**
+  String get recommendedModelsAlreadyListed;
+
+  /// No description provided for @remoteMnnModelSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'来自 {collection} 的官方模型'**
+  String remoteMnnModelSummary(String collection);
+
+  /// No description provided for @remoteMnnModelDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'从 taobao-mnn Collections 同步；安装前会校验仓库版本和每个模型文件。'**
+  String get remoteMnnModelDescription;
+
   /// No description provided for @liveDictationSettings.
   ///
   /// In zh, this message translates to:

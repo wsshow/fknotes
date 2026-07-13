@@ -12,6 +12,7 @@ import '../services/local_model_manager.dart';
 import '../services/realtime_dictation_preferences_service.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/editor_context_menu.dart';
+import 'taobao_mnn_catalog_page.dart';
 
 class ModelManagementPage extends StatefulWidget {
   final String? focusModelId;
@@ -75,6 +76,15 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
           context.l10n.localModelsPageTitle,
           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
         ),
+        actions: [
+          IconButton(
+            key: const Key('discover-taobao-mnn-models'),
+            tooltip: context.l10n.discoverMnnModels,
+            onPressed: _openMnnCatalog,
+            icon: const Icon(Icons.travel_explore_rounded),
+          ),
+          const SizedBox(width: 6),
+        ],
       ),
       body: SafeArea(
         top: false,
@@ -213,6 +223,19 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
       context,
     ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
   );
+
+  Future<void> _openMnnCatalog() async {
+    final added = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => const TaobaoMnnCatalogPage()),
+    );
+    if (added == true && mounted) {
+      await _manager.initialize(force: true);
+      if (mounted) {
+        AppFeedback.success(context, context.l10n.modelAddedToManager);
+      }
+    }
+  }
 
   Future<void> _chooseDownloadSource() async {
     final selected = await showModalBottomSheet<ModelDownloadSourcePreference>(

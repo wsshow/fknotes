@@ -30,6 +30,9 @@ class LocalModelDefinition {
   final String license;
   final bool recommended;
   final int recommendedMemoryBytes;
+  final bool remote;
+  final String repository;
+  final String revision;
 
   const LocalModelDefinition({
     required this.id,
@@ -47,6 +50,9 @@ class LocalModelDefinition {
     this.license = '',
     this.recommended = false,
     this.recommendedMemoryBytes = 0,
+    this.remote = false,
+    this.repository = '',
+    this.revision = '',
   });
 }
 

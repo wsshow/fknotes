@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../models/local_model.dart';
+import '../models/taobao_mnn_model.dart';
 import 'kokoro_tts_model_service.dart';
 import 'language_model_service.dart';
 import 'local_assistant_service.dart';
@@ -16,6 +17,7 @@ import 'speech_denoiser_model_service.dart';
 import 'speech_transcription_service.dart';
 import 'speaker_diarization_model_service.dart';
 import 'streaming_speech_model_service.dart';
+import 'taobao_mnn_catalog_service.dart';
 import 'voice_activity_model_service.dart';
 
 enum ModelTransferStatus {
@@ -380,16 +382,21 @@ class LocalModelManager extends ChangeNotifier {
   final _speakerDiarizationModels = SpeakerDiarizationModelService.instance;
   final _kokoroTtsModels = KokoroTtsModelService.instance;
   final _languageModels = LanguageModelService.instance;
+  final _remoteCatalog = TaobaoMnnCatalogService.instance;
   final _dictationPreferences = RealtimeDictationPreferencesService.instance;
   final Map<String, LocalModelInstallation> _installations = {};
   final Map<String, ModelTransferState> _transfers = {};
+  final Map<String, LocalModelDefinition> _remoteDefinitions = {};
   bool _initialized = false;
   bool _importPickerBusy = false;
   int _initializationGeneration = 0;
   String _selectedLiveDictationModelId = streamingChineseId;
   String _selectedAssistantModelId = qwen35Id;
 
-  List<LocalModelDefinition> get models => catalog;
+  List<LocalModelDefinition> get models => [
+    ...catalog,
+    ..._remoteDefinitions.values,
+  ];
   List<ModelTransferState> get transfers =>
       List.unmodifiable(_transfers.values);
   bool get initialized => _initialized;
@@ -407,7 +414,7 @@ class LocalModelManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  int get installedCount => catalog.where((model) {
+  int get installedCount => models.where((model) {
     return model.availability == LocalModelAvailability.builtIn ||
         installationOf(model.id).installed;
   }).length;
@@ -419,6 +426,20 @@ class LocalModelManager extends ChangeNotifier {
 
   Future<void> initialize({bool force = false}) async {
     if (_initialized && !force) return;
+    await _remoteCatalog.loadCache();
+    _languageModels.registerRemoteModels(_remoteCatalog.cachedDetails);
+    _remoteDefinitions
+      ..clear()
+      ..addEntries(
+        _remoteCatalog.cachedDetails
+            .where(
+              (model) => !_languageModels.curatedRepositories.contains(
+                model.repository.toLowerCase(),
+              ),
+            )
+            .map((model) => MapEntry(model.id, _remoteDefinition(model))),
+      );
+    final languageModelIds = _languageModels.modelIds;
     final generation = ++_initializationGeneration;
     final results = await Future.wait<Object>([
       _speechModels.inspect(),
@@ -437,7 +458,7 @@ class LocalModelManager extends ChangeNotifier {
       _kokoroTtsModels.inspect(),
       _kokoroTtsModels.partialDownloadBytes(),
       Future.wait<List<Object>>([
-        for (final id in LanguageModelService.supportedModelIds)
+        for (final id in languageModelIds)
           Future.wait<Object>([
             _languageModels.inspect(id),
             _languageModels.partialDownloadBytes(id),
@@ -501,7 +522,7 @@ class LocalModelManager extends ChangeNotifier {
       partialSizeBytes: kokoroTtsPartial,
     );
     for (var index = 0; index < languageResults.length; index++) {
-      final id = LanguageModelService.supportedModelIds[index];
+      final id = languageModelIds[index];
       final info = languageResults[index][0] as LanguageModelInfo;
       final partialBytes = languageResults[index][1] as int;
       _installations[id] = LocalModelInstallation(
@@ -561,7 +582,7 @@ class LocalModelManager extends ChangeNotifier {
           shouldCancel: () => transfer.cancelRequested,
           onProgress: progress,
         );
-      } else if (LanguageModelService.supportedModelIds.contains(modelId)) {
+      } else if (_languageModels.supports(modelId)) {
         await _languageModels.download(
           modelId,
           shouldCancel: () => transfer.cancelRequested,
@@ -581,7 +602,7 @@ class LocalModelManager extends ChangeNotifier {
       if (StreamingSpeechModelService.supportedModelIds.contains(modelId)) {
         await _selectIfNoUsableLiveModel(modelId);
       }
-      if (LanguageModelService.supportedModelIds.contains(modelId)) {
+      if (_languageModels.supports(modelId)) {
         await _selectIfNoUsableAssistantModel(modelId);
       }
       transfer.status = ModelTransferStatus.completed;
@@ -604,7 +625,7 @@ class LocalModelManager extends ChangeNotifier {
         modelId != speechDenoiserId &&
         modelId != speakerDiarizationId &&
         modelId != kokoroTtsId &&
-        !LanguageModelService.supportedModelIds.contains(modelId) &&
+        !_languageModels.supports(modelId) &&
         !StreamingSpeechModelService.supportedModelIds.contains(modelId)) {
       return;
     }
@@ -640,7 +661,7 @@ class LocalModelManager extends ChangeNotifier {
         );
       } else if (modelId == kokoroTtsId) {
         imported = await _kokoroTtsModels.pickAndImport(onProgress: progress);
-      } else if (LanguageModelService.supportedModelIds.contains(modelId)) {
+      } else if (_languageModels.supports(modelId)) {
         imported = await _languageModels.pickAndImport(
           modelId,
           onProgress: progress,
@@ -657,7 +678,7 @@ class LocalModelManager extends ChangeNotifier {
         if (StreamingSpeechModelService.supportedModelIds.contains(modelId)) {
           await _selectIfNoUsableLiveModel(modelId);
         }
-        if (LanguageModelService.supportedModelIds.contains(modelId)) {
+        if (_languageModels.supports(modelId)) {
           await _selectIfNoUsableAssistantModel(modelId);
         }
         transfer.status = ModelTransferStatus.completed;
@@ -727,14 +748,14 @@ class LocalModelManager extends ChangeNotifier {
         throw StateError('请先停止正在进行的笔记朗读');
       }
       await _kokoroTtsModels.remove();
-    } else if (LanguageModelService.supportedModelIds.contains(modelId)) {
+    } else if (_languageModels.supports(modelId)) {
       if (LocalAssistantService.instance.loadedModelId == modelId) {
         throw StateError('请先结束正在进行的本地助手任务并释放模型');
       }
       await _languageModels.remove(modelId);
       if (_selectedAssistantModelId == modelId) {
         String? replacement;
-        for (final candidate in LanguageModelService.supportedModelIds) {
+        for (final candidate in _languageModels.modelIds) {
           if (candidate == modelId) continue;
           if ((await _languageModels.inspect(candidate)).installed) {
             replacement = candidate;
@@ -806,8 +827,41 @@ class LocalModelManager extends ChangeNotifier {
     }
   }
 
+  Future<void> registerRemoteModel(TaobaoMnnModelSpec model) async {
+    if (_languageModels.curatedRepositories.contains(
+      model.repository.toLowerCase(),
+    )) {
+      return;
+    }
+    _languageModels.registerRemoteModels([model]);
+    _remoteDefinitions[model.id] = _remoteDefinition(model);
+    await initialize(force: true);
+  }
+
+  LocalModelDefinition _remoteDefinition(TaobaoMnnModelSpec model) =>
+      LocalModelDefinition(
+        id: model.id,
+        name: model.name,
+        summary: model.collection,
+        description:
+            'Official MNN model synchronized from taobao-mnn Collections.',
+        category: LocalModelCategory.language,
+        availability: LocalModelAvailability.downloadable,
+        task: LocalModelTask.textGeneration,
+        downloadSizeBytes: model.downloadSizeBytes,
+        languages: model.languages,
+        engine: 'MNN · taobao-mnn',
+        version: model.revision.substring(0, 8),
+        source: model.repository,
+        license: model.license,
+        recommendedMemoryBytes: model.recommendedMemoryBytes,
+        remote: true,
+        repository: model.repository,
+        revision: model.revision,
+      );
+
   LocalModelDefinition _definition(String id) =>
-      catalog.firstWhere((model) => model.id == id);
+      models.firstWhere((model) => model.id == id);
 
   String _friendlyError(Object error) {
     if (error is TimeoutException) {

@@ -420,6 +420,105 @@ class AppLocalizationsEn extends AppLocalizations {
       'Download and choose the model used by Local Assistant. The default context is 4096 tokens.';
 
   @override
+  String get discoverMnnModels => 'Discover MNN models';
+
+  @override
+  String get discoverMnnModelsDescription =>
+      'Browse public language models synchronized directly from taobao-mnn Collections.';
+
+  @override
+  String get browseModels => 'Browse models';
+
+  @override
+  String get refreshCatalog => 'Refresh catalog';
+
+  @override
+  String get syncingModelCatalog => 'Syncing model catalog…';
+
+  @override
+  String modelCatalogSyncFailed(String error) {
+    return 'Couldn\'t refresh the model catalog: $error';
+  }
+
+  @override
+  String get cachedCatalogInUse =>
+      'Showing the last successfully synchronized catalog';
+
+  @override
+  String get searchMnnModels => 'Search MNN models';
+
+  @override
+  String get noMnnModelsFound => 'No matching MNN models';
+
+  @override
+  String get officialMnnCollection => 'Official taobao-mnn Collection';
+
+  @override
+  String downloadCount(int count) {
+    return '$count downloads';
+  }
+
+  @override
+  String get checkingModelCompatibility => 'Checking model compatibility…';
+
+  @override
+  String get modelCompatibilityPassed =>
+      'MNN file and configuration checks passed';
+
+  @override
+  String modelCompatibilityFailed(String error) {
+    return 'This model can\'t be added: $error';
+  }
+
+  @override
+  String get pinnedCommit => 'Pinned commit';
+
+  @override
+  String get modelFileCount => 'Model files';
+
+  @override
+  String fileCountValue(int count) {
+    return '$count files';
+  }
+
+  @override
+  String get modelCapabilities => 'Capabilities';
+
+  @override
+  String get textGenerationCapability => 'Text generation';
+
+  @override
+  String get imageInputCapability => 'Image input';
+
+  @override
+  String get audioInputCapability => 'Audio input';
+
+  @override
+  String get reasoningCapability => 'Reasoning';
+
+  @override
+  String get toolCallingCapability => 'Tool calling';
+
+  @override
+  String get addAndDownloadModel => 'Add and download';
+
+  @override
+  String get modelAddedToManager => 'Model added to Local models';
+
+  @override
+  String get recommendedModelsAlreadyListed =>
+      'FKNotes recommended models are already shown on the previous page.';
+
+  @override
+  String remoteMnnModelSummary(String collection) {
+    return 'Official model from $collection';
+  }
+
+  @override
+  String get remoteMnnModelDescription =>
+      'Synchronized from taobao-mnn Collections. The repository revision and every model file are verified before installation.';
+
+  @override
   String get liveDictationSettings => 'Live dictation settings';
 
   @override

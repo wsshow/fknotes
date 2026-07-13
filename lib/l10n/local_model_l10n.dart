@@ -22,6 +22,7 @@ String localizedModelSummary(
   AppLocalizations l10n,
   LocalModelDefinition model,
 ) {
+  if (model.remote) return l10n.remoteMnnModelSummary(model.summary);
   if (_usesChinese(l10n)) return model.summary;
   return switch (model.id) {
     LocalModelManager.miniCpm5Id => 'Lightweight, fast local note assistant',
@@ -60,6 +61,7 @@ String localizedModelDescription(
   AppLocalizations l10n,
   LocalModelDefinition model,
 ) {
+  if (model.remote) return l10n.remoteMnnModelDescription;
   if (_usesChinese(l10n)) return model.description;
   return switch (model.id) {
     LocalModelManager.miniCpm5Id =>

@@ -6,11 +6,13 @@ import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 
 import '../models/local_llm.dart';
+import '../models/taobao_mnn_model.dart';
 import 'file_storage_service.dart';
 import 'model_download_source_policy.dart';
 import 'model_download_transport.dart';
 import 'model_install_coordinator.dart';
 import 'speech_model_service.dart';
+import 'taobao_mnn_catalog_service.dart';
 
 class LanguageModelInfo {
   final String modelId;
@@ -31,9 +33,15 @@ class LanguageModelInfo {
 class _LanguageModelFile {
   final String name;
   final int sizeBytes;
-  final String sha256;
+  final String? sha256;
+  final String? gitBlobId;
 
-  const _LanguageModelFile(this.name, this.sizeBytes, this.sha256);
+  const _LanguageModelFile(
+    this.name,
+    this.sizeBytes,
+    this.sha256, {
+    this.gitBlobId,
+  });
 }
 
 class _LanguageModelSpec {
@@ -42,6 +50,7 @@ class _LanguageModelSpec {
   final String storageFolder;
   final String repository;
   final String revision;
+  final String license;
   final int nativeContextTokens;
   final int minimumMemoryBytes;
   final LocalLlmCapabilities capabilities;
@@ -54,6 +63,7 @@ class _LanguageModelSpec {
     required this.storageFolder,
     required this.repository,
     required this.revision,
+    this.license = 'Apache-2.0',
     required this.nativeContextTokens,
     required this.minimumMemoryBytes,
     required this.capabilities,
@@ -538,9 +548,57 @@ class LanguageModelService {
 
   final _storage = FileStorageService.instance;
   final Set<String> _busyModelIds = {};
+  final Map<String, _LanguageModelSpec> _dynamicSpecs = {};
+  bool _remoteCacheLoaded = false;
+
+  List<String> get modelIds => [
+    ...supportedModelIds,
+    ..._dynamicSpecs.keys.where((id) => !supportedModelIds.contains(id)),
+  ];
+  Set<String> get curatedRepositories =>
+      _specs.map((spec) => spec.repository.toLowerCase()).toSet();
+  bool supports(String id) =>
+      supportedModelIds.contains(id) || _dynamicSpecs.containsKey(id);
+
+  void registerRemoteModels(Iterable<TaobaoMnnModelSpec> models) {
+    for (final model in models) {
+      if (curatedRepositories.contains(model.repository.toLowerCase())) {
+        continue;
+      }
+      final folderHash = sha1
+          .convert(utf8.encode(model.repository.toLowerCase()))
+          .toString()
+          .substring(0, 10);
+      final safeName = model.name
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+          .replaceAll(RegExp(r'^-+|-+$'), '');
+      _dynamicSpecs[model.id] = _LanguageModelSpec(
+        id: model.id,
+        displayName: model.name,
+        storageFolder: 'remote-$safeName-$folderHash',
+        repository: model.repository,
+        revision: model.revision,
+        license: model.license,
+        nativeContextTokens: model.nativeContextTokens,
+        minimumMemoryBytes: model.recommendedMemoryBytes,
+        capabilities: model.capabilities,
+        generationOptions: model.generationOptions,
+        files: [
+          for (final file in model.files)
+            _LanguageModelFile(
+              file.name,
+              file.sizeBytes,
+              file.sha256,
+              gitBlobId: file.gitBlobId,
+            ),
+        ],
+      );
+    }
+  }
 
   _LanguageModelSpec _spec(String id) =>
-      _specs.firstWhere((spec) => spec.id == id);
+      _dynamicSpecs[id] ?? _specs.firstWhere((spec) => spec.id == id);
 
   String _root(_LanguageModelSpec spec) =>
       p.join(_storage.baseDir, 'models', 'llm', spec.storageFolder);
@@ -557,17 +615,26 @@ class LanguageModelService {
   LocalLlmCapabilities capabilities(String id) => _spec(id).capabilities;
 
   Future<String> selectedModelId() async {
+    await _ensureRemoteModelsLoaded();
     final file = File(_selectionPath);
     if (!await file.exists()) return qwen35Id;
     try {
       final json = jsonDecode(await file.readAsString());
       final id = json is Map ? json['modelId'] : null;
-      return id is String && supportedModelIds.contains(id) ? id : qwen35Id;
+      return id is String && supports(id) ? id : qwen35Id;
     } on FormatException {
       return qwen35Id;
     } on FileSystemException {
       return qwen35Id;
     }
+  }
+
+  Future<void> _ensureRemoteModelsLoaded() async {
+    if (_remoteCacheLoaded) return;
+    final catalog = TaobaoMnnCatalogService.instance;
+    await catalog.loadCache();
+    registerRemoteModels(catalog.cachedDetails);
+    _remoteCacheLoaded = true;
   }
 
   Future<void> selectModel(String id) async {
@@ -808,7 +875,7 @@ class LanguageModelService {
           }
         }
         await File(p.join(staging.path, 'LICENSE.txt')).writeAsString(
-          'Model license: Apache License 2.0\n'
+          'Model license: ${spec.license.isEmpty ? 'Not specified' : spec.license}\n'
           'Upstream: https://huggingface.co/${spec.repository}\n',
           flush: true,
         );
@@ -819,7 +886,7 @@ class LanguageModelService {
             'engine': 'mnn',
             'repository': spec.repository,
             'revision': spec.revision,
-            'license': 'Apache-2.0',
+            'license': spec.license,
           }),
           flush: true,
         );
@@ -874,8 +941,21 @@ class LanguageModelService {
     if (!await file.exists() || await file.length() != definition.sizeBytes) {
       return false;
     }
-    final digest = await sha256.bind(file.openRead()).first;
-    return digest.toString() == definition.sha256;
+    final expectedSha256 = definition.sha256;
+    if (expectedSha256 != null && expectedSha256.isNotEmpty) {
+      final digest = await sha256.bind(file.openRead()).first;
+      return digest.toString() == expectedSha256;
+    }
+    final expectedBlob = definition.gitBlobId;
+    if (expectedBlob == null || expectedBlob.isEmpty) return false;
+    final output = _DigestSink();
+    final sink = sha1.startChunkedConversion(output);
+    sink.add(utf8.encode('blob ${definition.sizeBytes}\u0000'));
+    await for (final chunk in file.openRead()) {
+      sink.add(chunk);
+    }
+    sink.close();
+    return output.value?.toString() == expectedBlob;
   }
 
   Future<T> _runExclusive<T>(String id, Future<T> Function() operation) async {
@@ -895,4 +975,14 @@ class LanguageModelService {
       await source.rename(destination.path);
     }
   }
+}
+
+class _DigestSink implements Sink<Digest> {
+  Digest? value;
+
+  @override
+  void add(Digest data) => value = data;
+
+  @override
+  void close() {}
 }
