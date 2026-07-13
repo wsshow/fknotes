@@ -918,6 +918,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String get recommended => 'Recommended';
 
   @override
+  String get modelTransfers => 'Downloads and resumable models';
+
+  @override
+  String get modelTransfersDescription =>
+      'Review models that are transferring, need attention, or have saved download progress. Completed models leave this list automatically.';
+
+  @override
+  String modelTransferSectionCount(int count) {
+    return 'Downloads and resumable models ($count)';
+  }
+
+  @override
+  String modelTransferSummary(int active, int resumable) {
+    return '$active running · $resumable ready to resume';
+  }
+
+  @override
+  String get noModelTransfers =>
+      'No models are transferring or waiting to resume';
+
+  @override
+  String get otherModels => 'Other models';
+
+  @override
   String get currentDictation => 'Current dictation';
 
   @override
@@ -965,7 +989,35 @@ class AppLocalizationsEn extends AppLocalizations {
   String get download => 'Download';
 
   @override
-  String get cancelingDownload => 'Canceling and keeping downloaded data…';
+  String get pauseDownload => 'Pause';
+
+  @override
+  String get cancelingDownload => 'Pausing and keeping downloaded data…';
+
+  @override
+  String downloadedResumable(String amount) {
+    return '$amount downloaded · Ready to resume';
+  }
+
+  @override
+  String get moreActions => 'More actions';
+
+  @override
+  String get discardPartialDownload => 'Delete downloaded data';
+
+  @override
+  String discardPartialDownloadQuestion(String name) {
+    return 'Delete download progress for $name?';
+  }
+
+  @override
+  String discardPartialDownloadDescription(String size) {
+    return 'This removes the downloaded $size. The next download will start from the beginning.';
+  }
+
+  @override
+  String get discardPartialDownloadFailed =>
+      'Could not delete the downloaded data. Try again later.';
 
   @override
   String connectingDownloadSource(String source) {

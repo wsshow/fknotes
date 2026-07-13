@@ -1568,6 +1568,42 @@ abstract class AppLocalizations {
   /// **'推荐'**
   String get recommended;
 
+  /// No description provided for @modelTransfers.
+  ///
+  /// In zh, this message translates to:
+  /// **'下载与待继续'**
+  String get modelTransfers;
+
+  /// No description provided for @modelTransfersDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'集中查看正在传输、等待处理以及保留了下载进度的模型。已完成的模型会自动离开这里。'**
+  String get modelTransfersDescription;
+
+  /// No description provided for @modelTransferSectionCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'下载与待继续（{count}）'**
+  String modelTransferSectionCount(int count);
+
+  /// No description provided for @modelTransferSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'{active} 项进行中 · {resumable} 项待继续'**
+  String modelTransferSummary(int active, int resumable);
+
+  /// No description provided for @noModelTransfers.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前没有正在传输或等待继续的模型'**
+  String get noModelTransfers;
+
+  /// No description provided for @otherModels.
+  ///
+  /// In zh, this message translates to:
+  /// **'其他模型'**
+  String get otherModels;
+
   /// No description provided for @currentDictation.
   ///
   /// In zh, this message translates to:
@@ -1658,11 +1694,53 @@ abstract class AppLocalizations {
   /// **'下载'**
   String get download;
 
+  /// No description provided for @pauseDownload.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂停'**
+  String get pauseDownload;
+
   /// No description provided for @cancelingDownload.
   ///
   /// In zh, this message translates to:
-  /// **'正在取消并保留已下载内容…'**
+  /// **'正在暂停并保留已下载内容…'**
   String get cancelingDownload;
+
+  /// No description provided for @downloadedResumable.
+  ///
+  /// In zh, this message translates to:
+  /// **'已下载 {amount}，可继续'**
+  String downloadedResumable(String amount);
+
+  /// No description provided for @moreActions.
+  ///
+  /// In zh, this message translates to:
+  /// **'更多操作'**
+  String get moreActions;
+
+  /// No description provided for @discardPartialDownload.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除已下载部分'**
+  String get discardPartialDownload;
+
+  /// No description provided for @discardPartialDownloadQuestion.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除 {name} 的下载进度？'**
+  String discardPartialDownloadQuestion(String name);
+
+  /// No description provided for @discardPartialDownloadDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'将删除已下载的 {size}，下次需要从头下载。'**
+  String discardPartialDownloadDescription(String size);
+
+  /// No description provided for @discardPartialDownloadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法删除已下载部分，请稍后重试'**
+  String get discardPartialDownloadFailed;
 
   /// No description provided for @connectingDownloadSource.
   ///

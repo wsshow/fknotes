@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:fknotes/app.dart';
 import 'package:fknotes/l10n/generated/app_localizations.dart';
 import 'package:fknotes/models/local_model.dart';
 import 'package:fknotes/pages/model_management_page.dart';
@@ -125,7 +126,7 @@ void main() {
     tester,
   ) async {
     tester.view.devicePixelRatio = 3;
-    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.physicalSize = const Size(1080, 9000);
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(const MaterialApp(home: ModelManagementPage()));
@@ -141,6 +142,13 @@ void main() {
     expect(find.text('语言模型'), findsOneWidget);
     expect(find.text('语音模型'), findsOneWidget);
     expect(find.text('视觉模型'), findsOneWidget);
+    expect(find.text('下载与待继续'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('下载与存储'),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
     expect(find.text('下载与存储'), findsOneWidget);
     expect(find.text('ML Kit 中文文字识别'), findsOneWidget);
     expect(find.text('Qwen3.5 2B INT4'), findsNothing);
@@ -178,7 +186,7 @@ void main() {
     expect(find.byType(BottomSheet), findsOneWidget);
   });
 
-  testWidgets('download actions fill the model card width on phones', (
+  testWidgets('fresh download action is compact and visually secondary', (
     tester,
   ) async {
     tester.view.devicePixelRatio = 3;
@@ -212,8 +220,120 @@ void main() {
 
     expect(importButton.left, closeTo(card.left + 16, 1.1));
     expect(downloadButton.right, closeTo(card.right - 16, 1.1));
-    expect(importButton.width, closeTo(downloadButton.width, 1.1));
-    expect(downloadButton.left - importButton.right, closeTo(10, 1.1));
+    expect(downloadButton.width, lessThan(card.width * .5));
+    expect(downloadButton.left - importButton.right, greaterThan(16));
+    final button = tester.widget<FilledButton>(
+      find.byKey(Key('model-download-$modelId')),
+    );
+    expect(
+      button.style?.backgroundColor?.resolve(<WidgetState>{}),
+      AppColors.softGreen,
+    );
+  });
+
+  testWidgets('recommended badge follows the model description', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 3;
+    tester.view.physicalSize = const Size(1080, 2400);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: ModelManagementPage(category: LocalModelCategory.language),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('可获取'));
+    await tester.pumpAndSettle();
+
+    final card = find.byKey(
+      const Key('model-card-${LocalModelManager.qwen3Vl4BId}'),
+    );
+    await tester.scrollUntilVisible(
+      card,
+      350,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    final description = find.descendant(
+      of: card,
+      matching: find.text('均衡的多语言图文理解模型'),
+    );
+    final badge = find.descendant(of: card, matching: find.text('推荐'));
+    expect(description, findsOneWidget);
+    expect(badge, findsOneWidget);
+    expect(
+      tester.getTopLeft(description).dy,
+      lessThan(tester.getTopLeft(badge).dy),
+    );
+  });
+
+  testWidgets('resumable models are pinned once above regular filters', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 3;
+    tester.view.physicalSize = const Size(1080, 9000);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: ModelManagementPage(category: LocalModelCategory.speech),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final card = find.byKey(
+      const Key('model-card-${LocalModelManager.voiceActivityId}'),
+    );
+    final filter = find.byKey(const Key('model-installation-filter'));
+    expect(find.textContaining('下载与待继续（'), findsOneWidget);
+    expect(card, findsOneWidget);
+    expect(tester.getTopLeft(card).dy, lessThan(tester.getTopLeft(filter).dy));
+    expect(
+      find.descendant(of: card, matching: find.text('继续下载')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: card,
+        matching: find.byKey(
+          const Key('model-partial-menu-${LocalModelManager.voiceActivityId}'),
+        ),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('可获取'));
+    await tester.pumpAndSettle();
+    expect(card, findsOneWidget);
+  });
+
+  testWidgets('overview transfer entry opens the unified task page', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 3;
+    tester.view.physicalSize = const Size(1080, 2400);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(const MaterialApp(home: ModelManagementPage()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('model-transfer-tasks-link')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('下载与待继续'), findsOneWidget);
+    expect(find.textContaining('集中查看正在传输'), findsOneWidget);
+    final resumableCard = find.byKey(
+      const Key('model-card-${LocalModelManager.voiceActivityId}'),
+    );
+    await tester.scrollUntilVisible(
+      resumableCard,
+      350,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(resumableCard, findsOneWidget);
   });
 
   testWidgets('focused model entry opens its category and availability', (

@@ -20,6 +20,7 @@ class ModelManagementPage extends StatefulWidget {
   final LocalModelCategory? category;
   final bool showDictationSettings;
   final bool showDownloadSettings;
+  final bool showTransferTasks;
 
   const ModelManagementPage({
     super.key,
@@ -27,6 +28,7 @@ class ModelManagementPage extends StatefulWidget {
     this.category,
     this.showDictationSettings = false,
     this.showDownloadSettings = false,
+    this.showTransferTasks = false,
   });
 
   @override
@@ -74,6 +76,7 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
   Widget build(BuildContext context) {
     if (widget.showDictationSettings) return _buildDictationSettings(context);
     if (widget.showDownloadSettings) return _buildDownloadSettings(context);
+    if (widget.showTransferTasks) return _buildTransferTasks(context);
     final category = widget.category ?? _focusedCategory;
     if (category != null) return _buildCategory(context, category);
     return _buildOverview(context);
@@ -91,6 +94,7 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
 
   Widget _buildOverview(BuildContext context) {
     final active = _manager.activeModels(_preferences);
+    final transferModels = _sortedTransferModels(_manager.models);
     final activeSize = active.fold<int>(
       0,
       (total, item) => total + item.installation.installedSizeBytes,
@@ -113,6 +117,16 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
               installedSizeBytes: activeSize,
               activeOnly: true,
             ),
+            if (transferModels.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              _ModelCategoryLink(
+                key: const Key('model-transfer-tasks-link'),
+                icon: Icons.downloading_rounded,
+                title: context.l10n.modelTransfers,
+                subtitle: _transferTaskSummary(transferModels),
+                onTap: _openTransferTasks,
+              ),
+            ],
             const SizedBox(height: 26),
             _sectionTitle(context.l10n.modelsInUse),
             const SizedBox(height: 12),
@@ -179,11 +193,14 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
     final showInstalled = focusedId == null
         ? _showInstalledModels
         : focusInstalled;
+    final transferModels = _sortedTransferModels(models);
+    final transferModelIds = transferModels.map((model) => model.id).toSet();
     final visible = models.where((model) {
       final installed =
           model.availability == LocalModelAvailability.builtIn ||
           _manager.installationOf(model.id).installed;
-      return showInstalled ? installed : !installed;
+      return !transferModelIds.contains(model.id) &&
+          (showInstalled ? installed : !installed);
     }).toList();
     return Scaffold(
       backgroundColor: AppColors.canvas,
@@ -219,6 +236,22 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
                 onTap: _openDictationSettings,
               ),
             ],
+            if (transferModels.isNotEmpty) ...[
+              const SizedBox(height: 22),
+              _TransferSectionHeader(
+                count: transferModels.length,
+                subtitle: _transferTaskSummary(transferModels),
+              ),
+              const SizedBox(height: 12),
+              for (var index = 0; index < transferModels.length; index++) ...[
+                _modelCard(
+                  transferModels[index],
+                  emphasized: transferModels[index].id == focusedId,
+                ),
+                if (index != transferModels.length - 1)
+                  const SizedBox(height: 12),
+              ],
+            ],
             const SizedBox(height: 20),
             SegmentedButton<bool>(
               key: const Key('model-installation-filter'),
@@ -241,6 +274,10 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
                         setState(() => _showInstalledModels = value.first),
             ),
             const SizedBox(height: 18),
+            if (transferModels.isNotEmpty) ...[
+              _sectionTitle(context.l10n.otherModels),
+              const SizedBox(height: 12),
+            ],
             if (visible.isEmpty)
               EmptyState(
                 icon: showInstalled
@@ -252,24 +289,9 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
               )
             else
               for (var index = 0; index < visible.length; index++) ...[
-                _ModelCard(
-                  definition: visible[index],
-                  installation: _manager.installationOf(visible[index].id),
-                  transfer: _manager.transferOf(visible[index].id),
+                _modelCard(
+                  visible[index],
                   emphasized: visible[index].id == focusedId,
-                  selectedForLiveDictation:
-                      visible[index].id ==
-                      _manager.selectedLiveDictationModelId,
-                  selectedForAssistant:
-                      visible[index].id == _manager.selectedAssistantModelId,
-                  onDownload: () => _confirmDownload(visible[index]),
-                  onImport: () => _manager.import(visible[index].id),
-                  onCancel: () => _manager.cancel(visible[index].id),
-                  onRemove: () => _confirmRemove(visible[index]),
-                  onSelect: () => category == LocalModelCategory.language
-                      ? _selectForAssistant(visible[index])
-                      : _selectForLiveDictation(visible[index]),
-                  onDetails: () => _showDetails(visible[index]),
                 ),
                 if (index != visible.length - 1) const SizedBox(height: 12),
               ],
@@ -277,6 +299,103 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
         ),
       ),
     );
+  }
+
+  Widget _buildTransferTasks(BuildContext context) {
+    final models = _sortedTransferModels(_manager.models);
+    return Scaffold(
+      backgroundColor: AppColors.canvas,
+      appBar: AppBar(title: Text(context.l10n.modelTransfers)),
+      body: SafeArea(
+        top: false,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
+          children: [
+            Text(
+              context.l10n.modelTransfersDescription,
+              style: const TextStyle(color: AppColors.muted, height: 1.5),
+            ),
+            const SizedBox(height: 18),
+            if (models.isEmpty)
+              EmptyState(
+                icon: Icons.download_done_rounded,
+                message: context.l10n.noModelTransfers,
+              )
+            else
+              for (var index = 0; index < models.length; index++) ...[
+                _modelCard(models[index]),
+                if (index != models.length - 1) const SizedBox(height: 12),
+              ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _modelCard(LocalModelDefinition model, {bool emphasized = false}) =>
+      _ModelCard(
+        definition: model,
+        installation: _manager.installationOf(model.id),
+        transfer: _manager.transferOf(model.id),
+        emphasized: emphasized,
+        selectedForLiveDictation:
+            model.id == _manager.selectedLiveDictationModelId,
+        selectedForAssistant: model.id == _manager.selectedAssistantModelId,
+        onDownload: () => _confirmDownload(model),
+        onImport: () => _manager.import(model.id),
+        onCancel: () => _manager.cancel(model.id),
+        onDiscardPartial: () => _confirmDiscardPartial(model),
+        onRemove: () => _confirmRemove(model),
+        onSelect: () => model.category == LocalModelCategory.language
+            ? _selectForAssistant(model)
+            : _selectForLiveDictation(model),
+        onDetails: () => _showDetails(model),
+      );
+
+  List<LocalModelDefinition> _sortedTransferModels(
+    Iterable<LocalModelDefinition> source,
+  ) {
+    final result = source.where(_isTransferModel).toList();
+    result.sort((left, right) {
+      final rank = _transferRank(left).compareTo(_transferRank(right));
+      if (rank != 0) return rank;
+      return localizedModelName(
+        context.l10n,
+        left,
+      ).compareTo(localizedModelName(context.l10n, right));
+    });
+    return result;
+  }
+
+  bool _isTransferModel(LocalModelDefinition model) {
+    final installation = _manager.installationOf(model.id);
+    if (installation.installed) return false;
+    final transfer = _manager.transferOf(model.id);
+    return installation.partialSizeBytes > 0 ||
+        transfer?.isRunning == true ||
+        transfer?.status == ModelTransferStatus.failed ||
+        transfer?.status == ModelTransferStatus.canceled;
+  }
+
+  int _transferRank(LocalModelDefinition model) {
+    final status = _manager.transferOf(model.id)?.status;
+    return switch (status) {
+      ModelTransferStatus.downloading || ModelTransferStatus.importing => 0,
+      ModelTransferStatus.connecting => 1,
+      ModelTransferStatus.waitingToInstall ||
+      ModelTransferStatus.verifying ||
+      ModelTransferStatus.canceling => 2,
+      ModelTransferStatus.failed => 3,
+      ModelTransferStatus.canceled => 4,
+      _ => 5,
+    };
+  }
+
+  String _transferTaskSummary(List<LocalModelDefinition> models) {
+    final active = models.where((model) {
+      return _manager.transferOf(model.id)?.isRunning == true;
+    }).length;
+    return context.l10n.modelTransferSummary(active, models.length - active);
   }
 
   Widget _buildDictationSettings(BuildContext context) {
@@ -412,6 +531,16 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
       context,
       MaterialPageRoute(
         builder: (_) => const ModelManagementPage(showDownloadSettings: true),
+      ),
+    );
+    if (mounted) await _manager.initialize(force: true);
+  }
+
+  Future<void> _openTransferTasks() async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const ModelManagementPage(showTransferTasks: true),
       ),
     );
     if (mounted) await _manager.initialize(force: true);
@@ -555,6 +684,42 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
           context,
           error.toString().replaceFirst('Bad state: ', ''),
         );
+      }
+    }
+  }
+
+  Future<void> _confirmDiscardPartial(LocalModelDefinition model) async {
+    final size = _manager.installationOf(model.id).partialSizeBytes;
+    if (size <= 0) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          context.l10n.discardPartialDownloadQuestion(
+            localizedModelName(context.l10n, model),
+          ),
+        ),
+        content: Text(
+          context.l10n.discardPartialDownloadDescription(_formatBytes(size)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(context.l10n.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(context.l10n.discardPartialDownload),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await _manager.remove(model.id);
+    } catch (_) {
+      if (mounted) {
+        AppFeedback.error(context, context.l10n.discardPartialDownloadFailed);
       }
     }
   }
@@ -1160,6 +1325,7 @@ class _ModelCategoryLink extends StatelessWidget {
   final VoidCallback onTap;
 
   const _ModelCategoryLink({
+    super.key,
     required this.icon,
     required this.title,
     required this.subtitle,
@@ -1217,6 +1383,56 @@ class _ModelCategoryLink extends StatelessWidget {
         ),
       ),
     ),
+  );
+}
+
+class _TransferSectionHeader extends StatelessWidget {
+  final int count;
+  final String subtitle;
+
+  const _TransferSectionHeader({required this.count, required this.subtitle});
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: AppColors.softGreen,
+          borderRadius: BorderRadius.circular(11),
+        ),
+        child: const Icon(
+          Icons.downloading_rounded,
+          size: 20,
+          color: AppColors.moss,
+        ),
+      ),
+      const SizedBox(width: 10),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              context.l10n.modelTransferSectionCount(count),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: const TextStyle(
+                color: AppColors.muted,
+                fontSize: 12,
+                height: 1.35,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ],
   );
 }
 
@@ -1455,6 +1671,7 @@ class _ModelCard extends StatelessWidget {
   final VoidCallback onDownload;
   final VoidCallback onImport;
   final VoidCallback onCancel;
+  final VoidCallback onDiscardPartial;
   final VoidCallback onRemove;
   final VoidCallback onSelect;
   final VoidCallback onDetails;
@@ -1468,6 +1685,7 @@ class _ModelCard extends StatelessWidget {
     required this.onDownload,
     required this.onImport,
     required this.onCancel,
+    required this.onDiscardPartial,
     required this.onRemove,
     required this.onSelect,
     required this.onDetails,
@@ -1525,37 +1743,6 @@ class _ModelCard extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    if (definition.recommended ||
-                        (selectedForLiveDictation &&
-                            definition.task == LocalModelTask.liveDictation) ||
-                        (selectedForAssistant &&
-                            installation.installed &&
-                            definition.category ==
-                                LocalModelCategory.language)) ...[
-                      const SizedBox(height: 7),
-                      Wrap(
-                        spacing: 7,
-                        runSpacing: 7,
-                        children: [
-                          if (definition.recommended)
-                            _StatusBadge(label: context.l10n.recommended),
-                          if (selectedForLiveDictation &&
-                              definition.task == LocalModelTask.liveDictation)
-                            _StatusBadge(
-                              label: context.l10n.currentDictation,
-                              installed: installation.installed,
-                            ),
-                          if (selectedForAssistant &&
-                              installation.installed &&
-                              definition.category ==
-                                  LocalModelCategory.language)
-                            _StatusBadge(
-                              label: context.l10n.currentAssistant,
-                              installed: true,
-                            ),
-                        ],
-                      ),
-                    ],
                     const SizedBox(height: 4),
                     Text(
                       localizedModelSummary(context.l10n, definition),
@@ -1576,6 +1763,21 @@ class _ModelCard extends StatelessWidget {
             spacing: 7,
             runSpacing: 7,
             children: [
+              if (definition.recommended)
+                _StatusBadge(label: context.l10n.recommended),
+              if (selectedForLiveDictation &&
+                  definition.task == LocalModelTask.liveDictation)
+                _StatusBadge(
+                  label: context.l10n.currentDictation,
+                  installed: installation.installed,
+                ),
+              if (selectedForAssistant &&
+                  installation.installed &&
+                  definition.category == LocalModelCategory.language)
+                _StatusBadge(
+                  label: context.l10n.currentAssistant,
+                  installed: true,
+                ),
               _MetaChip(label: definition.engine),
               if (definition.downloadSizeBytes > 0)
                 _MetaChip(label: _formatBytes(definition.downloadSizeBytes)),
@@ -1602,36 +1804,7 @@ class _ModelCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
             ),
             const SizedBox(height: 9),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(child: _transferStatus(context, transfer!)),
-                const SizedBox(width: 8),
-                if (transfer!.status == ModelTransferStatus.verifying ||
-                    transfer!.status == ModelTransferStatus.canceling ||
-                    !transfer!.cancelable)
-                  SizedBox(
-                    width: 64,
-                    child: Center(
-                      child: Text(
-                        context.l10n.pleaseWait,
-                        style: const TextStyle(
-                          color: AppColors.muted,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  )
-                else
-                  SizedBox(
-                    width: 64,
-                    child: TextButton(
-                      onPressed: onCancel,
-                      child: Text(context.l10n.cancel),
-                    ),
-                  ),
-              ],
-            ),
+            _transferStatus(context, transfer!),
           ] else ...[
             const SizedBox(height: 15),
             _actions(context),
@@ -1651,18 +1824,34 @@ class _ModelCard extends StatelessWidget {
   Widget _transferStatus(BuildContext context, ModelTransferState state) {
     if (state.status == ModelTransferStatus.importing &&
         state.totalBytes <= 0) {
-      return Text(
-        context.l10n.preparingLocalModelImport,
-        style: const TextStyle(color: AppColors.muted, fontSize: 12),
+      return Row(
+        children: [
+          Expanded(
+            child: Text(
+              context.l10n.preparingLocalModelImport,
+              style: const TextStyle(color: AppColors.muted, fontSize: 12),
+            ),
+          ),
+          const SizedBox(width: 8),
+          _transferAction(context, state),
+        ],
       );
     }
     if (state.status != ModelTransferStatus.downloading &&
         state.status != ModelTransferStatus.importing) {
-      return Text(
-        _transferDescription(context, state),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(color: AppColors.muted, fontSize: 12),
+      return Row(
+        children: [
+          Expanded(
+            child: Text(
+              _transferDescription(context, state),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: AppColors.muted, fontSize: 12),
+            ),
+          ),
+          const SizedBox(width: 8),
+          _transferAction(context, state),
+        ],
       );
     }
     const numberStyle = TextStyle(
@@ -1718,31 +1907,61 @@ class _ModelCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                    source,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.muted,
-                      fontSize: 12,
-                    ),
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          source,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.muted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      const Text(
+                        ' · ',
+                        style: TextStyle(color: AppColors.muted, fontSize: 12),
+                      ),
+                      Text(speed, maxLines: 1, style: numberStyle),
+                    ],
                   ),
                 ),
                 const SizedBox(width: 8),
-                SizedBox(
-                  width: 88,
-                  child: Text(
-                    speed,
-                    maxLines: 1,
-                    textAlign: TextAlign.right,
-                    overflow: TextOverflow.clip,
-                    style: numberStyle,
-                  ),
-                ),
+                _transferAction(context, state),
               ],
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _transferAction(BuildContext context, ModelTransferState state) {
+    if (state.status == ModelTransferStatus.verifying ||
+        state.status == ModelTransferStatus.canceling ||
+        !state.cancelable) {
+      return SizedBox(
+        width: 64,
+        child: Center(
+          child: Text(
+            context.l10n.pleaseWait,
+            style: const TextStyle(color: AppColors.muted, fontSize: 12),
+          ),
+        ),
+      );
+    }
+    return SizedBox(
+      width: 64,
+      child: TextButton(
+        key: Key('model-pause-${definition.id}'),
+        onPressed: onCancel,
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          minimumSize: const Size(64, 36),
+        ),
+        child: Text(context.l10n.pauseDownload),
       ),
     );
   }
@@ -1808,10 +2027,10 @@ class _ModelCard extends StatelessWidget {
         ],
       );
     }
+    final hasPartial = installation.partialSizeBytes > 0;
+    final failed = transfer?.status == ModelTransferStatus.failed;
     final canContinue =
-        installation.partialSizeBytes > 0 ||
-        transfer?.status == ModelTransferStatus.canceled ||
-        transfer?.status == ModelTransferStatus.failed;
+        hasPartial || transfer?.status == ModelTransferStatus.canceled;
     return LayoutBuilder(
       builder: (context, constraints) {
         final importButton = TextButton.icon(
@@ -1821,26 +2040,102 @@ class _ModelCard extends StatelessWidget {
           icon: const Icon(Icons.folder_open_rounded, size: 19),
           label: Text(context.l10n.importFromFile),
         );
-        final downloadButton = FilledButton.icon(
-          key: Key('model-download-${definition.id}'),
-          style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
-          onPressed: onDownload,
-          icon: const Icon(Icons.download_rounded, size: 19),
-          label: Text(
-            canContinue ? context.l10n.continueDownload : context.l10n.download,
-          ),
-        );
-        if (constraints.maxWidth < 280) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [importButton, const SizedBox(height: 8), downloadButton],
+        final buttonKey = Key('model-download-${definition.id}');
+        final Widget downloadButton;
+        if (failed) {
+          downloadButton = OutlinedButton.icon(
+            key: buttonKey,
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(112, 48),
+              foregroundColor: AppColors.coral,
+              side: const BorderSide(color: AppColors.coral),
+            ),
+            onPressed: onDownload,
+            icon: const Icon(Icons.refresh_rounded, size: 19),
+            label: Text(context.l10n.retry),
+          );
+        } else if (canContinue) {
+          downloadButton = FilledButton.icon(
+            key: buttonKey,
+            style: FilledButton.styleFrom(minimumSize: const Size(112, 48)),
+            onPressed: onDownload,
+            icon: const Icon(Icons.play_arrow_rounded, size: 20),
+            label: Text(context.l10n.continueDownload),
+          );
+        } else {
+          downloadButton = FilledButton.tonalIcon(
+            key: buttonKey,
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(112, 48),
+              backgroundColor: AppColors.softGreen,
+              foregroundColor: AppColors.moss,
+            ),
+            onPressed: onDownload,
+            icon: const Icon(Icons.download_rounded, size: 19),
+            label: Text(context.l10n.download),
           );
         }
-        return Row(
+        final actionRow = constraints.maxWidth < 280
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Align(alignment: Alignment.centerLeft, child: importButton),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: downloadButton,
+                  ),
+                ],
+              )
+            : Row(
+                children: [
+                  importButton,
+                  const Spacer(),
+                  const SizedBox(width: 8),
+                  downloadButton,
+                ],
+              );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(child: importButton),
-            const SizedBox(width: 10),
-            Expanded(child: downloadButton),
+            if (hasPartial) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      context.l10n.downloadedResumable(
+                        _formatBytes(installation.partialSizeBytes),
+                      ),
+                      style: const TextStyle(
+                        color: AppColors.muted,
+                        fontSize: 12,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ),
+                  PopupMenuButton<void>(
+                    key: Key('model-partial-menu-${definition.id}'),
+                    tooltip: context.l10n.moreActions,
+                    padding: EdgeInsets.zero,
+                    icon: const Icon(Icons.more_horiz_rounded, size: 20),
+                    onSelected: (_) => onDiscardPartial(),
+                    itemBuilder: (context) => [
+                      PopupMenuItem<void>(
+                        child: Row(
+                          children: [
+                            const Icon(Icons.delete_sweep_outlined, size: 19),
+                            const SizedBox(width: 10),
+                            Text(context.l10n.discardPartialDownload),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+            ],
+            actionRow,
           ],
         );
       },

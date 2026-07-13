@@ -816,6 +816,29 @@ class AppLocalizationsZh extends AppLocalizations {
   String get recommended => '推荐';
 
   @override
+  String get modelTransfers => '下载与待继续';
+
+  @override
+  String get modelTransfersDescription =>
+      '集中查看正在传输、等待处理以及保留了下载进度的模型。已完成的模型会自动离开这里。';
+
+  @override
+  String modelTransferSectionCount(int count) {
+    return '下载与待继续（$count）';
+  }
+
+  @override
+  String modelTransferSummary(int active, int resumable) {
+    return '$active 项进行中 · $resumable 项待继续';
+  }
+
+  @override
+  String get noModelTransfers => '当前没有正在传输或等待继续的模型';
+
+  @override
+  String get otherModels => '其他模型';
+
+  @override
   String get currentDictation => '当前听写';
 
   @override
@@ -863,7 +886,34 @@ class AppLocalizationsZh extends AppLocalizations {
   String get download => '下载';
 
   @override
-  String get cancelingDownload => '正在取消并保留已下载内容…';
+  String get pauseDownload => '暂停';
+
+  @override
+  String get cancelingDownload => '正在暂停并保留已下载内容…';
+
+  @override
+  String downloadedResumable(String amount) {
+    return '已下载 $amount，可继续';
+  }
+
+  @override
+  String get moreActions => '更多操作';
+
+  @override
+  String get discardPartialDownload => '删除已下载部分';
+
+  @override
+  String discardPartialDownloadQuestion(String name) {
+    return '删除 $name 的下载进度？';
+  }
+
+  @override
+  String discardPartialDownloadDescription(String size) {
+    return '将删除已下载的 $size，下次需要从头下载。';
+  }
+
+  @override
+  String get discardPartialDownloadFailed => '无法删除已下载部分，请稍后重试';
 
   @override
   String connectingDownloadSource(String source) {
