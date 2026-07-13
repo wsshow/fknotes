@@ -441,6 +441,51 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get modelCatalogRefreshTimeout => 'Model catalog refresh timed out';
+
+  @override
+  String get modelCatalogRefreshTimeoutDescription =>
+      'The model service did not respond in time. Retry or switch the model network source.';
+
+  @override
+  String get modelCatalogOffline => 'Couldn\'t connect to the model service';
+
+  @override
+  String get modelCatalogOfflineDescription =>
+      'Check your connection or try another model network source.';
+
+  @override
+  String get modelCatalogServiceUnavailable =>
+      'Model service is temporarily unavailable';
+
+  @override
+  String get modelCatalogServiceUnavailableDescription =>
+      'The service isn\'t responding normally. Try again later.';
+
+  @override
+  String get modelCatalogAuthorizationRequired =>
+      'Some models require access approval';
+
+  @override
+  String get modelCatalogAuthorizationRequiredDescription =>
+      'This catalog contains models whose license must be accepted on Hugging Face before use.';
+
+  @override
+  String get modelCatalogInvalidResponse =>
+      'The model catalog can\'t be read right now';
+
+  @override
+  String get modelCatalogInvalidResponseDescription =>
+      'The service returned unrecognized data. Try again later.';
+
+  @override
+  String get modelCatalogCompatibilityUnavailable =>
+      'Model compatibility can\'t be checked right now';
+
+  @override
+  String get modelNetworkSourceSettings => 'Switch network source';
+
+  @override
   String get cachedCatalogInUse =>
       'Showing the last successfully synchronized catalog';
 

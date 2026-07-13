@@ -5,6 +5,9 @@ import 'dart:typed_data';
 import 'package:fknotes/models/taobao_mnn_model.dart';
 import 'package:fknotes/pages/taobao_mnn_catalog_page.dart';
 import 'package:fknotes/services/taobao_mnn_catalog_service.dart';
+import 'package:fknotes/services/model_catalog_http_client.dart';
+import 'package:fknotes/services/model_download_source_policy.dart';
+import 'package:path/path.dart' as p;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -91,6 +94,9 @@ void main() {
       MaterialApp(
         home: TaobaoMnnCatalogPage(
           service: service,
+          sourcePolicy: ModelDownloadSourcePolicy(
+            settingsPath: p.join(cache.path, 'source.json'),
+          ),
           curatedRepositories: const {},
           onInstall: (model) async => installed = model,
         ),
@@ -123,6 +129,50 @@ void main() {
     expect(installed?.repository, 'taobao-mnn/Qwen3-VL-Test-MNN');
     expect(installed?.capabilities.imageInput, isTrue);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('catalog timeout hides raw network exception details', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 3;
+    tester.view.physicalSize = const Size(1080, 2400);
+    addTearDown(tester.view.reset);
+    final cache = (await tester.runAsync(
+      () => Directory.systemTemp.createTemp('fknotes_catalog_timeout_'),
+    ))!;
+    addTearDown(
+      () => tester.runAsync(() async {
+        if (await cache.exists()) await cache.delete(recursive: true);
+      }),
+    );
+    final service = TaobaoMnnCatalogService(
+      cacheDirectory: cache.path,
+      httpGet: (uri) async => throw const ModelCatalogRequestException(
+        ModelCatalogFailureKind.timeout,
+        debugDetails:
+            'SocketException: connection timed out, host: huggingface.co:443',
+      ),
+    );
+    await tester.runAsync(service.loadCache);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TaobaoMnnCatalogPage(
+          service: service,
+          sourcePolicy: ModelDownloadSourcePolicy(
+            settingsPath: p.join(cache.path, 'source.json'),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('模型目录刷新超时'), findsOneWidget);
+    expect(find.textContaining('SocketException'), findsNothing);
+    expect(find.textContaining('huggingface.co'), findsNothing);
+    expect(find.text('重试'), findsOneWidget);
+    expect(find.text('切换网络源'), findsOneWidget);
   });
 }
 

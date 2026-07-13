@@ -1,12 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 import '../app.dart';
 import '../l10n/l10n.dart';
 import '../models/taobao_mnn_model.dart';
 import '../services/language_model_service.dart';
 import '../services/local_model_manager.dart';
+import '../services/model_catalog_http_client.dart';
+import '../services/model_download_source_policy.dart';
 import '../services/taobao_mnn_catalog_service.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/editor_context_menu.dart';
@@ -15,12 +18,14 @@ class TaobaoMnnCatalogPage extends StatefulWidget {
   final TaobaoMnnCatalogService? service;
   final Set<String>? curatedRepositories;
   final Future<void> Function(TaobaoMnnModelSpec model)? onInstall;
+  final ModelDownloadSourcePolicy? sourcePolicy;
 
   const TaobaoMnnCatalogPage({
     super.key,
     this.service,
     this.curatedRepositories,
     this.onInstall,
+    this.sourcePolicy,
   });
 
   @override
@@ -30,19 +35,22 @@ class TaobaoMnnCatalogPage extends StatefulWidget {
 class _TaobaoMnnCatalogPageState extends State<TaobaoMnnCatalogPage> {
   late final TaobaoMnnCatalogService _service;
   late final Set<String> _curatedRepositories;
+  late final ModelDownloadSourcePolicy _sourcePolicy;
   final _search = TextEditingController();
   bool _loading = true;
   bool _syncing = false;
-  String? _error;
+  Object? _error;
 
   @override
   void initState() {
     super.initState();
     _service = widget.service ?? TaobaoMnnCatalogService.instance;
+    _sourcePolicy = widget.sourcePolicy ?? ModelDownloadSourcePolicy.instance;
     _curatedRepositories =
         widget.curatedRepositories ??
         LanguageModelService.instance.curatedRepositories;
     _search.addListener(_changed);
+    _sourcePolicy.addListener(_changed);
     unawaited(_initialize());
   }
 
@@ -51,6 +59,7 @@ class _TaobaoMnnCatalogPageState extends State<TaobaoMnnCatalogPage> {
     _search
       ..removeListener(_changed)
       ..dispose();
+    _sourcePolicy.removeListener(_changed);
     super.dispose();
   }
 
@@ -59,6 +68,7 @@ class _TaobaoMnnCatalogPageState extends State<TaobaoMnnCatalogPage> {
   }
 
   Future<void> _initialize() async {
+    unawaited(_sourcePolicy.load());
     await _service.loadCache();
     if (!mounted) return;
     setState(() => _loading = false);
@@ -74,10 +84,54 @@ class _TaobaoMnnCatalogPageState extends State<TaobaoMnnCatalogPage> {
     try {
       await _service.sync();
     } catch (error) {
-      _error = error.toString();
+      _error = error;
+      if (kDebugMode) debugPrint('Model catalog refresh failed: $error');
     } finally {
       if (mounted) setState(() => _syncing = false);
     }
+  }
+
+  Future<void> _chooseNetworkSource() async {
+    final selected = await showModalBottomSheet<ModelDownloadSourcePreference>(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (context) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              context.l10n.modelDownloadSource,
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              context.l10n.downloadSourceSecurityDescription,
+              style: const TextStyle(color: AppColors.muted, height: 1.45),
+            ),
+            const SizedBox(height: 10),
+            for (final preference in ModelDownloadSourcePreference.values)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(_sourceIcon(preference)),
+                title: Text(_sourceTitle(context, preference)),
+                subtitle: Text(_sourceDescription(context, preference)),
+                trailing: _sourcePolicy.preference == preference
+                    ? const Icon(Icons.check_circle_rounded)
+                    : null,
+                onTap: () => Navigator.pop(context, preference),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected == null || !mounted) return;
+    await _sourcePolicy.setPreference(selected);
+    if (mounted) unawaited(_sync());
   }
 
   List<TaobaoMnnCatalogEntry> get _visibleEntries {
@@ -115,6 +169,9 @@ class _TaobaoMnnCatalogPageState extends State<TaobaoMnnCatalogPage> {
   @override
   Widget build(BuildContext context) {
     final entries = _visibleEntries;
+    final errorPresentation = _error == null
+        ? null
+        : _catalogErrorPresentation(context, _error!);
     return Scaffold(
       appBar: AppBar(
         title: Text(context.l10n.discoverMnnModels),
@@ -164,11 +221,18 @@ class _TaobaoMnnCatalogPageState extends State<TaobaoMnnCatalogPage> {
                     if (_error != null) ...[
                       const SizedBox(height: 14),
                       _CatalogNotice(
-                        message: context.l10n.modelCatalogSyncFailed(_error!),
-                        secondary: _service.entries.isEmpty
-                            ? null
-                            : context.l10n.cachedCatalogInUse,
+                        message: errorPresentation!.title,
+                        secondary: [
+                          errorPresentation.description,
+                          if (_service.entries.isNotEmpty)
+                            context.l10n.cachedCatalogInUse,
+                        ].join('\n'),
                         error: true,
+                        actionLabel: context.l10n.retry,
+                        onAction: _sync,
+                        secondaryActionLabel:
+                            context.l10n.modelNetworkSourceSettings,
+                        onSecondaryAction: _chooseNetworkSource,
                       ),
                     ],
                     const SizedBox(height: 12),
@@ -283,7 +347,7 @@ class _TaobaoMnnModelDetailPage extends StatefulWidget {
 
 class _TaobaoMnnModelDetailPageState extends State<_TaobaoMnnModelDetailPage> {
   TaobaoMnnModelSpec? _model;
-  String? _error;
+  Object? _error;
   bool _installing = false;
 
   @override
@@ -297,7 +361,8 @@ class _TaobaoMnnModelDetailPageState extends State<_TaobaoMnnModelDetailPage> {
       final model = await widget.service.inspect(widget.entry);
       if (mounted) setState(() => _model = model);
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (kDebugMode) debugPrint('Model compatibility check failed: $error');
+      if (mounted) setState(() => _error = error);
     }
   }
 
@@ -312,7 +377,7 @@ class _TaobaoMnnModelDetailPageState extends State<_TaobaoMnnModelDetailPage> {
       if (mounted) {
         setState(() {
           _installing = false;
-          _error = error.toString();
+          _error = error;
         });
       }
     }
@@ -321,6 +386,9 @@ class _TaobaoMnnModelDetailPageState extends State<_TaobaoMnnModelDetailPage> {
   @override
   Widget build(BuildContext context) {
     final model = _model;
+    final errorPresentation = _error == null
+        ? null
+        : _catalogErrorPresentation(context, _error!);
     return Scaffold(
       appBar: AppBar(title: Text(widget.entry.name)),
       body: SafeArea(
@@ -336,7 +404,7 @@ class _TaobaoMnnModelDetailPageState extends State<_TaobaoMnnModelDetailPage> {
             ] else if (_error != null && model == null)
               EmptyState(
                 icon: Icons.error_outline_rounded,
-                message: context.l10n.modelCompatibilityFailed(_error!),
+                message: errorPresentation!.title,
                 actionLabel: context.l10n.retry,
                 onAction: () {
                   setState(() => _error = null);
@@ -400,7 +468,11 @@ class _TaobaoMnnModelDetailPageState extends State<_TaobaoMnnModelDetailPage> {
               ),
               if (_error != null) ...[
                 const SizedBox(height: 16),
-                _CatalogNotice(message: _error!, error: true),
+                _CatalogNotice(
+                  message: errorPresentation!.title,
+                  secondary: errorPresentation.description,
+                  error: true,
+                ),
               ],
               const SizedBox(height: 28),
               FilledButton.icon(
@@ -427,11 +499,19 @@ class _CatalogNotice extends StatelessWidget {
   final String message;
   final String? secondary;
   final bool error;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+  final String? secondaryActionLabel;
+  final VoidCallback? onSecondaryAction;
 
   const _CatalogNotice({
     required this.message,
     this.secondary,
     this.error = false,
+    this.actionLabel,
+    this.onAction,
+    this.secondaryActionLabel,
+    this.onSecondaryAction,
   });
 
   @override
@@ -462,6 +542,25 @@ class _CatalogNotice extends StatelessWidget {
                   style: const TextStyle(color: AppColors.muted, fontSize: 12),
                 ),
               ],
+              if (onAction != null || onSecondaryAction != null) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    if (onAction != null)
+                      TextButton(
+                        onPressed: onAction,
+                        child: Text(actionLabel ?? context.l10n.retry),
+                      ),
+                    if (onSecondaryAction != null)
+                      TextButton(
+                        onPressed: onSecondaryAction,
+                        child: Text(secondaryActionLabel ?? ''),
+                      ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
@@ -469,6 +568,78 @@ class _CatalogNotice extends StatelessWidget {
     ),
   );
 }
+
+class _CatalogErrorPresentation {
+  final String title;
+  final String description;
+
+  const _CatalogErrorPresentation(this.title, this.description);
+}
+
+_CatalogErrorPresentation _catalogErrorPresentation(
+  BuildContext context,
+  Object error,
+) {
+  final l10n = context.l10n;
+  final kind = error is ModelCatalogRequestException
+      ? error.kind
+      : error is FormatException || error is TaobaoMnnCatalogException
+      ? ModelCatalogFailureKind.invalidResponse
+      : ModelCatalogFailureKind.serviceUnavailable;
+  return switch (kind) {
+    ModelCatalogFailureKind.timeout => _CatalogErrorPresentation(
+      l10n.modelCatalogRefreshTimeout,
+      l10n.modelCatalogRefreshTimeoutDescription,
+    ),
+    ModelCatalogFailureKind.offline => _CatalogErrorPresentation(
+      l10n.modelCatalogOffline,
+      l10n.modelCatalogOfflineDescription,
+    ),
+    ModelCatalogFailureKind.unauthorized => _CatalogErrorPresentation(
+      l10n.modelCatalogAuthorizationRequired,
+      l10n.modelCatalogAuthorizationRequiredDescription,
+    ),
+    ModelCatalogFailureKind.invalidResponse => _CatalogErrorPresentation(
+      l10n.modelCatalogInvalidResponse,
+      l10n.modelCatalogInvalidResponseDescription,
+    ),
+    ModelCatalogFailureKind.serviceUnavailable => _CatalogErrorPresentation(
+      l10n.modelCatalogServiceUnavailable,
+      l10n.modelCatalogServiceUnavailableDescription,
+    ),
+  };
+}
+
+String _sourceTitle(
+  BuildContext context,
+  ModelDownloadSourcePreference preference,
+) => switch (preference) {
+  ModelDownloadSourcePreference.automatic =>
+    context.l10n.downloadSourceAutomatic,
+  ModelDownloadSourcePreference.officialFirst =>
+    context.l10n.downloadSourceOfficialFirst,
+  ModelDownloadSourcePreference.mainlandFirst =>
+    context.l10n.downloadSourceMainlandFirst,
+};
+
+String _sourceDescription(
+  BuildContext context,
+  ModelDownloadSourcePreference preference,
+) => switch (preference) {
+  ModelDownloadSourcePreference.automatic =>
+    context.l10n.downloadSourceAutomaticDescription,
+  ModelDownloadSourcePreference.officialFirst =>
+    context.l10n.downloadSourceOfficialDescription,
+  ModelDownloadSourcePreference.mainlandFirst =>
+    context.l10n.downloadSourceMainlandDescription,
+};
+
+IconData _sourceIcon(ModelDownloadSourcePreference preference) =>
+    switch (preference) {
+      ModelDownloadSourcePreference.automatic => Icons.alt_route_rounded,
+      ModelDownloadSourcePreference.officialFirst => Icons.public_rounded,
+      ModelDownloadSourcePreference.mainlandFirst => Icons.speed_rounded,
+    };
 
 class _DetailCard extends StatelessWidget {
   final List<Widget> children;

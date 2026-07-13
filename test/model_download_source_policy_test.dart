@@ -75,4 +75,21 @@ void main() {
       'GitHub',
     ]);
   });
+
+  test('automatic mode persists a recently healthy endpoint', () async {
+    final policy = ModelDownloadSourcePolicy(
+      settingsPath: settingsPath,
+      countryCodeProvider: () => 'CN',
+    );
+    policy.reportSuccessfulSource(sources().first);
+    await policy.flush();
+
+    final restored = ModelDownloadSourcePolicy(
+      settingsPath: settingsPath,
+      countryCodeProvider: () => 'CN',
+    );
+    await restored.load();
+
+    expect(restored.order(sources()).first.label, 'Hugging Face');
+  });
 }

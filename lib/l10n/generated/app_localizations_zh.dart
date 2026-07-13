@@ -398,6 +398,44 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get modelCatalogRefreshTimeout => '模型目录刷新超时';
+
+  @override
+  String get modelCatalogRefreshTimeoutDescription =>
+      '当前网络未能及时连接模型服务。你可以重试或切换模型网络源。';
+
+  @override
+  String get modelCatalogOffline => '无法连接模型服务';
+
+  @override
+  String get modelCatalogOfflineDescription => '请检查网络连接，或尝试切换模型网络源。';
+
+  @override
+  String get modelCatalogServiceUnavailable => '模型服务暂时不可用';
+
+  @override
+  String get modelCatalogServiceUnavailableDescription => '服务当前没有正常响应，请稍后重试。';
+
+  @override
+  String get modelCatalogAuthorizationRequired => '部分模型需要访问授权';
+
+  @override
+  String get modelCatalogAuthorizationRequiredDescription =>
+      '当前目录包含需要在 Hugging Face 接受许可后才能访问的模型。';
+
+  @override
+  String get modelCatalogInvalidResponse => '模型目录暂时无法读取';
+
+  @override
+  String get modelCatalogInvalidResponseDescription => '服务返回了无法识别的数据，请稍后重试。';
+
+  @override
+  String get modelCatalogCompatibilityUnavailable => '暂时无法检查模型兼容性';
+
+  @override
+  String get modelNetworkSourceSettings => '切换网络源';
+
+  @override
   String get cachedCatalogInUse => '正在显示上次成功同步的目录';
 
   @override

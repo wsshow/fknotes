@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import '../models/local_llm.dart';
 import '../models/taobao_mnn_model.dart';
 import 'file_storage_service.dart';
+import 'model_catalog_http_client.dart';
 
 typedef TaobaoMnnHttpGet = Future<Uint8List> Function(Uri uri);
 
@@ -460,28 +461,6 @@ class TaobaoMnnCatalogService {
     return fallback;
   }
 
-  static Future<Uint8List> _defaultHttpGet(Uri uri) async {
-    final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 15);
-    try {
-      final request = await client.getUrl(uri);
-      request.headers.set(HttpHeaders.userAgentHeader, 'fknotes/model-catalog');
-      final response = await request.close().timeout(
-        const Duration(seconds: 25),
-      );
-      if (response.statusCode != HttpStatus.ok) {
-        throw HttpException(
-          'Hugging Face returned ${response.statusCode}',
-          uri: uri,
-        );
-      }
-      final builder = BytesBuilder(copy: false);
-      await for (final chunk in response.timeout(const Duration(seconds: 30))) {
-        builder.add(chunk);
-      }
-      return builder.takeBytes();
-    } finally {
-      client.close(force: true);
-    }
-  }
+  static Future<Uint8List> _defaultHttpGet(Uri uri) =>
+      ModelCatalogHttpClient.instance.get(uri);
 }

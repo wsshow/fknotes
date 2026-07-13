@@ -818,6 +818,78 @@ abstract class AppLocalizations {
   /// **'无法刷新模型目录：{error}'**
   String modelCatalogSyncFailed(String error);
 
+  /// No description provided for @modelCatalogRefreshTimeout.
+  ///
+  /// In zh, this message translates to:
+  /// **'模型目录刷新超时'**
+  String get modelCatalogRefreshTimeout;
+
+  /// No description provided for @modelCatalogRefreshTimeoutDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前网络未能及时连接模型服务。你可以重试或切换模型网络源。'**
+  String get modelCatalogRefreshTimeoutDescription;
+
+  /// No description provided for @modelCatalogOffline.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法连接模型服务'**
+  String get modelCatalogOffline;
+
+  /// No description provided for @modelCatalogOfflineDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'请检查网络连接，或尝试切换模型网络源。'**
+  String get modelCatalogOfflineDescription;
+
+  /// No description provided for @modelCatalogServiceUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'模型服务暂时不可用'**
+  String get modelCatalogServiceUnavailable;
+
+  /// No description provided for @modelCatalogServiceUnavailableDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'服务当前没有正常响应，请稍后重试。'**
+  String get modelCatalogServiceUnavailableDescription;
+
+  /// No description provided for @modelCatalogAuthorizationRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'部分模型需要访问授权'**
+  String get modelCatalogAuthorizationRequired;
+
+  /// No description provided for @modelCatalogAuthorizationRequiredDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前目录包含需要在 Hugging Face 接受许可后才能访问的模型。'**
+  String get modelCatalogAuthorizationRequiredDescription;
+
+  /// No description provided for @modelCatalogInvalidResponse.
+  ///
+  /// In zh, this message translates to:
+  /// **'模型目录暂时无法读取'**
+  String get modelCatalogInvalidResponse;
+
+  /// No description provided for @modelCatalogInvalidResponseDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'服务返回了无法识别的数据，请稍后重试。'**
+  String get modelCatalogInvalidResponseDescription;
+
+  /// No description provided for @modelCatalogCompatibilityUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法检查模型兼容性'**
+  String get modelCatalogCompatibilityUnavailable;
+
+  /// No description provided for @modelNetworkSourceSettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'切换网络源'**
+  String get modelNetworkSourceSettings;
+
   /// No description provided for @cachedCatalogInUse.
   ///
   /// In zh, this message translates to:

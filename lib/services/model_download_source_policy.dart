@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -28,6 +29,8 @@ class ModelDownloadSourcePolicy extends ChangeNotifier {
   ModelDownloadSourcePreference _preference =
       ModelDownloadSourcePreference.automatic;
   ModelDownloadSourceKind? _sessionHealthyKind;
+  ModelDownloadSourceKind? _persistedHealthyKind;
+  DateTime? _persistedHealthyAt;
   String? _lastUsedSourceLabel;
   Future<void> _writeQueue = Future.value();
 
@@ -52,6 +55,7 @@ class ModelDownloadSourcePolicy extends ChangeNotifier {
       ModelDownloadSourceKind.mainlandMirror,
     ModelDownloadSourcePreference.automatic =>
       _sessionHealthyKind ??
+          (_persistedHealthIsFresh ? _persistedHealthyKind : null) ??
           (regionPrefersMainland
               ? ModelDownloadSourceKind.mainlandMirror
               : ModelDownloadSourceKind.official),
@@ -68,6 +72,17 @@ class ModelDownloadSourcePolicy extends ChangeNotifier {
       _preference = ModelDownloadSourcePreference.values.firstWhere(
         (value) => value.name == name,
         orElse: () => ModelDownloadSourcePreference.automatic,
+      );
+      final healthyName = decoded['healthyKind'];
+      _persistedHealthyKind = null;
+      for (final kind in ModelDownloadSourceKind.values) {
+        if (kind.name == healthyName) {
+          _persistedHealthyKind = kind;
+          break;
+        }
+      }
+      _persistedHealthyAt = DateTime.tryParse(
+        decoded['healthyAt'] as String? ?? '',
       );
     } on FormatException {
       _preference = ModelDownloadSourcePreference.automatic;
@@ -86,6 +101,8 @@ class ModelDownloadSourcePolicy extends ChangeNotifier {
     _writeQueue = operation.catchError((_) {});
     await operation;
   }
+
+  Future<void> flush() => _writeQueue;
 
   List<ModelDownloadSource> order(List<ModelDownloadSource> sources) {
     if (sources.length < 2) return List.unmodifiable(sources);
@@ -113,6 +130,13 @@ class ModelDownloadSourcePolicy extends ChangeNotifier {
     _lastUsedSourceLabel = source.label;
     if (adaptive && _preference == ModelDownloadSourcePreference.automatic) {
       _sessionHealthyKind = source.kind;
+      if (sessionWillChange || !_persistedHealthIsFresh) {
+        _persistedHealthyKind = source.kind;
+        _persistedHealthyAt = DateTime.now();
+        final operation = _writeQueue.then((_) => _write());
+        _writeQueue = operation.catchError((_) {});
+        unawaited(operation);
+      }
     }
     if (changed) notifyListeners();
   }
@@ -134,7 +158,11 @@ class ModelDownloadSourcePolicy extends ChangeNotifier {
     await destination.parent.create(recursive: true);
     final temporary = File('${destination.path}.tmp');
     await temporary.writeAsString(
-      jsonEncode({'preference': _preference.name}),
+      jsonEncode({
+        'preference': _preference.name,
+        'healthyKind': _persistedHealthyKind?.name,
+        'healthyAt': _persistedHealthyAt?.toUtc().toIso8601String(),
+      }),
       flush: true,
     );
     try {
@@ -143,5 +171,12 @@ class ModelDownloadSourcePolicy extends ChangeNotifier {
       if (await destination.exists()) await destination.delete();
       await temporary.rename(destination.path);
     }
+  }
+
+  bool get _persistedHealthIsFresh {
+    final at = _persistedHealthyAt;
+    return _persistedHealthyKind != null &&
+        at != null &&
+        DateTime.now().difference(at) < const Duration(hours: 6);
   }
 }
