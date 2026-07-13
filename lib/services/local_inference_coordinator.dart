@@ -79,9 +79,9 @@ class LocalInferenceCoordinator extends ChangeNotifier {
           'inference_lease_rejected',
           data: {
             'requestedType': type.name,
-            'requestedOwner': ownerId,
+            'requestedOwnerHash': ownerId.hashCode,
             'activeType': active.type.name,
-            'activeOwner': active.ownerId,
+            'activeOwnerHash': active.ownerId.hashCode,
           },
         );
       }
@@ -99,7 +99,7 @@ class LocalInferenceCoordinator extends ChangeNotifier {
       AppDiagnostics.info(
         AppLogCategory.inference,
         'inference_lease_acquired',
-        data: {'type': type.name, 'ownerId': ownerId},
+        data: {'type': type.name, 'ownerHash': ownerId.hashCode},
         traceId: 'lease-$generation',
       );
     }
@@ -117,7 +117,7 @@ class LocalInferenceCoordinator extends ChangeNotifier {
         'inference_lease_released',
         data: {
           'type': activity.type.name,
-          'ownerId': activity.ownerId,
+          'ownerHash': activity.ownerId.hashCode,
           'durationMs': DateTime.now()
               .difference(activity.startedAt)
               .inMilliseconds,

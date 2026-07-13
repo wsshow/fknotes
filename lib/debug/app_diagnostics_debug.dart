@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:archive/archive_io.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -19,7 +20,7 @@ class DebugAppDiagnostics extends ChangeNotifier
   static const _maxLogFileBytes = 2 * 1024 * 1024;
   static const _maxPersistedFiles = 6;
   static final _sensitiveKey = RegExp(
-    r'(password|passphrase|secret|token|authorization|cookie|credential|access.?key|system.?prompt|content|note.?text|chat.?text|transcript|ocr.?text)',
+    r'(password|passphrase|secret|token|authorization|cookie|credential|access.?key|system.?prompt|content|note.?text|chat.?text|transcript|ocr.?text|file.?path|directory.?path|owner.?id)',
     caseSensitive: false,
   );
   static final _bearerPattern = RegExp(
@@ -27,6 +28,10 @@ class DebugAppDiagnostics extends ChangeNotifier
     caseSensitive: false,
   );
   static final _urlCredentialPattern = RegExp(r'(?<=://)[^/@\s]+@');
+  static final _privateFilePattern = RegExp(
+    r'(?:file|content)://[^\s)\]}]+|/data/(?:user/\d+|data)/[^/\s]+/(?:files|cache|app_flutter)/[^\s)\]}]+|/storage/emulated/\d+/[^\s)\]}]+',
+    caseSensitive: false,
+  );
 
   final _records = <AppLogRecord>[];
   final _clock = Stopwatch()..start();
@@ -40,6 +45,7 @@ class DebugAppDiagnostics extends ChangeNotifier
   int _sequence = 0;
   int _currentBytes = 0;
   bool _initialized = false;
+  Map<String, Object?>? _nativeRuntimeInfo;
 
   DebugAppDiagnostics({
     this.supportDirectoryOverride,
@@ -74,6 +80,7 @@ class DebugAppDiagnostics extends ChangeNotifier
       _currentBytes = utf8.encode('$contents\n').length;
     }
     _initialized = true;
+    await _loadNativeRuntimeInfo();
     record(
       AppLogLevel.info,
       AppLogCategory.application,
@@ -226,6 +233,7 @@ class DebugAppDiagnostics extends ChangeNotifier
               'locale': Platform.localeName,
               'numberOfProcessors': Platform.numberOfProcessors,
               'dartVersion': _sanitizeText(Platform.version, limit: 500),
+              if (_nativeRuntimeInfo != null) 'native': _nativeRuntimeInfo,
             },
             'privacy': {
               'userContentIncluded': false,
@@ -294,6 +302,40 @@ class DebugAppDiagnostics extends ChangeNotifier
           await encoder.close();
         } catch (_) {}
       }
+    }
+  }
+
+  Future<void> _loadNativeRuntimeInfo() async {
+    if (!Platform.isAndroid) return;
+    try {
+      final value = await const MethodChannel(
+        'fknotes/debug_diagnostics',
+      ).invokeMapMethod<String, Object?>('runtimeInfo');
+      if (value == null) return;
+      _nativeRuntimeInfo = _sanitizeMap(value);
+      record(
+        AppLogLevel.info,
+        AppLogCategory.platform,
+        'android_runtime_info_captured',
+        data: {
+          'sdk': value['sdk'],
+          'model': value['model'],
+          'supportedAbis': value['supportedAbis'],
+          'memoryClassMb': value['memoryClassMb'],
+          'isLowRamDevice': value['isLowRamDevice'],
+          'previousExits': value['previousExits'],
+        },
+      );
+    } on MissingPluginException {
+      // Widget tests and non-Android debug hosts do not register the bridge.
+    } catch (error, stackTrace) {
+      record(
+        AppLogLevel.warning,
+        AppLogCategory.platform,
+        'android_runtime_info_failed',
+        error: error,
+        stackTrace: stackTrace,
+      );
     }
   }
 
@@ -379,7 +421,11 @@ class DebugAppDiagnostics extends ChangeNotifier
           (match) => '${match.group(1)}<redacted>',
         )
         .replaceAll(_urlCredentialPattern, '<redacted>@')
-        .replaceAll(Platform.environment['HOME'] ?? '\u0000', '<home>');
+        .replaceAll(_privateFilePattern, '<private-file>');
+    final home = Platform.environment['HOME'];
+    if (home != null && home.isNotEmpty) {
+      sanitized = sanitized.replaceAll(home, '<home>');
+    }
     if (sanitized.length > limit) {
       sanitized = '${sanitized.substring(0, limit)}…<truncated>';
     }

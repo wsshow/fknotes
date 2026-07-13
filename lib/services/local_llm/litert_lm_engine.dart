@@ -189,8 +189,7 @@ class LiteRtLmEngine implements LocalLlmEngine {
                 }
                 unawaited(_finish(controller, subscription, done, timeout));
               case LiteRtLmNativeEventType.loaded ||
-                  LiteRtLmNativeEventType.unloaded ||
-                  LiteRtLmNativeEventType.diagnostic:
+                  LiteRtLmNativeEventType.unloaded:
                 break;
             }
           });

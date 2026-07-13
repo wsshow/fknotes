@@ -1,9 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../app.dart';
+import '../debug/debug_console_launcher.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../l10n/l10n.dart';
 import '../models/note_entry.dart';
@@ -1465,6 +1467,15 @@ class _DataTabState extends State<_DataTab> {
                     : _buildMetadataSubtitle(l10n, _appBuildMetadata!),
                 showChevron: false,
               ),
+              if (kDebugMode) ...[
+                const Divider(height: 1),
+                _SettingRow(
+                  icon: Icons.bug_report_outlined,
+                  title: '调试中心 · Debug',
+                  subtitle: '实时日志、异常堆栈与脱敏诊断包',
+                  onTap: () => openDebugConsole(context),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 24),

@@ -39,7 +39,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.roundToInt
 
-class MainActivity : FlutterFragmentActivity() {
+open class MainActivity : FlutterFragmentActivity() {
     private companion object {
         const val IMPORT_CHANNEL = "fknotes/attachment_import"
         const val AUDIO_DECODE_CHANNEL = "fknotes/audio_decode"

@@ -8,7 +8,6 @@ import '../../debug/app_diagnostics.dart';
 import '../../models/local_llm.dart';
 
 enum LiteRtLmNativeEventType {
-  diagnostic,
   loaded,
   textDelta,
   completed,
@@ -72,9 +71,7 @@ class MethodChannelLiteRtLmTransport implements LiteRtLmTransport {
             data: {
               'requestId': event.requestId,
               'type': event.type.name,
-              if (event.type == LiteRtLmNativeEventType.diagnostic)
-                'nativeLifecycle': event.data
-              else if (!failed && event.data.isNotEmpty)
+              if (!failed && event.data.isNotEmpty)
                 'payloadLength': event.data.length,
             },
             error: failed ? event.data : null,
