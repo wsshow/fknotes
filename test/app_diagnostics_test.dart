@@ -99,4 +99,26 @@ void main() {
     expect(diagnostics.snapshot(query: 'qwen-test'), hasLength(1));
     expect(diagnostics.snapshot(query: 'not-present'), isEmpty);
   });
+
+  test('clearing diagnostics also removes native worker crash logs', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'fknotes_native_diagnostics_test_',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final diagnostics = DebugAppDiagnostics(
+      supportDirectoryOverride: directory,
+      temporaryDirectoryOverride: directory,
+    );
+
+    await diagnostics.initialize();
+    final nativeLog = File(
+      '${directory.path}${Platform.pathSeparator}debug_diagnostics'
+      '${Platform.pathSeparator}native-worker.jsonl',
+    );
+    await nativeLog.writeAsString('{"stage":"engine_create_started"}\n');
+
+    await diagnostics.clear();
+
+    expect(await nativeLog.exists(), isFalse);
+  });
 }

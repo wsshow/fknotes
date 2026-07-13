@@ -98,7 +98,7 @@ void main() {
   });
 
   test(
-    'does not retry or leak an uncaught error when the worker dies on load',
+    'retries once on CPU without leaking an error when workers die on load',
     () async {
       final transport = _FakeTransport(crashOnLoad: true);
       final engine = LiteRtLmEngine(transport: transport);
@@ -122,10 +122,29 @@ void main() {
       }, (error, _) => uncaught.add(error));
 
       expect(uncaught, isEmpty);
-      expect(transport.loadBackends, [LocalLlmBackend.openCl]);
+      expect(transport.loadBackends, [
+        LocalLlmBackend.openCl,
+        LocalLlmBackend.cpu,
+      ]);
       expect(engine.state, LocalLlmEngineState.failed);
     },
   );
+
+  test('recovers on CPU after the GPU worker dies', () async {
+    final transport = _FakeTransport(crashGpuWorker: true);
+    final engine = LiteRtLmEngine(transport: transport);
+
+    await engine.loadModel(
+      _descriptor(modelFile.path),
+      options: const LocalLlmLoadOptions(backend: LocalLlmBackend.openCl),
+    );
+
+    expect(transport.loadBackends, [
+      LocalLlmBackend.openCl,
+      LocalLlmBackend.cpu,
+    ]);
+    expect(engine.state, LocalLlmEngineState.ready);
+  });
 }
 
 LocalLlmModelDescriptor _descriptor(String path) => LocalLlmModelDescriptor(
@@ -140,6 +159,7 @@ LocalLlmModelDescriptor _descriptor(String path) => LocalLlmModelDescriptor(
 class _FakeTransport implements LiteRtLmTransport {
   final bool crashOnGenerate;
   final bool crashOnLoad;
+  final bool crashGpuWorker;
   final bool failGpuLoad;
   final _events = StreamController<LiteRtLmNativeEvent>.broadcast();
   String? loadedModelPath;
@@ -149,6 +169,7 @@ class _FakeTransport implements LiteRtLmTransport {
   _FakeTransport({
     this.crashOnGenerate = false,
     this.crashOnLoad = false,
+    this.crashGpuWorker = false,
     this.failGpuLoad = false,
   });
 
@@ -170,7 +191,8 @@ class _FakeTransport implements LiteRtLmTransport {
     loadedModelPath = modelPath;
     loadBackends.add(options.backend);
     loadOptions.add(options);
-    if (crashOnLoad) {
+    if (crashOnLoad ||
+        (crashGpuWorker && options.backend != LocalLlmBackend.cpu)) {
       scheduleMicrotask(
         () => _events.add(
           const LiteRtLmNativeEvent(

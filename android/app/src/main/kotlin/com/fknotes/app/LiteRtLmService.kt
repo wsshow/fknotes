@@ -28,7 +28,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * terminate this worker without taking the Flutter UI or unsaved notes down.
  */
 @OptIn(com.google.ai.edge.litertlm.ExperimentalApi::class)
-class LiteRtLmService : Service() {
+open class LiteRtLmService : Service() {
     private val executor = Executors.newSingleThreadExecutor()
     private var engine: Engine? = null
     @Volatile private var conversation: Conversation? = null
@@ -51,11 +51,13 @@ class LiteRtLmService : Service() {
     override fun onCreate() {
         super.onCreate()
         Engine.setNativeMinLogSeverity(LogSeverity.ERROR)
+        onInferenceDiagnostic(stage = 0)
     }
 
     override fun onBind(intent: Intent?): IBinder = messenger.binder
 
     override fun onDestroy() {
+        onInferenceDiagnostic(stage = 8)
         runCatching { conversation?.cancelProcess() }
         runCatching { conversation?.close() }
         runCatching { engine?.close() }
@@ -71,6 +73,11 @@ class LiteRtLmService : Service() {
             try {
                 operation(message, JSONObject(payload))
             } catch (error: Throwable) {
+                onInferenceDiagnostic(
+                    stage = 7,
+                    requestId = requestId(message),
+                    error = error,
+                )
                 emitError(message, error)
             }
         }
@@ -78,6 +85,7 @@ class LiteRtLmService : Service() {
 
     private fun load(message: Message, payload: JSONObject) {
         val requestId = requestId(message)
+        onInferenceDiagnostic(stage = 1, requestId = requestId)
         val modelPath = payload.getString("modelPath")
         val model = File(modelPath)
         require(model.isFile && model.length() > 0) { "LiteRT-LM 模型文件不存在或为空" }
@@ -89,17 +97,31 @@ class LiteRtLmService : Service() {
         // A text-only chat must not initialize either multimodal pipeline.
         val visionBackend = if (payload.optBoolean("imageInput")) Backend.GPU() else null
         val audioBackend = if (payload.optBoolean("audioInput")) Backend.CPU(threads) else null
+        val contextTokens = payload.optInt("contextTokens", 4096)
+        onInferenceDiagnostic(
+            stage = 2,
+            requestId = requestId,
+            modelBytes = model.length(),
+            backendName = payload.optString("backend"),
+            contextTokens = contextTokens,
+            imageInput = payload.optBoolean("imageInput"),
+            audioInput = payload.optBoolean("audioInput"),
+        )
+        onInferenceDiagnostic(stage = 3, requestId = requestId)
         val created = Engine(
             EngineConfig(
                 modelPath = model.absolutePath,
                 backend = backend,
                 visionBackend = visionBackend,
                 audioBackend = audioBackend,
-                maxNumTokens = payload.optInt("contextTokens", 4096),
+                maxNumTokens = contextTokens,
             ),
         )
+        onInferenceDiagnostic(stage = 4, requestId = requestId)
         try {
+            onInferenceDiagnostic(stage = 5, requestId = requestId)
             created.initialize()
+            onInferenceDiagnostic(stage = 6, requestId = requestId)
             engine = created
             emit(message, requestId, "loaded")
         } catch (error: Throwable) {
@@ -287,4 +309,16 @@ class LiteRtLmService : Service() {
         val detail = error.message?.takeIf(String::isNotBlank) ?: error.javaClass.simpleName
         emit(message, requestId, "error", detail)
     }
+
+    /** Debug builds override this without placing diagnostic writers in Release. */
+    protected open fun onInferenceDiagnostic(
+        stage: Int,
+        requestId: Int = -1,
+        modelBytes: Long = 0,
+        backendName: String = "",
+        contextTokens: Int = 0,
+        imageInput: Boolean = false,
+        audioInput: Boolean = false,
+        error: Throwable? = null,
+    ) = Unit
 }

@@ -176,7 +176,9 @@ class DebugAppDiagnostics extends ChangeNotifier
     final directory = _directory;
     if (directory != null && await directory.exists()) {
       await for (final entity in directory.list(followLinks: false)) {
-        if (entity is File && p.basename(entity.path).startsWith('events-')) {
+        if (entity is File &&
+            (p.basename(entity.path).startsWith('events-') ||
+                p.basename(entity.path).startsWith('native-worker'))) {
           await entity.delete();
         }
       }

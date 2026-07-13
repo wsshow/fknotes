@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import '../../debug/app_diagnostics.dart';
 import '../../models/local_llm.dart';
 import '../file_storage_service.dart';
 import 'litert_lm_transport.dart';
@@ -80,12 +82,26 @@ class LiteRtLmEngine implements LocalLlmEngine {
     try {
       try {
         await _load(model, options);
-      } on _LiteRtLmWorkerDiedException {
-        // A dead native worker is not a recoverable GPU initialization error.
-        // Starting a second process immediately only repeats the native crash.
-        rethrow;
-      } catch (_) {
+      } catch (error) {
         if (options.backend == LocalLlmBackend.cpu) rethrow;
+        if (kDebugMode) {
+          AppDiagnostics.warning(
+            AppLogCategory.inference,
+            'litert_cpu_fallback_started',
+            data: {
+              'modelId': model.id,
+              'reason': error is _LiteRtLmWorkerDiedException
+                  ? 'workerDied'
+                  : 'gpuInitializationFailed',
+            },
+            traceId: model.id,
+          );
+        }
+        if (error is _LiteRtLmWorkerDiedException) {
+          // Let Android fully reap the failed GPU worker before binding a clean
+          // CPU-only process. The worker boundary keeps the Flutter UI safe.
+          await Future<void>.delayed(const Duration(milliseconds: 350));
+        }
         await _load(
           model,
           LocalLlmLoadOptions(

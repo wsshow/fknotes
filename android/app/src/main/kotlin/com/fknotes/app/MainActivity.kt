@@ -1,6 +1,7 @@
 package com.fknotes.app
 
 import android.app.Activity
+import android.app.Service
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -66,7 +67,11 @@ open class MainActivity : FlutterFragmentActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        liteRtLmBridge = LiteRtLmBridge(this, flutterEngine.dartExecutor.binaryMessenger)
+        liteRtLmBridge = LiteRtLmBridge(
+            this,
+            flutterEngine.dartExecutor.binaryMessenger,
+            liteRtLmServiceClass(),
+        )
         importChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             IMPORT_CHANNEL,
@@ -173,6 +178,9 @@ open class MainActivity : FlutterFragmentActivity() {
             }
         }
     }
+
+    protected open fun liteRtLmServiceClass(): Class<out Service> =
+        LiteRtLmService::class.java
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         liteRtLmBridge?.dispose()

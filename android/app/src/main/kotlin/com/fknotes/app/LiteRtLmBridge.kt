@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.app.Service
 import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
@@ -22,6 +23,7 @@ import java.util.ArrayDeque
 internal class LiteRtLmBridge(
     private val context: Context,
     binaryMessenger: BinaryMessenger,
+    private val serviceClass: Class<out Service> = LiteRtLmService::class.java,
 ) : MethodChannel.MethodCallHandler, EventChannel.StreamHandler {
     private data class PendingCommand(
         val message: Message,
@@ -131,7 +133,7 @@ internal class LiteRtLmBridge(
         if (binding) return
         binding = true
         val started = context.bindService(
-            Intent(context, LiteRtLmService::class.java),
+            Intent(context, serviceClass),
             connection,
             Context.BIND_AUTO_CREATE,
         )
