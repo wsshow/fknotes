@@ -59,12 +59,14 @@ class MainActivity : FlutterFragmentActivity() {
     private lateinit var importChannel: MethodChannel
     private lateinit var audioDecodeChannel: MethodChannel
     private lateinit var appLocaleChannel: MethodChannel
+    private var liteRtLmBridge: LiteRtLmBridge? = null
     private var pendingResult: MethodChannel.Result? = null
     private var pendingRequest: ImportRequest? = null
     private val importTasks = ConcurrentHashMap<String, ImportTask>()
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        liteRtLmBridge = LiteRtLmBridge(this, flutterEngine.dartExecutor.binaryMessenger)
         importChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             IMPORT_CHANNEL,
@@ -170,6 +172,12 @@ class MainActivity : FlutterFragmentActivity() {
                 else -> result.notImplemented()
             }
         }
+    }
+
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        liteRtLmBridge?.dispose()
+        liteRtLmBridge = null
+        super.cleanUpFlutterEngine(flutterEngine)
     }
 
     private fun decodeAudioToWav(source: File, destination: File) {

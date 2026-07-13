@@ -19,5 +19,6 @@ void main() {
     expect(cmake, contains('foreach(library MNN MNN_Express'));
     expect(cmake, contains('llm MNN_Express'));
     expect(preparation, isNot(contains('mnn_chat_')));
+    expect(preparation, contains('libllm.so'));
   });
 }

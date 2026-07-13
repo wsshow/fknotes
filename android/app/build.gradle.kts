@@ -32,7 +32,7 @@ val prepareMnnRuntime by tasks.registering(Exec::class) {
         rootProject.file("../tool/prepare_mnn_runtime.sh").absolutePath,
         mnnRuntimeDirectory.absolutePath,
     )
-    outputs.file(File(mnnRuntimeDirectory, ".ready-3.6.0-v2"))
+    outputs.file(File(mnnRuntimeDirectory, ".ready-3.6.0-split-v4"))
 }
 
 fun releaseSigningValue(
@@ -130,6 +130,7 @@ tasks.configureEach {
 }
 
 dependencies {
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.14.0")
     // The Flutter bridge only bundles Latin recognition by default.
     // FK Notes runs the on-device Chinese recognizer explicitly.
     implementation("com.google.mlkit:text-recognition-chinese:16.0.1")

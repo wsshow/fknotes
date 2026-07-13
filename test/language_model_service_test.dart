@@ -30,6 +30,10 @@ void main() {
           LanguageModelService.qwen3Vl8BDownloadSizeBytes,
       LanguageModelService.miniCpmV4Id:
           LanguageModelService.miniCpmV4DownloadSizeBytes,
+      LanguageModelService.gemma4E2BLiteRtId:
+          LanguageModelService.gemma4E2BLiteRtDownloadSizeBytes,
+      LanguageModelService.gemma4E4BLiteRtId:
+          LanguageModelService.gemma4E4BLiteRtDownloadSizeBytes,
     };
 
     expect(LanguageModelService.supportedModelIds, expected.keys);
@@ -51,8 +55,16 @@ void main() {
       LanguageModelService.qwen3Vl4BId,
       LanguageModelService.qwen3Vl8BId,
       LanguageModelService.miniCpmV4Id,
+      LanguageModelService.gemma4E2BLiteRtId,
+      LanguageModelService.gemma4E4BLiteRtId,
     ]) {
       expect(service.capabilities(id).imageInput, isTrue, reason: id);
+    }
+    for (final id in const [
+      LanguageModelService.gemma4E2BLiteRtId,
+      LanguageModelService.gemma4E4BLiteRtId,
+    ]) {
+      expect(service.capabilities(id).audioInput, isTrue, reason: id);
     }
   });
 

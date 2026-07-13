@@ -4,6 +4,8 @@ enum LocalLlmRole { system, user, assistant, tool }
 
 enum LocalLlmBackend { cpu, openCl, vulkan, metal }
 
+enum LocalLlmEngineKind { mnn, liteRtLm }
+
 enum LocalLlmEngineState {
   unavailable,
   idle,
@@ -80,6 +82,7 @@ class LocalLlmEngineAvailability {
 }
 
 class LocalLlmModelDescriptor {
+  final LocalLlmEngineKind engine;
   final String id;
   final String name;
   final String configPath;
@@ -90,6 +93,7 @@ class LocalLlmModelDescriptor {
   final LocalLlmGenerationOptions generationOptions;
 
   const LocalLlmModelDescriptor({
+    this.engine = LocalLlmEngineKind.mnn,
     required this.id,
     required this.name,
     required this.configPath,

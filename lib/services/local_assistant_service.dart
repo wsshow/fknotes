@@ -8,12 +8,21 @@ import '../models/local_llm.dart';
 import 'language_model_service.dart';
 import 'local_inference_coordinator.dart';
 import 'local_llm/local_llm_coordinator.dart';
+import 'local_llm/litert_lm_engine.dart';
 import 'local_llm/mnn_local_llm_engine.dart';
+import 'local_llm/routing_local_llm_engine.dart';
 
 /// Application-level entry point for all future local assistant features.
 class LocalAssistantService with WidgetsBindingObserver {
   LocalAssistantService._({LocalLlmCoordinator? coordinator})
-    : _coordinator = coordinator ?? LocalLlmCoordinator(MnnLocalLlmEngine()) {
+    : _coordinator =
+          coordinator ??
+          LocalLlmCoordinator(
+            RoutingLocalLlmEngine(
+              mnn: MnnLocalLlmEngine(),
+              liteRtLm: LiteRtLmEngine(),
+            ),
+          ) {
     WidgetsBinding.instance.addObserver(this);
   }
 
@@ -36,7 +45,7 @@ class LocalAssistantService with WidgetsBindingObserver {
   Future<void> loadSelectedModel({
     int contextTokens = 4096,
     bool enableThinking = false,
-    LocalLlmBackend backend = LocalLlmBackend.cpu,
+    LocalLlmBackend? backend,
   }) async {
     _idleUnloadTimer?.cancel();
     _inferenceLease ??= _inference.acquire(
@@ -46,10 +55,15 @@ class LocalAssistantService with WidgetsBindingObserver {
     try {
       final selectedId = await _models.selectedModelId();
       final descriptor = await _models.descriptor(selectedId);
+      final selectedBackend =
+          backend ??
+          (descriptor.engine == LocalLlmEngineKind.liteRtLm
+              ? LocalLlmBackend.openCl
+              : LocalLlmBackend.cpu);
       await _coordinator.loadModel(
         descriptor,
         options: LocalLlmLoadOptions(
-          backend: backend,
+          backend: selectedBackend,
           threads: math.min(4, math.max(2, Platform.numberOfProcessors ~/ 2)),
           contextTokens: contextTokens,
           enableThinking: enableThinking,

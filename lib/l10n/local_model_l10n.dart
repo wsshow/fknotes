@@ -34,6 +34,10 @@ String localizedModelSummary(
       'More capable multilingual vision-language model',
     LocalModelManager.miniCpmV4Id =>
       'Mobile-optimized vision model for Chinese content',
+    LocalModelManager.gemma4E2BLiteRtId =>
+      'LiteRT-LM accelerated on-device image and audio model',
+    LocalModelManager.gemma4E4BLiteRtId =>
+      'More capable LiteRT-LM multimodal model',
     LocalModelManager.senseVoiceId =>
       'Audio transcription and optional dictation refinement',
     LocalModelManager.streamingChineseId =>
@@ -70,6 +74,10 @@ String localizedModelDescription(
       'Handles complex images, long documents, charts, OCR, and higher-quality generation. Intended for flagship devices with ample memory.',
     LocalModelManager.miniCpmV4Id =>
       'Optimized for Chinese OCR, screenshots, documents, and high-resolution images while balancing model size and visual quality.',
+    LocalModelManager.gemma4E2BLiteRtId =>
+      'Runs independently on LiteRT-LM with multilingual reasoning, image, and audio understanding. E2B balances speed and memory use.',
+    LocalModelManager.gemma4E4BLiteRtId =>
+      'Runs independently on LiteRT-LM for more complex reasoning, code, image, and audio tasks. Requires more free memory.',
     LocalModelManager.senseVoiceId =>
       'Works with Mandarin, Cantonese, English, and mixed recordings. It can also run as an optional second pass after live dictation.',
     LocalModelManager.streamingChineseId =>
@@ -121,6 +129,9 @@ String localizedModelSource(AppLocalizations l10n, LocalModelDefinition model) {
     LocalModelManager.qwen3Vl4BId ||
     LocalModelManager.qwen3Vl8BId =>
       'Qwen / taobao-mnn · Hugging Face multi-source downloads',
+    LocalModelManager.gemma4E2BLiteRtId ||
+    LocalModelManager.gemma4E4BLiteRtId =>
+      'Google / litert-community · Hugging Face multi-source downloads',
     LocalModelManager.streamingChineseId ||
     LocalModelManager.streamingBilingualId =>
       'Hugging Face repository · official and regional endpoints',

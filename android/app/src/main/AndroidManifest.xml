@@ -13,6 +13,8 @@
         android:icon="@mipmap/ic_launcher"
         android:localeConfig="@xml/locales_config"
         android:roundIcon="@mipmap/ic_launcher">
+        <uses-native-library android:name="libvndksupport.so" android:required="false" />
+        <uses-native-library android:name="libOpenCL.so" android:required="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -35,6 +37,11 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <service
+            android:name=".LiteRtLmService"
+            android:exported="false"
+            android:process=":local_llm"
+            android:stopWithTask="true" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

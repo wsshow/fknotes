@@ -129,6 +129,8 @@ class LocalModelManager extends ChangeNotifier {
   static const qwen3Vl4BId = LanguageModelService.qwen3Vl4BId;
   static const qwen3Vl8BId = LanguageModelService.qwen3Vl8BId;
   static const miniCpmV4Id = LanguageModelService.miniCpmV4Id;
+  static const gemma4E2BLiteRtId = LanguageModelService.gemma4E2BLiteRtId;
+  static const gemma4E4BLiteRtId = LanguageModelService.gemma4E4BLiteRtId;
 
   static const catalog = <LocalModelDefinition>[
     LocalModelDefinition(
@@ -212,6 +214,39 @@ class LocalModelManager extends ChangeNotifier {
       license: 'Apache-2.0',
       recommended: true,
       recommendedMemoryBytes: 8 * 1024 * 1024 * 1024,
+    ),
+    LocalModelDefinition(
+      id: gemma4E2BLiteRtId,
+      name: 'Gemma 4 E2B IT',
+      summary: 'LiteRT-LM 加速的图像与音频端侧模型',
+      description: '由 LiteRT-LM 独立运行，支持多语言、推理、图片和音频理解；E2B 在性能与内存占用之间更均衡。',
+      category: LocalModelCategory.language,
+      availability: LocalModelAvailability.downloadable,
+      task: LocalModelTask.textGeneration,
+      downloadSizeBytes: LanguageModelService.gemma4E2BLiteRtDownloadSizeBytes,
+      languages: ['多语言', '图片', '音频'],
+      engine: 'LiteRT-LM 0.14 · Gemma 4',
+      version: 'Gemma 4 E2B IT',
+      source: 'Google / litert-community · Hugging Face 多源下载',
+      license: 'Apache-2.0',
+      recommended: true,
+      recommendedMemoryBytes: 6 * 1024 * 1024 * 1024,
+    ),
+    LocalModelDefinition(
+      id: gemma4E4BLiteRtId,
+      name: 'Gemma 4 E4B IT',
+      summary: '能力更强的 LiteRT-LM 多模态模型',
+      description: '由 LiteRT-LM 独立运行，面向更复杂的推理、代码、图片和音频任务；需要较大的内存余量。',
+      category: LocalModelCategory.language,
+      availability: LocalModelAvailability.downloadable,
+      task: LocalModelTask.textGeneration,
+      downloadSizeBytes: LanguageModelService.gemma4E4BLiteRtDownloadSizeBytes,
+      languages: ['多语言', '图片', '音频'],
+      engine: 'LiteRT-LM 0.14 · Gemma 4',
+      version: 'Gemma 4 E4B IT',
+      source: 'Google / litert-community · Hugging Face 多源下载',
+      license: 'Apache-2.0',
+      recommendedMemoryBytes: 12 * 1024 * 1024 * 1024,
     ),
     LocalModelDefinition(
       id: senseVoiceId,

@@ -14,7 +14,7 @@ OUTPUT_DIR="$1"
 CACHE_DIR="$OUTPUT_DIR/downloads"
 ANDROID_ZIP="$CACHE_DIR/mnn-android-$MNN_VERSION.zip"
 IOS_ZIP="$CACHE_DIR/mnn-ios-$MNN_VERSION.zip"
-READY_FILE="$OUTPUT_DIR/.ready-$MNN_VERSION-v2"
+READY_FILE="$OUTPUT_DIR/.ready-$MNN_VERSION-split-v4"
 
 sha256() {
   if command -v shasum >/dev/null 2>&1; then
@@ -43,7 +43,9 @@ download_verified() {
   mv "$destination.tmp" "$destination"
 }
 
-if [ -f "$READY_FILE" ]; then
+if [ -f "$READY_FILE" ] && \
+  [ -f "$OUTPUT_DIR/android/jni/arm64-v8a/libllm.so" ] && \
+  [ -f "$OUTPUT_DIR/android/jni/arm64-v8a/libMNN_Express.so" ]; then
   exit 0
 fi
 

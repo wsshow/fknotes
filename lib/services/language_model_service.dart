@@ -45,6 +45,7 @@ class _LanguageModelFile {
 }
 
 class _LanguageModelSpec {
+  final LocalLlmEngineKind engine;
   final String id;
   final String displayName;
   final String storageFolder;
@@ -58,6 +59,7 @@ class _LanguageModelSpec {
   final List<_LanguageModelFile> files;
 
   const _LanguageModelSpec({
+    this.engine = LocalLlmEngineKind.mnn,
     required this.id,
     required this.displayName,
     required this.storageFolder,
@@ -73,9 +75,12 @@ class _LanguageModelSpec {
 
   int get downloadSizeBytes =>
       files.fold(0, (total, file) => total + file.sizeBytes);
+
+  String get runtimeFileName =>
+      engine == LocalLlmEngineKind.mnn ? 'config.json' : files.single.name;
 }
 
-/// Downloads and transactionally installs MNN language-model directories.
+/// Downloads and transactionally installs trusted local language models.
 class LanguageModelService {
   LanguageModelService._();
   static final LanguageModelService instance = LanguageModelService._();
@@ -85,17 +90,23 @@ class LanguageModelService {
   static const qwen3Vl4BId = 'qwen3-vl-4b-instruct-mnn-int4';
   static const qwen3Vl8BId = 'qwen3-vl-8b-instruct-mnn-int4';
   static const miniCpmV4Id = 'minicpm-v-4-mnn-int4';
+  static const gemma4E2BLiteRtId = 'gemma-4-e2b-it-litert-lm';
+  static const gemma4E4BLiteRtId = 'gemma-4-e4b-it-litert-lm';
   static const miniCpm5DownloadSizeBytes = 626439064;
   static const qwen35DownloadSizeBytes = 1386690287;
   static const qwen3Vl4BDownloadSizeBytes = 2958466071;
   static const qwen3Vl8BDownloadSizeBytes = 5453816751;
   static const miniCpmV4DownloadSizeBytes = 2834666144;
+  static const gemma4E2BLiteRtDownloadSizeBytes = 2588147712;
+  static const gemma4E4BLiteRtDownloadSizeBytes = 3659530240;
   static const supportedModelIds = [
     miniCpm5Id,
     qwen35Id,
     qwen3Vl4BId,
     qwen3Vl8BId,
     miniCpmV4Id,
+    gemma4E2BLiteRtId,
+    gemma4E4BLiteRtId,
   ];
   static const _retiredMnnGemmaModelIds = {
     'gemma-4-e2b-it-mnn-int4',
@@ -392,6 +403,60 @@ class LanguageModelService {
         ),
       ],
     ),
+    _LanguageModelSpec(
+      engine: LocalLlmEngineKind.liteRtLm,
+      id: gemma4E2BLiteRtId,
+      displayName: 'Gemma 4 E2B IT',
+      storageFolder: 'gemma-4-e2b-it-litert-lm',
+      repository: 'litert-community/gemma-4-E2B-it-litert-lm',
+      revision: '9262660a1676eed6d0c477ab1a86344430854664',
+      nativeContextTokens: 32768,
+      minimumMemoryBytes: 6 * 1024 * 1024 * 1024,
+      capabilities: LocalLlmCapabilities(
+        imageInput: true,
+        audioInput: true,
+        backends: {LocalLlmBackend.cpu, LocalLlmBackend.openCl},
+      ),
+      generationOptions: LocalLlmGenerationOptions(
+        temperature: 1,
+        topP: 0.95,
+        topK: 64,
+      ),
+      files: [
+        _LanguageModelFile(
+          'gemma-4-E2B-it.litertlm',
+          gemma4E2BLiteRtDownloadSizeBytes,
+          '181938105e0eefd105961417e8da75903eacda102c4fce9ce90f50b97139a63c',
+        ),
+      ],
+    ),
+    _LanguageModelSpec(
+      engine: LocalLlmEngineKind.liteRtLm,
+      id: gemma4E4BLiteRtId,
+      displayName: 'Gemma 4 E4B IT',
+      storageFolder: 'gemma-4-e4b-it-litert-lm',
+      repository: 'litert-community/gemma-4-E4B-it-litert-lm',
+      revision: 'f7ad3343bd6ebc9607f4dc3bc4f2398bd5749bc5',
+      nativeContextTokens: 32768,
+      minimumMemoryBytes: 12 * 1024 * 1024 * 1024,
+      capabilities: LocalLlmCapabilities(
+        imageInput: true,
+        audioInput: true,
+        backends: {LocalLlmBackend.cpu, LocalLlmBackend.openCl},
+      ),
+      generationOptions: LocalLlmGenerationOptions(
+        temperature: 1,
+        topP: 0.95,
+        topK: 64,
+      ),
+      files: [
+        _LanguageModelFile(
+          'gemma-4-E4B-it.litertlm',
+          gemma4E4BLiteRtDownloadSizeBytes,
+          '0b2a8980ce155fd97673d8e820b4d29d9c7d99b8fa6806f425d969b145bd52e0',
+        ),
+      ],
+    ),
   ];
 
   final _storage = FileStorageService.instance;
@@ -541,7 +606,7 @@ class LanguageModelService {
       if (json is! Map ||
           json['id'] != spec.id ||
           json['revision'] != spec.revision ||
-          json['engine'] != 'mnn') {
+          json['engine'] != spec.engine.name) {
         return unavailable('语言模型版本不匹配，请重新下载');
       }
     } on FormatException {
@@ -565,7 +630,7 @@ class LanguageModelService {
     return LanguageModelInfo(
       modelId: id,
       installed: true,
-      configPath: p.join(active.path, 'config.json'),
+      configPath: p.join(active.path, spec.runtimeFileName),
       sizeBytes: size,
     );
   }
@@ -577,6 +642,7 @@ class LanguageModelService {
       throw StateError(info.problem ?? '${spec.displayName}尚未安装');
     }
     return LocalLlmModelDescriptor(
+      engine: spec.engine,
       id: spec.id,
       name: spec.displayName,
       configPath: info.configPath,
@@ -671,10 +737,12 @@ class LanguageModelService {
     void Function(SpeechModelImportProgress progress)? onProgress,
   }) async {
     final spec = _spec(id);
-    const group = XTypeGroup(
-      label: 'MNN 语言模型文件',
-      extensions: ['json', 'mnn', 'weight', 'bin', 'mtok', 'txt'],
-    );
+    final group = spec.engine == LocalLlmEngineKind.mnn
+        ? const XTypeGroup(
+            label: 'MNN 语言模型文件',
+            extensions: ['json', 'mnn', 'weight', 'bin', 'mtok', 'txt'],
+          )
+        : const XTypeGroup(label: 'LiteRT-LM 模型文件', extensions: ['litertlm']);
     final selected = await openFiles(acceptedTypeGroups: [group]);
     if (selected.isEmpty) return null;
     return _runExclusive(id, () async {
@@ -762,7 +830,7 @@ class LanguageModelService {
           const JsonEncoder.withIndent('  ').convert({
             'id': spec.id,
             'name': spec.displayName,
-            'engine': 'mnn',
+            'engine': spec.engine.name,
             'repository': spec.repository,
             'revision': spec.revision,
             'license': spec.license,
