@@ -2,8 +2,10 @@ package com.fknotes.app
 
 import android.app.Service
 import android.content.Intent
+import android.os.Build
 import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.Message
 import android.os.Messenger
 import com.google.ai.edge.litertlm.Backend
@@ -20,6 +22,7 @@ import com.google.ai.edge.litertlm.Message as LiteMessage
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -29,27 +32,33 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 @OptIn(com.google.ai.edge.litertlm.ExperimentalApi::class)
 open class LiteRtLmService : Service() {
+    private data class Command(
+        val requestId: Int,
+        val replyTo: Messenger?,
+    )
+
     private val executor = Executors.newSingleThreadExecutor()
+    private val controlExecutor = Executors.newSingleThreadExecutor()
     private var engine: Engine? = null
     @Volatile private var conversation: Conversation? = null
     @Volatile private var activeRequestId: Int? = null
     @Volatile private var activeFinished: AtomicBoolean? = null
-
-    private val messenger = Messenger(
-        Handler(mainLooper) { message ->
-            when (message.what) {
-                LiteRtLmIpc.LOAD -> execute(message, ::load)
-                LiteRtLmIpc.GENERATE -> execute(message, ::generate)
-                LiteRtLmIpc.CANCEL -> execute(message, ::cancel)
-                LiteRtLmIpc.UNLOAD -> execute(message, ::unload)
-                else -> return@Handler false
-            }
-            true
-        },
-    )
+    private lateinit var messenger: Messenger
 
     override fun onCreate() {
         super.onCreate()
+        messenger = Messenger(
+            Handler(Looper.getMainLooper()) { message ->
+                when (message.what) {
+                    LiteRtLmIpc.LOAD -> execute(message, ::load)
+                    LiteRtLmIpc.GENERATE -> execute(message, ::generate)
+                    LiteRtLmIpc.CANCEL -> execute(message, ::cancel, controlExecutor)
+                    LiteRtLmIpc.UNLOAD -> execute(message, ::unload)
+                    else -> return@Handler false
+                }
+                true
+            },
+        )
         Engine.setNativeMinLogSeverity(LogSeverity.ERROR)
         onInferenceDiagnostic(stage = 0)
     }
@@ -64,34 +73,54 @@ open class LiteRtLmService : Service() {
         conversation = null
         engine = null
         executor.shutdownNow()
+        controlExecutor.shutdownNow()
         super.onDestroy()
     }
 
-    private fun execute(message: Message, operation: (Message, JSONObject) -> Unit) {
+    private fun execute(
+        message: Message,
+        operation: (Command, JSONObject) -> Unit,
+        targetExecutor: ExecutorService = executor,
+    ) {
+        // Handler recycles Message after this callback returns. Snapshot every
+        // value needed by the executor and asynchronous inference callbacks.
+        val command = Command(
+            requestId = message.data.getInt(LiteRtLmIpc.REQUEST_ID, -1),
+            replyTo = message.replyTo,
+        )
         val payload = message.data.getString(LiteRtLmIpc.PAYLOAD) ?: "{}"
-        executor.execute {
+        targetExecutor.execute {
             try {
-                operation(message, JSONObject(payload))
+                operation(command, JSONObject(payload))
             } catch (error: Throwable) {
                 onInferenceDiagnostic(
                     stage = 7,
-                    requestId = requestId(message),
+                    requestId = command.requestId,
                     error = error,
                 )
-                emitError(message, error)
+                emitError(command, error)
             }
         }
     }
 
-    private fun load(message: Message, payload: JSONObject) {
-        val requestId = requestId(message)
+    private fun load(command: Command, payload: JSONObject) {
+        val requestId = command.requestId
         onInferenceDiagnostic(stage = 1, requestId = requestId)
         val modelPath = payload.getString("modelPath")
         val model = File(modelPath)
         require(model.isFile && model.length() > 0) { "LiteRT-LM 模型文件不存在或为空" }
         closeRuntime()
         val threads = payload.optInt("threads", 4).coerceIn(1, 8)
-        val backend = backend(payload.optString("backend"), threads)
+        val requestedBackend = payload.optString("backend")
+        // Android Emulator exposes a Vulkan stack but no usable render node
+        // for LiteRT-LM. GPU initialization can appear successful and then
+        // hang forever on the first generation, including cancelProcess().
+        val backendName = if (requestedBackend == "gpu" && isEmulator()) {
+            "cpu"
+        } else {
+            requestedBackend
+        }
+        val backend = backend(backendName, threads)
         // Match Google AI Edge Gallery's LiteRT-LM contract: image and audio
         // pipelines are task-specific, vision uses GPU, and audio uses CPU.
         // A text-only chat must not initialize either multimodal pipeline.
@@ -102,7 +131,7 @@ open class LiteRtLmService : Service() {
             stage = 2,
             requestId = requestId,
             modelBytes = model.length(),
-            backendName = payload.optString("backend"),
+            backendName = backendName,
             contextTokens = contextTokens,
             imageInput = payload.optBoolean("imageInput"),
             audioInput = payload.optBoolean("audioInput"),
@@ -123,15 +152,15 @@ open class LiteRtLmService : Service() {
             created.initialize()
             onInferenceDiagnostic(stage = 6, requestId = requestId)
             engine = created
-            emit(message, requestId, "loaded")
+            emit(command, requestId, "loaded")
         } catch (error: Throwable) {
             runCatching { created.close() }
             throw error
         }
     }
 
-    private fun generate(message: Message, payload: JSONObject) {
-        val requestId = requestId(message)
+    private fun generate(command: Command, payload: JSONObject) {
+        val requestId = command.requestId
         val currentEngine = requireNotNull(engine) { "LiteRT-LM 模型尚未加载" }
         check(activeRequestId == null) { "已有 LiteRT-LM 生成任务正在运行" }
         val messages = payload.getJSONArray("messages")
@@ -179,7 +208,7 @@ open class LiteRtLmService : Service() {
             last,
             object : MessageCallback {
                 override fun onMessage(messageChunk: LiteMessage) {
-                    if (!finished.get()) emit(message, requestId, "textDelta", messageChunk.toString())
+                    if (!finished.get()) emit(command, requestId, "textDelta", messageChunk.toString())
                 }
 
                 override fun onDone() {
@@ -193,24 +222,24 @@ open class LiteRtLmService : Service() {
                             .put("decodeTokensPerSecond", benchmark.lastDecodeTokensPerSecond)
                     }.getOrElse { JSONObject() }
                     finishConversation(created, requestId)
-                    emit(message, requestId, "completed", metrics.toString())
+                    emit(command, requestId, "completed", metrics.toString())
                 }
 
                 override fun onError(throwable: Throwable) {
                     if (!finished.compareAndSet(false, true)) return
                     finishConversation(created, requestId)
-                    emitError(message, throwable, requestId)
+                    emitError(command, throwable, requestId)
                 }
             },
         )
     }
 
-    private fun cancel(message: Message, payload: JSONObject) {
-        val requestId = requestId(message)
+    private fun cancel(command: Command, payload: JSONObject) {
+        val requestId = command.requestId
         val current = conversation
         val finished = activeFinished
         if (current == null || activeRequestId != requestId || finished == null) {
-            emit(message, requestId, "canceled")
+            emit(command, requestId, "canceled")
             return
         }
         if (!finished.compareAndSet(false, true)) return
@@ -218,17 +247,17 @@ open class LiteRtLmService : Service() {
             current.cancelProcess()
         } catch (error: Throwable) {
             finishConversation(current, requestId)
-            emitError(message, error, requestId)
+            emitError(command, error, requestId)
             return
         }
         finishConversation(current, requestId)
-        emit(message, requestId, "canceled")
+        emit(command, requestId, "canceled")
     }
 
-    private fun unload(message: Message, payload: JSONObject) {
-        val requestId = requestId(message)
+    private fun unload(command: Command, payload: JSONObject) {
+        val requestId = command.requestId
         closeRuntime()
-        emit(message, requestId, "unloaded")
+        emit(command, requestId, "unloaded")
     }
 
     private fun toMessage(item: JSONObject): LiteMessage {
@@ -262,6 +291,12 @@ open class LiteRtLmService : Service() {
     private fun backend(name: String, threads: Int): Backend =
         if (name == "gpu") Backend.GPU() else Backend.CPU(threadCount = threads.coerceIn(1, 8))
 
+    private fun isEmulator(): Boolean =
+        Build.FINGERPRINT.startsWith("generic") ||
+            Build.MODEL.startsWith("sdk_gphone") ||
+            Build.HARDWARE.contains("ranchu") ||
+            Build.HARDWARE.contains("goldfish")
+
     @Synchronized
     private fun finishConversation(target: Conversation, requestId: Int) {
         if (conversation !== target || activeRequestId != requestId) return
@@ -287,10 +322,7 @@ open class LiteRtLmService : Service() {
         engine = null
     }
 
-    private fun requestId(message: Message): Int =
-        message.data.getInt(LiteRtLmIpc.REQUEST_ID, -1)
-
-    private fun emit(message: Message, requestId: Int, type: String, data: String = "") {
+    private fun emit(command: Command, requestId: Int, type: String, data: String = "") {
         val response = Message.obtain(null, LiteRtLmIpc.EVENT).apply {
             this.data = android.os.Bundle().apply {
                 putInt(LiteRtLmIpc.REQUEST_ID, requestId)
@@ -299,15 +331,15 @@ open class LiteRtLmService : Service() {
             }
         }
         try {
-            message.replyTo?.send(response)
+            command.replyTo?.send(response)
         } catch (_: Throwable) {
             // The UI process may have gone away; the worker can be reclaimed.
         }
     }
 
-    private fun emitError(message: Message, error: Throwable, requestId: Int = requestId(message)) {
+    private fun emitError(command: Command, error: Throwable, requestId: Int = command.requestId) {
         val detail = error.message?.takeIf(String::isNotBlank) ?: error.javaClass.simpleName
-        emit(message, requestId, "error", detail)
+        emit(command, requestId, "error", detail)
     }
 
     /** Debug builds override this without placing diagnostic writers in Release. */
