@@ -1603,33 +1603,32 @@ class _ModelCard extends StatelessWidget {
             ),
             const SizedBox(height: 9),
             Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Expanded(
-                  child: Text(
-                    _transferDescription(context, transfer!),
-                    style: const TextStyle(
-                      color: AppColors.muted,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
+                Expanded(child: _transferStatus(context, transfer!)),
+                const SizedBox(width: 8),
                 if (transfer!.status == ModelTransferStatus.verifying ||
                     transfer!.status == ModelTransferStatus.canceling ||
                     !transfer!.cancelable)
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    child: Text(
-                      context.l10n.pleaseWait,
-                      style: const TextStyle(
-                        color: AppColors.muted,
-                        fontSize: 12,
+                  SizedBox(
+                    width: 64,
+                    child: Center(
+                      child: Text(
+                        context.l10n.pleaseWait,
+                        style: const TextStyle(
+                          color: AppColors.muted,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                   )
                 else
-                  TextButton(
-                    onPressed: onCancel,
-                    child: Text(context.l10n.cancel),
+                  SizedBox(
+                    width: 64,
+                    child: TextButton(
+                      onPressed: onCancel,
+                      child: Text(context.l10n.cancel),
+                    ),
                   ),
               ],
             ),
@@ -1645,6 +1644,105 @@ class _ModelCard extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _transferStatus(BuildContext context, ModelTransferState state) {
+    if (state.status == ModelTransferStatus.importing &&
+        state.totalBytes <= 0) {
+      return Text(
+        context.l10n.preparingLocalModelImport,
+        style: const TextStyle(color: AppColors.muted, fontSize: 12),
+      );
+    }
+    if (state.status != ModelTransferStatus.downloading &&
+        state.status != ModelTransferStatus.importing) {
+      return Text(
+        _transferDescription(context, state),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(color: AppColors.muted, fontSize: 12),
+      );
+    }
+    const numberStyle = TextStyle(
+      color: AppColors.muted,
+      fontSize: 12,
+      fontFeatures: [FontFeature.tabularFigures()],
+    );
+    final amount =
+        '${_formatBytes(state.transferredBytes)} / '
+        '${_formatBytes(state.totalBytes)}';
+    final eta = state.estimatedRemaining;
+    final etaText = context.l10n.estimatedRemainingCompact(
+      eta == null ? '--:--:--' : _formatDurationClock(eta),
+    );
+    final source = state.status == ModelTransferStatus.importing
+        ? context.l10n.localModelImportTransfer
+        : state.sourceLabel.isEmpty
+        ? context.l10n.modelDownloadTransfer
+        : _localizedDownloadSourceLabel(context.l10n, state.sourceLabel);
+    final speed = state.bytesPerSecond <= 0
+        ? context.l10n.speedTesting
+        : '${_formatBytes(state.bytesPerSecond.round())}/s';
+    return Semantics(
+      label: '$amount, $source, $speed, $etaText',
+      child: ExcludeSemantics(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    amount,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: numberStyle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 104,
+                  child: Text(
+                    etaText,
+                    maxLines: 1,
+                    textAlign: TextAlign.right,
+                    overflow: TextOverflow.clip,
+                    style: numberStyle,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    source,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.muted,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 88,
+                  child: Text(
+                    speed,
+                    maxLines: 1,
+                    textAlign: TextAlign.right,
+                    overflow: TextOverflow.clip,
+                    style: numberStyle,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1769,27 +1867,7 @@ class _ModelCard extends StatelessWidget {
         _formatBytes(state.transferredBytes),
       );
     }
-    if (state.status == ModelTransferStatus.importing) {
-      if (state.totalBytes <= 0) {
-        return context.l10n.preparingLocalModelImport;
-      }
-      final amount = context.l10n.importingLocalModelAmount(
-        _formatBytes(state.transferredBytes),
-        _formatBytes(state.totalBytes),
-      );
-      return state.bytesPerSecond <= 0
-          ? amount
-          : '$amount · ${_formatBytes(state.bytesPerSecond.round())}/s';
-    }
-    final speed = state.bytesPerSecond <= 0
-        ? context.l10n.waitingFirstPacket
-        : '${_formatBytes(state.bytesPerSecond.round())}/s';
-    final source = state.sourceLabel.isEmpty
-        ? ''
-        : ' · ${_localizedDownloadSourceLabel(context.l10n, state.sourceLabel)}';
-    return '${context.l10n.downloadedVerb} '
-        '${_formatBytes(state.transferredBytes)} / '
-        '${_formatBytes(state.totalBytes)}$source · $speed';
+    return '';
   }
 }
 
@@ -1863,3 +1941,10 @@ String _formatBytes(int bytes) => bytes < 1024
     : '${(bytes / 1073741824).toStringAsFixed(1)} GB';
 
 String _formatMemory(int bytes) => '${(bytes / 1073741824).round()} GB';
+
+String _formatDurationClock(Duration duration) {
+  final hours = duration.inHours.toString().padLeft(2, '0');
+  final minutes = (duration.inMinutes % 60).toString().padLeft(2, '0');
+  final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+  return '$hours:$minutes:$seconds';
+}

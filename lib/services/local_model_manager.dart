@@ -73,6 +73,18 @@ class ModelTransferState {
   double get progress =>
       totalBytes <= 0 ? 0 : (transferredBytes / totalBytes).clamp(0.0, 1.0);
 
+  Duration? get estimatedRemaining {
+    if (status != ModelTransferStatus.downloading &&
+        status != ModelTransferStatus.importing) {
+      return null;
+    }
+    final remainingBytes = totalBytes - transferredBytes;
+    if (remainingBytes <= 0 || bytesPerSecond <= 0) return null;
+    final seconds = (remainingBytes / bytesPerSecond).ceil();
+    if (seconds <= 0) return null;
+    return Duration(seconds: seconds);
+  }
+
   void updateProgress(SpeechModelImportProgress progress) {
     final now = DateTime.now();
     if (!progress.verifying &&

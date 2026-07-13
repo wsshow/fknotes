@@ -1688,23 +1688,23 @@ abstract class AppLocalizations {
   /// **'正在准备本地模型文件…'**
   String get preparingLocalModelImport;
 
-  /// No description provided for @importingLocalModelAmount.
+  /// No description provided for @estimatedRemainingCompact.
   ///
   /// In zh, this message translates to:
-  /// **'正在导入本地模型 · {current} / {total}'**
-  String importingLocalModelAmount(String current, String total);
+  /// **'剩余 {time}'**
+  String estimatedRemainingCompact(String time);
 
-  /// No description provided for @downloadedVerb.
+  /// No description provided for @modelDownloadTransfer.
   ///
   /// In zh, this message translates to:
-  /// **'已下载'**
-  String get downloadedVerb;
+  /// **'模型下载'**
+  String get modelDownloadTransfer;
 
-  /// No description provided for @waitingFirstPacket.
+  /// No description provided for @localModelImportTransfer.
   ///
   /// In zh, this message translates to:
-  /// **'等待首个数据包…'**
-  String get waitingFirstPacket;
+  /// **'本地文件导入'**
+  String get localModelImportTransfer;
 
   /// No description provided for @thirdPartyMainlandMirror.
   ///

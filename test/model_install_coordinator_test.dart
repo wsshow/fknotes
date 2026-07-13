@@ -138,6 +138,21 @@ void main() {
     expect(transfer.transferredBytes, 30);
   });
 
+  test('model transfer estimates remaining time from current speed', () {
+    final transfer = ModelTransferState(
+      modelId: 'test-model',
+      status: ModelTransferStatus.downloading,
+      transferredBytes: 200,
+      totalBytes: 1000,
+      bytesPerSecond: 100,
+    );
+
+    expect(transfer.estimatedRemaining, const Duration(seconds: 8));
+
+    transfer.status = ModelTransferStatus.verifying;
+    expect(transfer.estimatedRemaining, isNull);
+  });
+
   test(
     'opening the local file picker does not create a fake transfer',
     () async {

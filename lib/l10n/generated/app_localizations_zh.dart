@@ -884,15 +884,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get preparingLocalModelImport => '正在准备本地模型文件…';
 
   @override
-  String importingLocalModelAmount(String current, String total) {
-    return '正在导入本地模型 · $current / $total';
+  String estimatedRemainingCompact(String time) {
+    return '剩余 $time';
   }
 
   @override
-  String get downloadedVerb => '已下载';
+  String get modelDownloadTransfer => '模型下载';
 
   @override
-  String get waitingFirstPacket => '等待首个数据包…';
+  String get localModelImportTransfer => '本地文件导入';
 
   @override
   String get thirdPartyMainlandMirror => '第三方国内镜像';

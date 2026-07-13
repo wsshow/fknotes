@@ -986,15 +986,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get preparingLocalModelImport => 'Preparing local model files…';
 
   @override
-  String importingLocalModelAmount(String current, String total) {
-    return 'Importing local model · $current / $total';
+  String estimatedRemainingCompact(String time) {
+    return '$time left';
   }
 
   @override
-  String get downloadedVerb => 'Downloaded';
+  String get modelDownloadTransfer => 'Model download';
 
   @override
-  String get waitingFirstPacket => 'Waiting for the first data packet…';
+  String get localModelImportTransfer => 'Local file import';
 
   @override
   String get thirdPartyMainlandMirror => 'Third-party regional mirror';
