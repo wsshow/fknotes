@@ -15,6 +15,7 @@ import '../providers/note_provider.dart';
 import '../services/app_build_metadata.dart';
 import '../services/app_lock_preferences_service.dart';
 import '../services/backup_service.dart';
+import '../services/background_task_center.dart';
 import '../services/file_storage_service.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/empty_state.dart';
@@ -435,10 +436,7 @@ class _OverviewTab extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
               sliver: SliverList.list(
                 children: [
-                  _BrandHeader(
-                    provider: provider,
-                    onAssistant: onOpenAssistant,
-                  ),
+                  _BrandHeader(onAssistant: onOpenAssistant),
                   const SizedBox(height: 22),
                   _SearchButton(onTap: onSearch),
                   const SizedBox(height: 28),
@@ -528,9 +526,8 @@ class _OverviewTab extends StatelessWidget {
 }
 
 class _BrandHeader extends StatelessWidget {
-  final NoteProvider provider;
   final VoidCallback onAssistant;
-  const _BrandHeader({required this.provider, required this.onAssistant});
+  const _BrandHeader({required this.onAssistant});
   @override
   Widget build(BuildContext context) => Row(
     children: [
@@ -558,7 +555,6 @@ class _BrandHeader extends StatelessWidget {
           ],
         ),
       ),
-      BackgroundTaskCenterButton(provider: provider),
       IconButton.filledTonal(
         key: const Key('open-local-chat'),
         tooltip: context.l10n.localAssistant,
@@ -1319,6 +1315,37 @@ class _DataTabState extends State<_DataTab> {
               ],
             ),
           ),
+          const SizedBox(height: 12),
+          AnimatedBuilder(
+            animation: BackgroundTaskCenter.instance,
+            builder: (context, _) {
+              final center = BackgroundTaskCenter.instance;
+              final hasTasks = center.items.isNotEmpty;
+              return _SettingCard(
+                children: [
+                  _SettingRow(
+                    key: const Key('open-background-tasks'),
+                    icon: center.failedCount > 0
+                        ? Icons.error_outline_rounded
+                        : center.activeCount > 0
+                        ? Icons.sync_rounded
+                        : Icons.task_alt_rounded,
+                    title: l10n.backgroundTasks,
+                    subtitle: hasTasks
+                        ? l10n.backgroundTaskSummary(
+                            center.activeCount,
+                            center.failedCount,
+                          )
+                        : l10n.noBackgroundTasks,
+                    onTap: () => showBackgroundTaskCenter(
+                      context,
+                      provider: widget.provider,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
           const SizedBox(height: 22),
           Text(
             l10n.preferences,
@@ -1727,6 +1754,7 @@ class _SettingRow extends StatelessWidget {
   final VoidCallback? onTap;
   final bool showChevron;
   const _SettingRow({
+    super.key,
     required this.icon,
     required this.title,
     required this.subtitle,

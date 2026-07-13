@@ -14,46 +14,16 @@ import '../services/realtime_dictation_service.dart';
 import '../services/speech_transcription_service.dart';
 import 'app_feedback.dart';
 
-class BackgroundTaskCenterButton extends StatelessWidget {
-  final NoteProvider provider;
-
-  const BackgroundTaskCenterButton({super.key, required this.provider});
-
-  @override
-  Widget build(BuildContext context) {
-    final center = BackgroundTaskCenter.instance;
-    return AnimatedBuilder(
-      animation: center,
-      builder: (context, _) {
-        final count = center.items.length;
-        return Badge(
-          isLabelVisible: count > 0,
-          label: Text('$count'),
-          child: IconButton(
-            key: const Key('open-background-tasks'),
-            tooltip: count == 0
-                ? context.l10n.backgroundTasks
-                : context.l10n.backgroundTaskCount(count),
-            onPressed: () => showModalBottomSheet<void>(
-              context: context,
-              useSafeArea: true,
-              showDragHandle: true,
-              isScrollControlled: true,
-              builder: (_) => _BackgroundTaskSheet(provider: provider),
-            ),
-            icon: Icon(
-              center.failedCount > 0
-                  ? Icons.error_outline_rounded
-                  : count > 0
-                  ? Icons.sync_rounded
-                  : Icons.task_alt_rounded,
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
+Future<void> showBackgroundTaskCenter(
+  BuildContext context, {
+  required NoteProvider provider,
+}) => showModalBottomSheet<void>(
+  context: context,
+  useSafeArea: true,
+  showDragHandle: true,
+  isScrollControlled: true,
+  builder: (_) => _BackgroundTaskSheet(provider: provider),
+);
 
 class _BackgroundTaskSheet extends StatelessWidget {
   final NoteProvider provider;

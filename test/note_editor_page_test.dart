@@ -59,15 +59,7 @@ void main() {
     await _pumpHomePage(tester);
 
     expect(find.byTooltip('本地助手'), findsOneWidget);
-    final taskButton = find
-        .byKey(const Key('open-background-tasks'))
-        .hitTestable();
-    expect(taskButton, findsOneWidget);
-    await tester.tap(taskButton);
-    await tester.pumpAndSettle();
-    expect(find.text('后台任务'), findsOneWidget);
-    tester.state<NavigatorState>(find.byType(Navigator)).pop();
-    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('open-background-tasks')), findsNothing);
     await tester.tap(find.byKey(const Key('open-local-chat')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
@@ -86,28 +78,31 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('background tasks keep a single home-level entry', (
+  testWidgets('background tasks are available from data instead of home', (
     tester,
   ) async {
     _usePhoneViewport(tester);
     await _pumpHomePage(tester);
 
-    final taskButton = find
-        .byKey(const Key('open-background-tasks'))
-        .hitTestable();
-    expect(taskButton, findsOneWidget);
+    expect(find.byKey(const Key('open-background-tasks')), findsNothing);
 
     await tester.tap(find.text('资料库'));
     await tester.pumpAndSettle();
-    expect(taskButton, findsNothing);
+    expect(find.byKey(const Key('open-background-tasks')), findsNothing);
 
     await tester.tap(find.text('数据'));
     await tester.pumpAndSettle();
-    expect(taskButton, findsNothing);
-
-    await tester.tap(find.text('主页'));
+    final taskEntry = find
+        .byKey(const Key('open-background-tasks'))
+        .hitTestable();
+    expect(taskEntry, findsOneWidget);
+    expect(find.text('当前没有正在运行或需要处理的任务'), findsOneWidget);
+    await tester.tap(taskEntry);
     await tester.pumpAndSettle();
-    expect(taskButton, findsOneWidget);
+    expect(find.text('后台任务'), findsWidgets);
+
+    tester.state<NavigatorState>(find.byType(Navigator)).pop();
+    await tester.pumpAndSettle();
   });
 
   testWidgets('data tab shows the installed version and build metadata', (
