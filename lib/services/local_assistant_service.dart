@@ -54,8 +54,8 @@ class LocalAssistantService with WidgetsBindingObserver {
           contextTokens: contextTokens,
           enableThinking: enableThinking,
           // A chat request contains the complete conversation. Reusing MNN's
-          // native prompt cache across requests is unsafe for some model
-          // families (notably Gemma 4) and can crash below the Dart boundary.
+          // native prompt cache across complete-history requests is unsafe for
+          // some chat templates and can corrupt the next turn's KV state.
           enablePromptCache: false,
         ),
       );

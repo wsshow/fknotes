@@ -21,7 +21,7 @@
 
 namespace {
 
-constexpr const char* kRuntimeVersion = "Android Chat 0.8.3 / Gemma 4";
+constexpr const char* kRuntimeVersion = "3.6.0";
 
 void emit_event(
     FkMnnEventCallback callback,
@@ -319,9 +319,8 @@ public:
             // Every Dart request contains the complete conversation. Do not
             // let KV state or a terminal status from the previous response
             // leak into this request. MNN's prompt-cache reconciliation is not
-            // safe for every chat template (Gemma 4 can abort in libMNN on the
-            // second turn), while reset + full prefill has deterministic
-            // ownership and failure boundaries.
+            // safe for every chat template, while reset + full prefill has
+            // deterministic ownership and failure boundaries.
             llm->reset();
 
             int64_t request_vision_us = 0;
@@ -331,9 +330,9 @@ public:
             // MNN's Android stepping implementation initializes generation
             // with a live output stream and an explicit end marker. Supplying
             // null pointers happens to work for some text models, but skips
-            // part of the upstream stream lifecycle and is unsafe for newer
-            // multimodal families such as Gemma 4. Dart still reads cumulative
-            // UTF-8 from LlmContext, so this sink only establishes ownership.
+            // part of the upstream stream lifecycle for newer multimodal
+            // families. Dart still reads cumulative UTF-8 from LlmContext, so
+            // this sink only establishes ownership.
             NullStreamBuffer output_buffer;
             std::ostream output_stream(&output_buffer);
             if (attachments.empty()) {

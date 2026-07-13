@@ -44,6 +44,14 @@ void main() {
                 'gated': false,
                 'pipeline_tag': 'text-generation',
               },
+              {
+                'type': 'model',
+                'id': 'taobao-mnn/Gemma-4-E2B-it-MNN',
+                'author': 'taobao-mnn',
+                'private': false,
+                'gated': false,
+                'pipeline_tag': 'text-generation',
+              },
             ],
           },
           {

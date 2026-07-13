@@ -129,8 +129,6 @@ class LocalModelManager extends ChangeNotifier {
   static const qwen3Vl4BId = LanguageModelService.qwen3Vl4BId;
   static const qwen3Vl8BId = LanguageModelService.qwen3Vl8BId;
   static const miniCpmV4Id = LanguageModelService.miniCpmV4Id;
-  static const gemma4E2BId = LanguageModelService.gemma4E2BId;
-  static const gemma4E4BId = LanguageModelService.gemma4E4BId;
 
   static const catalog = <LocalModelDefinition>[
     LocalModelDefinition(
@@ -214,38 +212,6 @@ class LocalModelManager extends ChangeNotifier {
       license: 'Apache-2.0',
       recommended: true,
       recommendedMemoryBytes: 8 * 1024 * 1024 * 1024,
-    ),
-    LocalModelDefinition(
-      id: gemma4E2BId,
-      name: 'Gemma 4 E2B IT INT4',
-      summary: '支持图像与音频的端侧推理模型',
-      description: '支持推理、图片理解和 WAV 音频理解，兼顾多语言、代码与内容生成，适合较新的高端设备。',
-      category: LocalModelCategory.language,
-      availability: LocalModelAvailability.downloadable,
-      task: LocalModelTask.textGeneration,
-      downloadSizeBytes: LanguageModelService.gemma4E2BDownloadSizeBytes,
-      languages: ['多语言', '图片', '音频'],
-      engine: 'MNN 3.6 · INT4 · PLE',
-      version: 'Gemma 4 E2B IT',
-      source: 'Google / taobao-mnn · Hugging Face 多源下载',
-      license: 'Apache-2.0',
-      recommendedMemoryBytes: 8 * 1024 * 1024 * 1024,
-    ),
-    LocalModelDefinition(
-      id: gemma4E4BId,
-      name: 'Gemma 4 E4B IT INT4',
-      summary: '更强的图像、音频与推理模型',
-      description: '面向更复杂的推理、代码、多语言图文和音频理解；资源占用较高，适合 12 GB 以上内存设备。',
-      category: LocalModelCategory.language,
-      availability: LocalModelAvailability.downloadable,
-      task: LocalModelTask.textGeneration,
-      downloadSizeBytes: LanguageModelService.gemma4E4BDownloadSizeBytes,
-      languages: ['多语言', '图片', '音频'],
-      engine: 'MNN 3.6 · INT4 · PLE',
-      version: 'Gemma 4 E4B IT',
-      source: 'Google / taobao-mnn · Hugging Face 多源下载',
-      license: 'Apache-2.0',
-      recommendedMemoryBytes: 12 * 1024 * 1024 * 1024,
     ),
     LocalModelDefinition(
       id: senseVoiceId,
@@ -426,6 +392,7 @@ class LocalModelManager extends ChangeNotifier {
 
   Future<void> initialize({bool force = false}) async {
     if (_initialized && !force) return;
+    await _languageModels.retireMnnGemmaModels();
     await _remoteCatalog.loadCache();
     _languageModels.registerRemoteModels(_remoteCatalog.cachedDetails);
     _remoteDefinitions

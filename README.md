@@ -37,7 +37,7 @@
 - SQLite（sqflite）：本地结构化数据
 - Google ML Kit：设备端中文文字识别
 - sherpa-onnx / SenseVoice Small INT8：设备端中文及多语种语音转写
-- MNN 3.6：Android / iOS arm64 设备端文本与多模态语言模型推理；Android 使用官方 MNN Chat 0.8.3 的 Gemma 4 验证运行库
+- MNN 3.6：Android / iOS arm64 设备端文本与多模态语言模型推理
 - Android 原生内容 URI 导入通道，以及 image_picker / file_selector 跨平台回退
 - just_audio / video_player / record：音视频播放与录音
 

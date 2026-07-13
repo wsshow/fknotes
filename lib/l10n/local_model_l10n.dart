@@ -34,10 +34,6 @@ String localizedModelSummary(
       'More capable multilingual vision-language model',
     LocalModelManager.miniCpmV4Id =>
       'Mobile-optimized vision model for Chinese content',
-    LocalModelManager.gemma4E2BId =>
-      'On-device reasoning with image and audio support',
-    LocalModelManager.gemma4E4BId =>
-      'Stronger image, audio, and reasoning capabilities',
     LocalModelManager.senseVoiceId =>
       'Audio transcription and optional dictation refinement',
     LocalModelManager.streamingChineseId =>
@@ -74,10 +70,6 @@ String localizedModelDescription(
       'Handles complex images, long documents, charts, OCR, and higher-quality generation. Intended for flagship devices with ample memory.',
     LocalModelManager.miniCpmV4Id =>
       'Optimized for Chinese OCR, screenshots, documents, and high-resolution images while balancing model size and visual quality.',
-    LocalModelManager.gemma4E2BId =>
-      'Supports reasoning, image understanding, and WAV audio understanding, plus multilingual writing and code on newer high-end devices.',
-    LocalModelManager.gemma4E4BId =>
-      'For more complex reasoning, code, multilingual image understanding, and audio tasks. Best on devices with at least 12 GB of memory.',
     LocalModelManager.senseVoiceId =>
       'Works with Mandarin, Cantonese, English, and mixed recordings. It can also run as an optional second pass after live dictation.',
     LocalModelManager.streamingChineseId =>
@@ -129,8 +121,6 @@ String localizedModelSource(AppLocalizations l10n, LocalModelDefinition model) {
     LocalModelManager.qwen3Vl4BId ||
     LocalModelManager.qwen3Vl8BId =>
       'Qwen / taobao-mnn · Hugging Face multi-source downloads',
-    LocalModelManager.gemma4E2BId || LocalModelManager.gemma4E4BId =>
-      'Google / taobao-mnn · Hugging Face multi-source downloads',
     LocalModelManager.streamingChineseId ||
     LocalModelManager.streamingBilingualId =>
       'Hugging Face repository · official and regional endpoints',

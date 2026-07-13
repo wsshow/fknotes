@@ -85,24 +85,26 @@ class LanguageModelService {
   static const qwen3Vl4BId = 'qwen3-vl-4b-instruct-mnn-int4';
   static const qwen3Vl8BId = 'qwen3-vl-8b-instruct-mnn-int4';
   static const miniCpmV4Id = 'minicpm-v-4-mnn-int4';
-  static const gemma4E2BId = 'gemma-4-e2b-it-mnn-int4';
-  static const gemma4E4BId = 'gemma-4-e4b-it-mnn-int4';
   static const miniCpm5DownloadSizeBytes = 626439064;
   static const qwen35DownloadSizeBytes = 1386690287;
   static const qwen3Vl4BDownloadSizeBytes = 2958466071;
   static const qwen3Vl8BDownloadSizeBytes = 5453816751;
   static const miniCpmV4DownloadSizeBytes = 2834666144;
-  static const gemma4E2BDownloadSizeBytes = 3739995144;
-  static const gemma4E4BDownloadSizeBytes = 5542169905;
   static const supportedModelIds = [
     miniCpm5Id,
     qwen35Id,
     qwen3Vl4BId,
     qwen3Vl8BId,
     miniCpmV4Id,
-    gemma4E2BId,
-    gemma4E4BId,
   ];
+  static const _retiredMnnGemmaModelIds = {
+    'gemma-4-e2b-it-mnn-int4',
+    'gemma-4-e4b-it-mnn-int4',
+  };
+  static const _retiredMnnGemmaStorageFolders = {
+    'gemma-4-e2b-it-mnn-int4',
+    'gemma-4-e4b-it-mnn-int4',
+  };
   static const _manifestFileName = 'manifest.json';
 
   static const _specs = <_LanguageModelSpec>[
@@ -390,160 +392,6 @@ class LanguageModelService {
         ),
       ],
     ),
-    _LanguageModelSpec(
-      id: gemma4E2BId,
-      displayName: 'Gemma 4 E2B IT INT4',
-      storageFolder: 'gemma-4-e2b-it-mnn-int4',
-      repository: 'taobao-mnn/gemma-4-E2B-it-MNN',
-      revision: 'ce18884f154ce405545f1acda5c5c8fdd9c1280c',
-      nativeContextTokens: 131072,
-      minimumMemoryBytes: 8 * 1024 * 1024 * 1024,
-      capabilities: LocalLlmCapabilities(
-        thinking: true,
-        toolCalling: true,
-        imageInput: true,
-        audioInput: true,
-      ),
-      generationOptions: LocalLlmGenerationOptions(
-        temperature: 1,
-        topP: 0.95,
-        topK: 64,
-      ),
-      files: [
-        _LanguageModelFile(
-          'audio.mnn',
-          1428288,
-          '8826caef00f13c74be59b69b06c76b1acc7576d0359537abc37386e11124dd51',
-        ),
-        _LanguageModelFile(
-          'audio.mnn.weight',
-          589877376,
-          '16d1191104bf049df50b7d11747ebd6e842fec0fb22c6004f1e85c57804a2015',
-        ),
-        _LanguageModelFile(
-          'config.json',
-          678,
-          '3b1c8caafa2792a64b81d2ef47d3e6afc1c250b280389e77d0d25628108c87a7',
-        ),
-        _LanguageModelFile(
-          'llm.mnn',
-          2276992,
-          '7115ecd7a66332d8a14c9d6467d560baec33c9650174cbb2f0e7641a69999216',
-        ),
-        _LanguageModelFile(
-          'llm.mnn.json',
-          4895844,
-          'b2befd57549d0694aafed3dbfc720d2ee67c94b5fa38ce54827b62b0f3654f9d',
-        ),
-        _LanguageModelFile(
-          'llm.mnn.weight',
-          1436474178,
-          '8d4b0fabb015da09a820fab22714f392b9e73f8f2fc7175dea7ef4f581d03881',
-        ),
-        _LanguageModelFile(
-          'llm_config.json',
-          1415,
-          '7096f286d274bee7f374b7d06533d5a611f6d678b119fa9542e74e65fd8a5379',
-        ),
-        _LanguageModelFile(
-          'ple_embeddings_int4.bin',
-          1468006400,
-          'c76e660ca418790bde8757099af0144488ece631dcd612245f1e1bf801f9e1e3',
-        ),
-        _LanguageModelFile(
-          'tokenizer.mtok',
-          10068633,
-          'e08a1293e250750949bb1f543edd626cc6cf9f039a2e461958d20f33407d26b9',
-        ),
-        _LanguageModelFile(
-          'visual.mnn',
-          1060528,
-          '759a3fa521cbb9e4bcf877769524faa41f0e1288a61d664cb9656f3e70f61fb0',
-        ),
-        _LanguageModelFile(
-          'visual.mnn.weight',
-          225904812,
-          '308e356f5a8527c28c1caba233b8d3521d4ba558b56cbcb8a53ed103d73ae1af',
-        ),
-      ],
-    ),
-    _LanguageModelSpec(
-      id: gemma4E4BId,
-      displayName: 'Gemma 4 E4B IT INT4',
-      storageFolder: 'gemma-4-e4b-it-mnn-int4',
-      repository: 'taobao-mnn/gemma-4-E4B-it-MNN',
-      revision: 'fec885bae19e9363cebd36de22527b340bc6b450',
-      nativeContextTokens: 131072,
-      minimumMemoryBytes: 12 * 1024 * 1024 * 1024,
-      capabilities: LocalLlmCapabilities(
-        thinking: true,
-        toolCalling: true,
-        imageInput: true,
-        audioInput: true,
-      ),
-      generationOptions: LocalLlmGenerationOptions(
-        temperature: 1,
-        topP: 0.95,
-        topK: 64,
-      ),
-      files: [
-        _LanguageModelFile(
-          'audio.mnn',
-          1428400,
-          'ba4a5ccf5b78c237f511bb91d4c3d5d020c362169d83ce4fb9c64111cce2c379',
-        ),
-        _LanguageModelFile(
-          'audio.mnn.weight',
-          593027200,
-          '9a74d2940e890944b748a18ded43c61d183a5e4bc3ecc4f0aa3fd98abe217c32',
-        ),
-        _LanguageModelFile(
-          'config.json',
-          678,
-          '3b1c8caafa2792a64b81d2ef47d3e6afc1c250b280389e77d0d25628108c87a7',
-        ),
-        _LanguageModelFile(
-          'llm.mnn',
-          3585584,
-          'b55bad1efd4e66217e7ff75b896535fc01a0d07fcc78cc7a3d6b562fd71e8836',
-        ),
-        _LanguageModelFile(
-          'llm.mnn.json',
-          7804930,
-          '3222ce9243e3f67251bb3aee8bbbfdb5f5cef38933c66f059d1e19121b2a8e70',
-        ),
-        _LanguageModelFile(
-          'llm.mnn.weight',
-          2936840364,
-          '1232792a67e05d31525e5d3d8e30d827c55803f5dab9923aab2bbfd7fb9207e7',
-        ),
-        _LanguageModelFile(
-          'llm_config.json',
-          1416,
-          'c03fc5ccbdab67b7021f56ff255223f7c4308d2fa3a46059573ce309d8757594',
-        ),
-        _LanguageModelFile(
-          'ple_embeddings_int4.bin',
-          1761607680,
-          '0d91ddc26d4e6a0d7657ead0385781a30da62d5c5457e0498fbe324a979c33af',
-        ),
-        _LanguageModelFile(
-          'tokenizer.mtok',
-          10068633,
-          'e08a1293e250750949bb1f543edd626cc6cf9f039a2e461958d20f33407d26b9',
-        ),
-        _LanguageModelFile(
-          'visual.mnn',
-          1060528,
-          '6003978cd06e99eef6679c423f511a280479d858237cd18207019572d45f1327',
-        ),
-        _LanguageModelFile(
-          'visual.mnn.weight',
-          226744492,
-          '77b5258977b829e8bb3058447c448e396e48442c66fa0d7034013a6735957769',
-        ),
-      ],
-    ),
   ];
 
   final _storage = FileStorageService.instance;
@@ -562,6 +410,10 @@ class LanguageModelService {
 
   void registerRemoteModels(Iterable<TaobaoMnnModelSpec> models) {
     for (final model in models) {
+      if (!TaobaoMnnCatalogService.supportsRepository(model.repository)) {
+        _dynamicSpecs.remove(model.id);
+        continue;
+      }
       if (curatedRepositories.contains(model.repository.toLowerCase())) {
         continue;
       }
@@ -626,6 +478,33 @@ class LanguageModelService {
       return qwen35Id;
     } on FileSystemException {
       return qwen35Id;
+    }
+  }
+
+  /// Removes Gemma 4 assets created by releases that routed the model through
+  /// MNN. Gemma 4 now has a separate LiteRT-LM installation and engine, so the
+  /// two formats must never share selection state or model storage.
+  Future<void> retireMnnGemmaModels() async {
+    for (final id in _retiredMnnGemmaModelIds) {
+      _dynamicSpecs.remove(id);
+    }
+    final root = p.join(_storage.baseDir, 'models', 'llm');
+    for (final folder in _retiredMnnGemmaStorageFolders) {
+      final directory = Directory(p.join(root, folder));
+      if (await directory.exists()) await directory.delete(recursive: true);
+    }
+    final selection = File(_selectionPath);
+    if (!await selection.exists()) return;
+    try {
+      final decoded = jsonDecode(await selection.readAsString());
+      final id = decoded is Map ? decoded['modelId'] : null;
+      if (id is String && _retiredMnnGemmaModelIds.contains(id)) {
+        await selection.delete();
+      }
+    } on FormatException {
+      // Corrupt selection files already fall back to the curated default.
+    } on FileSystemException {
+      // A failed best-effort migration must not prevent app startup.
     }
   }
 

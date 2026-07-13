@@ -359,6 +359,7 @@ class TaobaoMnnCatalogService {
             (entry) =>
                 TaobaoMnnCatalogEntry.fromJson(entry.cast<String, Object?>()),
           )
+          .where((entry) => supportsRepository(entry.repository))
           .toList();
     } on FormatException {
       return const [];
@@ -380,6 +381,7 @@ class TaobaoMnnCatalogService {
             (detail) =>
                 TaobaoMnnModelSpec.fromJson(detail.cast<String, Object?>()),
           )
+          .where((detail) => supportsRepository(detail.repository))
           .toList();
     } on FormatException {
       return const [];
@@ -409,11 +411,20 @@ class TaobaoMnnCatalogService {
         value.contains('reranker');
   }
 
+  static bool supportsRepository(String repository) {
+    final value = repository.toLowerCase();
+    return value.startsWith('$organization/') &&
+        value.endsWith('-mnn') &&
+        !_isUnsupportedRepository(repository);
+  }
+
   static bool _isUnsupportedRepository(String repository) {
     final value = repository.toLowerCase();
     return value.contains('embedding') ||
         value.contains('reranker') ||
-        value.contains('stable-diffusion');
+        value.contains('stable-diffusion') ||
+        value.contains('gemma-4') ||
+        value.contains('gemma4');
   }
 
   static int _recommendedMemory(int downloadBytes) {
