@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:fknotes/l10n/generated/app_localizations.dart';
+import 'package:fknotes/models/local_model.dart';
 import 'package:fknotes/pages/model_management_page.dart';
 import 'package:fknotes/services/file_storage_service.dart';
 import 'package:fknotes/services/local_model_manager.dart';
@@ -120,7 +121,7 @@ void main() {
     );
   });
 
-  testWidgets('model manager groups available, built-in and planned models', (
+  testWidgets('overview only shows active models and category navigation', (
     tester,
   ) async {
     tester.view.devicePixelRatio = 3;
@@ -131,156 +132,50 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('本地模型'), findsOneWidget);
+    expect(find.text('正在使用'), findsOneWidget);
+    expect(find.text('分类管理'), findsOneWidget);
     expect(
       find.byKey(const Key('model-download-source-setting')),
-      findsOneWidget,
+      findsNothing,
     );
-    expect(find.text('模型下载源'), findsOneWidget);
     expect(find.text('语言模型'), findsOneWidget);
-    expect(find.text('MiniCPM5 1B INT4'), findsOneWidget);
-    expect(find.text('Qwen3.5 2B INT4'), findsOneWidget);
-    expect(find.text('597.4 MB'), findsOneWidget);
-    expect(find.text('1.3 GB'), findsOneWidget);
+    expect(find.text('语音模型'), findsOneWidget);
+    expect(find.text('视觉模型'), findsOneWidget);
+    expect(find.text('下载与存储'), findsOneWidget);
+    expect(find.text('ML Kit 中文文字识别'), findsOneWidget);
+    expect(find.text('Qwen3.5 2B INT4'), findsNothing);
+    expect(find.byIcon(Icons.download_rounded), findsNothing);
+    expect(find.byIcon(Icons.folder_open_rounded), findsNothing);
+  });
 
-    await tester.scrollUntilVisible(
-      find.text('实时听写设置'),
-      350,
-      scrollable: find.byType(Scrollable).first,
+  testWidgets('speech configuration owns live dictation settings', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 3;
+    tester.view.physicalSize = const Size(1080, 2400);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: ModelManagementPage(category: LocalModelCategory.speech),
+      ),
     );
     await tester.pumpAndSettle();
 
+    expect(find.text('语音模型'), findsOneWidget);
     expect(find.text('实时听写设置'), findsOneWidget);
+    expect(find.text('热词增强'), findsNothing);
+
+    await tester.tap(find.text('实时听写设置'));
+    await tester.pumpAndSettle();
     expect(find.text('热词增强'), findsOneWidget);
     expect(find.text('结束后精修'), findsOneWidget);
     expect(find.text('实时降噪'), findsOneWidget);
-    final noiseSuppressionSwitch = tester.widget<Switch>(
-      find.byKey(const Key('live-dictation-noise-suppression-switch')),
-    );
-    expect(noiseSuppressionSwitch.value, isFalse);
-    expect(noiseSuppressionSwitch.onChanged, isNull);
-    expect(
-      tester
-          .widget<Switch>(
-            find.byKey(const Key('live-dictation-two-pass-switch')),
-          )
-          .value,
-      isFalse,
-    );
 
     await tester.tap(find.byKey(const Key('live-dictation-hotwords-card')));
     await tester.pumpAndSettle();
     expect(find.text('实时听写热词'), findsOneWidget);
     expect(find.byType(BottomSheet), findsOneWidget);
-    expect(find.byType(AlertDialog), findsNothing);
-    await tester.enterText(
-      find.byKey(const Key('live-dictation-hotwords-field')),
-      'FKNotes\n非空笔记\nfknotes',
-    );
-    tester.testTextInput.hide();
-    await tester.ensureVisible(
-      find.byKey(const Key('save-live-dictation-hotwords')),
-    );
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const Key('save-live-dictation-hotwords')).hitTestable(),
-      findsOneWidget,
-    );
-    final saveButton = tester.widget<FilledButton>(
-      find.byKey(const Key('save-live-dictation-hotwords')),
-    );
-    await tester.runAsync(() async {
-      await (saveButton.onPressed as dynamic)();
-    });
-    await tester.pumpAndSettle();
-    expect(find.text('实时听写热词'), findsNothing);
-    expect(find.text('已保存 2 个热词'), findsOneWidget);
-    expect(find.text('2 个热词 · 强度 2.0'), findsOneWidget);
-    expect(
-      tester
-          .widget<Switch>(
-            find.byKey(const Key('live-dictation-two-pass-switch')),
-          )
-          .value,
-      isFalse,
-    );
-
-    await tester.scrollUntilVisible(
-      find.text('SenseVoice Small INT8'),
-      350,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('SenseVoice Small INT8'), findsOneWidget);
-    expect(find.text('继续下载'), findsOneWidget);
-
-    await tester.scrollUntilVisible(
-      find.text('Streaming Zipformer 中文'),
-      350,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Streaming Zipformer 中文'), findsOneWidget);
-    expect(find.text('159.6 MB'), findsOneWidget);
-    expect(find.text('当前听写'), findsOneWidget);
-    expect(find.text('下载'), findsWidgets);
-
-    await tester.scrollUntilVisible(
-      find.text('Streaming Zipformer 中英双语'),
-      350,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Streaming Zipformer 中英双语'), findsOneWidget);
-    expect(find.text('189.1 MB'), findsOneWidget);
-
-    await tester.scrollUntilVisible(
-      find.text('Silero VAD INT8'),
-      350,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Silero VAD INT8'), findsOneWidget);
-    expect(find.text('207.9 KB'), findsOneWidget);
-
-    await tester.scrollUntilVisible(
-      find.text('DPDFNet 实时降噪'),
-      350,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('DPDFNet 实时降噪'), findsOneWidget);
-    expect(find.text('8.4 MB'), findsOneWidget);
-
-    await tester.scrollUntilVisible(
-      find.text('Pyannote + 3D-Speaker'),
-      350,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Pyannote + 3D-Speaker'), findsOneWidget);
-    expect(find.text('44.4 MB'), findsOneWidget);
-
-    await tester.scrollUntilVisible(
-      find.text('Kokoro 中英双语 INT8'),
-      350,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Kokoro 中英双语 INT8'), findsOneWidget);
-    expect(find.text('140.2 MB'), findsOneWidget);
-
-    await tester.drag(find.byType(ListView), const Offset(0, -1000));
-    await tester.pumpAndSettle();
-
-    expect(find.text('视觉模型'), findsOneWidget);
-    expect(find.text('ML Kit 中文文字识别'), findsOneWidget);
-    expect(find.text('随应用提供'), findsOneWidget);
   });
 
   testWidgets('download actions fill the model card width on phones', (
@@ -290,7 +185,14 @@ void main() {
     tester.view.physicalSize = const Size(1080, 2400);
     addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(const MaterialApp(home: ModelManagementPage()));
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: ModelManagementPage(category: LocalModelCategory.language),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('可获取'));
     await tester.pumpAndSettle();
 
     final modelId = LocalModelManager.qwen3Vl4BId;
@@ -332,9 +234,17 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Local models'), findsOneWidget);
+    expect(find.text('In use'), findsOneWidget);
+    expect(find.text('Manage by category'), findsOneWidget);
     expect(find.text('Language models'), findsOneWidget);
-    expect(find.text('Model download source'), findsOneWidget);
-    expect(find.text('Lightweight, fast local note assistant'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Downloads and storage'),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Downloads and storage'), findsOneWidget);
+    expect(find.text('Model download source'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

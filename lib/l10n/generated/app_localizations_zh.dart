@@ -264,7 +264,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get localModels => '本地模型';
 
   @override
-  String get localModelsSubtitle => '下载、导入和移除设备端识别模型';
+  String get localModelsSubtitle => '查看正在使用的模型并按能力分类管理';
 
   @override
   String get backupAndMigration => '备份与迁移';
@@ -366,6 +366,75 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get localModelsPageTitle => '本地模型';
+
+  @override
+  String get modelsInUse => '正在使用';
+
+  @override
+  String get noModelsInUse => '尚未配置正在使用的本地模型';
+
+  @override
+  String get modelConfiguration => '分类管理';
+
+  @override
+  String activeModelCount(int count) {
+    return '正在使用 $count 个模型';
+  }
+
+  @override
+  String activeModelsUsage(String size) {
+    return '本地模型占用 $size';
+  }
+
+  @override
+  String get installedModels => '已安装';
+
+  @override
+  String get availableModels => '可获取';
+
+  @override
+  String installedModelsCount(int count) {
+    return '已安装 $count 个模型';
+  }
+
+  @override
+  String get noInstalledModelsInCategory => '这一分类还没有已安装的模型';
+
+  @override
+  String get noAvailableModelsInCategory => '当前没有其他可获取的模型';
+
+  @override
+  String get speechModelsDescription => '分别管理实时听写、录音转写、语音处理与语音合成模型。';
+
+  @override
+  String get visionModelsDescription => '管理 OCR 与专用视觉能力；聊天图片理解由支持图片的语言模型提供。';
+
+  @override
+  String get liveDictationSettingsDescription => '管理当前听写模型、热词、精修和实时降噪';
+
+  @override
+  String get modelDownloadsAndStorage => '下载与存储';
+
+  @override
+  String get modelDownloadsAndStorageDescription => '下载源、后台任务和模型文件占用';
+
+  @override
+  String get localAssistantUsage => '本地助手';
+
+  @override
+  String get liveDictationUsage => '实时听写';
+
+  @override
+  String get audioTranscriptionUsage => '录音转写';
+
+  @override
+  String get voiceActivityUsage => '语音检测';
+
+  @override
+  String get speechEnhancementUsage => '实时降噪';
+
+  @override
+  String get textRecognitionUsage => '文字识别';
 
   @override
   String get modelPrivacyHint => '模型只在用户下载时联网，且不会进入笔记备份；用户数据仅在手动云同步时上传。';

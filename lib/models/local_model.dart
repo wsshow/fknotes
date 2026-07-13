@@ -14,6 +14,19 @@ enum LocalModelTask {
   imageUnderstanding,
 }
 
+/// A stable product-facing slot that explains why a model is active.
+///
+/// Installation and usage are deliberately separate: downloaded models can
+/// remain available without appearing in the "in use" dashboard.
+enum LocalModelUsage {
+  assistant,
+  liveDictation,
+  audioTranscription,
+  voiceActivityDetection,
+  speechEnhancement,
+  textRecognition,
+}
+
 class LocalModelDefinition {
   final String id;
   final String name;
@@ -65,5 +78,17 @@ class LocalModelInstallation {
     this.installed = false,
     this.installedSizeBytes = 0,
     this.partialSizeBytes = 0,
+  });
+}
+
+class ActiveLocalModel {
+  final LocalModelDefinition definition;
+  final LocalModelInstallation installation;
+  final Set<LocalModelUsage> usages;
+
+  const ActiveLocalModel({
+    required this.definition,
+    required this.installation,
+    required this.usages,
   });
 }

@@ -12,11 +12,22 @@ import '../services/local_model_manager.dart';
 import '../services/realtime_dictation_preferences_service.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/editor_context_menu.dart';
+import '../widgets/empty_state.dart';
 import 'taobao_mnn_catalog_page.dart';
 
 class ModelManagementPage extends StatefulWidget {
   final String? focusModelId;
-  const ModelManagementPage({super.key, this.focusModelId});
+  final LocalModelCategory? category;
+  final bool showDictationSettings;
+  final bool showDownloadSettings;
+
+  const ModelManagementPage({
+    super.key,
+    this.focusModelId,
+    this.category,
+    this.showDictationSettings = false,
+    this.showDownloadSettings = false,
+  });
 
   @override
   State<ModelManagementPage> createState() => _ModelManagementPageState();
@@ -28,6 +39,7 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
   final _dictationPreferences = RealtimeDictationPreferencesService.instance;
   RealtimeDictationPreferences _preferences =
       const RealtimeDictationPreferences();
+  bool _showInstalledModels = true;
 
   @override
   void initState() {
@@ -60,15 +72,29 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
 
   @override
   Widget build(BuildContext context) {
-    final language = _manager.models
-        .where((model) => model.category == LocalModelCategory.language)
-        .toList();
-    final speech = _manager.models
-        .where((model) => model.category == LocalModelCategory.speech)
-        .toList();
-    final vision = _manager.models
-        .where((model) => model.category == LocalModelCategory.vision)
-        .toList();
+    if (widget.showDictationSettings) return _buildDictationSettings(context);
+    if (widget.showDownloadSettings) return _buildDownloadSettings(context);
+    final category = widget.category ?? _focusedCategory;
+    if (category != null) return _buildCategory(context, category);
+    return _buildOverview(context);
+  }
+
+  LocalModelCategory? get _focusedCategory {
+    final id = widget.focusModelId;
+    if (id == null) return null;
+    try {
+      return _manager.modelOf(id).category;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Widget _buildOverview(BuildContext context) {
+    final active = _manager.activeModels(_preferences);
+    final activeSize = active.fold<int>(
+      0,
+      (total, item) => total + item.installation.installedSizeBytes,
+    );
     return Scaffold(
       backgroundColor: AppColors.canvas,
       appBar: AppBar(
@@ -76,15 +102,6 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
           context.l10n.localModelsPageTitle,
           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
         ),
-        actions: [
-          IconButton(
-            key: const Key('discover-taobao-mnn-models'),
-            tooltip: context.l10n.discoverMnnModels,
-            onPressed: _openMnnCatalog,
-            icon: const Icon(Icons.travel_explore_rounded),
-          ),
-          const SizedBox(width: 6),
-        ],
       ),
       body: SafeArea(
         top: false,
@@ -92,72 +109,202 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 120),
           children: [
             _ModelSummary(
-              installedCount: _manager.installedCount,
-              installedSizeBytes: _manager.installedSizeBytes,
-            ),
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppColors.softGreen,
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(
-                    Icons.lock_outline_rounded,
-                    size: 19,
-                    color: AppColors.moss,
-                  ),
-                  const SizedBox(width: 9),
-                  Expanded(
-                    child: Text(
-                      context.l10n.modelPrivacyHint,
-                      style: const TextStyle(
-                        color: AppColors.muted,
-                        height: 1.55,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            _DownloadSourceCard(
-              preference: _sourcePolicy.preference,
-              automaticPrefersMainland: _sourcePolicy.regionPrefersMainland,
-              lastUsedSourceLabel: _sourcePolicy.lastUsedSourceLabel,
-              onTap: _chooseDownloadSource,
+              installedCount: active.length,
+              installedSizeBytes: activeSize,
+              activeOnly: true,
             ),
             const SizedBox(height: 26),
-            _sectionTitle(context.l10n.languageModels),
-            const SizedBox(height: 6),
+            _sectionTitle(context.l10n.modelsInUse),
+            const SizedBox(height: 12),
+            if (active.isEmpty)
+              EmptyState(
+                icon: Icons.memory_outlined,
+                message: context.l10n.noModelsInUse,
+              )
+            else
+              for (var index = 0; index < active.length; index++) ...[
+                _ActiveModelCard(
+                  model: active[index],
+                  onTap: () => _openCategory(
+                    active[index].definition.category,
+                    focusModelId: active[index].definition.id,
+                  ),
+                  onDetails: () => _showDetails(active[index].definition),
+                ),
+                if (index != active.length - 1) const SizedBox(height: 12),
+              ],
+            const SizedBox(height: 26),
+            _sectionTitle(context.l10n.modelConfiguration),
+            const SizedBox(height: 12),
+            _ModelCategoryLink(
+              icon: Icons.auto_awesome_rounded,
+              title: context.l10n.languageModels,
+              subtitle: _categorySubtitle(LocalModelCategory.language),
+              onTap: () => _openCategory(LocalModelCategory.language),
+            ),
+            const SizedBox(height: 10),
+            _ModelCategoryLink(
+              icon: Icons.graphic_eq_rounded,
+              title: context.l10n.speechModels,
+              subtitle: context.l10n.speechModelsDescription,
+              onTap: () => _openCategory(LocalModelCategory.speech),
+            ),
+            const SizedBox(height: 10),
+            _ModelCategoryLink(
+              icon: Icons.image_search_rounded,
+              title: context.l10n.visionModels,
+              subtitle: _categorySubtitle(LocalModelCategory.vision),
+              onTap: () => _openCategory(LocalModelCategory.vision),
+            ),
+            const SizedBox(height: 10),
+            _ModelCategoryLink(
+              icon: Icons.cloud_download_outlined,
+              title: context.l10n.modelDownloadsAndStorage,
+              subtitle: context.l10n.modelDownloadsAndStorageDescription,
+              onTap: _openDownloadSettings,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategory(BuildContext context, LocalModelCategory category) {
+    final models = _manager.models
+        .where((model) => model.category == category)
+        .toList();
+    final focusedId = widget.focusModelId;
+    final focusInstalled =
+        focusedId != null && _manager.installationOf(focusedId).installed;
+    final showInstalled = focusedId == null
+        ? _showInstalledModels
+        : focusInstalled;
+    final visible = models.where((model) {
+      final installed =
+          model.availability == LocalModelAvailability.builtIn ||
+          _manager.installationOf(model.id).installed;
+      return showInstalled ? installed : !installed;
+    }).toList();
+    return Scaffold(
+      backgroundColor: AppColors.canvas,
+      appBar: AppBar(
+        title: Text(_categoryTitle(category)),
+        actions: category == LocalModelCategory.language
+            ? [
+                IconButton(
+                  key: const Key('discover-taobao-mnn-models'),
+                  tooltip: context.l10n.discoverMnnModels,
+                  onPressed: _openMnnCatalog,
+                  icon: const Icon(Icons.travel_explore_rounded),
+                ),
+                const SizedBox(width: 6),
+              ]
+            : null,
+      ),
+      body: SafeArea(
+        top: false,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
+          children: [
             Text(
-              context.l10n.languageModelsDescription,
-              style: const TextStyle(color: AppColors.muted, height: 1.45),
+              _categoryDescription(category),
+              style: const TextStyle(color: AppColors.muted, height: 1.5),
             ),
-            const SizedBox(height: 12),
-            for (var index = 0; index < language.length; index++) ...[
-              _ModelCard(
-                definition: language[index],
-                installation: _manager.installationOf(language[index].id),
-                transfer: _manager.transferOf(language[index].id),
-                emphasized: language[index].id == widget.focusModelId,
-                selectedForAssistant:
-                    language[index].id == _manager.selectedAssistantModelId,
-                onDownload: () => _confirmDownload(language[index]),
-                onImport: () => _manager.import(language[index].id),
-                onCancel: () => _manager.cancel(language[index].id),
-                onRemove: () => _confirmRemove(language[index]),
-                onSelect: () => _selectForAssistant(language[index]),
-                onDetails: () => _showDetails(language[index]),
+            if (category == LocalModelCategory.speech) ...[
+              const SizedBox(height: 16),
+              _ModelCategoryLink(
+                icon: Icons.mic_rounded,
+                title: context.l10n.liveDictationSettings,
+                subtitle: context.l10n.liveDictationSettingsDescription,
+                onTap: _openDictationSettings,
               ),
-              if (index != language.length - 1) const SizedBox(height: 12),
             ],
-            const SizedBox(height: 26),
-            _sectionTitle(context.l10n.liveDictationSettings),
-            const SizedBox(height: 12),
+            const SizedBox(height: 20),
+            SegmentedButton<bool>(
+              key: const Key('model-installation-filter'),
+              segments: [
+                ButtonSegment(
+                  value: true,
+                  label: Text(context.l10n.installedModels),
+                  icon: const Icon(Icons.check_circle_outline_rounded),
+                ),
+                ButtonSegment(
+                  value: false,
+                  label: Text(context.l10n.availableModels),
+                  icon: const Icon(Icons.add_circle_outline_rounded),
+                ),
+              ],
+              selected: {showInstalled},
+              onSelectionChanged: focusedId != null
+                  ? null
+                  : (value) =>
+                        setState(() => _showInstalledModels = value.first),
+            ),
+            const SizedBox(height: 18),
+            if (visible.isEmpty)
+              EmptyState(
+                icon: showInstalled
+                    ? Icons.inventory_2_outlined
+                    : Icons.manage_search_rounded,
+                message: showInstalled
+                    ? context.l10n.noInstalledModelsInCategory
+                    : context.l10n.noAvailableModelsInCategory,
+              )
+            else
+              for (var index = 0; index < visible.length; index++) ...[
+                _ModelCard(
+                  definition: visible[index],
+                  installation: _manager.installationOf(visible[index].id),
+                  transfer: _manager.transferOf(visible[index].id),
+                  emphasized: visible[index].id == focusedId,
+                  selectedForLiveDictation:
+                      visible[index].id ==
+                      _manager.selectedLiveDictationModelId,
+                  selectedForAssistant:
+                      visible[index].id == _manager.selectedAssistantModelId,
+                  onDownload: () => _confirmDownload(visible[index]),
+                  onImport: () => _manager.import(visible[index].id),
+                  onCancel: () => _manager.cancel(visible[index].id),
+                  onRemove: () => _confirmRemove(visible[index]),
+                  onSelect: () => category == LocalModelCategory.language
+                      ? _selectForAssistant(visible[index])
+                      : _selectForLiveDictation(visible[index]),
+                  onDetails: () => _showDetails(visible[index]),
+                ),
+                if (index != visible.length - 1) const SizedBox(height: 12),
+              ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDictationSettings(BuildContext context) {
+    final selected = _manager.modelOf(_manager.selectedLiveDictationModelId);
+    final installation = _manager.installationOf(selected.id);
+    return Scaffold(
+      backgroundColor: AppColors.canvas,
+      appBar: AppBar(title: Text(context.l10n.liveDictationSettings)),
+      body: SafeArea(
+        top: false,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
+          children: [
+            if (installation.installed) ...[
+              _ActiveModelCard(
+                model: ActiveLocalModel(
+                  definition: selected,
+                  installation: installation,
+                  usages: const {LocalModelUsage.liveDictation},
+                ),
+                onTap: () => _openCategory(
+                  LocalModelCategory.speech,
+                  focusModelId: selected.id,
+                ),
+                onDetails: () => _showDetails(selected),
+              ),
+              const SizedBox(height: 18),
+            ],
             _HotwordsCard(preferences: _preferences, onTap: _editHotwords),
             const SizedBox(height: 12),
             _TwoPassCard(
@@ -172,49 +319,58 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
                   .installed,
               onChanged: _setNoiseSuppressionEnabled,
             ),
-            const SizedBox(height: 26),
-            _sectionTitle(context.l10n.speechModels),
-            const SizedBox(height: 12),
-            for (var index = 0; index < speech.length; index++) ...[
-              _ModelCard(
-                definition: speech[index],
-                installation: _manager.installationOf(speech[index].id),
-                transfer: _manager.transferOf(speech[index].id),
-                emphasized: speech[index].id == widget.focusModelId,
-                selectedForLiveDictation:
-                    speech[index].id == _manager.selectedLiveDictationModelId,
-                onDownload: () => _confirmDownload(speech[index]),
-                onImport: () => _manager.import(speech[index].id),
-                onCancel: () => _manager.cancel(speech[index].id),
-                onRemove: () => _confirmRemove(speech[index]),
-                onSelect: () => _selectForLiveDictation(speech[index]),
-                onDetails: () => _showDetails(speech[index]),
-              ),
-              if (index != speech.length - 1) const SizedBox(height: 12),
-            ],
-            if (vision.isNotEmpty) ...[
-              const SizedBox(height: 26),
-              _sectionTitle(context.l10n.visionModels),
-              const SizedBox(height: 12),
-              for (var index = 0; index < vision.length; index++) ...[
-                _ModelCard(
-                  definition: vision[index],
-                  installation: _manager.installationOf(vision[index].id),
-                  transfer: _manager.transferOf(vision[index].id),
-                  onDownload: () => _confirmDownload(vision[index]),
-                  onImport: () => _manager.import(vision[index].id),
-                  onCancel: () => _manager.cancel(vision[index].id),
-                  onRemove: () => _confirmRemove(vision[index]),
-                  onSelect: () {},
-                  onDetails: () => _showDetails(vision[index]),
-                ),
-                if (index != vision.length - 1) const SizedBox(height: 12),
-              ],
-            ],
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildDownloadSettings(BuildContext context) => Scaffold(
+    backgroundColor: AppColors.canvas,
+    appBar: AppBar(title: Text(context.l10n.modelDownloadsAndStorage)),
+    body: SafeArea(
+      top: false,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
+        children: [
+          _ModelSummary(
+            installedCount: _manager.installedCount,
+            installedSizeBytes: _manager.installedSizeBytes,
+          ),
+          const SizedBox(height: 14),
+          _DownloadSourceCard(
+            preference: _sourcePolicy.preference,
+            automaticPrefersMainland: _sourcePolicy.regionPrefersMainland,
+            lastUsedSourceLabel: _sourcePolicy.lastUsedSourceLabel,
+            onTap: _chooseDownloadSource,
+          ),
+          const SizedBox(height: 14),
+          _PrivacyNotice(message: context.l10n.modelPrivacyHint),
+        ],
+      ),
+    ),
+  );
+
+  String _categoryTitle(LocalModelCategory category) => switch (category) {
+    LocalModelCategory.language => context.l10n.languageModels,
+    LocalModelCategory.speech => context.l10n.speechModels,
+    LocalModelCategory.vision => context.l10n.visionModels,
+  };
+
+  String _categoryDescription(LocalModelCategory category) =>
+      switch (category) {
+        LocalModelCategory.language => context.l10n.languageModelsDescription,
+        LocalModelCategory.speech => context.l10n.speechModelsDescription,
+        LocalModelCategory.vision => context.l10n.visionModelsDescription,
+      };
+
+  String _categorySubtitle(LocalModelCategory category) {
+    final installed = _manager.models.where((model) {
+      return model.category == category &&
+          (model.availability == LocalModelAvailability.builtIn ||
+              _manager.installationOf(model.id).installed);
+    }).length;
+    return context.l10n.installedModelsCount(installed);
   }
 
   Widget _sectionTitle(String title) => Text(
@@ -223,6 +379,43 @@ class _ModelManagementPageState extends State<ModelManagementPage> {
       context,
     ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
   );
+
+  Future<void> _openCategory(
+    LocalModelCategory category, {
+    String? focusModelId,
+  }) async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            ModelManagementPage(category: category, focusModelId: focusModelId),
+      ),
+    );
+    if (mounted) await _manager.initialize(force: true);
+  }
+
+  Future<void> _openDictationSettings() async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const ModelManagementPage(showDictationSettings: true),
+      ),
+    );
+    if (mounted) {
+      await _loadDictationPreferences();
+      await _manager.initialize(force: true);
+    }
+  }
+
+  Future<void> _openDownloadSettings() async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const ModelManagementPage(showDownloadSettings: true),
+      ),
+    );
+    if (mounted) await _manager.initialize(force: true);
+  }
 
   Future<void> _openMnnCatalog() async {
     final added = await Navigator.push<bool>(
@@ -932,6 +1125,226 @@ class _DownloadSourceCard extends StatelessWidget {
   }
 }
 
+class _PrivacyNotice extends StatelessWidget {
+  final String message;
+
+  const _PrivacyNotice({required this.message});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: AppColors.softGreen,
+      borderRadius: BorderRadius.circular(15),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.lock_outline_rounded, size: 19, color: AppColors.moss),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Text(
+            message,
+            style: const TextStyle(color: AppColors.muted, height: 1.55),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _ModelCategoryLink extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _ModelCategoryLink({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: AppColors.surface,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(17),
+      side: const BorderSide(color: AppColors.line),
+    ),
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(15),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppColors.softGreen,
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: Icon(icon, color: AppColors.moss),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      color: AppColors.muted,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.muted),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _ActiveModelCard extends StatelessWidget {
+  final ActiveLocalModel model;
+  final VoidCallback onTap;
+  final VoidCallback? onDetails;
+
+  const _ActiveModelCard({
+    required this.model,
+    required this.onTap,
+    this.onDetails,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final definition = model.definition;
+    return Material(
+      key: Key('active-model-${definition.id}'),
+      color: AppColors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: const BorderSide(color: AppColors.line),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: AppColors.softGreen,
+                      borderRadius: BorderRadius.circular(13),
+                    ),
+                    child: Icon(
+                      _modelIcon(definition.task),
+                      color: AppColors.moss,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          localizedModelName(context.l10n, definition),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 7),
+                        Wrap(
+                          spacing: 7,
+                          runSpacing: 7,
+                          children: [
+                            for (final usage in model.usages)
+                              _StatusBadge(
+                                label: _usageLabel(context.l10n, usage),
+                                installed: true,
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (onDetails != null)
+                    IconButton(
+                      tooltip: context.l10n.modelDetails,
+                      onPressed: onDetails,
+                      icon: const Icon(Icons.info_outline_rounded, size: 21),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 13),
+              Wrap(
+                spacing: 7,
+                runSpacing: 7,
+                children: [
+                  _MetaChip(label: definition.engine),
+                  if (model.installation.installedSizeBytes > 0)
+                    _MetaChip(
+                      label: _formatBytes(
+                        model.installation.installedSizeBytes,
+                      ),
+                    ),
+                  if (definition.availability == LocalModelAvailability.builtIn)
+                    _MetaChip(label: context.l10n.bundledWithApp),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _usageLabel(AppLocalizations l10n, LocalModelUsage usage) =>
+    switch (usage) {
+      LocalModelUsage.assistant => l10n.localAssistantUsage,
+      LocalModelUsage.liveDictation => l10n.liveDictationUsage,
+      LocalModelUsage.audioTranscription => l10n.audioTranscriptionUsage,
+      LocalModelUsage.voiceActivityDetection => l10n.voiceActivityUsage,
+      LocalModelUsage.speechEnhancement => l10n.speechEnhancementUsage,
+      LocalModelUsage.textRecognition => l10n.textRecognitionUsage,
+    };
+
+IconData _modelIcon(LocalModelTask task) => switch (task) {
+  LocalModelTask.audioTranscription => Icons.graphic_eq_rounded,
+  LocalModelTask.liveDictation => Icons.mic_rounded,
+  LocalModelTask.voiceActivityDetection => Icons.multiline_chart_rounded,
+  LocalModelTask.speechEnhancement => Icons.noise_control_off_rounded,
+  LocalModelTask.speakerDiarization => Icons.groups_2_outlined,
+  LocalModelTask.textToSpeech => Icons.record_voice_over_rounded,
+  LocalModelTask.textGeneration => Icons.auto_awesome_rounded,
+  LocalModelTask.textRecognition => Icons.document_scanner_rounded,
+  LocalModelTask.imageUnderstanding => Icons.image_search_rounded,
+};
+
 String _downloadSourceTitle(
   AppLocalizations l10n,
   ModelDownloadSourcePreference preference,
@@ -973,9 +1386,11 @@ String _localizedDownloadSourceLabel(AppLocalizations l10n, String label) =>
 class _ModelSummary extends StatelessWidget {
   final int installedCount;
   final int installedSizeBytes;
+  final bool activeOnly;
   const _ModelSummary({
     required this.installedCount,
     required this.installedSizeBytes,
+    this.activeOnly = false,
   });
 
   @override
@@ -1003,7 +1418,9 @@ class _ModelSummary extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                context.l10n.installedModelCount(installedCount),
+                activeOnly
+                    ? context.l10n.activeModelCount(installedCount)
+                    : context.l10n.installedModelCount(installedCount),
                 style: const TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
@@ -1011,9 +1428,13 @@ class _ModelSummary extends StatelessWidget {
               ),
               const SizedBox(height: 3),
               Text(
-                context.l10n.optionalModelsUsage(
-                  _formatBytes(installedSizeBytes),
-                ),
+                activeOnly
+                    ? context.l10n.activeModelsUsage(
+                        _formatBytes(installedSizeBytes),
+                      )
+                    : context.l10n.optionalModelsUsage(
+                        _formatBytes(installedSizeBytes),
+                      ),
                 style: const TextStyle(color: AppColors.muted),
               ),
             ],

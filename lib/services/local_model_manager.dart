@@ -428,6 +428,45 @@ class LocalModelManager extends ChangeNotifier {
     (sum, installation) => sum + installation.installedSizeBytes,
   );
 
+  /// Returns configured models, not every model present on disk.
+  ///
+  /// One model can back more than one product feature. In that case it is
+  /// returned once with multiple usages so the overview never duplicates it.
+  List<ActiveLocalModel> activeModels(
+    RealtimeDictationPreferences preferences,
+  ) {
+    final usagesById = <String, Set<LocalModelUsage>>{};
+
+    void activate(String id, LocalModelUsage usage, {bool enabled = true}) {
+      if (!enabled || !installationOf(id).installed) return;
+      usagesById.putIfAbsent(id, () => <LocalModelUsage>{}).add(usage);
+    }
+
+    activate(_selectedAssistantModelId, LocalModelUsage.assistant);
+    activate(_selectedLiveDictationModelId, LocalModelUsage.liveDictation);
+    activate(senseVoiceId, LocalModelUsage.audioTranscription);
+    activate(
+      voiceActivityId,
+      LocalModelUsage.voiceActivityDetection,
+      enabled: installationOf(senseVoiceId).installed,
+    );
+    activate(
+      speechDenoiserId,
+      LocalModelUsage.speechEnhancement,
+      enabled: preferences.noiseSuppressionEnabled,
+    );
+    activate(mlKitChineseOcrId, LocalModelUsage.textRecognition);
+
+    return [
+      for (final entry in usagesById.entries)
+        ActiveLocalModel(
+          definition: _definition(entry.key),
+          installation: installationOf(entry.key),
+          usages: Set.unmodifiable(entry.value),
+        ),
+    ];
+  }
+
   Future<void> initialize({bool force = false}) async {
     if (_initialized && !force) return;
     await _languageModels.retireMnnGemmaModels();

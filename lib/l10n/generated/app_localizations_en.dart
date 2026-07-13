@@ -296,7 +296,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get localModelsSubtitle =>
-      'Download, import, and remove on-device models';
+      'Review active models and manage them by capability';
 
   @override
   String get backupAndMigration => 'Backup and migration';
@@ -407,6 +407,93 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get localModelsPageTitle => 'Local models';
+
+  @override
+  String get modelsInUse => 'In use';
+
+  @override
+  String get noModelsInUse => 'No local models are currently configured';
+
+  @override
+  String get modelConfiguration => 'Manage by category';
+
+  @override
+  String activeModelCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count models in use',
+      one: '1 model in use',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String activeModelsUsage(String size) {
+    return 'Local models use $size';
+  }
+
+  @override
+  String get installedModels => 'Installed';
+
+  @override
+  String get availableModels => 'Available';
+
+  @override
+  String installedModelsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count models installed',
+      one: '1 model installed',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noInstalledModelsInCategory =>
+      'No models in this category are installed';
+
+  @override
+  String get noAvailableModelsInCategory =>
+      'No other models are currently available';
+
+  @override
+  String get speechModelsDescription =>
+      'Manage live dictation, recording transcription, speech processing, and text-to-speech separately.';
+
+  @override
+  String get visionModelsDescription =>
+      'Manage OCR and dedicated vision features. Chat image understanding is provided by image-capable language models.';
+
+  @override
+  String get liveDictationSettingsDescription =>
+      'Manage the dictation model, hotwords, refinement, and live denoising';
+
+  @override
+  String get modelDownloadsAndStorage => 'Downloads and storage';
+
+  @override
+  String get modelDownloadsAndStorageDescription =>
+      'Download sources, background tasks, and model storage';
+
+  @override
+  String get localAssistantUsage => 'Local Assistant';
+
+  @override
+  String get liveDictationUsage => 'Live dictation';
+
+  @override
+  String get audioTranscriptionUsage => 'Transcription';
+
+  @override
+  String get voiceActivityUsage => 'Voice detection';
+
+  @override
+  String get speechEnhancementUsage => 'Live denoising';
+
+  @override
+  String get textRecognitionUsage => 'Text recognition';
 
   @override
   String get modelPrivacyHint =>

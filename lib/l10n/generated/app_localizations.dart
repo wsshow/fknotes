@@ -587,7 +587,7 @@ abstract class AppLocalizations {
   /// No description provided for @localModelsSubtitle.
   ///
   /// In zh, this message translates to:
-  /// **'下载、导入和移除设备端识别模型'**
+  /// **'查看正在使用的模型并按能力分类管理'**
   String get localModelsSubtitle;
 
   /// No description provided for @backupAndMigration.
@@ -763,6 +763,132 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'本地模型'**
   String get localModelsPageTitle;
+
+  /// No description provided for @modelsInUse.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在使用'**
+  String get modelsInUse;
+
+  /// No description provided for @noModelsInUse.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未配置正在使用的本地模型'**
+  String get noModelsInUse;
+
+  /// No description provided for @modelConfiguration.
+  ///
+  /// In zh, this message translates to:
+  /// **'分类管理'**
+  String get modelConfiguration;
+
+  /// No description provided for @activeModelCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在使用 {count} 个模型'**
+  String activeModelCount(int count);
+
+  /// No description provided for @activeModelsUsage.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地模型占用 {size}'**
+  String activeModelsUsage(String size);
+
+  /// No description provided for @installedModels.
+  ///
+  /// In zh, this message translates to:
+  /// **'已安装'**
+  String get installedModels;
+
+  /// No description provided for @availableModels.
+  ///
+  /// In zh, this message translates to:
+  /// **'可获取'**
+  String get availableModels;
+
+  /// No description provided for @installedModelsCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'已安装 {count} 个模型'**
+  String installedModelsCount(int count);
+
+  /// No description provided for @noInstalledModelsInCategory.
+  ///
+  /// In zh, this message translates to:
+  /// **'这一分类还没有已安装的模型'**
+  String get noInstalledModelsInCategory;
+
+  /// No description provided for @noAvailableModelsInCategory.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前没有其他可获取的模型'**
+  String get noAvailableModelsInCategory;
+
+  /// No description provided for @speechModelsDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'分别管理实时听写、录音转写、语音处理与语音合成模型。'**
+  String get speechModelsDescription;
+
+  /// No description provided for @visionModelsDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'管理 OCR 与专用视觉能力；聊天图片理解由支持图片的语言模型提供。'**
+  String get visionModelsDescription;
+
+  /// No description provided for @liveDictationSettingsDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'管理当前听写模型、热词、精修和实时降噪'**
+  String get liveDictationSettingsDescription;
+
+  /// No description provided for @modelDownloadsAndStorage.
+  ///
+  /// In zh, this message translates to:
+  /// **'下载与存储'**
+  String get modelDownloadsAndStorage;
+
+  /// No description provided for @modelDownloadsAndStorageDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'下载源、后台任务和模型文件占用'**
+  String get modelDownloadsAndStorageDescription;
+
+  /// No description provided for @localAssistantUsage.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地助手'**
+  String get localAssistantUsage;
+
+  /// No description provided for @liveDictationUsage.
+  ///
+  /// In zh, this message translates to:
+  /// **'实时听写'**
+  String get liveDictationUsage;
+
+  /// No description provided for @audioTranscriptionUsage.
+  ///
+  /// In zh, this message translates to:
+  /// **'录音转写'**
+  String get audioTranscriptionUsage;
+
+  /// No description provided for @voiceActivityUsage.
+  ///
+  /// In zh, this message translates to:
+  /// **'语音检测'**
+  String get voiceActivityUsage;
+
+  /// No description provided for @speechEnhancementUsage.
+  ///
+  /// In zh, this message translates to:
+  /// **'实时降噪'**
+  String get speechEnhancementUsage;
+
+  /// No description provided for @textRecognitionUsage.
+  ///
+  /// In zh, this message translates to:
+  /// **'文字识别'**
+  String get textRecognitionUsage;
 
   /// No description provided for @modelPrivacyHint.
   ///
