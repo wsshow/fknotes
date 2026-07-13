@@ -46,6 +46,8 @@ class LocalAssistantService with WidgetsBindingObserver {
     int contextTokens = 4096,
     bool enableThinking = false,
     LocalLlmBackend? backend,
+    bool enableImageInput = false,
+    bool enableAudioInput = false,
   }) async {
     _idleUnloadTimer?.cancel();
     _inferenceLease ??= _inference.acquire(
@@ -71,6 +73,8 @@ class LocalAssistantService with WidgetsBindingObserver {
           // native prompt cache across complete-history requests is unsafe for
           // some chat templates and can corrupt the next turn's KV state.
           enablePromptCache: false,
+          enableImageInput: enableImageInput,
+          enableAudioInput: enableAudioInput,
         ),
       );
     } catch (_) {

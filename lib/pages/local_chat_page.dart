@@ -471,7 +471,17 @@ class _LocalChatPageState extends State<LocalChatPage> {
 
     var finishStatus = LocalChatMessageStatus.stopped;
     try {
-      await _assistant.loadSelectedModel();
+      final attachments = request.messages.expand(
+        (message) => message.attachments,
+      );
+      await _assistant.loadSelectedModel(
+        enableImageInput: attachments.any(
+          (attachment) => attachment.mimeType.startsWith('image/'),
+        ),
+        enableAudioInput: attachments.any(
+          (attachment) => attachment.mimeType.startsWith('audio/'),
+        ),
+      );
       if (_closed) {
         await _assistant.unload();
         return;

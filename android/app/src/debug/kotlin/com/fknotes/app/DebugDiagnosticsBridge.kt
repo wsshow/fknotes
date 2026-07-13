@@ -4,6 +4,8 @@ import android.app.ActivityManager
 import android.app.ApplicationExitInfo
 import android.content.Context
 import android.os.Build
+import android.system.Os
+import android.system.OsConstants
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodChannel
 
@@ -41,6 +43,9 @@ internal object DebugDiagnosticsBridge {
             "availableMemoryBytes" to memory.availMem,
             "totalMemoryBytes" to memory.totalMem,
             "lowMemory" to memory.lowMemory,
+            "pageSizeBytes" to runCatching {
+                Os.sysconf(OsConstants._SC_PAGESIZE)
+            }.getOrNull(),
             "previousExits" to previousExits(context, manager),
         )
     }
@@ -50,18 +55,37 @@ internal object DebugDiagnosticsBridge {
         manager: ActivityManager,
     ): List<Map<String, Any?>> {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return emptyList()
-        return manager.getHistoricalProcessExitReasons(context.packageName, 0, 5).map {
+        return manager.getHistoricalProcessExitReasons(context.packageName, 0, 10).map {
             mapOf(
                 "timestamp" to it.timestamp,
+                "processName" to it.processName,
                 "reason" to exitReason(it.reason),
                 "status" to it.status,
                 "importance" to it.importance,
                 "pssKb" to it.pss,
                 "rssKb" to it.rss,
                 "description" to it.description,
+                "nativeTrace" to readTrace(it),
             )
         }
     }
+
+    private fun readTrace(info: ApplicationExitInfo): String? = runCatching {
+        info.traceInputStream?.bufferedReader()?.use { reader ->
+            val output = StringBuilder()
+            val buffer = CharArray(2048)
+            while (output.length < MAX_TRACE_CHARS) {
+                val read = reader.read(
+                    buffer,
+                    0,
+                    minOf(buffer.size, MAX_TRACE_CHARS - output.length),
+                )
+                if (read <= 0) break
+                output.append(buffer, 0, read)
+            }
+            output.toString().takeIf(String::isNotBlank)
+        }
+    }.getOrNull()
 
     private fun exitReason(reason: Int): String =
         when (reason) {
@@ -80,4 +104,6 @@ internal object DebugDiagnosticsBridge {
             ApplicationExitInfo.REASON_USER_STOPPED -> "user_stopped"
             else -> "unknown_$reason"
         }
+
+    private const val MAX_TRACE_CHARS = 12_000
 }

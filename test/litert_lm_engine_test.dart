@@ -22,10 +22,7 @@ void main() {
 
   test('loads and streams through the LiteRT-LM transport', () async {
     final transport = _FakeTransport();
-    final engine = LiteRtLmEngine(
-      transport: transport,
-      supportDirectoryProvider: () async => directory,
-    );
+    final engine = LiteRtLmEngine(transport: transport);
     await engine.loadModel(_descriptor(modelFile.path));
 
     final events = await engine
@@ -49,10 +46,7 @@ void main() {
 
   test('reports an isolated worker death without hanging', () async {
     final transport = _FakeTransport(crashOnGenerate: true);
-    final engine = LiteRtLmEngine(
-      transport: transport,
-      supportDirectoryProvider: () async => directory,
-    );
+    final engine = LiteRtLmEngine(transport: transport);
     await engine.loadModel(_descriptor(modelFile.path));
 
     await expectLater(
@@ -76,10 +70,7 @@ void main() {
 
   test('falls back to CPU when the GPU backend cannot initialize', () async {
     final transport = _FakeTransport(failGpuLoad: true);
-    final engine = LiteRtLmEngine(
-      transport: transport,
-      supportDirectoryProvider: () async => directory,
-    );
+    final engine = LiteRtLmEngine(transport: transport);
 
     await engine.loadModel(
       _descriptor(modelFile.path),
@@ -92,6 +83,49 @@ void main() {
     ]);
     expect(engine.state, LocalLlmEngineState.ready);
   });
+
+  test('enables multimodal pipelines only when explicitly requested', () async {
+    final transport = _FakeTransport();
+    final engine = LiteRtLmEngine(transport: transport);
+
+    await engine.loadModel(
+      _descriptor(modelFile.path),
+      options: const LocalLlmLoadOptions(enableImageInput: true),
+    );
+
+    expect(transport.loadOptions.single.enableImageInput, isTrue);
+    expect(transport.loadOptions.single.enableAudioInput, isFalse);
+  });
+
+  test(
+    'does not retry or leak an uncaught error when the worker dies on load',
+    () async {
+      final transport = _FakeTransport(crashOnLoad: true);
+      final engine = LiteRtLmEngine(transport: transport);
+      final uncaught = <Object>[];
+
+      await runZonedGuarded(() async {
+        await expectLater(
+          engine.loadModel(
+            _descriptor(modelFile.path),
+            options: const LocalLlmLoadOptions(backend: LocalLlmBackend.openCl),
+          ),
+          throwsA(
+            isA<LocalLlmException>().having(
+              (error) => error.message,
+              'message',
+              contains('当前设备'),
+            ),
+          ),
+        );
+        await Future<void>.delayed(Duration.zero);
+      }, (error, _) => uncaught.add(error));
+
+      expect(uncaught, isEmpty);
+      expect(transport.loadBackends, [LocalLlmBackend.openCl]);
+      expect(engine.state, LocalLlmEngineState.failed);
+    },
+  );
 }
 
 LocalLlmModelDescriptor _descriptor(String path) => LocalLlmModelDescriptor(
@@ -105,12 +139,18 @@ LocalLlmModelDescriptor _descriptor(String path) => LocalLlmModelDescriptor(
 
 class _FakeTransport implements LiteRtLmTransport {
   final bool crashOnGenerate;
+  final bool crashOnLoad;
   final bool failGpuLoad;
   final _events = StreamController<LiteRtLmNativeEvent>.broadcast();
   String? loadedModelPath;
   final loadBackends = <LocalLlmBackend>[];
+  final loadOptions = <LocalLlmLoadOptions>[];
 
-  _FakeTransport({this.crashOnGenerate = false, this.failGpuLoad = false});
+  _FakeTransport({
+    this.crashOnGenerate = false,
+    this.crashOnLoad = false,
+    this.failGpuLoad = false,
+  });
 
   @override
   bool get available => true;
@@ -125,12 +165,23 @@ class _FakeTransport implements LiteRtLmTransport {
   Future<bool> load({
     required int requestId,
     required String modelPath,
-    required String cachePath,
     required LocalLlmLoadOptions options,
-    required LocalLlmCapabilities capabilities,
   }) async {
     loadedModelPath = modelPath;
     loadBackends.add(options.backend);
+    loadOptions.add(options);
+    if (crashOnLoad) {
+      scheduleMicrotask(
+        () => _events.add(
+          const LiteRtLmNativeEvent(
+            requestId: -1,
+            type: LiteRtLmNativeEventType.serviceDied,
+            data: 'LiteRT-LM 推理进程意外终止',
+          ),
+        ),
+      );
+      return false;
+    }
     scheduleMicrotask(
       () => _events.add(
         LiteRtLmNativeEvent(

@@ -113,6 +113,8 @@ class LocalLlmLoadOptions {
   final int contextTokens;
   final bool enableThinking;
   final bool enablePromptCache;
+  final bool enableImageInput;
+  final bool enableAudioInput;
 
   const LocalLlmLoadOptions({
     this.backend = LocalLlmBackend.cpu,
@@ -120,6 +122,8 @@ class LocalLlmLoadOptions {
     this.contextTokens = 4096,
     this.enableThinking = false,
     this.enablePromptCache = true,
+    this.enableImageInput = false,
+    this.enableAudioInput = false,
   }) : assert(threads > 0),
        assert(contextTokens > 0);
 }

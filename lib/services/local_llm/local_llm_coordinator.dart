@@ -19,6 +19,7 @@ class LocalLlmCoordinator {
   );
   Future<void> _lifecycle = Future.value();
   Completer<void>? _generationDone;
+  LocalLlmLoadOptions? _loadedOptions;
   bool _disposed = false;
 
   LocalLlmCoordinator(this._engine);
@@ -49,6 +50,8 @@ class LocalLlmCoordinator {
           'contextTokens': options.contextTokens,
           'imageInput': model.capabilities.imageInput,
           'audioInput': model.capabilities.audioInput,
+          'enableImageInput': options.enableImageInput,
+          'enableAudioInput': options.enableAudioInput,
         },
         traceId: model.id,
       );
@@ -58,7 +61,8 @@ class LocalLlmCoordinator {
       throw const LocalLlmException('正在生成内容，暂时不能切换模型');
     }
     if (_snapshot.model?.id == model.id &&
-        _snapshot.state == LocalLlmEngineState.ready) {
+        _snapshot.state == LocalLlmEngineState.ready &&
+        _canReuseLoadedOptions(_loadedOptions, options)) {
       return;
     }
     if (_snapshot.model != null) {
@@ -67,6 +71,7 @@ class LocalLlmCoordinator {
     _emit(LocalLlmEngineState.loading, model: model);
     try {
       await _engine.loadModel(model, options: options);
+      _loadedOptions = options;
       _emit(LocalLlmEngineState.ready, model: model);
       if (kDebugMode) {
         AppDiagnostics.info(
@@ -77,6 +82,7 @@ class LocalLlmCoordinator {
         );
       }
     } catch (error, stackTrace) {
+      _loadedOptions = null;
       _emit(LocalLlmEngineState.failed, model: model, error: error);
       if (kDebugMode) {
         AppDiagnostics.error(
@@ -231,6 +237,7 @@ class LocalLlmCoordinator {
     }
     try {
       await _engine.unload();
+      _loadedOptions = null;
       _emit(LocalLlmEngineState.idle);
       if (kDebugMode) {
         AppDiagnostics.info(
@@ -253,6 +260,19 @@ class LocalLlmCoordinator {
       rethrow;
     }
   }
+
+  bool _canReuseLoadedOptions(
+    LocalLlmLoadOptions? loaded,
+    LocalLlmLoadOptions requested,
+  ) =>
+      loaded != null &&
+      loaded.backend == requested.backend &&
+      loaded.threads == requested.threads &&
+      loaded.contextTokens == requested.contextTokens &&
+      loaded.enableThinking == requested.enableThinking &&
+      loaded.enablePromptCache == requested.enablePromptCache &&
+      (!requested.enableImageInput || loaded.enableImageInput) &&
+      (!requested.enableAudioInput || loaded.enableAudioInput);
 
   Future<void> dispose() async {
     if (_disposed) return;

@@ -81,12 +81,14 @@ class LiteRtLmService : Service() {
         val modelPath = payload.getString("modelPath")
         val model = File(modelPath)
         require(model.isFile && model.length() > 0) { "LiteRT-LM 模型文件不存在或为空" }
-        val cache = File(payload.getString("cachePath"))
-        require(cache.isDirectory || cache.mkdirs()) { "无法创建 LiteRT-LM 缓存目录" }
         closeRuntime()
-        val backend = backend(payload.optString("backend"), payload.optInt("threads", 4))
-        val visionBackend = if (payload.optBoolean("imageInput")) backend else null
-        val audioBackend = if (payload.optBoolean("audioInput")) backend else null
+        val threads = payload.optInt("threads", 4).coerceIn(1, 8)
+        val backend = backend(payload.optString("backend"), threads)
+        // Match Google AI Edge Gallery's LiteRT-LM contract: image and audio
+        // pipelines are task-specific, vision uses GPU, and audio uses CPU.
+        // A text-only chat must not initialize either multimodal pipeline.
+        val visionBackend = if (payload.optBoolean("imageInput")) Backend.GPU() else null
+        val audioBackend = if (payload.optBoolean("audioInput")) Backend.CPU(threads) else null
         val created = Engine(
             EngineConfig(
                 modelPath = model.absolutePath,
@@ -94,8 +96,6 @@ class LiteRtLmService : Service() {
                 visionBackend = visionBackend,
                 audioBackend = audioBackend,
                 maxNumTokens = payload.optInt("contextTokens", 4096),
-                maxNumImages = 4,
-                cacheDir = cache.absolutePath,
             ),
         )
         try {

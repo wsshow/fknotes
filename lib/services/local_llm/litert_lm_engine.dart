@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
 import '../../models/local_llm.dart';
 import '../file_storage_service.dart';
@@ -12,7 +11,6 @@ import 'local_llm_engine.dart';
 
 class LiteRtLmEngine implements LocalLlmEngine {
   final LiteRtLmTransport _transport;
-  final Future<Directory> Function() _supportDirectoryProvider;
   final String Function(String relativePath) _attachmentPathResolver;
   int _nextRequestId = 1;
   LocalLlmEngineState _state = LocalLlmEngineState.idle;
@@ -23,11 +21,8 @@ class LiteRtLmEngine implements LocalLlmEngine {
 
   LiteRtLmEngine({
     LiteRtLmTransport? transport,
-    Future<Directory> Function()? supportDirectoryProvider,
     String Function(String relativePath)? attachmentPathResolver,
   }) : _transport = transport ?? MethodChannelLiteRtLmTransport(),
-       _supportDirectoryProvider =
-           supportDirectoryProvider ?? getApplicationSupportDirectory,
        _attachmentPathResolver =
            attachmentPathResolver ?? FileStorageService.instance.absolutePath;
 
@@ -75,24 +70,32 @@ class LiteRtLmEngine implements LocalLlmEngine {
     if (!await FileSystemEntity.isFile(model.configPath)) {
       throw const LocalLlmException('LiteRT-LM 模型文件不存在或已被移除');
     }
-    final support = await _supportDirectoryProvider();
-    final cache = Directory(p.join(support.path, 'litert-lm-cache', model.id));
-    await cache.create(recursive: true);
+    if (options.enableImageInput && !model.capabilities.imageInput) {
+      throw const LocalLlmException('当前 LiteRT-LM 模型不支持图片输入');
+    }
+    if (options.enableAudioInput && !model.capabilities.audioInput) {
+      throw const LocalLlmException('当前 LiteRT-LM 模型不支持音频输入');
+    }
     _state = LocalLlmEngineState.loading;
     try {
       try {
-        await _load(model, cache, options);
+        await _load(model, options);
+      } on _LiteRtLmWorkerDiedException {
+        // A dead native worker is not a recoverable GPU initialization error.
+        // Starting a second process immediately only repeats the native crash.
+        rethrow;
       } catch (_) {
         if (options.backend == LocalLlmBackend.cpu) rethrow;
         await _load(
           model,
-          cache,
           LocalLlmLoadOptions(
             backend: LocalLlmBackend.cpu,
             threads: options.threads,
             contextTokens: options.contextTokens,
             enableThinking: options.enableThinking,
             enablePromptCache: options.enablePromptCache,
+            enableImageInput: options.enableImageInput,
+            enableAudioInput: options.enableAudioInput,
           ),
         );
       }
@@ -106,7 +109,6 @@ class LiteRtLmEngine implements LocalLlmEngine {
 
   Future<void> _load(
     LocalLlmModelDescriptor model,
-    Directory cache,
     LocalLlmLoadOptions options,
   ) {
     final requestId = _newRequestId();
@@ -116,9 +118,7 @@ class LiteRtLmEngine implements LocalLlmEngine {
       start: () => _transport.load(
         requestId: requestId,
         modelPath: model.configPath,
-        cachePath: cache.path,
         options: options,
-        capabilities: model.capabilities,
       ),
     );
   }
@@ -246,32 +246,54 @@ class LiteRtLmEngine implements LocalLlmEngine {
     required LiteRtLmNativeEventType successType,
     required Future<bool> Function() start,
   }) async {
-    final completer = Completer<void>();
+    final completer = Completer<_LiteRtLmOperationResult>();
+    _LiteRtLmOperationResult? observedResult;
     late final StreamSubscription<LiteRtLmNativeEvent> subscription;
     subscription = _transport.events.listen((event) {
       if (event.requestId == requestId && event.type == successType) {
-        if (!completer.isCompleted) completer.complete();
+        final result = const _LiteRtLmOperationResult.success();
+        observedResult = result;
+        if (!completer.isCompleted) completer.complete(result);
       } else if ((event.requestId == requestId &&
               event.type == LiteRtLmNativeEventType.error) ||
           event.type == LiteRtLmNativeEventType.serviceDied) {
+        final result = _LiteRtLmOperationResult.failure(
+          event.data.isEmpty ? 'LiteRT-LM 操作失败' : event.data,
+          workerDied: event.type == LiteRtLmNativeEventType.serviceDied,
+        );
+        observedResult = result;
         if (!completer.isCompleted) {
-          completer.completeError(
-            LocalLlmException(
-              event.data.isEmpty ? 'LiteRT-LM 操作失败' : event.data,
-            ),
-          );
+          // Complete with a value, not an asynchronous error. The native event
+          // can arrive while the MethodChannel invocation is still pending; an
+          // error future without a listener would otherwise escape to the root
+          // zone and be reported as a second, unrelated fatal Dart exception.
+          completer.complete(result);
         }
       }
     });
-    if (!await start()) {
-      await subscription.cancel();
-      throw const LocalLlmException('无法连接 LiteRT-LM 推理进程');
-    }
     try {
-      await completer.future.timeout(const Duration(minutes: 2));
+      final accepted = await start();
+      if (!accepted) {
+        // Give a queued service-death event one turn to reach the listener so
+        // the caller receives the real failure instead of a generic IPC error.
+        await Future<void>.delayed(Duration.zero);
+        _throwIfFailed(observedResult);
+        throw const LocalLlmException('无法连接 LiteRT-LM 推理进程');
+      }
+      final result = await completer.future.timeout(const Duration(minutes: 2));
+      _throwIfFailed(result);
     } finally {
       await subscription.cancel();
     }
+  }
+
+  void _throwIfFailed(_LiteRtLmOperationResult? result) {
+    if (result?.success == true) return;
+    if (result?.workerDied == true) {
+      throw _LiteRtLmWorkerDiedException(result!.message);
+    }
+    if (result != null) throw LocalLlmException(result.message);
+    throw const LocalLlmException('无法连接 LiteRT-LM 推理进程');
   }
 
   Future<void> _finish(
@@ -408,4 +430,28 @@ class LiteRtLmEngine implements LocalLlmEngine {
   }
 
   int _newRequestId() => _nextRequestId++;
+}
+
+class _LiteRtLmOperationResult {
+  final bool success;
+  final bool workerDied;
+  final String message;
+
+  const _LiteRtLmOperationResult.success()
+    : success = true,
+      workerDied = false,
+      message = '';
+
+  const _LiteRtLmOperationResult.failure(
+    this.message, {
+    required this.workerDied,
+  }) : success = false;
+}
+
+class _LiteRtLmWorkerDiedException extends LocalLlmException {
+  const _LiteRtLmWorkerDiedException(Object cause)
+    : super(
+        'LiteRT-LM 在当前设备上加载模型时异常终止；这通常是系统或推理运行库兼容性问题，请导出 Debug 诊断包',
+        cause: cause,
+      );
 }

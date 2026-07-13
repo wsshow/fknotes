@@ -102,6 +102,25 @@ void main() {
     await expectLater(stream, emitsError(isA<LocalLlmException>()));
     await coordinator.dispose();
   });
+
+  test('reloads only when a newly requested modality is missing', () async {
+    final engine = _FakeEngine();
+    final coordinator = LocalLlmCoordinator(engine);
+
+    await coordinator.loadModel(modelA);
+    await coordinator.loadModel(
+      modelA,
+      options: const LocalLlmLoadOptions(enableImageInput: true),
+    );
+    await coordinator.loadModel(modelA);
+
+    expect(engine.operations, [
+      'load:model-a',
+      'unload:model-a',
+      'load:model-a',
+    ]);
+    await coordinator.dispose();
+  });
 }
 
 class _FakeEngine implements LocalLlmEngine {

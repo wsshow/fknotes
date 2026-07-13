@@ -26,6 +26,9 @@ void main() {
         data: {
           'provider': 'S3',
           'secretAccessKey': 'must-not-leak',
+          'accessToken': 'also-must-not-leak',
+          'contextTokens': 2048,
+          'nativeTrace': 'x' * 2000,
           'endpoint': 'https://user:password@example.com/bucket',
           'filePath': '/data/user/0/com.fknotes.app/files/private-note.md',
           'ownerId': '/data/user/0/com.fknotes.app/files/audio/private.m4a',
@@ -43,6 +46,9 @@ void main() {
       );
       expect(records, hasLength(1));
       expect(records.single.data['secretAccessKey'], '<redacted>');
+      expect(records.single.data['accessToken'], '<redacted>');
+      expect(records.single.data['contextTokens'], 2048);
+      expect((records.single.data['nativeTrace']! as String).length, 2000);
       expect(records.single.data['filePath'], '<redacted>');
       expect(records.single.data['ownerId'], '<redacted>');
       expect(records.single.data['endpoint'], contains('<redacted>@'));

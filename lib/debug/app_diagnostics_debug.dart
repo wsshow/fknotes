@@ -20,7 +20,7 @@ class DebugAppDiagnostics extends ChangeNotifier
   static const _maxLogFileBytes = 2 * 1024 * 1024;
   static const _maxPersistedFiles = 6;
   static final _sensitiveKey = RegExp(
-    r'(password|passphrase|secret|token|authorization|cookie|credential|access.?key|system.?prompt|content|note.?text|chat.?text|transcript|ocr.?text|file.?path|directory.?path|owner.?id)',
+    r'(password|passphrase|secret|authorization|cookie|credential|access.?key|^(?:token|api.?token|auth.?token|access.?token|refresh.?token|id.?token|hugging.?face.?token)$|system.?prompt|content|note.?text|chat.?text|transcript|ocr.?text|file.?path|directory.?path|owner.?id)',
     caseSensitive: false,
   );
   static final _bearerPattern = RegExp(
@@ -191,6 +191,10 @@ class DebugAppDiagnostics extends ChangeNotifier
   @override
   Future<File?> exportBundle() async {
     if (!_initialized) await initialize();
+    // A native worker can crash after application startup. Refresh Android's
+    // process-exit history immediately before export so the tombstone belongs
+    // to the failure the user is reporting, not only to a previous launch.
+    await _loadNativeRuntimeInfo(event: 'android_runtime_info_refreshed');
     record(
       AppLogLevel.info,
       AppLogCategory.application,
@@ -305,7 +309,9 @@ class DebugAppDiagnostics extends ChangeNotifier
     }
   }
 
-  Future<void> _loadNativeRuntimeInfo() async {
+  Future<void> _loadNativeRuntimeInfo({
+    String event = 'android_runtime_info_captured',
+  }) async {
     if (!Platform.isAndroid) return;
     try {
       final value = await const MethodChannel(
@@ -316,7 +322,7 @@ class DebugAppDiagnostics extends ChangeNotifier
       record(
         AppLogLevel.info,
         AppLogCategory.platform,
-        'android_runtime_info_captured',
+        event,
         data: {
           'sdk': value['sdk'],
           'model': value['model'],
@@ -365,7 +371,10 @@ class DebugAppDiagnostics extends ChangeNotifier
   Future<void> _cleanupOldFiles(Directory directory) async {
     final files = await directory
         .list(followLinks: false)
-        .where((entity) => entity is File)
+        .where(
+          (entity) =>
+              entity is File && p.basename(entity.path).startsWith('events-'),
+        )
         .cast<File>()
         .toList();
     files.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
@@ -383,10 +392,22 @@ class DebugAppDiagnostics extends ChangeNotifier
 
   Map<String, Object?> _sanitizeMap(Map<String, Object?> value) => {
     for (final entry in value.entries)
-      _sanitizeText(entry.key, limit: 100): _sensitiveKey.hasMatch(entry.key)
-          ? '<redacted>'
-          : _sanitizeValue(entry.value, depth: 0),
+      _sanitizeText(entry.key, limit: 100): _sanitizeEntry(
+        entry.key,
+        entry.value,
+        depth: 0,
+      ),
   };
+
+  Object? _sanitizeEntry(String key, Object? value, {required int depth}) {
+    if (_sensitiveKey.hasMatch(key)) return '<redacted>';
+    if (value is String &&
+        (key.toLowerCase().contains('trace') ||
+            key.toLowerCase().contains('tombstone'))) {
+      return _sanitizeText(value, limit: 12000);
+    }
+    return _sanitizeValue(value, depth: depth);
+  }
 
   Object? _sanitizeValue(Object? value, {required int depth}) {
     if (value == null || value is num || value is bool) return value;
@@ -397,12 +418,11 @@ class DebugAppDiagnostics extends ChangeNotifier
     if (value is Map) {
       return {
         for (final entry in value.entries)
-          _sanitizeText(
+          _sanitizeText('${entry.key}', limit: 100): _sanitizeEntry(
             '${entry.key}',
-            limit: 100,
-          ): _sensitiveKey.hasMatch('${entry.key}')
-              ? '<redacted>'
-              : _sanitizeValue(entry.value, depth: depth + 1),
+            entry.value,
+            depth: depth + 1,
+          ),
       };
     }
     if (value is Iterable) {

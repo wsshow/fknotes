@@ -37,9 +37,7 @@ abstract interface class LiteRtLmTransport {
   Future<bool> load({
     required int requestId,
     required String modelPath,
-    required String cachePath,
     required LocalLlmLoadOptions options,
-    required LocalLlmCapabilities capabilities,
   });
 
   Future<bool> generate({
@@ -95,18 +93,15 @@ class MethodChannelLiteRtLmTransport implements LiteRtLmTransport {
   Future<bool> load({
     required int requestId,
     required String modelPath,
-    required String cachePath,
     required LocalLlmLoadOptions options,
-    required LocalLlmCapabilities capabilities,
   }) => _invoke('load', {
     'requestId': requestId,
     'modelPath': modelPath,
-    'cachePath': cachePath,
     'backend': options.backend == LocalLlmBackend.cpu ? 'cpu' : 'gpu',
     'threads': options.threads,
     'contextTokens': options.contextTokens,
-    'imageInput': capabilities.imageInput,
-    'audioInput': capabilities.audioInput,
+    'imageInput': options.enableImageInput,
+    'audioInput': options.enableAudioInput,
   });
 
   @override
