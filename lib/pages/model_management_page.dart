@@ -1067,6 +1067,7 @@ class _ModelCard extends StatelessWidget {
       LocalModelTask.imageUnderstanding => Icons.image_search_rounded,
     };
     return Container(
+      key: Key('model-card-${definition.id}'),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -1244,31 +1245,46 @@ class _ModelCard extends StatelessWidget {
       );
     }
     if (installation.installed) {
-      return Wrap(
-        alignment: WrapAlignment.end,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: 8,
-        runSpacing: 8,
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _StatusBadge(label: context.l10n.installed, installed: true),
-          if (definition.task == LocalModelTask.liveDictation &&
-              !selectedForLiveDictation)
-            TextButton.icon(
-              onPressed: onSelect,
-              icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
-              label: Text(context.l10n.useForDictation),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Wrap(
+              alignment: WrapAlignment.end,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (definition.task == LocalModelTask.liveDictation &&
+                    !selectedForLiveDictation)
+                  TextButton.icon(
+                    onPressed: onSelect,
+                    icon: const Icon(
+                      Icons.check_circle_outline_rounded,
+                      size: 18,
+                    ),
+                    label: Text(context.l10n.useForDictation),
+                  ),
+                if (definition.category == LocalModelCategory.language &&
+                    !selectedForAssistant)
+                  TextButton.icon(
+                    onPressed: onSelect,
+                    icon: const Icon(
+                      Icons.check_circle_outline_rounded,
+                      size: 18,
+                    ),
+                    label: Text(context.l10n.useForAssistant),
+                  ),
+                TextButton.icon(
+                  key: Key('model-remove-${definition.id}'),
+                  onPressed: onRemove,
+                  icon: const Icon(Icons.delete_outline_rounded, size: 19),
+                  label: Text(context.l10n.remove),
+                ),
+              ],
             ),
-          if (definition.category == LocalModelCategory.language &&
-              !selectedForAssistant)
-            TextButton.icon(
-              onPressed: onSelect,
-              icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
-              label: Text(context.l10n.useForAssistant),
-            ),
-          TextButton.icon(
-            onPressed: onRemove,
-            icon: const Icon(Icons.delete_outline_rounded, size: 19),
-            label: Text(context.l10n.remove),
           ),
         ],
       );
@@ -1277,25 +1293,38 @@ class _ModelCard extends StatelessWidget {
         installation.partialSizeBytes > 0 ||
         transfer?.status == ModelTransferStatus.canceled ||
         transfer?.status == ModelTransferStatus.failed;
-    return Wrap(
-      alignment: WrapAlignment.end,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        TextButton.icon(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final importButton = TextButton.icon(
+          key: Key('model-import-${definition.id}'),
+          style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
           onPressed: onImport,
           icon: const Icon(Icons.folder_open_rounded, size: 19),
           label: Text(context.l10n.importFromFile),
-        ),
-        FilledButton.icon(
+        );
+        final downloadButton = FilledButton.icon(
+          key: Key('model-download-${definition.id}'),
+          style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
           onPressed: onDownload,
           icon: const Icon(Icons.download_rounded, size: 19),
           label: Text(
             canContinue ? context.l10n.continueDownload : context.l10n.download,
           ),
-        ),
-      ],
+        );
+        if (constraints.maxWidth < 280) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [importButton, const SizedBox(height: 8), downloadButton],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: importButton),
+            const SizedBox(width: 10),
+            Expanded(child: downloadButton),
+          ],
+        );
+      },
     );
   }
 

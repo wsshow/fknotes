@@ -283,6 +283,37 @@ void main() {
     expect(find.text('随应用提供'), findsOneWidget);
   });
 
+  testWidgets('download actions fill the model card width on phones', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 3;
+    tester.view.physicalSize = const Size(1080, 2400);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(const MaterialApp(home: ModelManagementPage()));
+    await tester.pumpAndSettle();
+
+    final modelId = LocalModelManager.qwen3Vl4BId;
+    final importFinder = find.byKey(Key('model-import-$modelId'));
+    await tester.scrollUntilVisible(
+      importFinder,
+      350,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    final card = tester.getRect(find.byKey(Key('model-card-$modelId')));
+    final importButton = tester.getRect(importFinder);
+    final downloadButton = tester.getRect(
+      find.byKey(Key('model-download-$modelId')),
+    );
+
+    expect(importButton.left, closeTo(card.left + 16, 1.1));
+    expect(downloadButton.right, closeTo(card.right - 16, 1.1));
+    expect(importButton.width, closeTo(downloadButton.width, 1.1));
+    expect(downloadButton.left - importButton.right, closeTo(10, 1.1));
+  });
+
   testWidgets('model catalog renders localized English metadata', (
     tester,
   ) async {
