@@ -387,4 +387,52 @@ void main() {
     expect(find.text('Model download source'), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('discarding a partial download removes its transfer task', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 3;
+    tester.view.physicalSize = const Size(1080, 9000);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      const MaterialApp(home: ModelManagementPage(showTransferTasks: true)),
+    );
+    await tester.pumpAndSettle();
+
+    const modelId = LocalModelManager.voiceActivityId;
+    final card = find.byKey(const Key('model-card-$modelId'));
+    final menu = find.byKey(const Key('model-partial-menu-$modelId'));
+    expect(card, findsOneWidget);
+    expect(menu, findsOneWidget);
+
+    await tester.tap(menu);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除已下载部分'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.textContaining('下次需要从头下载'), findsOneWidget);
+
+    await tester.tap(find.text('删除已下载部分'));
+    await tester.pumpAndSettle();
+    for (var attempt = 0; attempt < 200; attempt++) {
+      if (LocalModelManager.instance.installationOf(modelId).partialSizeBytes ==
+          0) {
+        break;
+      }
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+
+    expect(
+      LocalModelManager.instance.installationOf(modelId).partialSizeBytes,
+      0,
+    );
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(card, findsNothing);
+  });
 }

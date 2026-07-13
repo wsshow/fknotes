@@ -2113,14 +2113,15 @@ class _ModelCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  PopupMenuButton<void>(
+                  PopupMenuButton<_PartialDownloadAction>(
                     key: Key('model-partial-menu-${definition.id}'),
                     tooltip: context.l10n.moreActions,
                     padding: EdgeInsets.zero,
                     icon: const Icon(Icons.more_horiz_rounded, size: 20),
                     onSelected: (_) => onDiscardPartial(),
                     itemBuilder: (context) => [
-                      PopupMenuItem<void>(
+                      PopupMenuItem<_PartialDownloadAction>(
+                        value: _PartialDownloadAction.discard,
                         child: Row(
                           children: [
                             const Icon(Icons.delete_sweep_outlined, size: 19),
@@ -2165,6 +2166,8 @@ class _ModelCard extends StatelessWidget {
     return '';
   }
 }
+
+enum _PartialDownloadAction { discard }
 
 class _StatusBadge extends StatelessWidget {
   final String label;
