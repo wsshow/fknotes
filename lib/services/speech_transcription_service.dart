@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 
+import '../debug/app_diagnostics.dart';
 import '../models/note_entry.dart';
 import 'file_storage_service.dart';
 import 'local_inference_coordinator.dart';
@@ -106,12 +107,27 @@ class SpeechTranscriptionService extends ChangeNotifier {
     );
     _jobs[attachment.filePath] = job;
     notifyListeners();
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.speech,
+        'audio_transcription_started',
+        data: {
+          'noteId': noteId,
+          'speakerMode': speakerCount != null,
+          'speakerCount': speakerCount,
+          'fileSizeBytes': attachment.fileSize,
+          'durationMs': attachment.durationMs,
+        },
+        traceId: job.key,
+      );
+    }
     unawaited(_run(job));
   }
 
   Future<void> _run(TranscriptionJob job) async {
     String? temporaryWave;
     LocalInferenceLease? inferenceLease;
+    final stopwatch = Stopwatch()..start();
     try {
       inferenceLease = _inference.acquire(
         type: LocalInferenceTaskType.transcription,
@@ -160,10 +176,36 @@ class SpeechTranscriptionService extends ChangeNotifier {
       );
       job.partialText = normalized;
       _update(job, status: TranscriptionStatus.completed, progress: 1);
-    } catch (error) {
+      if (kDebugMode) {
+        AppDiagnostics.info(
+          AppLogCategory.speech,
+          'audio_transcription_completed',
+          data: {
+            'durationMs': stopwatch.elapsedMilliseconds,
+            'characterCount': normalized.length,
+            'speakerMode': job.speakerCount != null,
+          },
+          traceId: job.key,
+        );
+      }
+    } catch (error, stackTrace) {
       if (job.status != TranscriptionStatus.canceled) {
         job.errorMessage = _friendlyError(error);
         _update(job, status: TranscriptionStatus.failed);
+        if (kDebugMode) {
+          AppDiagnostics.error(
+            AppLogCategory.speech,
+            'audio_transcription_failed',
+            data: {
+              'durationMs': stopwatch.elapsedMilliseconds,
+              'status': job.status.name,
+              'speakerMode': job.speakerCount != null,
+            },
+            error: error,
+            stackTrace: stackTrace,
+            traceId: job.key,
+          );
+        }
       }
     } finally {
       inferenceLease?.release();
@@ -323,6 +365,13 @@ class SpeechTranscriptionService extends ChangeNotifier {
     job.updatedAt = DateTime.now();
     job.cancelWorker?.call();
     notifyListeners();
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.speech,
+        'audio_transcription_cancel_requested',
+        traceId: job.key,
+      );
+    }
   }
 
   void dismiss(String filePath) {

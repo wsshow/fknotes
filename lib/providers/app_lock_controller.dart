@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
+import '../debug/app_diagnostics.dart';
 import '../services/app_lock_preferences_service.dart';
 import '../services/device_authentication_service.dart';
 
@@ -54,6 +56,13 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
     _automaticPromptAttempted = false;
     _initialized = true;
     notifyListeners();
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.authentication,
+        'app_lock_initialized',
+        data: {'enabled': enabled, 'timeout': timeout.name},
+      );
+    }
   }
 
   Future<DeviceAuthenticationResult> authenticateAutomatically({
@@ -131,6 +140,13 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
     _message = null;
     _messageId = DeviceAuthenticationMessage.none;
     notifyListeners();
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.authentication,
+        'app_lock_enabled_changed',
+        data: {'enabled': value},
+      );
+    }
     return result;
   }
 
@@ -144,6 +160,13 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
     }
     _preferences = updated;
     notifyListeners();
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.authentication,
+        'app_lock_timeout_changed',
+        data: {'timeout': value.name},
+      );
+    }
     return null;
   }
 
@@ -167,6 +190,13 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
     _message = null;
     _messageId = DeviceAuthenticationMessage.none;
     notifyListeners();
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.authentication,
+        'device_authentication_started',
+        data: {'unlockOnSuccess': unlockOnSuccess},
+      );
+    }
     final result = await _authenticator.authenticate(prompt: prompt);
     _authenticating = false;
     if (result.authenticated) {
@@ -179,6 +209,18 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
       _messageId = result.messageId;
     }
     notifyListeners();
+    if (kDebugMode) {
+      AppDiagnostics.instance.record(
+        result.authenticated ? AppLogLevel.info : AppLogLevel.warning,
+        AppLogCategory.authentication,
+        'device_authentication_completed',
+        data: {
+          'status': result.status.name,
+          'messageId': result.messageId.name,
+          'unlockOnSuccess': unlockOnSuccess,
+        },
+      );
+    }
     return result;
   }
 
@@ -188,6 +230,13 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void handleLifecycleState(AppLifecycleState state) {
+    if (kDebugMode) {
+      AppDiagnostics.debug(
+        AppLogCategory.application,
+        'application_lifecycle_changed',
+        data: {'state': state.name, 'lockEnabled': enabled, 'locked': locked},
+      );
+    }
     switch (state) {
       case AppLifecycleState.resumed:
         final backgroundedAt = _backgroundedAt;
@@ -222,6 +271,13 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
     _messageId = DeviceAuthenticationMessage.none;
     _automaticPromptAttempted = !allowAutomaticPrompt;
     if (notify) notifyListeners();
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.authentication,
+        'application_locked',
+        data: {'automaticPromptAllowed': allowAutomaticPrompt},
+      );
+    }
   }
 
   @override

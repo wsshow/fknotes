@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../debug/app_diagnostics.dart';
 import 'local_inference_coordinator.dart';
 import 'local_model_manager.dart';
 import 'speech_transcription_service.dart';
@@ -45,6 +46,7 @@ class BackgroundTaskCenter extends ChangeNotifier {
   final _attachments = AttachmentImportService.instance;
   final _transcriptions = SpeechTranscriptionService.instance;
   final _inference = LocalInferenceCoordinator.instance;
+  final Map<String, BackgroundTaskState> _debugStates = {};
 
   List<BackgroundTaskItem> get items {
     final result = <BackgroundTaskItem>[];
@@ -146,7 +148,46 @@ class BackgroundTaskCenter extends ChangeNotifier {
   int get failedCount =>
       items.where((item) => item.state == BackgroundTaskState.failed).length;
 
-  void _changed() => notifyListeners();
+  void _changed() {
+    if (kDebugMode) _recordStateChanges();
+    notifyListeners();
+  }
+
+  void _recordStateChanges() {
+    final current = <String, BackgroundTaskState>{};
+    for (final item in items) {
+      final key = '${item.kind.name}:${item.id.hashCode}';
+      current[key] = item.state;
+      final previous = _debugStates[key];
+      if (previous == item.state) continue;
+      AppDiagnostics.instance.record(
+        item.state == BackgroundTaskState.failed
+            ? AppLogLevel.error
+            : AppLogLevel.info,
+        AppLogCategory.backgroundTask,
+        item.state == BackgroundTaskState.failed
+            ? 'background_task_failed'
+            : 'background_task_started',
+        data: {
+          'taskKey': key,
+          'kind': item.kind.name,
+          'cancelable': item.cancelable,
+          'resourceType': item.resourceType,
+        },
+      );
+    }
+    for (final entry in _debugStates.entries) {
+      if (current.containsKey(entry.key)) continue;
+      AppDiagnostics.info(
+        AppLogCategory.backgroundTask,
+        'background_task_removed',
+        data: {'taskKey': entry.key, 'previousState': entry.value.name},
+      );
+    }
+    _debugStates
+      ..clear()
+      ..addAll(current);
+  }
 
   static String _modelStatusLabel(ModelTransferStatus status) =>
       switch (status) {

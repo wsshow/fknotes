@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../../debug/app_diagnostics.dart';
 import '../../models/local_llm.dart';
 
 enum LiteRtLmNativeEventType {
+  diagnostic,
   loaded,
   textDelta,
   completed,
@@ -57,6 +60,29 @@ class MethodChannelLiteRtLmTransport implements LiteRtLmTransport {
       .receiveBroadcastStream()
       .where((event) => event is Map)
       .map((event) => _decodeEvent(Map<Object?, Object?>.from(event as Map)))
+      .map((event) {
+        if (kDebugMode && event.type != LiteRtLmNativeEventType.textDelta) {
+          final failed =
+              event.type == LiteRtLmNativeEventType.error ||
+              event.type == LiteRtLmNativeEventType.serviceDied;
+          AppDiagnostics.instance.record(
+            failed ? AppLogLevel.error : AppLogLevel.debug,
+            AppLogCategory.inference,
+            'litert_native_event',
+            data: {
+              'requestId': event.requestId,
+              'type': event.type.name,
+              if (event.type == LiteRtLmNativeEventType.diagnostic)
+                'nativeLifecycle': event.data
+              else if (!failed && event.data.isNotEmpty)
+                'payloadLength': event.data.length,
+            },
+            error: failed ? event.data : null,
+            traceId: 'litert-${event.requestId}',
+          );
+        }
+        return event;
+      })
       .asBroadcastStream();
 
   @override
@@ -120,11 +146,59 @@ class MethodChannelLiteRtLmTransport implements LiteRtLmTransport {
 
   Future<bool> _invoke(String method, Map<String, Object?> arguments) async {
     if (!available) return false;
+    final requestId = (arguments['requestId'] as num?)?.toInt() ?? -1;
+    if (kDebugMode) {
+      AppDiagnostics.debug(
+        AppLogCategory.platform,
+        'litert_method_channel_invoked',
+        data: {
+          'method': method,
+          'requestId': requestId,
+          if (method == 'generate')
+            'messageCount': (arguments['messages'] as List?)?.length ?? 0,
+        },
+        traceId: 'litert-$requestId',
+      );
+    }
     try {
-      return await _methods.invokeMethod<bool>(method, arguments) ?? false;
-    } on MissingPluginException {
+      final accepted =
+          await _methods.invokeMethod<bool>(method, arguments) ?? false;
+      if (kDebugMode) {
+        AppDiagnostics.debug(
+          AppLogCategory.platform,
+          'litert_method_channel_completed',
+          data: {
+            'method': method,
+            'requestId': requestId,
+            'accepted': accepted,
+          },
+          traceId: 'litert-$requestId',
+        );
+      }
+      return accepted;
+    } on MissingPluginException catch (error, stackTrace) {
+      if (kDebugMode) {
+        AppDiagnostics.error(
+          AppLogCategory.platform,
+          'litert_method_channel_missing',
+          data: {'method': method, 'requestId': requestId},
+          error: error,
+          stackTrace: stackTrace,
+          traceId: 'litert-$requestId',
+        );
+      }
       return false;
-    } on PlatformException {
+    } on PlatformException catch (error, stackTrace) {
+      if (kDebugMode) {
+        AppDiagnostics.error(
+          AppLogCategory.platform,
+          'litert_method_channel_failed',
+          data: {'method': method, 'requestId': requestId, 'code': error.code},
+          error: error,
+          stackTrace: stackTrace,
+          traceId: 'litert-$requestId',
+        );
+      }
       return false;
     }
   }

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
+import '../debug/app_diagnostics.dart';
 import 'model_download_source_policy.dart';
 import 'model_download_transport.dart';
 
@@ -63,16 +64,44 @@ class ModelCatalogHttpClient {
     ]);
     final failures = <ModelCatalogRequestException>[];
     for (final source in sources) {
+      final stopwatch = Stopwatch()..start();
+      if (kDebugMode) {
+        AppDiagnostics.debug(
+          AppLogCategory.network,
+          'model_catalog_source_attempted',
+          data: {'source': source.label, 'host': source.uri.host},
+        );
+      }
       try {
         final bytes = await (_sourceFetch?.call(source) ?? _read(source));
         _sourcePolicy.reportSuccessfulSource(source);
+        if (kDebugMode) {
+          AppDiagnostics.info(
+            AppLogCategory.network,
+            'model_catalog_source_succeeded',
+            data: {
+              'source': source.label,
+              'host': source.uri.host,
+              'durationMs': stopwatch.elapsedMilliseconds,
+              'responseBytes': bytes.length,
+            },
+          );
+        }
         return bytes;
       } on ModelCatalogRequestException catch (error) {
         failures.add(error);
         if (kDebugMode) {
-          debugPrint(
-            'Model catalog source failed: ${source.label}: '
-            '${error.debugDetails}',
+          AppDiagnostics.warning(
+            AppLogCategory.network,
+            'model_catalog_source_failed',
+            data: {
+              'source': source.label,
+              'host': source.uri.host,
+              'durationMs': stopwatch.elapsedMilliseconds,
+              'failureKind': error.kind.name,
+              'debugDetails': error.debugDetails,
+            },
+            error: error,
           );
         }
       }

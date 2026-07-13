@@ -2,10 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../models/cloud_sync.dart';
+import '../debug/app_diagnostics.dart';
 import 'backup_service.dart';
 import 'cloud_remote_storage.dart';
 import 'cloud_sync_settings_service.dart';
@@ -60,6 +62,13 @@ class CloudSyncService {
       clearSyncState: targetChanged,
     );
     await _settings.save(saved);
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.cloudSync,
+        'cloud_sync_configuration_saved',
+        data: {'provider': saved.provider.name, 'targetChanged': targetChanged},
+      );
+    }
     return saved;
   }
 
@@ -67,14 +76,46 @@ class CloudSyncService {
     final problem = settings.configurationProblem;
     if (problem != null) throw StateError(problem);
     final remote = _remoteBuilder(settings);
+    final stopwatch = Stopwatch()..start();
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.cloudSync,
+        'cloud_connection_test_started',
+        data: {'provider': settings.provider.name},
+      );
+    }
     try {
       await remote.testConnection();
+      if (kDebugMode) {
+        AppDiagnostics.info(
+          AppLogCategory.cloudSync,
+          'cloud_connection_test_completed',
+          data: {
+            'provider': settings.provider.name,
+            'durationMs': stopwatch.elapsedMilliseconds,
+          },
+        );
+      }
+    } catch (error, stackTrace) {
+      if (kDebugMode) {
+        AppDiagnostics.error(
+          AppLogCategory.cloudSync,
+          'cloud_connection_test_failed',
+          data: {
+            'provider': settings.provider.name,
+            'durationMs': stopwatch.elapsedMilliseconds,
+          },
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
+      rethrow;
     } finally {
       remote.close();
     }
   }
 
-  Future<CloudSyncResult> synchronize() => _run(() async {
+  Future<CloudSyncResult> synchronize() => _run('cloud_sync', () async {
     final settings = await _configuredSettings();
     final remote = _remoteBuilder(settings);
     try {
@@ -122,7 +163,7 @@ class CloudSyncService {
 
   Future<CloudSyncResult> resolveConflict(
     CloudSyncConflictResolution resolution,
-  ) => _run(() async {
+  ) => _run('cloud_conflict_resolution', () async {
     final settings = await _configuredSettings();
     final remote = _remoteBuilder(settings);
     try {
@@ -151,11 +192,37 @@ class CloudSyncService {
     }
   });
 
-  Future<T> _run<T>(Future<T> Function() operation) async {
+  Future<T> _run<T>(String event, Future<T> Function() operation) async {
     if (_busy) throw StateError('云同步任务正在进行');
     _busy = true;
+    final stopwatch = Stopwatch()..start();
+    if (kDebugMode) {
+      AppDiagnostics.info(AppLogCategory.cloudSync, '${event}_started');
+    }
     try {
-      return await operation();
+      final result = await operation();
+      if (kDebugMode) {
+        AppDiagnostics.info(
+          AppLogCategory.cloudSync,
+          '${event}_completed',
+          data: {
+            'durationMs': stopwatch.elapsedMilliseconds,
+            if (result is CloudSyncResult) 'result': result.type.name,
+          },
+        );
+      }
+      return result;
+    } catch (error, stackTrace) {
+      if (kDebugMode) {
+        AppDiagnostics.error(
+          AppLogCategory.cloudSync,
+          '${event}_failed',
+          data: {'durationMs': stopwatch.elapsedMilliseconds},
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
+      rethrow;
     } finally {
       _busy = false;
     }
@@ -204,6 +271,18 @@ class CloudSyncService {
       sizeBytes: artifact.sizeBytes,
     );
     final previous = await _readMetadata(remote);
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.cloudSync,
+        'cloud_snapshot_upload_started',
+        data: {
+          'revision': revision,
+          'sizeBytes': artifact.sizeBytes,
+          'replacesPrevious': previous != null,
+        },
+        traceId: revision,
+      );
+    }
     await remote.uploadFile(
       metadata.archiveKey,
       artifact.file,
@@ -218,6 +297,14 @@ class CloudSyncService {
         // The new pointer is already valid. A stale snapshot is safer than
         // failing a completed synchronization because cleanup was denied.
       }
+    }
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.cloudSync,
+        'cloud_snapshot_upload_completed',
+        data: {'revision': revision, 'sizeBytes': artifact.sizeBytes},
+        traceId: revision,
+      );
     }
     return metadata;
   }
@@ -238,6 +325,14 @@ class CloudSyncService {
     final downloaded = File(
       p.join(temporaryRoot.path, '${metadata.revision}.fknotes.zip'),
     );
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.cloudSync,
+        'cloud_snapshot_download_started',
+        data: {'revision': metadata.revision, 'sizeBytes': metadata.sizeBytes},
+        traceId: metadata.revision,
+      );
+    }
     try {
       await remote.downloadFile(
         metadata.archiveKey,
@@ -253,6 +348,17 @@ class CloudSyncService {
       }
       await _backups.restore(downloaded);
       await _saveSyncState(settings, metadata);
+      if (kDebugMode) {
+        AppDiagnostics.info(
+          AppLogCategory.cloudSync,
+          'cloud_snapshot_restore_completed',
+          data: {
+            'revision': metadata.revision,
+            'sizeBytes': metadata.sizeBytes,
+          },
+          traceId: metadata.revision,
+        );
+      }
     } finally {
       if (await downloaded.exists()) await downloaded.delete();
     }

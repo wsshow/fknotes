@@ -57,18 +57,22 @@ internal class LiteRtLmBridge(
             binding = false
             bound = true
             service = Messenger(binder)
+            debugLifecycle("service_connected")
             flushPending()
         }
 
         override fun onServiceDisconnected(name: ComponentName) {
+            debugLifecycle("service_disconnected")
             handleWorkerDeath("LiteRT-LM 推理进程连接已断开")
         }
 
         override fun onBindingDied(name: ComponentName) {
+            debugLifecycle("binding_died")
             handleWorkerDeath("LiteRT-LM 推理进程意外终止")
         }
 
         override fun onNullBinding(name: ComponentName) {
+            debugLifecycle("null_binding")
             handleWorkerDeath("LiteRT-LM 推理服务无法启动")
         }
     }
@@ -130,10 +134,15 @@ internal class LiteRtLmBridge(
         pending.add(PendingCommand(message, result))
         if (binding) return
         binding = true
+        debugLifecycle("bind_started", message.data.getInt(LiteRtLmIpc.REQUEST_ID, -1))
         val started = context.bindService(
             Intent(context, LiteRtLmService::class.java),
             connection,
             Context.BIND_AUTO_CREATE,
+        )
+        debugLifecycle(
+            if (started) "bind_accepted" else "bind_rejected",
+            message.data.getInt(LiteRtLmIpc.REQUEST_ID, -1),
         )
         if (!started) handleWorkerDeath("LiteRT-LM 推理服务无法启动")
     }
@@ -146,8 +155,16 @@ internal class LiteRtLmBridge(
     private fun send(target: Messenger, command: PendingCommand) {
         try {
             target.send(command.message)
+            debugLifecycle(
+                "command_sent",
+                command.message.data.getInt(LiteRtLmIpc.REQUEST_ID, -1),
+            )
             command.result.success(true)
         } catch (_: RemoteException) {
+            debugLifecycle(
+                "command_send_failed",
+                command.message.data.getInt(LiteRtLmIpc.REQUEST_ID, -1),
+            )
             command.result.success(false)
             handleWorkerDeath("LiteRT-LM 推理进程意外终止")
         }
@@ -177,6 +194,10 @@ internal class LiteRtLmBridge(
                 LiteRtLmIpc.DATA to data,
             ),
         )
+    }
+
+    private fun debugLifecycle(event: String, requestId: Int = -1) {
+        if (BuildConfig.DEBUG) emit(requestId, "diagnostic", event)
     }
 
     private companion object {

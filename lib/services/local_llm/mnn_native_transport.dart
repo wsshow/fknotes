@@ -4,7 +4,9 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:ffi/ffi.dart';
+import 'package:flutter/foundation.dart';
 
+import '../../debug/app_diagnostics.dart';
 import '../../models/local_llm.dart';
 
 enum MnnNativeEventType {
@@ -134,8 +136,16 @@ class FfiMnnNativeTransport implements MnnNativeTransport {
     );
     try {
       _bindings = _MnnBindings(_openLibrary());
-    } catch (_) {
+    } catch (error, stackTrace) {
       _bindings = null;
+      if (kDebugMode) {
+        AppDiagnostics.error(
+          AppLogCategory.platform,
+          'mnn_native_library_load_failed',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
     }
   }
 
@@ -165,7 +175,8 @@ class FfiMnnNativeTransport implements MnnNativeTransport {
     final cache = cachePath.toNativeUtf8();
     final backend = _backendName(options.backend).toNativeUtf8();
     try {
-      return bindings.load(
+      final accepted =
+          bindings.load(
             requestId,
             config,
             cache,
@@ -177,6 +188,21 @@ class FfiMnnNativeTransport implements MnnNativeTransport {
             _callback.nativeFunction,
           ) ==
           1;
+      if (kDebugMode) {
+        AppDiagnostics.debug(
+          AppLogCategory.platform,
+          'mnn_native_load_dispatched',
+          data: {
+            'requestId': requestId,
+            'accepted': accepted,
+            'backend': options.backend.name,
+            'threads': options.threads,
+            'contextTokens': options.contextTokens,
+          },
+          traceId: 'mnn-$requestId',
+        );
+      }
+      return accepted;
     } finally {
       calloc.free(config);
       calloc.free(cache);
@@ -221,7 +247,8 @@ class FfiMnnNativeTransport implements MnnNativeTransport {
         }
       }
       final options = request.options;
-      return bindings.generate(
+      final accepted =
+          bindings.generate(
             requestId,
             roles,
             contents,
@@ -238,6 +265,21 @@ class FfiMnnNativeTransport implements MnnNativeTransport {
             _callback.nativeFunction,
           ) ==
           1;
+      if (kDebugMode) {
+        AppDiagnostics.debug(
+          AppLogCategory.platform,
+          'mnn_native_generation_dispatched',
+          data: {
+            'requestId': requestId,
+            'accepted': accepted,
+            'messageCount': count,
+            'attachmentCount': attachmentCount,
+            'maxNewTokens': options.maxNewTokens,
+          },
+          traceId: 'mnn-$requestId',
+        );
+      }
+      return accepted;
     } finally {
       for (var index = 0; index < count; index++) {
         calloc.free(roles[index]);
@@ -286,6 +328,21 @@ class FfiMnnNativeTransport implements MnnNativeTransport {
       return;
     }
     final type = MnnNativeEventType.values[eventType];
+    if (kDebugMode && type != MnnNativeEventType.textDelta) {
+      final failed = type == MnnNativeEventType.error;
+      AppDiagnostics.instance.record(
+        failed ? AppLogLevel.error : AppLogLevel.debug,
+        AppLogCategory.inference,
+        'mnn_native_event',
+        data: {
+          'requestId': requestId,
+          'type': type.name,
+          if (!failed) 'payloadBytes': bytes.length,
+        },
+        error: failed ? utf8.decode(bytes, allowMalformed: true) : null,
+        traceId: 'mnn-$requestId',
+      );
+    }
     if (type == MnnNativeEventType.textDelta) {
       try {
         final payload = _textDecoders

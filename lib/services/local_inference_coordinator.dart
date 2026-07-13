@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../debug/app_diagnostics.dart';
+
 enum LocalInferenceTaskType {
   liveDictation,
   transcription,
@@ -70,7 +72,21 @@ class LocalInferenceCoordinator extends ChangeNotifier {
     required String ownerId,
   }) {
     final active = _activity;
-    if (active != null) throw LocalInferenceBusyException(active);
+    if (active != null) {
+      if (kDebugMode) {
+        AppDiagnostics.warning(
+          AppLogCategory.inference,
+          'inference_lease_rejected',
+          data: {
+            'requestedType': type.name,
+            'requestedOwner': ownerId,
+            'activeType': active.type.name,
+            'activeOwner': active.ownerId,
+          },
+        );
+      }
+      throw LocalInferenceBusyException(active);
+    }
     final generation = ++_generation;
     _activity = LocalInferenceActivity(
       generation: generation,
@@ -79,13 +95,36 @@ class LocalInferenceCoordinator extends ChangeNotifier {
       startedAt: DateTime.now(),
     );
     notifyListeners();
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.inference,
+        'inference_lease_acquired',
+        data: {'type': type.name, 'ownerId': ownerId},
+        traceId: 'lease-$generation',
+      );
+    }
     return LocalInferenceLease._(this, generation);
   }
 
   void _release(int generation) {
     if (_activity?.generation != generation) return;
+    final activity = _activity;
     _activity = null;
     notifyListeners();
+    if (kDebugMode && activity != null) {
+      AppDiagnostics.info(
+        AppLogCategory.inference,
+        'inference_lease_released',
+        data: {
+          'type': activity.type.name,
+          'ownerId': activity.ownerId,
+          'durationMs': DateTime.now()
+              .difference(activity.startedAt)
+              .inMilliseconds,
+        },
+        traceId: 'lease-$generation',
+      );
+    }
   }
 
   @visibleForTesting

@@ -1,10 +1,13 @@
 import 'dart:io';
 import 'dart:isolate';
 
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 import 'package:image/image.dart' as img;
+
+import '../debug/app_diagnostics.dart';
 
 class FileStorageService {
   FileStorageService._();
@@ -17,6 +20,7 @@ class FileStorageService {
 
   /// Initialize storage directories
   Future<void> init({String? baseDir}) async {
+    final stopwatch = Stopwatch()..start();
     final appDir = baseDir == null
         ? await getApplicationSupportDirectory()
         : Directory(baseDir);
@@ -55,6 +59,17 @@ class FileStorageService {
           // A previous process may still be releasing the temporary decoder.
         }
       }
+    }
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.storage,
+        'file_storage_initialized',
+        data: {
+          'durationMs': stopwatch.elapsedMilliseconds,
+          'customDirectory': baseDir != null,
+          'managedDirectoryCount': dirs.length,
+        },
+      );
     }
   }
 

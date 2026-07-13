@@ -1,5 +1,8 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
+import '../../debug/app_diagnostics.dart';
 import '../../models/local_llm.dart';
 import 'local_llm_engine.dart';
 
@@ -33,6 +36,23 @@ class LocalLlmCoordinator {
     LocalLlmModelDescriptor model, {
     LocalLlmLoadOptions options = const LocalLlmLoadOptions(),
   }) => _serializeLifecycle(() async {
+    final stopwatch = Stopwatch()..start();
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.inference,
+        'llm_model_load_started',
+        data: {
+          'modelId': model.id,
+          'engine': model.engine.name,
+          'backend': options.backend.name,
+          'threads': options.threads,
+          'contextTokens': options.contextTokens,
+          'imageInput': model.capabilities.imageInput,
+          'audioInput': model.capabilities.audioInput,
+        },
+        traceId: model.id,
+      );
+    }
     _ensureNotDisposed();
     if (isGenerating) {
       throw const LocalLlmException('正在生成内容，暂时不能切换模型');
@@ -48,8 +68,26 @@ class LocalLlmCoordinator {
     try {
       await _engine.loadModel(model, options: options);
       _emit(LocalLlmEngineState.ready, model: model);
-    } catch (error) {
+      if (kDebugMode) {
+        AppDiagnostics.info(
+          AppLogCategory.inference,
+          'llm_model_load_completed',
+          data: {'durationMs': stopwatch.elapsedMilliseconds},
+          traceId: model.id,
+        );
+      }
+    } catch (error, stackTrace) {
       _emit(LocalLlmEngineState.failed, model: model, error: error);
+      if (kDebugMode) {
+        AppDiagnostics.error(
+          AppLogCategory.inference,
+          'llm_model_load_failed',
+          data: {'durationMs': stopwatch.elapsedMilliseconds},
+          error: error,
+          stackTrace: stackTrace,
+          traceId: model.id,
+        );
+      }
       rethrow;
     }
   });
@@ -61,6 +99,26 @@ class LocalLlmCoordinator {
     Future<void> start() async {
       if (started) return;
       started = true;
+      final stopwatch = Stopwatch()..start();
+      final modelId = _snapshot.model?.id ?? 'not-loaded';
+      var outputCharacters = 0;
+      if (kDebugMode) {
+        AppDiagnostics.info(
+          AppLogCategory.inference,
+          'llm_generation_started',
+          data: {
+            'modelId': modelId,
+            'messageCount': request.messages.length,
+            'attachmentCount': request.messages.fold<int>(
+              0,
+              (total, message) => total + message.attachments.length,
+            ),
+            'maxNewTokens': request.options.maxNewTokens,
+            'timeoutMs': request.options.timeout.inMilliseconds,
+          },
+          traceId: modelId,
+        );
+      }
       try {
         _ensureNotDisposed();
         if (_snapshot.state != LocalLlmEngineState.ready ||
@@ -75,6 +133,28 @@ class LocalLlmCoordinator {
         _emit(LocalLlmEngineState.generating, model: _snapshot.model);
         try {
           await for (final event in _engine.generate(request)) {
+            if (event is LocalLlmTextDelta) {
+              outputCharacters += event.text.length;
+            }
+            if (kDebugMode && event is LocalLlmGenerationCompleted) {
+              AppDiagnostics.info(
+                AppLogCategory.inference,
+                'llm_generation_completed',
+                data: {
+                  'durationMs': stopwatch.elapsedMilliseconds,
+                  'outputCharacters': outputCharacters,
+                  'finishReason': event.reason.name,
+                  'promptTokens': event.metrics.promptTokens,
+                  'generatedTokens': event.metrics.generatedTokens,
+                  'prefillTokensPerSecond':
+                      event.metrics.prefillTokensPerSecond,
+                  'decodeTokensPerSecond': event.metrics.decodeTokensPerSecond,
+                  'visionTimeMs': event.metrics.visionTime.inMilliseconds,
+                  'audioTimeMs': event.metrics.audioTime.inMilliseconds,
+                },
+                traceId: modelId,
+              );
+            }
             if (!controller.isClosed) controller.add(event);
           }
         } finally {
@@ -87,6 +167,19 @@ class LocalLlmCoordinator {
           }
         }
       } catch (error, stackTrace) {
+        if (kDebugMode) {
+          AppDiagnostics.error(
+            AppLogCategory.inference,
+            'llm_generation_failed',
+            data: {
+              'durationMs': stopwatch.elapsedMilliseconds,
+              'outputCharacters': outputCharacters,
+            },
+            error: error,
+            stackTrace: stackTrace,
+            traceId: modelId,
+          );
+        }
         if (!controller.isClosed) controller.addError(error, stackTrace);
       } finally {
         if (!controller.isClosed) await controller.close();
@@ -106,6 +199,13 @@ class LocalLlmCoordinator {
     _ensureNotDisposed();
     final done = _generationDone;
     if (done == null) return;
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.inference,
+        'llm_generation_cancel_requested',
+        traceId: _snapshot.model?.id,
+      );
+    }
     _emit(LocalLlmEngineState.canceling, model: _snapshot.model);
     await _engine.cancel();
     await done.future;
@@ -121,11 +221,35 @@ class LocalLlmCoordinator {
       return;
     }
     _emit(LocalLlmEngineState.unloading, model: _snapshot.model);
+    final modelId = _snapshot.model?.id;
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.inference,
+        'llm_model_unload_started',
+        traceId: modelId,
+      );
+    }
     try {
       await _engine.unload();
       _emit(LocalLlmEngineState.idle);
-    } catch (error) {
+      if (kDebugMode) {
+        AppDiagnostics.info(
+          AppLogCategory.inference,
+          'llm_model_unload_completed',
+          traceId: modelId,
+        );
+      }
+    } catch (error, stackTrace) {
       _emit(LocalLlmEngineState.failed, error: error);
+      if (kDebugMode) {
+        AppDiagnostics.error(
+          AppLogCategory.inference,
+          'llm_model_unload_failed',
+          error: error,
+          stackTrace: stackTrace,
+          traceId: modelId,
+        );
+      }
       rethrow;
     }
   }
@@ -153,6 +277,14 @@ class LocalLlmCoordinator {
       model: model,
       error: error,
     );
+    if (kDebugMode) {
+      AppDiagnostics.debug(
+        AppLogCategory.inference,
+        'llm_runtime_state_changed',
+        data: {'state': state.name, 'modelId': model?.id},
+        traceId: model?.id,
+      );
+    }
     if (!_snapshots.isClosed) _snapshots.add(_snapshot);
   }
 

@@ -1,8 +1,10 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
+import '../debug/app_diagnostics.dart';
 import '../models/local_chat.dart';
 import 'database_service.dart';
 import 'file_storage_service.dart';
@@ -178,7 +180,7 @@ class LocalChatStore {
             ),
           );
     }
-    return sessionRows
+    final sessions = sessionRows
         .map(
           (row) => LocalChatSession(
             id: row['id'] as String,
@@ -192,6 +194,17 @@ class LocalChatStore {
           ),
         )
         .toList();
+    if (kDebugMode) {
+      AppDiagnostics.debug(
+        AppLogCategory.localAssistant,
+        'chat_history_loaded',
+        data: {
+          'sessionCount': sessions.length,
+          'messageCount': messageRows.length,
+        },
+      );
+    }
+    return sessions;
   }
 
   Future<void> saveSession(LocalChatSession session) {
@@ -231,6 +244,26 @@ class LocalChatStore {
         }
         await batch.commit(noResult: true);
       });
+      if (kDebugMode) {
+        AppDiagnostics.info(
+          AppLogCategory.localAssistant,
+          'chat_session_saved',
+          data: {
+            'sessionId': session.id,
+            'personaId': session.personaId,
+            'messageCount': session.messages.length,
+            'attachmentCount': session.messages.fold<int>(
+              0,
+              (total, message) => total + message.attachments.length,
+            ),
+            'characterCount': session.messages.fold<int>(
+              0,
+              (total, message) => total + message.content.length,
+            ),
+          },
+          traceId: 'chat-${session.id}',
+        );
+      }
     });
     _writeQueue = result.catchError((_) {});
     return result;
@@ -255,6 +288,14 @@ class LocalChatStore {
       await database.delete('chat_sessions', where: 'id = ?', whereArgs: [id]);
       for (final path in paths) {
         await FileStorageService.instance.deleteFile(path);
+      }
+      if (kDebugMode) {
+        AppDiagnostics.info(
+          AppLogCategory.localAssistant,
+          'chat_session_deleted',
+          data: {'sessionId': id, 'attachmentCount': paths.length},
+          traceId: 'chat-$id',
+        );
       }
     });
     _writeQueue = result.catchError((_) {});

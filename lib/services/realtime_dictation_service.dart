@@ -12,6 +12,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 
+import '../debug/app_diagnostics.dart';
 import 'realtime_dictation_preferences_service.dart';
 import 'realtime_dictation_text_policy.dart';
 import 'local_inference_coordinator.dart';
@@ -842,6 +843,14 @@ class RealtimeDictationService extends ChangeNotifier {
     _debugEvents.add(line);
     if (_debugEvents.length > 300) _debugEvents.removeAt(0);
     debugPrint('FKNOTES_ASR $line');
+    AppDiagnostics.debug(
+      AppLogCategory.speech,
+      'realtime_dictation_event',
+      data: {'diagnostic': _redactDictationDiagnostic(message)},
+      traceId: _debugStartedAt == null
+          ? null
+          : 'asr-${_debugStartedAt!.microsecondsSinceEpoch}',
+    );
   }
 
   String _friendlyError(Object error) => error.toString().replaceFirst(
@@ -849,6 +858,11 @@ class RealtimeDictationService extends ChangeNotifier {
     '',
   );
 }
+
+String _redactDictationDiagnostic(String message) => message
+    .replaceAll(RegExp(r'text="[^"]*"'), 'text=<redacted>')
+    .replaceAll(RegExp(r'text=\S+'), 'text=<redacted>')
+    .replaceAll(RegExp(r'(/[\w.-]+)+'), '<path>');
 
 class _PcmStats {
   final int samples;

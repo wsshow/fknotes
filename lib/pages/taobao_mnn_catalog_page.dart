@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 
 import '../app.dart';
+import '../debug/app_diagnostics.dart';
 import '../l10n/l10n.dart';
 import '../models/litert_model.dart';
 import '../models/taobao_mnn_model.dart';
@@ -114,8 +115,15 @@ class _TaobaoMnnCatalogPageState extends State<TaobaoMnnCatalogPage> {
     try {
       await sync();
       return null;
-    } catch (error) {
-      if (kDebugMode) debugPrint('Model catalog refresh failed: $error');
+    } catch (error, stackTrace) {
+      if (kDebugMode) {
+        AppDiagnostics.error(
+          AppLogCategory.modelManagement,
+          'model_catalog_refresh_failed',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
       return error;
     }
   }
@@ -440,8 +448,17 @@ class _TaobaoMnnModelDetailPageState extends State<_TaobaoMnnModelDetailPage> {
     try {
       final model = await widget.service.inspect(widget.entry, force: true);
       if (mounted) setState(() => _model = model);
-    } catch (error) {
-      if (kDebugMode) debugPrint('Model package verification failed: $error');
+    } catch (error, stackTrace) {
+      if (kDebugMode) {
+        AppDiagnostics.error(
+          AppLogCategory.modelManagement,
+          'mnn_model_package_verification_failed',
+          data: {'repository': widget.entry.repository},
+          error: error,
+          stackTrace: stackTrace,
+          traceId: widget.entry.repository,
+        );
+      }
       if (mounted) setState(() => _error = error);
     } finally {
       if (mounted) setState(() => _checking = false);
@@ -455,7 +472,17 @@ class _TaobaoMnnModelDetailPageState extends State<_TaobaoMnnModelDetailPage> {
     try {
       await widget.onInstall(model);
       if (mounted) Navigator.pop(context, true);
-    } catch (error) {
+    } catch (error, stackTrace) {
+      if (kDebugMode) {
+        AppDiagnostics.error(
+          AppLogCategory.modelManagement,
+          'mnn_model_install_failed',
+          data: {'repository': widget.entry.repository},
+          error: error,
+          stackTrace: stackTrace,
+          traceId: widget.entry.repository,
+        );
+      }
       if (mounted) {
         setState(() {
           _installing = false;
@@ -641,9 +668,16 @@ class _LiteRtModelDetailPageState extends State<_LiteRtModelDetailPage> {
     try {
       final model = await widget.service.inspect(widget.entry, force: true);
       if (mounted) setState(() => _model = model);
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (kDebugMode) {
-        debugPrint('LiteRT model package verification failed: $error');
+        AppDiagnostics.error(
+          AppLogCategory.modelManagement,
+          'litert_model_package_verification_failed',
+          data: {'repository': widget.entry.repository},
+          error: error,
+          stackTrace: stackTrace,
+          traceId: widget.entry.repository,
+        );
       }
       if (mounted) setState(() => _error = error);
     } finally {

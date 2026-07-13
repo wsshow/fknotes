@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 
+import '../debug/app_diagnostics.dart';
+
 enum OcrStatus { recognized, noText, failed }
 
 class OcrResult {
@@ -35,6 +37,10 @@ class OcrService {
   /// Extract text from an image file and preserve the difference between an
   /// image without text and a recognition failure.
   Future<OcrResult> recognizeText(String imagePath) async {
+    final stopwatch = Stopwatch()..start();
+    if (kDebugMode) {
+      AppDiagnostics.info(AppLogCategory.media, 'ocr_started');
+    }
     try {
       final file = File(imagePath);
       if (!await file.exists()) {
@@ -44,11 +50,30 @@ class OcrService {
       final inputImage = InputImage.fromFile(file);
       final recognizedText = await _textRecognizer.processImage(inputImage);
       final text = recognizedText.text.trim();
+      if (kDebugMode) {
+        AppDiagnostics.info(
+          AppLogCategory.media,
+          'ocr_completed',
+          data: {
+            'durationMs': stopwatch.elapsedMilliseconds,
+            'characterCount': text.length,
+            'hasText': text.isNotEmpty,
+          },
+        );
+      }
       return text.isEmpty
           ? const OcrResult.noText()
           : OcrResult.recognized(text);
     } catch (error, stackTrace) {
-      debugPrint('OCR recognition failed: $error\n$stackTrace');
+      if (kDebugMode) {
+        AppDiagnostics.error(
+          AppLogCategory.media,
+          'ocr_failed',
+          data: {'durationMs': stopwatch.elapsedMilliseconds},
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
       return OcrResult.failed('文字识别暂时不可用，请稍后重试');
     }
   }

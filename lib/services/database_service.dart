@@ -1,8 +1,10 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
+import '../debug/app_diagnostics.dart';
 import 'file_storage_service.dart';
 import '../models/local_chat.dart';
 
@@ -16,16 +18,52 @@ class DatabaseService {
 
   Future<Database> _initDatabase() async {
     final path = p.join(FileStorageService.instance.baseDir, 'fknotes.db');
-    return openDatabase(
-      path,
-      version: 8,
-      onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
-      onCreate: _onCreate,
-      onUpgrade: _onUpgrade,
-    );
+    final stopwatch = Stopwatch()..start();
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.database,
+        'database_open_started',
+        data: {'schemaVersion': 8},
+      );
+    }
+    try {
+      final database = await openDatabase(
+        path,
+        version: 8,
+        onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
+        onCreate: _onCreate,
+        onUpgrade: _onUpgrade,
+      );
+      if (kDebugMode) {
+        AppDiagnostics.info(
+          AppLogCategory.database,
+          'database_open_completed',
+          data: {'durationMs': stopwatch.elapsedMilliseconds},
+        );
+      }
+      return database;
+    } catch (error, stackTrace) {
+      if (kDebugMode) {
+        AppDiagnostics.error(
+          AppLogCategory.database,
+          'database_open_failed',
+          data: {'durationMs': stopwatch.elapsedMilliseconds},
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
+      rethrow;
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.database,
+        'database_schema_create_started',
+        data: {'version': version},
+      );
+    }
     await db.execute('''
       CREATE TABLE entries (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,9 +92,23 @@ class DatabaseService {
     await _createChatTables(db);
     await _createIndexes(db);
     await _createSearchIndex(db);
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.database,
+        'database_schema_create_completed',
+        data: {'version': version},
+      );
+    }
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.database,
+        'database_migration_started',
+        data: {'fromVersion': oldVersion, 'toVersion': newVersion},
+      );
+    }
     if (oldVersion < 2) {
       await _createAttachmentsTable(db);
       await db.execute('''
@@ -121,6 +173,13 @@ class DatabaseService {
           "ALTER TABLE chat_messages ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]'",
         );
       }
+    }
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.database,
+        'database_migration_completed',
+        data: {'fromVersion': oldVersion, 'toVersion': newVersion},
+      );
     }
   }
 
@@ -388,9 +447,19 @@ class DatabaseService {
   Future<void> close() async {
     await _database?.close();
     _database = null;
+    if (kDebugMode) {
+      AppDiagnostics.info(AppLogCategory.database, 'database_closed');
+    }
   }
 
   Future<void> validateUserData() async {
+    final stopwatch = Stopwatch()..start();
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.database,
+        'database_validation_started',
+      );
+    }
     final db = await database;
     final quickCheck = await db.rawQuery('PRAGMA quick_check');
     if (quickCheck.isEmpty ||
@@ -430,6 +499,16 @@ class DatabaseService {
       if (thumbnailPath != null && thumbnailPath.isNotEmpty) {
         FileStorageService.instance.absolutePath(thumbnailPath);
       }
+    }
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.database,
+        'database_validation_completed',
+        data: {
+          'durationMs': stopwatch.elapsedMilliseconds,
+          'attachmentCount': attachments.length,
+        },
+      );
     }
   }
 }

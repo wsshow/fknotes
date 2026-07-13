@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 
+import '../debug/app_diagnostics.dart';
 import '../models/note_entry.dart';
 import 'database_service.dart';
 
@@ -10,12 +12,24 @@ class NoteService {
   Future<Database> get _db => DatabaseService.instance.database;
 
   Future<List<NoteEntry>> getAllEntries() async {
+    final stopwatch = Stopwatch()..start();
     final db = await _db;
     final maps = await db.query(
       'entries',
       orderBy: 'is_pinned DESC, updated_at DESC',
     );
-    return _hydrate(db, maps);
+    final entries = await _hydrate(db, maps);
+    if (kDebugMode) {
+      AppDiagnostics.debug(
+        AppLogCategory.database,
+        'notes_loaded',
+        data: {
+          'count': entries.length,
+          'durationMs': stopwatch.elapsedMilliseconds,
+        },
+      );
+    }
+    return entries;
   }
 
   Future<Set<String>> referencedAttachmentPaths() async {
@@ -50,16 +64,30 @@ class NoteService {
 
   Future<int> insertEntry(NoteEntry entry) async {
     final db = await _db;
-    return db.transaction((txn) async {
+    final id = await db.transaction((txn) async {
       final id = await txn.insert('entries', entry.toMap());
       await _replaceAttachments(txn, id, entry.allAttachments);
       return id;
     });
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.database,
+        'note_inserted',
+        data: {
+          'noteId': id,
+          'type': entry.type.name,
+          'attachmentCount': entry.allAttachments.length,
+          'characterCount': entry.content?.length ?? 0,
+        },
+        traceId: 'note-$id',
+      );
+    }
+    return id;
   }
 
   Future<int> updateEntry(NoteEntry entry) async {
     final db = await _db;
-    return db.transaction((txn) async {
+    final count = await db.transaction((txn) async {
       final count = await txn.update(
         'entries',
         entry.toMap(),
@@ -71,6 +99,21 @@ class NoteService {
       }
       return count;
     });
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.database,
+        'note_updated',
+        data: {
+          'noteId': entry.id,
+          'rowCount': count,
+          'type': entry.type.name,
+          'attachmentCount': entry.allAttachments.length,
+          'characterCount': entry.content?.length ?? 0,
+        },
+        traceId: entry.id == null ? null : 'note-${entry.id}',
+      );
+    }
+    return count;
   }
 
   /// Append one completed background import without rewriting every existing
@@ -126,7 +169,16 @@ class NoteService {
 
   Future<int> deleteEntry(int id) async {
     final db = await _db;
-    return db.delete('entries', where: 'id = ?', whereArgs: [id]);
+    final count = await db.delete('entries', where: 'id = ?', whereArgs: [id]);
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.database,
+        'note_deleted',
+        data: {'noteId': id, 'rowCount': count},
+        traceId: 'note-$id',
+      );
+    }
+    return count;
   }
 
   Future<NoteEntry?> updateAttachmentTranscript({
@@ -163,6 +215,7 @@ class NoteService {
 
   Future<List<NoteEntry>> searchLike(String query) async {
     if (query.trim().isEmpty) return const [];
+    final stopwatch = Stopwatch()..start();
     final db = await _db;
     final like = '%${query.trim()}%';
     final maps = await db.rawQuery(
@@ -179,7 +232,19 @@ class NoteService {
       ''',
       [like, like, like, like, like, like, like, like],
     );
-    return _hydrate(db, maps);
+    final entries = await _hydrate(db, maps);
+    if (kDebugMode) {
+      AppDiagnostics.debug(
+        AppLogCategory.database,
+        'note_search_completed',
+        data: {
+          'queryLength': query.trim().length,
+          'resultCount': entries.length,
+          'durationMs': stopwatch.elapsedMilliseconds,
+        },
+      );
+    }
+    return entries;
   }
 
   Future<List<NoteEntry>> _hydrate(

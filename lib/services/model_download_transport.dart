@@ -1,6 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
+import '../debug/app_diagnostics.dart';
+
 class ModelDownloadCanceled implements Exception {
   const ModelDownloadCanceled();
 }
@@ -63,6 +67,19 @@ class ModelDownloadTransport {
     if (sources.isEmpty) throw ArgumentError.value(sources, 'sources');
     Object? lastError;
     for (final source in sources) {
+      final stopwatch = Stopwatch()..start();
+      if (kDebugMode) {
+        AppDiagnostics.debug(
+          AppLogCategory.modelDownload,
+          'model_download_source_attempted',
+          data: {
+            'source': source.label,
+            'kind': source.kind.name,
+            'host': source.uri.host,
+            'expectedBytes': expectedBytes,
+          },
+        );
+      }
       try {
         await _downloadFromSource(
           source: source,
@@ -73,11 +90,39 @@ class ModelDownloadTransport {
           shouldCancel: shouldCancel,
         );
         onSourceSelected?.call(source);
+        if (kDebugMode) {
+          AppDiagnostics.info(
+            AppLogCategory.modelDownload,
+            'model_download_source_succeeded',
+            data: {
+              'source': source.label,
+              'kind': source.kind.name,
+              'host': source.uri.host,
+              'durationMs': stopwatch.elapsedMilliseconds,
+              'expectedBytes': expectedBytes,
+            },
+          );
+        }
         return source.label;
       } on ModelDownloadCanceled {
         rethrow;
-      } catch (error) {
+      } catch (error, stackTrace) {
         lastError = error;
+        if (kDebugMode) {
+          AppDiagnostics.warning(
+            AppLogCategory.modelDownload,
+            'model_download_source_failed',
+            data: {
+              'source': source.label,
+              'kind': source.kind.name,
+              'host': source.uri.host,
+              'durationMs': stopwatch.elapsedMilliseconds,
+              'expectedBytes': expectedBytes,
+            },
+            error: error,
+            stackTrace: stackTrace,
+          );
+        }
       }
     }
     throw lastError ?? const HttpException('没有可用的模型下载源');

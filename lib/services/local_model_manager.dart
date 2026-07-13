@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import '../debug/app_diagnostics.dart';
 import '../models/local_model.dart';
 import '../models/taobao_mnn_model.dart';
 import '../models/litert_model.dart';
@@ -469,127 +470,164 @@ class LocalModelManager extends ChangeNotifier {
 
   Future<void> initialize({bool force = false}) async {
     if (_initialized && !force) return;
-    await _languageModels.retireMnnGemmaModels();
-    await Future.wait([_remoteCatalog.loadCache(), _liteRtCatalog.loadCache()]);
-    _languageModels.registerRemoteModels(_remoteCatalog.cachedDetails);
-    _languageModels.registerRemoteLiteRtModels(_liteRtCatalog.managedDetails);
-    _remoteDefinitions
-      ..clear()
-      ..addEntries(
-        _remoteCatalog.cachedDetails
+    final stopwatch = Stopwatch()..start();
+    if (kDebugMode) {
+      AppDiagnostics.debug(
+        AppLogCategory.modelManagement,
+        'model_manager_initialization_started',
+        data: {'force': force},
+      );
+    }
+    try {
+      await _languageModels.retireMnnGemmaModels();
+      await Future.wait([
+        _remoteCatalog.loadCache(),
+        _liteRtCatalog.loadCache(),
+      ]);
+      _languageModels.registerRemoteModels(_remoteCatalog.cachedDetails);
+      _languageModels.registerRemoteLiteRtModels(_liteRtCatalog.managedDetails);
+      _remoteDefinitions
+        ..clear()
+        ..addEntries(
+          _remoteCatalog.cachedDetails
+              .where(
+                (model) => !_languageModels.curatedRepositories.contains(
+                  model.repository.toLowerCase(),
+                ),
+              )
+              .map((model) => MapEntry(model.id, _remoteDefinition(model))),
+        );
+      _remoteDefinitions.addEntries(
+        _liteRtCatalog.managedDetails
             .where(
               (model) => !_languageModels.curatedRepositories.contains(
                 model.repository.toLowerCase(),
               ),
             )
-            .map((model) => MapEntry(model.id, _remoteDefinition(model))),
+            .map((model) => MapEntry(model.id, _remoteLiteRtDefinition(model))),
       );
-    _remoteDefinitions.addEntries(
-      _liteRtCatalog.managedDetails
-          .where(
-            (model) => !_languageModels.curatedRepositories.contains(
-              model.repository.toLowerCase(),
-            ),
-          )
-          .map((model) => MapEntry(model.id, _remoteLiteRtDefinition(model))),
-    );
-    final languageModelIds = _languageModels.modelIds;
-    final generation = ++_initializationGeneration;
-    final results = await Future.wait<Object>([
-      _speechModels.inspect(),
-      _speechModels.partialDownloadBytes(),
-      _streamingModels.inspect(modelId: streamingChineseId),
-      _streamingModels.partialDownloadBytes(streamingChineseId),
-      _streamingModels.inspect(modelId: streamingBilingualId),
-      _streamingModels.partialDownloadBytes(streamingBilingualId),
-      _streamingModels.selectedModelId(),
-      _voiceActivityModels.inspect(),
-      _voiceActivityModels.partialDownloadBytes(),
-      _speechDenoiserModels.inspect(),
-      _speechDenoiserModels.partialDownloadBytes(),
-      _speakerDiarizationModels.inspect(),
-      _speakerDiarizationModels.partialDownloadBytes(),
-      _kokoroTtsModels.inspect(),
-      _kokoroTtsModels.partialDownloadBytes(),
-      Future.wait<List<Object>>([
-        for (final id in languageModelIds)
-          Future.wait<Object>([
-            _languageModels.inspect(id),
-            _languageModels.partialDownloadBytes(id),
-          ]),
-      ]),
-      _languageModels.selectedModelId(),
-    ]);
-    final speech = results[0] as SpeechModelInfo;
-    final partial = results[1] as int;
-    final streaming = results[2] as StreamingSpeechModelInfo;
-    final streamingPartial = results[3] as int;
-    final bilingual = results[4] as StreamingSpeechModelInfo;
-    final bilingualPartial = results[5] as int;
-    final selectedLiveDictationModelId = results[6] as String;
-    final voiceActivity = results[7] as VoiceActivityModelInfo;
-    final voiceActivityPartial = results[8] as int;
-    final speechDenoiser = results[9] as SpeechDenoiserModelInfo;
-    final speechDenoiserPartial = results[10] as int;
-    final speakerDiarization = results[11] as SpeakerDiarizationModelInfo;
-    final speakerDiarizationPartial = results[12] as int;
-    final kokoroTts = results[13] as KokoroTtsModelInfo;
-    final kokoroTtsPartial = results[14] as int;
-    final languageResults = results[15] as List<List<Object>>;
-    final selectedAssistantModelId = results[16] as String;
-    if (generation != _initializationGeneration) return;
-    _selectedLiveDictationModelId = selectedLiveDictationModelId;
-    _selectedAssistantModelId = selectedAssistantModelId;
-    _installations[senseVoiceId] = LocalModelInstallation(
-      installed: speech.installed,
-      installedSizeBytes: speech.sizeBytes,
-      partialSizeBytes: partial,
-    );
-    _installations[streamingChineseId] = LocalModelInstallation(
-      installed: streaming.installed,
-      installedSizeBytes: streaming.sizeBytes,
-      partialSizeBytes: streamingPartial,
-    );
-    _installations[streamingBilingualId] = LocalModelInstallation(
-      installed: bilingual.installed,
-      installedSizeBytes: bilingual.sizeBytes,
-      partialSizeBytes: bilingualPartial,
-    );
-    _installations[voiceActivityId] = LocalModelInstallation(
-      installed: voiceActivity.installed,
-      installedSizeBytes: voiceActivity.sizeBytes,
-      partialSizeBytes: voiceActivityPartial,
-    );
-    _installations[speechDenoiserId] = LocalModelInstallation(
-      installed: speechDenoiser.installed,
-      installedSizeBytes: speechDenoiser.sizeBytes,
-      partialSizeBytes: speechDenoiserPartial,
-    );
-    _installations[speakerDiarizationId] = LocalModelInstallation(
-      installed: speakerDiarization.installed,
-      installedSizeBytes: speakerDiarization.sizeBytes,
-      partialSizeBytes: speakerDiarizationPartial,
-    );
-    _installations[kokoroTtsId] = LocalModelInstallation(
-      installed: kokoroTts.installed,
-      installedSizeBytes: kokoroTts.sizeBytes,
-      partialSizeBytes: kokoroTtsPartial,
-    );
-    for (var index = 0; index < languageResults.length; index++) {
-      final id = languageModelIds[index];
-      final info = languageResults[index][0] as LanguageModelInfo;
-      final partialBytes = languageResults[index][1] as int;
-      _installations[id] = LocalModelInstallation(
-        installed: info.installed,
-        installedSizeBytes: info.sizeBytes,
-        partialSizeBytes: partialBytes,
+      final languageModelIds = _languageModels.modelIds;
+      final generation = ++_initializationGeneration;
+      final results = await Future.wait<Object>([
+        _speechModels.inspect(),
+        _speechModels.partialDownloadBytes(),
+        _streamingModels.inspect(modelId: streamingChineseId),
+        _streamingModels.partialDownloadBytes(streamingChineseId),
+        _streamingModels.inspect(modelId: streamingBilingualId),
+        _streamingModels.partialDownloadBytes(streamingBilingualId),
+        _streamingModels.selectedModelId(),
+        _voiceActivityModels.inspect(),
+        _voiceActivityModels.partialDownloadBytes(),
+        _speechDenoiserModels.inspect(),
+        _speechDenoiserModels.partialDownloadBytes(),
+        _speakerDiarizationModels.inspect(),
+        _speakerDiarizationModels.partialDownloadBytes(),
+        _kokoroTtsModels.inspect(),
+        _kokoroTtsModels.partialDownloadBytes(),
+        Future.wait<List<Object>>([
+          for (final id in languageModelIds)
+            Future.wait<Object>([
+              _languageModels.inspect(id),
+              _languageModels.partialDownloadBytes(id),
+            ]),
+        ]),
+        _languageModels.selectedModelId(),
+      ]);
+      final speech = results[0] as SpeechModelInfo;
+      final partial = results[1] as int;
+      final streaming = results[2] as StreamingSpeechModelInfo;
+      final streamingPartial = results[3] as int;
+      final bilingual = results[4] as StreamingSpeechModelInfo;
+      final bilingualPartial = results[5] as int;
+      final selectedLiveDictationModelId = results[6] as String;
+      final voiceActivity = results[7] as VoiceActivityModelInfo;
+      final voiceActivityPartial = results[8] as int;
+      final speechDenoiser = results[9] as SpeechDenoiserModelInfo;
+      final speechDenoiserPartial = results[10] as int;
+      final speakerDiarization = results[11] as SpeakerDiarizationModelInfo;
+      final speakerDiarizationPartial = results[12] as int;
+      final kokoroTts = results[13] as KokoroTtsModelInfo;
+      final kokoroTtsPartial = results[14] as int;
+      final languageResults = results[15] as List<List<Object>>;
+      final selectedAssistantModelId = results[16] as String;
+      if (generation != _initializationGeneration) return;
+      _selectedLiveDictationModelId = selectedLiveDictationModelId;
+      _selectedAssistantModelId = selectedAssistantModelId;
+      _installations[senseVoiceId] = LocalModelInstallation(
+        installed: speech.installed,
+        installedSizeBytes: speech.sizeBytes,
+        partialSizeBytes: partial,
       );
+      _installations[streamingChineseId] = LocalModelInstallation(
+        installed: streaming.installed,
+        installedSizeBytes: streaming.sizeBytes,
+        partialSizeBytes: streamingPartial,
+      );
+      _installations[streamingBilingualId] = LocalModelInstallation(
+        installed: bilingual.installed,
+        installedSizeBytes: bilingual.sizeBytes,
+        partialSizeBytes: bilingualPartial,
+      );
+      _installations[voiceActivityId] = LocalModelInstallation(
+        installed: voiceActivity.installed,
+        installedSizeBytes: voiceActivity.sizeBytes,
+        partialSizeBytes: voiceActivityPartial,
+      );
+      _installations[speechDenoiserId] = LocalModelInstallation(
+        installed: speechDenoiser.installed,
+        installedSizeBytes: speechDenoiser.sizeBytes,
+        partialSizeBytes: speechDenoiserPartial,
+      );
+      _installations[speakerDiarizationId] = LocalModelInstallation(
+        installed: speakerDiarization.installed,
+        installedSizeBytes: speakerDiarization.sizeBytes,
+        partialSizeBytes: speakerDiarizationPartial,
+      );
+      _installations[kokoroTtsId] = LocalModelInstallation(
+        installed: kokoroTts.installed,
+        installedSizeBytes: kokoroTts.sizeBytes,
+        partialSizeBytes: kokoroTtsPartial,
+      );
+      for (var index = 0; index < languageResults.length; index++) {
+        final id = languageModelIds[index];
+        final info = languageResults[index][0] as LanguageModelInfo;
+        final partialBytes = languageResults[index][1] as int;
+        _installations[id] = LocalModelInstallation(
+          installed: info.installed,
+          installedSizeBytes: info.sizeBytes,
+          partialSizeBytes: partialBytes,
+        );
+      }
+      _installations[mlKitChineseOcrId] = const LocalModelInstallation(
+        installed: true,
+      );
+      _initialized = true;
+      notifyListeners();
+      if (kDebugMode) {
+        AppDiagnostics.info(
+          AppLogCategory.modelManagement,
+          'model_manager_initialization_completed',
+          data: {
+            'durationMs': stopwatch.elapsedMilliseconds,
+            'modelCount': models.length,
+            'installedCount': installedCount,
+            'selectedAssistantModelId': _selectedAssistantModelId,
+            'selectedLiveDictationModelId': _selectedLiveDictationModelId,
+          },
+        );
+      }
+    } catch (error, stackTrace) {
+      if (kDebugMode) {
+        AppDiagnostics.error(
+          AppLogCategory.modelManagement,
+          'model_manager_initialization_failed',
+          data: {'force': force, 'durationMs': stopwatch.elapsedMilliseconds},
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
+      rethrow;
     }
-    _installations[mlKitChineseOcrId] = const LocalModelInstallation(
-      installed: true,
-    );
-    _initialized = true;
-    notifyListeners();
   }
 
   Future<void> download(String modelId) async {
@@ -605,6 +643,19 @@ class LocalModelManager extends ChangeNotifier {
     );
     _transfers[modelId] = transfer;
     notifyListeners();
+    final stopwatch = Stopwatch()..start();
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.modelDownload,
+        'model_download_started',
+        data: {
+          'modelId': modelId,
+          'partialBytes': partial,
+          'totalBytes': definition.downloadSizeBytes,
+        },
+        traceId: modelId,
+      );
+    }
     try {
       void progress(SpeechModelImportProgress value) {
         transfer.updateProgress(value);
@@ -661,13 +712,50 @@ class LocalModelManager extends ChangeNotifier {
       }
       transfer.status = ModelTransferStatus.completed;
       await initialize(force: true);
+      if (kDebugMode) {
+        AppDiagnostics.info(
+          AppLogCategory.modelDownload,
+          'model_download_completed',
+          data: {
+            'durationMs': stopwatch.elapsedMilliseconds,
+            'transferredBytes': transfer.transferredBytes,
+            'source': transfer.sourceLabel,
+          },
+          traceId: modelId,
+        );
+      }
     } on ModelDownloadCanceled {
       transfer.status = ModelTransferStatus.canceled;
       await initialize(force: true);
-    } catch (error) {
+      if (kDebugMode) {
+        AppDiagnostics.info(
+          AppLogCategory.modelDownload,
+          'model_download_canceled',
+          data: {
+            'durationMs': stopwatch.elapsedMilliseconds,
+            'transferredBytes': transfer.transferredBytes,
+          },
+          traceId: modelId,
+        );
+      }
+    } catch (error, stackTrace) {
       transfer.status = ModelTransferStatus.failed;
       transfer.errorMessage = _friendlyError(error);
       await initialize(force: true);
+      if (kDebugMode) {
+        AppDiagnostics.error(
+          AppLogCategory.modelDownload,
+          'model_download_failed',
+          data: {
+            'durationMs': stopwatch.elapsedMilliseconds,
+            'transferredBytes': transfer.transferredBytes,
+            'source': transfer.sourceLabel,
+          },
+          error: error,
+          stackTrace: stackTrace,
+          traceId: modelId,
+        );
+      }
     } finally {
       notifyListeners();
     }
@@ -692,6 +780,15 @@ class LocalModelManager extends ChangeNotifier {
     );
     _transfers[modelId] = transfer;
     notifyListeners();
+    final stopwatch = Stopwatch()..start();
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.modelManagement,
+        'model_import_started',
+        data: {'modelId': modelId},
+        traceId: modelId,
+      );
+    }
     try {
       void progress(SpeechModelImportProgress value) {
         transfer.updateProgress(value);
@@ -738,10 +835,30 @@ class LocalModelManager extends ChangeNotifier {
         transfer.status = ModelTransferStatus.completed;
       }
       await initialize(force: true);
-    } catch (error) {
+      if (kDebugMode) {
+        AppDiagnostics.info(
+          AppLogCategory.modelManagement,
+          imported == null
+              ? 'model_import_picker_canceled'
+              : 'model_import_completed',
+          data: {'durationMs': stopwatch.elapsedMilliseconds},
+          traceId: modelId,
+        );
+      }
+    } catch (error, stackTrace) {
       transfer.status = ModelTransferStatus.failed;
       transfer.errorMessage = _friendlyError(error);
       notifyListeners();
+      if (kDebugMode) {
+        AppDiagnostics.error(
+          AppLogCategory.modelManagement,
+          'model_import_failed',
+          data: {'durationMs': stopwatch.elapsedMilliseconds},
+          error: error,
+          stackTrace: stackTrace,
+          traceId: modelId,
+        );
+      }
     } finally {
       _importPickerBusy = false;
     }
@@ -753,99 +870,142 @@ class LocalModelManager extends ChangeNotifier {
     transfer!.cancelRequested = true;
     transfer.status = ModelTransferStatus.canceling;
     notifyListeners();
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.modelDownload,
+        'model_transfer_cancel_requested',
+        data: {'status': transfer.status.name},
+        traceId: modelId,
+      );
+    }
   }
 
   Future<void> remove(String modelId) async {
-    if (modelId == senseVoiceId) {
-      if (SpeechTranscriptionService.instance.jobs.any(
-        (job) => job.isRunning,
+    final stopwatch = Stopwatch()..start();
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.modelManagement,
+        'model_removal_started',
+        traceId: modelId,
+      );
+    }
+    try {
+      if (modelId == senseVoiceId) {
+        if (SpeechTranscriptionService.instance.jobs.any(
+          (job) => job.isRunning,
+        )) {
+          throw StateError('请先等待正在进行的转写结束');
+        }
+        if (RealtimeDictationService.instance.isActive) {
+          throw StateError('请先结束正在进行的实时听写');
+        }
+        await _speechModels.remove();
+      } else if (modelId == voiceActivityId) {
+        if (SpeechTranscriptionService.instance.jobs.any(
+          (job) => job.isRunning,
+        )) {
+          throw StateError('请先等待正在进行的转写结束');
+        }
+        if (RealtimeDictationService.instance.isActive) {
+          throw StateError('请先结束正在进行的实时听写');
+        }
+        await _voiceActivityModels.remove();
+      } else if (modelId == speechDenoiserId) {
+        if (RealtimeDictationService.instance.isActive) {
+          throw StateError('请先结束正在进行的实时听写');
+        }
+        await _speechDenoiserModels.remove();
+        final preferences = await _dictationPreferences.load();
+        if (preferences.noiseSuppressionEnabled) {
+          await _dictationPreferences.save(
+            hotwordsText: preferences.hotwords.join('\n'),
+            hotwordsScore: preferences.hotwordsScore,
+            twoPassEnabled: preferences.twoPassEnabled,
+            noiseSuppressionEnabled: false,
+          );
+        }
+      } else if (modelId == speakerDiarizationId) {
+        if (SpeechTranscriptionService.instance.jobs.any(
+          (job) => job.isRunning,
+        )) {
+          throw StateError('请先等待正在进行的转写结束');
+        }
+        await _speakerDiarizationModels.remove();
+      } else if (modelId == kokoroTtsId) {
+        if (NoteReadAloudService.instance.isActive) {
+          throw StateError('请先停止正在进行的笔记朗读');
+        }
+        await _kokoroTtsModels.remove();
+      } else if (_languageModels.supports(modelId)) {
+        if (LocalAssistantService.instance.loadedModelId == modelId) {
+          throw StateError('请先结束正在进行的本地助手任务并释放模型');
+        }
+        await _languageModels.remove(modelId);
+        if (_selectedAssistantModelId == modelId) {
+          String? replacement;
+          for (final candidate in _languageModels.modelIds) {
+            if (candidate == modelId) continue;
+            if ((await _languageModels.inspect(candidate)).installed) {
+              replacement = candidate;
+              break;
+            }
+          }
+          if (replacement != null) {
+            await _languageModels.selectModel(replacement);
+          }
+        }
+      } else if (StreamingSpeechModelService.supportedModelIds.contains(
+        modelId,
       )) {
-        throw StateError('请先等待正在进行的转写结束');
+        if (RealtimeDictationService.instance.isActive) {
+          throw StateError('请先结束正在进行的实时听写');
+        }
+        final wasSelected = _selectedLiveDictationModelId == modelId;
+        await _streamingModels.remove(modelId);
+        if (wasSelected) {
+          String? replacement;
+          for (final candidate
+              in StreamingSpeechModelService.supportedModelIds) {
+            if (candidate == modelId) continue;
+            if ((await _streamingModels.inspect(
+              modelId: candidate,
+            )).installed) {
+              replacement = candidate;
+              break;
+            }
+          }
+          if (replacement == null) {
+            await _streamingModels.resetSelection();
+          } else {
+            await _streamingModels.selectModel(replacement);
+          }
+        }
+      } else {
+        return;
       }
-      if (RealtimeDictationService.instance.isActive) {
-        throw StateError('请先结束正在进行的实时听写');
-      }
-      await _speechModels.remove();
-    } else if (modelId == voiceActivityId) {
-      if (SpeechTranscriptionService.instance.jobs.any(
-        (job) => job.isRunning,
-      )) {
-        throw StateError('请先等待正在进行的转写结束');
-      }
-      if (RealtimeDictationService.instance.isActive) {
-        throw StateError('请先结束正在进行的实时听写');
-      }
-      await _voiceActivityModels.remove();
-    } else if (modelId == speechDenoiserId) {
-      if (RealtimeDictationService.instance.isActive) {
-        throw StateError('请先结束正在进行的实时听写');
-      }
-      await _speechDenoiserModels.remove();
-      final preferences = await _dictationPreferences.load();
-      if (preferences.noiseSuppressionEnabled) {
-        await _dictationPreferences.save(
-          hotwordsText: preferences.hotwords.join('\n'),
-          hotwordsScore: preferences.hotwordsScore,
-          twoPassEnabled: preferences.twoPassEnabled,
-          noiseSuppressionEnabled: false,
+      _transfers.remove(modelId);
+      await initialize(force: true);
+      if (kDebugMode) {
+        AppDiagnostics.info(
+          AppLogCategory.modelManagement,
+          'model_removal_completed',
+          data: {'durationMs': stopwatch.elapsedMilliseconds},
+          traceId: modelId,
         );
       }
-    } else if (modelId == speakerDiarizationId) {
-      if (SpeechTranscriptionService.instance.jobs.any(
-        (job) => job.isRunning,
-      )) {
-        throw StateError('请先等待正在进行的转写结束');
+    } catch (error, stackTrace) {
+      if (kDebugMode) {
+        AppDiagnostics.error(
+          AppLogCategory.modelManagement,
+          'model_removal_failed',
+          data: {'durationMs': stopwatch.elapsedMilliseconds},
+          error: error,
+          stackTrace: stackTrace,
+          traceId: modelId,
+        );
       }
-      await _speakerDiarizationModels.remove();
-    } else if (modelId == kokoroTtsId) {
-      if (NoteReadAloudService.instance.isActive) {
-        throw StateError('请先停止正在进行的笔记朗读');
-      }
-      await _kokoroTtsModels.remove();
-    } else if (_languageModels.supports(modelId)) {
-      if (LocalAssistantService.instance.loadedModelId == modelId) {
-        throw StateError('请先结束正在进行的本地助手任务并释放模型');
-      }
-      await _languageModels.remove(modelId);
-      if (_selectedAssistantModelId == modelId) {
-        String? replacement;
-        for (final candidate in _languageModels.modelIds) {
-          if (candidate == modelId) continue;
-          if ((await _languageModels.inspect(candidate)).installed) {
-            replacement = candidate;
-            break;
-          }
-        }
-        if (replacement != null) await _languageModels.selectModel(replacement);
-      }
-    } else if (StreamingSpeechModelService.supportedModelIds.contains(
-      modelId,
-    )) {
-      if (RealtimeDictationService.instance.isActive) {
-        throw StateError('请先结束正在进行的实时听写');
-      }
-      final wasSelected = _selectedLiveDictationModelId == modelId;
-      await _streamingModels.remove(modelId);
-      if (wasSelected) {
-        String? replacement;
-        for (final candidate in StreamingSpeechModelService.supportedModelIds) {
-          if (candidate == modelId) continue;
-          if ((await _streamingModels.inspect(modelId: candidate)).installed) {
-            replacement = candidate;
-            break;
-          }
-        }
-        if (replacement == null) {
-          await _streamingModels.resetSelection();
-        } else {
-          await _streamingModels.selectModel(replacement);
-        }
-      }
-    } else {
-      return;
+      rethrow;
     }
-    _transfers.remove(modelId);
-    await initialize(force: true);
   }
 
   Future<void> selectForLiveDictation(String modelId) async {
@@ -854,6 +1014,13 @@ class LocalModelManager extends ChangeNotifier {
     await _streamingModels.selectModel(modelId);
     _selectedLiveDictationModelId = modelId;
     notifyListeners();
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.modelManagement,
+        'live_dictation_model_selected',
+        data: {'modelId': modelId},
+      );
+    }
   }
 
   Future<void> selectForAssistant(String modelId) async {
@@ -862,6 +1029,13 @@ class LocalModelManager extends ChangeNotifier {
     await _languageModels.selectModel(modelId);
     _selectedAssistantModelId = modelId;
     notifyListeners();
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.modelManagement,
+        'assistant_model_selected',
+        data: {'modelId': modelId},
+      );
+    }
   }
 
   Future<void> _selectIfNoUsableLiveModel(String installedModelId) async {
@@ -890,6 +1064,13 @@ class LocalModelManager extends ChangeNotifier {
     _languageModels.registerRemoteModels([model]);
     _remoteDefinitions[model.id] = _remoteDefinition(model);
     await initialize(force: true);
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.modelManagement,
+        'remote_mnn_model_registered',
+        data: {'modelId': model.id, 'repository': model.repository},
+      );
+    }
   }
 
   Future<void> registerRemoteLiteRtModel(LiteRtModelSpec model) async {
@@ -902,6 +1083,13 @@ class LocalModelManager extends ChangeNotifier {
     _languageModels.registerRemoteLiteRtModels([model]);
     _remoteDefinitions[model.id] = _remoteLiteRtDefinition(model);
     await initialize(force: true);
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.modelManagement,
+        'remote_litert_model_registered',
+        data: {'modelId': model.id, 'repository': model.repository},
+      );
+    }
   }
 
   LocalModelDefinition _remoteDefinition(TaobaoMnnModelSpec model) =>

@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../app.dart';
+import '../debug/app_diagnostics.dart';
 import '../l10n/l10n.dart';
 import '../l10n/local_model_l10n.dart';
 import '../models/note_entry.dart';
@@ -414,8 +415,22 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     }
     final draft = _recoverySnapshot();
     unawaited(
-      _draftRecovery.save(draft).catchError((Object error) {
-        debugPrint('无法写入编辑器恢复草稿：$error');
+      _draftRecovery.save(draft).catchError((
+        Object error,
+        StackTrace stackTrace,
+      ) {
+        if (kDebugMode) {
+          AppDiagnostics.error(
+            AppLogCategory.editor,
+            'editor_recovery_draft_save_failed',
+            data: {'noteId': widget.existingEntry?.id},
+            error: error,
+            stackTrace: stackTrace,
+            traceId: widget.existingEntry?.id == null
+                ? 'note-new'
+                : 'note-${widget.existingEntry!.id}',
+          );
+        }
       }),
     );
   }
@@ -431,8 +446,19 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     try {
       await _draftRecovery.save(draft);
       if (mounted) await _persist(showError: false);
-    } catch (error) {
-      debugPrint('应用进入后台时无法保存编辑器草稿：$error');
+    } catch (error, stackTrace) {
+      if (kDebugMode) {
+        AppDiagnostics.error(
+          AppLogCategory.editor,
+          'editor_background_save_failed',
+          data: {'noteId': widget.existingEntry?.id},
+          error: error,
+          stackTrace: stackTrace,
+          traceId: widget.existingEntry?.id == null
+              ? 'note-new'
+              : 'note-${widget.existingEntry!.id}',
+        );
+      }
     }
   }
 

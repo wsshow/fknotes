@@ -10,6 +10,7 @@ import 'package:mime/mime.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
+import '../debug/app_diagnostics.dart';
 import '../models/note_entry.dart';
 import 'file_storage_service.dart';
 
@@ -249,15 +250,35 @@ class AttachmentImportService extends ChangeNotifier {
     NoteType type, {
     bool camera = false,
   }) async {
-    if (camera) {
-      final image = await _picker.pickImage(source: ImageSource.camera);
-      if (image == null) return const [];
-      return _importSelectedFiles([image], NoteType.image);
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.media,
+        'attachment_import_picker_opened',
+        data: {'type': type.name, 'camera': camera},
+      );
     }
-    if (Platform.isAndroid) return _pickAndImportOnAndroid(type);
-    final selected = await _pickWithFlutter(type);
-    if (selected.isEmpty) return const [];
-    return _importSelectedFiles(selected, type);
+    try {
+      if (camera) {
+        final image = await _picker.pickImage(source: ImageSource.camera);
+        if (image == null) return const [];
+        return _importSelectedFiles([image], NoteType.image);
+      }
+      if (Platform.isAndroid) return _pickAndImportOnAndroid(type);
+      final selected = await _pickWithFlutter(type);
+      if (selected.isEmpty) return const [];
+      return _importSelectedFiles(selected, type);
+    } catch (error, stackTrace) {
+      if (kDebugMode) {
+        AppDiagnostics.error(
+          AppLogCategory.media,
+          'attachment_import_picker_failed',
+          data: {'type': type.name, 'camera': camera},
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
+      rethrow;
+    }
   }
 
   Future<List<AttachmentImportJob>> _pickAndImportOnAndroid(
@@ -369,6 +390,20 @@ class AttachmentImportService extends ChangeNotifier {
     }
     _schedulePersistence(immediate: true);
     notifyListeners();
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.media,
+        'attachment_import_jobs_registered',
+        data: {
+          'types': jobs.map((job) => job.type.name).toSet().toList(),
+          'jobCount': jobs.length,
+          'totalBytes': jobs.fold<int>(
+            0,
+            (total, job) => total + (job.totalBytes < 0 ? 0 : job.totalBytes),
+          ),
+        },
+      );
+    }
     return jobs.map((job) => _jobs[job.id]!).toList(growable: false);
   }
 
@@ -448,7 +483,19 @@ class AttachmentImportService extends ChangeNotifier {
       );
       _schedulePersistence(immediate: true);
       notifyListeners();
-    } catch (error) {
+      if (kDebugMode) {
+        AppDiagnostics.info(
+          AppLogCategory.media,
+          'attachment_import_completed',
+          data: {
+            'jobId': id,
+            'type': current.type.name,
+            'sizeBytes': current.totalBytes,
+          },
+          traceId: 'attachment-$id',
+        );
+      }
+    } catch (error, stackTrace) {
       final job = _jobs[id];
       if (job == null || job.status == AttachmentImportStatus.canceled) return;
       _jobs[id] = job.copyWith(
@@ -458,6 +505,16 @@ class AttachmentImportService extends ChangeNotifier {
       );
       _schedulePersistence(immediate: true);
       notifyListeners();
+      if (kDebugMode) {
+        AppDiagnostics.error(
+          AppLogCategory.media,
+          'attachment_import_failed',
+          data: {'jobId': id, 'type': job.type.name},
+          error: error,
+          stackTrace: stackTrace,
+          traceId: 'attachment-$id',
+        );
+      }
     }
   }
 
@@ -491,6 +548,15 @@ class AttachmentImportService extends ChangeNotifier {
     );
     _schedulePersistence(immediate: true);
     notifyListeners();
+    if (kDebugMode) {
+      AppDiagnostics.error(
+        AppLogCategory.media,
+        'attachment_commit_failed',
+        data: {'jobId': jobId, 'type': job.type.name},
+        error: message,
+        traceId: 'attachment-$jobId',
+      );
+    }
   }
 
   Future<void> cancel(String jobId) async {
@@ -504,6 +570,14 @@ class AttachmentImportService extends ChangeNotifier {
     notifyListeners();
     if (Platform.isAndroid) {
       await _channel.invokeMethod<void>('cancelImport', {'jobId': jobId});
+    }
+    if (kDebugMode) {
+      AppDiagnostics.info(
+        AppLogCategory.media,
+        'attachment_import_canceled',
+        data: {'jobId': jobId, 'type': job.type.name},
+        traceId: 'attachment-$jobId',
+      );
     }
   }
 
@@ -552,6 +626,18 @@ class AttachmentImportService extends ChangeNotifier {
           clearErrorMessage: true,
         );
         _schedulePersistence(immediate: true);
+        if (kDebugMode) {
+          AppDiagnostics.info(
+            AppLogCategory.media,
+            'native_attachment_import_completed',
+            data: {
+              'jobId': id,
+              'type': job.type.name,
+              'sizeBytes': (arguments['fileSize'] as num?)?.toInt(),
+            },
+            traceId: 'attachment-$id',
+          );
+        }
       case 'failed':
         _jobs[id] = job.copyWith(
           status: AttachmentImportStatus.failed,
@@ -559,6 +645,15 @@ class AttachmentImportService extends ChangeNotifier {
           updatedAt: DateTime.now(),
         );
         _schedulePersistence(immediate: true);
+        if (kDebugMode) {
+          AppDiagnostics.error(
+            AppLogCategory.media,
+            'native_attachment_import_failed',
+            data: {'jobId': id, 'type': job.type.name},
+            error: arguments['message'] as String? ?? '附件导入失败',
+            traceId: 'attachment-$id',
+          );
+        }
       case 'canceled':
         _jobs[id] = job.copyWith(
           status: AttachmentImportStatus.canceled,
