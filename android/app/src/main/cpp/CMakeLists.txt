@@ -19,12 +19,11 @@ if(ANDROID_ABI STREQUAL "arm64-v8a")
     target_compile_definitions(fknotes_mnn PRIVATE FKNOTES_MNN_RUNTIME=1)
     target_include_directories(fknotes_mnn PRIVATE "${MNN_HEADERS_ROOT}")
 
-    foreach(library MNN MNN_Express MNN_CL MNN_Vulkan MNNOpenCV MNNAudio llm)
-        add_library(${library} SHARED IMPORTED)
-        set_target_properties(${library} PROPERTIES
-            IMPORTED_LOCATION "${MNN_RUNTIME_ROOT}/lib${library}.so")
-    endforeach()
+    # MNN Chat's Android runtime is built with MNN_SEP_BUILD=OFF and exports
+    # the LLM, multimodal, CV and audio APIs from one verified library.
+    add_library(MNN SHARED IMPORTED)
+    set_target_properties(MNN PROPERTIES
+        IMPORTED_LOCATION "${MNN_RUNTIME_ROOT}/libMNN.so")
     target_link_libraries(fknotes_mnn PRIVATE
-        llm MNN_Express MNN_CL MNN_Vulkan MNNOpenCV MNNAudio MNN
-        android log)
+        MNN android log)
 endif()

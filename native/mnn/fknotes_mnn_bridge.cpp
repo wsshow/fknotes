@@ -21,7 +21,7 @@
 
 namespace {
 
-constexpr const char* kRuntimeVersion = "3.6.0";
+constexpr const char* kRuntimeVersion = "Android Chat 0.8.3 / Gemma 4";
 
 void emit_event(
     FkMnnEventCallback callback,
@@ -99,6 +99,17 @@ using MNN::Transformer::Llm;
 using MNN::Transformer::LlmContext;
 using MNN::Transformer::LlmStatus;
 using MNN::Transformer::MultimodalPrompt;
+
+class NullStreamBuffer final : public std::streambuf {
+protected:
+    std::streamsize xsputn(const char*, std::streamsize count) override {
+        return count;
+    }
+
+    int_type overflow(int_type character) override {
+        return traits_type::not_eof(character);
+    }
+};
 
 struct MultimodalAttachment {
     int32_t message_index;
@@ -317,8 +328,16 @@ public:
             int64_t request_audio_us = 0;
             float request_pixels_mp = 0.0f;
             float request_audio_input_s = 0.0f;
+            // MNN's Android stepping implementation initializes generation
+            // with a live output stream and an explicit end marker. Supplying
+            // null pointers happens to work for some text models, but skips
+            // part of the upstream stream lifecycle and is unsafe for newer
+            // multimodal families such as Gemma 4. Dart still reads cumulative
+            // UTF-8 from LlmContext, so this sink only establishes ownership.
+            NullStreamBuffer output_buffer;
+            std::ostream output_stream(&output_buffer);
             if (attachments.empty()) {
-                llm->response(messages, nullptr, nullptr, 0);
+                llm->response(messages, &output_stream, "<eop>", 0);
             } else {
                 bool has_image = false;
                 bool has_audio = false;
@@ -356,7 +375,7 @@ public:
                     finish_request(FK_MNN_EVENT_ERROR, "多模态提示词编码失败");
                     return;
                 }
-                llm->response(input_ids, nullptr, nullptr, 0);
+                llm->response(input_ids, &output_stream, "<eop>", 0);
             }
 
             std::size_t emitted_bytes = 0;

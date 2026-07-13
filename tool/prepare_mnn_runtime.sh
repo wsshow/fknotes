@@ -2,7 +2,8 @@
 set -eu
 
 MNN_VERSION="3.6.0"
-ANDROID_SHA256="3ff2b92e11531f5a9d820b6bf6a8aede3e124e098a3645d8f6a23dcbc862015f"
+ANDROID_APP_VERSION="0_8_3"
+ANDROID_SHA256="eb249cabbf73b8b1567d7611715cad8f1cbf4df7be75cb447ea206f12f94ab14"
 IOS_SHA256="8dd885740672d2b22d35bb25b15fba5bdba20a4767791bf699fa61c28b1d3c3d"
 
 if [ "$#" -ne 1 ]; then
@@ -12,9 +13,9 @@ fi
 
 OUTPUT_DIR="$1"
 CACHE_DIR="$OUTPUT_DIR/downloads"
-ANDROID_ZIP="$CACHE_DIR/mnn-android-$MNN_VERSION.zip"
+ANDROID_APK="$CACHE_DIR/mnn-chat-$ANDROID_APP_VERSION.apk"
 IOS_ZIP="$CACHE_DIR/mnn-ios-$MNN_VERSION.zip"
-READY_FILE="$OUTPUT_DIR/.ready-$MNN_VERSION-v2"
+READY_FILE="$OUTPUT_DIR/.ready-android-$ANDROID_APP_VERSION-ios-$MNN_VERSION-v3"
 
 sha256() {
   if command -v shasum >/dev/null 2>&1; then
@@ -49,22 +50,25 @@ fi
 
 mkdir -p "$CACHE_DIR"
 download_verified \
-  "https://github.com/alibaba/MNN/releases/download/$MNN_VERSION/mnn_${MNN_VERSION}_android_armv7_armv8_cpu_opencl_vulkan.zip" \
-  "$ANDROID_ZIP" "$ANDROID_SHA256"
+  "https://meta.alicdn.com/data/mnn/apks/mnn_chat_${ANDROID_APP_VERSION}.apk" \
+  "$ANDROID_APK" "$ANDROID_SHA256"
 download_verified \
   "https://github.com/alibaba/MNN/releases/download/$MNN_VERSION/mnn_${MNN_VERSION}_ios_armv82_cpu_metal_coreml.zip" \
   "$IOS_ZIP" "$IOS_SHA256"
 
 rm -rf "$OUTPUT_DIR/android" "$OUTPUT_DIR/ios" "$OUTPUT_DIR/extracted"
 mkdir -p "$OUTPUT_DIR/android/jni/arm64-v8a" "$OUTPUT_DIR/android/include" \
-  "$OUTPUT_DIR/ios" \
-  "$OUTPUT_DIR/extracted/android" "$OUTPUT_DIR/extracted/ios"
-unzip -q "$ANDROID_ZIP" -d "$OUTPUT_DIR/extracted/android"
+  "$OUTPUT_DIR/ios" "$OUTPUT_DIR/extracted/ios"
 unzip -q "$IOS_ZIP" -d "$OUTPUT_DIR/extracted/ios"
 
-ANDROID_RELEASE_DIR="$OUTPUT_DIR/extracted/android/mnn_${MNN_VERSION}_android_armv7_armv8_cpu_opencl_vulkan"
 IOS_RELEASE_DIR="$OUTPUT_DIR/extracted/ios/MNN-iOS-CPU-GPU/Static"
-cp "$ANDROID_RELEASE_DIR/arm64-v8a/"*.so "$OUTPUT_DIR/android/jni/arm64-v8a/"
+# The generic 3.6.0 Android SDK crashes while lazily materializing Gemma 4
+# external weights on some arm64 devices. MNN Chat 0.8.3 is the upstream
+# Android runtime packaged and exercised with the Gemma 4 catalog. It is a
+# monolithic build, so extract its verified libMNN.so instead of mixing it with
+# the generic SDK's split libraries.
+unzip -p "$ANDROID_APK" lib/arm64-v8a/libMNN.so \
+  > "$OUTPUT_DIR/android/jni/arm64-v8a/libMNN.so"
 cp -R "$IOS_RELEASE_DIR/MNN.framework" "$OUTPUT_DIR/ios/MNN.framework"
 ln -s "../../ios/MNN.framework/Headers" "$OUTPUT_DIR/android/include/MNN"
 ln -s "../../ios/MNN.framework/Headers/llm" "$OUTPUT_DIR/android/include/llm"

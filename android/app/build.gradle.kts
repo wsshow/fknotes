@@ -32,7 +32,7 @@ val prepareMnnRuntime by tasks.registering(Exec::class) {
         rootProject.file("../tool/prepare_mnn_runtime.sh").absolutePath,
         mnnRuntimeDirectory.absolutePath,
     )
-    outputs.file(File(mnnRuntimeDirectory, ".ready-3.6.0-v2"))
+    outputs.file(File(mnnRuntimeDirectory, ".ready-android-0_8_3-ios-3.6.0-v3"))
 }
 
 fun releaseSigningValue(
