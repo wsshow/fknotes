@@ -881,7 +881,12 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get importedVerb => '已导入';
+  String get preparingLocalModelImport => '正在准备本地模型文件…';
+
+  @override
+  String importingLocalModelAmount(String current, String total) {
+    return '正在导入本地模型 · $current / $total';
+  }
 
   @override
   String get downloadedVerb => '已下载';

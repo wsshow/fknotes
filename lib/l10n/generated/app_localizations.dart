@@ -1682,11 +1682,17 @@ abstract class AppLocalizations {
   /// **'已下载 {size} · 等待安装'**
   String downloadedWaitingInstall(String size);
 
-  /// No description provided for @importedVerb.
+  /// No description provided for @preparingLocalModelImport.
   ///
   /// In zh, this message translates to:
-  /// **'已导入'**
-  String get importedVerb;
+  /// **'正在准备本地模型文件…'**
+  String get preparingLocalModelImport;
+
+  /// No description provided for @importingLocalModelAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在导入本地模型 · {current} / {total}'**
+  String importingLocalModelAmount(String current, String total);
 
   /// No description provided for @downloadedVerb.
   ///

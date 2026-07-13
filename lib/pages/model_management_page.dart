@@ -1769,16 +1769,26 @@ class _ModelCard extends StatelessWidget {
         _formatBytes(state.transferredBytes),
       );
     }
-    final verb = state.status == ModelTransferStatus.importing
-        ? context.l10n.importedVerb
-        : context.l10n.downloadedVerb;
+    if (state.status == ModelTransferStatus.importing) {
+      if (state.totalBytes <= 0) {
+        return context.l10n.preparingLocalModelImport;
+      }
+      final amount = context.l10n.importingLocalModelAmount(
+        _formatBytes(state.transferredBytes),
+        _formatBytes(state.totalBytes),
+      );
+      return state.bytesPerSecond <= 0
+          ? amount
+          : '$amount · ${_formatBytes(state.bytesPerSecond.round())}/s';
+    }
     final speed = state.bytesPerSecond <= 0
         ? context.l10n.waitingFirstPacket
         : '${_formatBytes(state.bytesPerSecond.round())}/s';
     final source = state.sourceLabel.isEmpty
         ? ''
         : ' · ${_localizedDownloadSourceLabel(context.l10n, state.sourceLabel)}';
-    return '$verb ${_formatBytes(state.transferredBytes)} / '
+    return '${context.l10n.downloadedVerb} '
+        '${_formatBytes(state.transferredBytes)} / '
         '${_formatBytes(state.totalBytes)}$source · $speed';
   }
 }

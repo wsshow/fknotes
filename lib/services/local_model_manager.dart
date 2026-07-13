@@ -773,13 +773,7 @@ class LocalModelManager extends ChangeNotifier {
     }
     if (_transfers[modelId]?.isRunning == true || _importPickerBusy) return;
     _importPickerBusy = true;
-    final transfer = ModelTransferState(
-      modelId: modelId,
-      status: ModelTransferStatus.importing,
-      cancelable: false,
-    );
-    _transfers[modelId] = transfer;
-    notifyListeners();
+    ModelTransferState? transfer;
     final stopwatch = Stopwatch()..start();
     if (kDebugMode) {
       AppDiagnostics.info(
@@ -791,7 +785,14 @@ class LocalModelManager extends ChangeNotifier {
     }
     try {
       void progress(SpeechModelImportProgress value) {
-        transfer.updateProgress(value);
+        final activeTransfer = transfer ??= ModelTransferState(
+          modelId: modelId,
+          status: ModelTransferStatus.importing,
+          totalBytes: value.totalBytes,
+          cancelable: false,
+        );
+        _transfers[modelId] = activeTransfer;
+        activeTransfer.updateProgress(value);
         notifyListeners();
       }
 
@@ -824,7 +825,7 @@ class LocalModelManager extends ChangeNotifier {
         );
       }
       if (imported == null) {
-        _transfers.remove(modelId);
+        if (transfer != null) _transfers.remove(modelId);
       } else {
         if (StreamingSpeechModelService.supportedModelIds.contains(modelId)) {
           await _selectIfNoUsableLiveModel(modelId);
@@ -832,7 +833,7 @@ class LocalModelManager extends ChangeNotifier {
         if (_languageModels.supports(modelId)) {
           await _selectIfNoUsableAssistantModel(modelId);
         }
-        transfer.status = ModelTransferStatus.completed;
+        transfer?.status = ModelTransferStatus.completed;
       }
       await initialize(force: true);
       if (kDebugMode) {
@@ -846,8 +847,14 @@ class LocalModelManager extends ChangeNotifier {
         );
       }
     } catch (error, stackTrace) {
-      transfer.status = ModelTransferStatus.failed;
-      transfer.errorMessage = _friendlyError(error);
+      final failedTransfer = transfer ??= ModelTransferState(
+        modelId: modelId,
+        status: ModelTransferStatus.failed,
+        cancelable: false,
+      );
+      _transfers[modelId] = failedTransfer;
+      failedTransfer.status = ModelTransferStatus.failed;
+      failedTransfer.errorMessage = _friendlyError(error);
       notifyListeners();
       if (kDebugMode) {
         AppDiagnostics.error(

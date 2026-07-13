@@ -983,7 +983,12 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get importedVerb => 'Imported';
+  String get preparingLocalModelImport => 'Preparing local model files…';
+
+  @override
+  String importingLocalModelAmount(String current, String total) {
+    return 'Importing local model · $current / $total';
+  }
 
   @override
   String get downloadedVerb => 'Downloaded';

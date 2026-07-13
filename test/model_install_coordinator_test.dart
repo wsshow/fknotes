@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:file_selector_platform_interface/file_selector_platform_interface.dart';
+import 'package:fknotes/services/file_storage_service.dart';
 import 'package:fknotes/services/local_model_manager.dart';
 import 'package:fknotes/services/model_install_coordinator.dart';
 import 'package:fknotes/services/speech_model_service.dart';
@@ -134,8 +137,49 @@ void main() {
     expect(transfer.status, ModelTransferStatus.canceling);
     expect(transfer.transferredBytes, 30);
   });
+
+  test(
+    'opening the local file picker does not create a fake transfer',
+    () async {
+      final storage = await Directory.systemTemp.createTemp(
+        'fknotes_import_picker_test_',
+      );
+      await FileStorageService.instance.init(baseDir: storage.path);
+      addTearDown(() => storage.delete(recursive: true));
+      final previousPlatform = FileSelectorPlatform.instance;
+      final platform = _PendingFileSelector();
+      FileSelectorPlatform.instance = platform;
+      addTearDown(() => FileSelectorPlatform.instance = previousPlatform);
+      final manager = LocalModelManager.instance;
+      manager.dismissTransfer(LocalModelManager.qwen35Id);
+
+      final import = manager.import(LocalModelManager.qwen35Id);
+      await platform.opened.future;
+
+      expect(manager.transferOf(LocalModelManager.qwen35Id), isNull);
+
+      platform.selection.complete(const []);
+      await import;
+      expect(manager.transferOf(LocalModelManager.qwen35Id), isNull);
+    },
+  );
 }
 
 class _Canceled implements Exception {
   const _Canceled();
+}
+
+class _PendingFileSelector extends FileSelectorPlatform {
+  final opened = Completer<void>();
+  final selection = Completer<List<XFile>>();
+
+  @override
+  Future<List<XFile>> openFiles({
+    List<XTypeGroup>? acceptedTypeGroups,
+    String? initialDirectory,
+    String? confirmButtonText,
+  }) {
+    opened.complete();
+    return selection.future;
+  }
 }
