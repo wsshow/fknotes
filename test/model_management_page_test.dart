@@ -216,6 +216,26 @@ void main() {
     expect(downloadButton.left - importButton.right, closeTo(10, 1.1));
   });
 
+  testWidgets('focused model entry opens its category and availability', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 3;
+    tester.view.physicalSize = const Size(1080, 2400);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: ModelManagementPage(focusModelId: LocalModelManager.qwen3Vl4BId),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('语言模型'), findsOneWidget);
+    expect(find.text('可获取'), findsOneWidget);
+    expect(find.text('Qwen3-VL 4B Instruct INT4'), findsOneWidget);
+    expect(find.text('正在使用'), findsNothing);
+  });
+
   testWidgets('model catalog renders localized English metadata', (
     tester,
   ) async {

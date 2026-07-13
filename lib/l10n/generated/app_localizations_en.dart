@@ -511,7 +511,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get discoverMnnModelsDescription =>
-      'Browse compatible public models synchronized from the taobao-mnn and litert-community Collections.';
+      'Browse public models synchronized from the taobao-mnn and litert-community Collections. You decide whether to verify and add them.';
 
   @override
   String get browseModels => 'Browse models';
@@ -594,6 +594,39 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get modelEngine => 'Inference engine';
+
+  @override
+  String get collection => 'Collection';
+
+  @override
+  String get downloads => 'Downloads';
+
+  @override
+  String get modelPackageNotVerified => 'Model package not verified';
+
+  @override
+  String get modelPackageVerificationDescription =>
+      'Verification reads repository metadata, the pinned revision, and file manifest. It does not download the full model or guarantee that this device can run it.';
+
+  @override
+  String get verifyModelPackage => 'Verify model package';
+
+  @override
+  String get verifyingModelPackage => 'Verifying model package…';
+
+  @override
+  String get reverifyModelPackage => 'Verify model package again';
+
+  @override
+  String get modelPackageUnsupported =>
+      'This repository is not a supported model package';
+
+  @override
+  String get modelPackageUnsupportedDescription =>
+      'Its format, public access status, or required files do not meet the current engine requirements.';
+
+  @override
   String get checkingModelCompatibility => 'Checking model compatibility…';
 
   @override
@@ -643,6 +676,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get addAndDownloadModel => 'Add and download';
+
+  @override
+  String get addToLanguageModels => 'Add to language models';
 
   @override
   String get modelAddedToManager => 'Model added to Local models';

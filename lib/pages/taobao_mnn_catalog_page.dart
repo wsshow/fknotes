@@ -203,13 +203,11 @@ class _TaobaoMnnCatalogPageState extends State<TaobaoMnnCatalogPage> {
   Future<void> _install(TaobaoMnnModelSpec model) async {
     final manager = LocalModelManager.instance;
     await manager.registerRemoteModel(model);
-    unawaited(manager.download(model.id));
   }
 
   Future<void> _installLiteRt(LiteRtModelSpec model) async {
     final manager = LocalModelManager.instance;
     await manager.registerRemoteLiteRtModel(model);
-    unawaited(manager.download(model.id));
   }
 
   @override
@@ -424,21 +422,29 @@ class _TaobaoMnnModelDetailPage extends StatefulWidget {
 class _TaobaoMnnModelDetailPageState extends State<_TaobaoMnnModelDetailPage> {
   TaobaoMnnModelSpec? _model;
   Object? _error;
+  bool _checking = false;
   bool _installing = false;
 
   @override
   void initState() {
     super.initState();
-    unawaited(_inspect());
+    _model = widget.service.cachedSpec(widget.entry.repository);
   }
 
   Future<void> _inspect() async {
+    if (_checking) return;
+    setState(() {
+      _checking = true;
+      _error = null;
+    });
     try {
-      final model = await widget.service.inspect(widget.entry);
+      final model = await widget.service.inspect(widget.entry, force: true);
       if (mounted) setState(() => _model = model);
     } catch (error) {
-      if (kDebugMode) debugPrint('Model compatibility check failed: $error');
+      if (kDebugMode) debugPrint('Model package verification failed: $error');
       if (mounted) setState(() => _error = error);
+    } finally {
+      if (mounted) setState(() => _checking = false);
     }
   }
 
@@ -464,7 +470,7 @@ class _TaobaoMnnModelDetailPageState extends State<_TaobaoMnnModelDetailPage> {
     final model = _model;
     final errorPresentation = _error == null
         ? null
-        : _catalogErrorPresentation(context, _error!);
+        : _modelVerificationErrorPresentation(context, _error!);
     return Scaffold(
       appBar: AppBar(title: Text(widget.entry.name)),
       body: SafeArea(
@@ -472,22 +478,44 @@ class _TaobaoMnnModelDetailPageState extends State<_TaobaoMnnModelDetailPage> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
           children: [
-            if (model == null && _error == null) ...[
-              const SizedBox(height: 80),
-              const Center(child: CircularProgressIndicator()),
-              const SizedBox(height: 18),
-              Center(child: Text(context.l10n.checkingModelCompatibility)),
-            ] else if (_error != null && model == null)
-              EmptyState(
-                icon: Icons.error_outline_rounded,
-                message: errorPresentation!.title,
-                actionLabel: context.l10n.retry,
-                onAction: () {
-                  setState(() => _error = null);
-                  unawaited(_inspect());
-                },
-              )
-            else if (model != null) ...[
+            _RepositorySummaryCard(
+              engine: 'MNN',
+              collection: widget.entry.collection,
+              repository: widget.entry.repository,
+              downloads: widget.entry.downloads,
+            ),
+            const SizedBox(height: 14),
+            if (_checking) ...[
+              const LinearProgressIndicator(minHeight: 3),
+              const SizedBox(height: 10),
+              Text(
+                context.l10n.verifyingModelPackage,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AppColors.muted),
+              ),
+            ] else if (model == null) ...[
+              _CatalogNotice(
+                icon: Icons.fact_check_outlined,
+                message: context.l10n.modelPackageNotVerified,
+                secondary: context.l10n.modelPackageVerificationDescription,
+                error: _error != null,
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                _CatalogNotice(
+                  message: errorPresentation!.title,
+                  secondary: errorPresentation.description,
+                  error: true,
+                ),
+              ],
+              const SizedBox(height: 22),
+              FilledButton.icon(
+                key: const Key('verify-taobao-mnn-model'),
+                onPressed: _inspect,
+                icon: const Icon(Icons.fact_check_outlined),
+                label: Text(context.l10n.verifyModelPackage),
+              ),
+            ] else ...[
               _CatalogNotice(message: context.l10n.modelCompatibilityPassed),
               const SizedBox(height: 18),
               _DetailCard(
@@ -550,7 +578,13 @@ class _TaobaoMnnModelDetailPageState extends State<_TaobaoMnnModelDetailPage> {
                   error: true,
                 ),
               ],
-              const SizedBox(height: 28),
+              const SizedBox(height: 22),
+              OutlinedButton.icon(
+                onPressed: _checking ? null : _inspect,
+                icon: const Icon(Icons.refresh_rounded),
+                label: Text(context.l10n.reverifyModelPackage),
+              ),
+              const SizedBox(height: 10),
               FilledButton.icon(
                 key: const Key('add-taobao-mnn-model'),
                 onPressed: _installing ? null : _install,
@@ -560,8 +594,8 @@ class _TaobaoMnnModelDetailPageState extends State<_TaobaoMnnModelDetailPage> {
                         height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.download_rounded),
-                label: Text(context.l10n.addAndDownloadModel),
+                    : const Icon(Icons.add_rounded),
+                label: Text(context.l10n.addToLanguageModels),
               ),
             ],
           ],
@@ -589,21 +623,31 @@ class _LiteRtModelDetailPage extends StatefulWidget {
 class _LiteRtModelDetailPageState extends State<_LiteRtModelDetailPage> {
   LiteRtModelSpec? _model;
   Object? _error;
+  bool _checking = false;
   bool _installing = false;
 
   @override
   void initState() {
     super.initState();
-    unawaited(_inspect());
+    _model = widget.service.cachedSpec(widget.entry.repository);
   }
 
   Future<void> _inspect() async {
+    if (_checking) return;
+    setState(() {
+      _checking = true;
+      _error = null;
+    });
     try {
-      final model = await widget.service.inspect(widget.entry);
+      final model = await widget.service.inspect(widget.entry, force: true);
       if (mounted) setState(() => _model = model);
     } catch (error) {
-      if (kDebugMode) debugPrint('LiteRT compatibility check failed: $error');
+      if (kDebugMode) {
+        debugPrint('LiteRT model package verification failed: $error');
+      }
       if (mounted) setState(() => _error = error);
+    } finally {
+      if (mounted) setState(() => _checking = false);
     }
   }
 
@@ -629,7 +673,7 @@ class _LiteRtModelDetailPageState extends State<_LiteRtModelDetailPage> {
     final model = _model;
     final errorPresentation = _error == null
         ? null
-        : _catalogErrorPresentation(context, _error!);
+        : _modelVerificationErrorPresentation(context, _error!);
     return Scaffold(
       appBar: AppBar(title: Text(widget.entry.name)),
       body: SafeArea(
@@ -637,22 +681,44 @@ class _LiteRtModelDetailPageState extends State<_LiteRtModelDetailPage> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
           children: [
-            if (model == null && _error == null) ...[
-              const SizedBox(height: 80),
-              const Center(child: CircularProgressIndicator()),
-              const SizedBox(height: 18),
-              Center(child: Text(context.l10n.checkingModelCompatibility)),
-            ] else if (_error != null && model == null)
-              EmptyState(
-                icon: Icons.error_outline_rounded,
-                message: errorPresentation!.title,
-                actionLabel: context.l10n.retry,
-                onAction: () {
-                  setState(() => _error = null);
-                  unawaited(_inspect());
-                },
-              )
-            else if (model != null) ...[
+            _RepositorySummaryCard(
+              engine: 'LiteRT-LM',
+              collection: widget.entry.collection,
+              repository: widget.entry.repository,
+              downloads: widget.entry.downloads,
+            ),
+            const SizedBox(height: 14),
+            if (_checking) ...[
+              const LinearProgressIndicator(minHeight: 3),
+              const SizedBox(height: 10),
+              Text(
+                context.l10n.verifyingModelPackage,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AppColors.muted),
+              ),
+            ] else if (model == null) ...[
+              _CatalogNotice(
+                icon: Icons.fact_check_outlined,
+                message: context.l10n.modelPackageNotVerified,
+                secondary: context.l10n.modelPackageVerificationDescription,
+                error: _error != null,
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                _CatalogNotice(
+                  message: errorPresentation!.title,
+                  secondary: errorPresentation.description,
+                  error: true,
+                ),
+              ],
+              const SizedBox(height: 22),
+              FilledButton.icon(
+                key: const Key('verify-litert-model'),
+                onPressed: _inspect,
+                icon: const Icon(Icons.fact_check_outlined),
+                label: Text(context.l10n.verifyModelPackage),
+              ),
+            ] else ...[
               _CatalogNotice(message: context.l10n.liteRtCompatibilityPassed),
               const SizedBox(height: 18),
               _DetailCard(
@@ -708,7 +774,13 @@ class _LiteRtModelDetailPageState extends State<_LiteRtModelDetailPage> {
                   error: true,
                 ),
               ],
-              const SizedBox(height: 28),
+              const SizedBox(height: 22),
+              OutlinedButton.icon(
+                onPressed: _checking ? null : _inspect,
+                icon: const Icon(Icons.refresh_rounded),
+                label: Text(context.l10n.reverifyModelPackage),
+              ),
+              const SizedBox(height: 10),
               FilledButton.icon(
                 key: const Key('add-litert-model'),
                 onPressed: _installing ? null : _install,
@@ -718,8 +790,8 @@ class _LiteRtModelDetailPageState extends State<_LiteRtModelDetailPage> {
                         height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.download_rounded),
-                label: Text(context.l10n.addAndDownloadModel),
+                    : const Icon(Icons.add_rounded),
+                label: Text(context.l10n.addToLanguageModels),
               ),
             ],
           ],
@@ -733,6 +805,7 @@ class _CatalogNotice extends StatelessWidget {
   final String message;
   final String? secondary;
   final bool error;
+  final IconData? icon;
   final String? actionLabel;
   final VoidCallback? onAction;
   final String? secondaryActionLabel;
@@ -742,6 +815,7 @@ class _CatalogNotice extends StatelessWidget {
     required this.message,
     this.secondary,
     this.error = false,
+    this.icon,
     this.actionLabel,
     this.onAction,
     this.secondaryActionLabel,
@@ -759,7 +833,8 @@ class _CatalogNotice extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(
-          error ? Icons.error_outline_rounded : Icons.verified_outlined,
+          icon ??
+              (error ? Icons.error_outline_rounded : Icons.verified_outlined),
           size: 19,
           color: error ? AppColors.coral : AppColors.moss,
         ),
@@ -846,6 +921,19 @@ _CatalogErrorPresentation _catalogErrorPresentation(
   };
 }
 
+_CatalogErrorPresentation _modelVerificationErrorPresentation(
+  BuildContext context,
+  Object error,
+) {
+  if (error is TaobaoMnnCatalogException || error is LiteRtCatalogException) {
+    return _CatalogErrorPresentation(
+      context.l10n.modelPackageUnsupported,
+      context.l10n.modelPackageUnsupportedDescription,
+    );
+  }
+  return _catalogErrorPresentation(context, error);
+}
+
 String _sourceTitle(
   BuildContext context,
   ModelDownloadSourcePreference preference,
@@ -890,6 +978,34 @@ class _DetailCard extends StatelessWidget {
       border: Border.all(color: AppColors.line),
     ),
     child: Column(children: children),
+  );
+}
+
+class _RepositorySummaryCard extends StatelessWidget {
+  final String engine;
+  final String collection;
+  final String repository;
+  final int downloads;
+
+  const _RepositorySummaryCard({
+    required this.engine,
+    required this.collection,
+    required this.repository,
+    required this.downloads,
+  });
+
+  @override
+  Widget build(BuildContext context) => _DetailCard(
+    children: [
+      _DetailRow(context.l10n.modelEngine, engine),
+      _DetailRow(context.l10n.collection, collection),
+      _DetailRow(context.l10n.source, repository),
+      if (downloads > 0)
+        _DetailRow(
+          context.l10n.downloads,
+          context.l10n.downloadCount(downloads),
+        ),
+    ],
   );
 }
 

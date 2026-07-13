@@ -450,7 +450,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get discoverMnnModelsDescription =>
-      '浏览从 taobao-mnn 与 litert-community Collections 同步并通过兼容性筛选的公开模型。';
+      '浏览从 taobao-mnn 与 litert-community Collections 同步的公开模型；是否校验和添加由你决定。';
 
   @override
   String get browseModels => '浏览模型';
@@ -525,6 +525,37 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get modelEngine => '推理引擎';
+
+  @override
+  String get collection => '模型集合';
+
+  @override
+  String get downloads => '下载热度';
+
+  @override
+  String get modelPackageNotVerified => '模型包尚未校验';
+
+  @override
+  String get modelPackageVerificationDescription =>
+      '校验会联网读取仓库元数据、固定版本和文件清单，不会下载完整模型，也不代表当前设备一定能运行。';
+
+  @override
+  String get verifyModelPackage => '校验模型包';
+
+  @override
+  String get verifyingModelPackage => '正在校验模型包…';
+
+  @override
+  String get reverifyModelPackage => '重新校验模型包';
+
+  @override
+  String get modelPackageUnsupported => '该仓库不是受支持的模型包';
+
+  @override
+  String get modelPackageUnsupportedDescription => '仓库格式、公开访问状态或必要文件不符合当前引擎要求。';
+
+  @override
   String get checkingModelCompatibility => '正在检查模型兼容性…';
 
   @override
@@ -572,6 +603,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get addAndDownloadModel => '添加并下载';
+
+  @override
+  String get addToLanguageModels => '添加到语言模型';
 
   @override
   String get modelAddedToManager => '模型已添加到本地模型';

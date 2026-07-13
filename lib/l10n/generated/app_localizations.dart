@@ -917,7 +917,7 @@ abstract class AppLocalizations {
   /// No description provided for @discoverMnnModelsDescription.
   ///
   /// In zh, this message translates to:
-  /// **'浏览从 taobao-mnn 与 litert-community Collections 同步并通过兼容性筛选的公开模型。'**
+  /// **'浏览从 taobao-mnn 与 litert-community Collections 同步的公开模型；是否校验和添加由你决定。'**
   String get discoverMnnModelsDescription;
 
   /// No description provided for @browseModels.
@@ -1052,6 +1052,66 @@ abstract class AppLocalizations {
   /// **'{count} 次下载'**
   String downloadCount(int count);
 
+  /// No description provided for @modelEngine.
+  ///
+  /// In zh, this message translates to:
+  /// **'推理引擎'**
+  String get modelEngine;
+
+  /// No description provided for @collection.
+  ///
+  /// In zh, this message translates to:
+  /// **'模型集合'**
+  String get collection;
+
+  /// No description provided for @downloads.
+  ///
+  /// In zh, this message translates to:
+  /// **'下载热度'**
+  String get downloads;
+
+  /// No description provided for @modelPackageNotVerified.
+  ///
+  /// In zh, this message translates to:
+  /// **'模型包尚未校验'**
+  String get modelPackageNotVerified;
+
+  /// No description provided for @modelPackageVerificationDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'校验会联网读取仓库元数据、固定版本和文件清单，不会下载完整模型，也不代表当前设备一定能运行。'**
+  String get modelPackageVerificationDescription;
+
+  /// No description provided for @verifyModelPackage.
+  ///
+  /// In zh, this message translates to:
+  /// **'校验模型包'**
+  String get verifyModelPackage;
+
+  /// No description provided for @verifyingModelPackage.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在校验模型包…'**
+  String get verifyingModelPackage;
+
+  /// No description provided for @reverifyModelPackage.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新校验模型包'**
+  String get reverifyModelPackage;
+
+  /// No description provided for @modelPackageUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'该仓库不是受支持的模型包'**
+  String get modelPackageUnsupported;
+
+  /// No description provided for @modelPackageUnsupportedDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'仓库格式、公开访问状态或必要文件不符合当前引擎要求。'**
+  String get modelPackageUnsupportedDescription;
+
   /// No description provided for @checkingModelCompatibility.
   ///
   /// In zh, this message translates to:
@@ -1141,6 +1201,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'添加并下载'**
   String get addAndDownloadModel;
+
+  /// No description provided for @addToLanguageModels.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加到语言模型'**
+  String get addToLanguageModels;
 
   /// No description provided for @modelAddedToManager.
   ///
