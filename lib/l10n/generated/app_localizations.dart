@@ -785,13 +785,13 @@ abstract class AppLocalizations {
   /// No description provided for @discoverMnnModels.
   ///
   /// In zh, this message translates to:
-  /// **'发现 MNN 模型'**
+  /// **'发现本地模型'**
   String get discoverMnnModels;
 
   /// No description provided for @discoverMnnModelsDescription.
   ///
   /// In zh, this message translates to:
-  /// **'直接浏览从 taobao-mnn Collections 同步的公开语言模型。'**
+  /// **'浏览从 taobao-mnn 与 litert-community Collections 同步并通过兼容性筛选的公开模型。'**
   String get discoverMnnModelsDescription;
 
   /// No description provided for @browseModels.
@@ -899,13 +899,13 @@ abstract class AppLocalizations {
   /// No description provided for @searchMnnModels.
   ///
   /// In zh, this message translates to:
-  /// **'搜索 MNN 模型'**
+  /// **'搜索本地模型'**
   String get searchMnnModels;
 
   /// No description provided for @noMnnModelsFound.
   ///
   /// In zh, this message translates to:
-  /// **'没有匹配的 MNN 模型'**
+  /// **'没有匹配的本地模型'**
   String get noMnnModelsFound;
 
   /// No description provided for @officialMnnCollection.
@@ -913,6 +913,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'taobao-mnn 官方 Collection'**
   String get officialMnnCollection;
+
+  /// No description provided for @officialLiteRtCollection.
+  ///
+  /// In zh, this message translates to:
+  /// **'litert-community 官方 Collection'**
+  String get officialLiteRtCollection;
 
   /// No description provided for @downloadCount.
   ///
@@ -932,6 +938,12 @@ abstract class AppLocalizations {
   /// **'MNN 文件与运行配置检查通过'**
   String get modelCompatibilityPassed;
 
+  /// No description provided for @liteRtCompatibilityPassed.
+  ///
+  /// In zh, this message translates to:
+  /// **'LiteRT-LM 文件、固定版本与校验值检查通过'**
+  String get liteRtCompatibilityPassed;
+
   /// No description provided for @modelCompatibilityFailed.
   ///
   /// In zh, this message translates to:
@@ -949,6 +961,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'模型文件'**
   String get modelFileCount;
+
+  /// No description provided for @modelFile.
+  ///
+  /// In zh, this message translates to:
+  /// **'模型文件'**
+  String get modelFile;
 
   /// No description provided for @fileCountValue.
   ///

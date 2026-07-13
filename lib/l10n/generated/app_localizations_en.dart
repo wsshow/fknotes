@@ -420,11 +420,11 @@ class AppLocalizationsEn extends AppLocalizations {
       'Download and choose the model used by Local Assistant. The default context is 4096 tokens.';
 
   @override
-  String get discoverMnnModels => 'Discover MNN models';
+  String get discoverMnnModels => 'Discover local models';
 
   @override
   String get discoverMnnModelsDescription =>
-      'Browse public language models synchronized directly from taobao-mnn Collections.';
+      'Browse compatible public models synchronized from the taobao-mnn and litert-community Collections.';
 
   @override
   String get browseModels => 'Browse models';
@@ -490,13 +490,16 @@ class AppLocalizationsEn extends AppLocalizations {
       'Showing the last successfully synchronized catalog';
 
   @override
-  String get searchMnnModels => 'Search MNN models';
+  String get searchMnnModels => 'Search local models';
 
   @override
-  String get noMnnModelsFound => 'No matching MNN models';
+  String get noMnnModelsFound => 'No matching local models';
 
   @override
   String get officialMnnCollection => 'Official taobao-mnn Collection';
+
+  @override
+  String get officialLiteRtCollection => 'Official litert-community Collection';
 
   @override
   String downloadCount(int count) {
@@ -511,6 +514,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'MNN file and configuration checks passed';
 
   @override
+  String get liteRtCompatibilityPassed =>
+      'LiteRT-LM file, pinned revision, and checksum checks passed';
+
+  @override
   String modelCompatibilityFailed(String error) {
     return 'This model can\'t be added: $error';
   }
@@ -520,6 +527,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get modelFileCount => 'Model files';
+
+  @override
+  String get modelFile => 'Model file';
 
   @override
   String fileCountValue(int count) {

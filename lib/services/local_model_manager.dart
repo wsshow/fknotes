@@ -5,8 +5,10 @@ import 'package:flutter/foundation.dart';
 
 import '../models/local_model.dart';
 import '../models/taobao_mnn_model.dart';
+import '../models/litert_model.dart';
 import 'kokoro_tts_model_service.dart';
 import 'language_model_service.dart';
+import 'litert_catalog_service.dart';
 import 'local_assistant_service.dart';
 import 'model_download_transport.dart';
 import 'note_read_aloud_service.dart';
@@ -383,6 +385,7 @@ class LocalModelManager extends ChangeNotifier {
   final _speakerDiarizationModels = SpeakerDiarizationModelService.instance;
   final _kokoroTtsModels = KokoroTtsModelService.instance;
   final _languageModels = LanguageModelService.instance;
+  final _liteRtCatalog = LiteRtCatalogService.instance;
   final _remoteCatalog = TaobaoMnnCatalogService.instance;
   final _dictationPreferences = RealtimeDictationPreferencesService.instance;
   final Map<String, LocalModelInstallation> _installations = {};
@@ -428,8 +431,9 @@ class LocalModelManager extends ChangeNotifier {
   Future<void> initialize({bool force = false}) async {
     if (_initialized && !force) return;
     await _languageModels.retireMnnGemmaModels();
-    await _remoteCatalog.loadCache();
+    await Future.wait([_remoteCatalog.loadCache(), _liteRtCatalog.loadCache()]);
     _languageModels.registerRemoteModels(_remoteCatalog.cachedDetails);
+    _languageModels.registerRemoteLiteRtModels(_liteRtCatalog.managedDetails);
     _remoteDefinitions
       ..clear()
       ..addEntries(
@@ -441,6 +445,15 @@ class LocalModelManager extends ChangeNotifier {
             )
             .map((model) => MapEntry(model.id, _remoteDefinition(model))),
       );
+    _remoteDefinitions.addEntries(
+      _liteRtCatalog.managedDetails
+          .where(
+            (model) => !_languageModels.curatedRepositories.contains(
+              model.repository.toLowerCase(),
+            ),
+          )
+          .map((model) => MapEntry(model.id, _remoteLiteRtDefinition(model))),
+    );
     final languageModelIds = _languageModels.modelIds;
     final generation = ++_initializationGeneration;
     final results = await Future.wait<Object>([
@@ -840,6 +853,18 @@ class LocalModelManager extends ChangeNotifier {
     await initialize(force: true);
   }
 
+  Future<void> registerRemoteLiteRtModel(LiteRtModelSpec model) async {
+    if (_languageModels.curatedRepositories.contains(
+      model.repository.toLowerCase(),
+    )) {
+      return;
+    }
+    await _liteRtCatalog.markAdded(model.repository);
+    _languageModels.registerRemoteLiteRtModels([model]);
+    _remoteDefinitions[model.id] = _remoteLiteRtDefinition(model);
+    await initialize(force: true);
+  }
+
   LocalModelDefinition _remoteDefinition(TaobaoMnnModelSpec model) =>
       LocalModelDefinition(
         id: model.id,
@@ -861,6 +886,29 @@ class LocalModelManager extends ChangeNotifier {
         repository: model.repository,
         revision: model.revision,
       );
+
+  LocalModelDefinition _remoteLiteRtDefinition(
+    LiteRtModelSpec model,
+  ) => LocalModelDefinition(
+    id: model.id,
+    name: model.name,
+    summary: model.collection,
+    description:
+        'Official Android model synchronized from litert-community Collections.',
+    category: LocalModelCategory.language,
+    availability: LocalModelAvailability.downloadable,
+    task: LocalModelTask.textGeneration,
+    downloadSizeBytes: model.downloadSizeBytes,
+    languages: model.languages,
+    engine: 'LiteRT-LM · litert-community',
+    version: model.revision.substring(0, 8),
+    source: model.repository,
+    license: model.license,
+    recommendedMemoryBytes: model.recommendedMemoryBytes,
+    remote: true,
+    repository: model.repository,
+    revision: model.revision,
+  );
 
   LocalModelDefinition _definition(String id) =>
       models.firstWhere((model) => model.id == id);

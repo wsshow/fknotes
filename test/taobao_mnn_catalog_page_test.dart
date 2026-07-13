@@ -3,7 +3,9 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:fknotes/models/taobao_mnn_model.dart';
+import 'package:fknotes/models/litert_model.dart';
 import 'package:fknotes/pages/taobao_mnn_catalog_page.dart';
+import 'package:fknotes/services/litert_catalog_service.dart';
 import 'package:fknotes/services/taobao_mnn_catalog_service.dart';
 import 'package:fknotes/services/model_catalog_http_client.dart';
 import 'package:fknotes/services/model_download_source_policy.dart';
@@ -89,20 +91,23 @@ void main() {
     );
     await tester.runAsync(service.sync);
     await tester.runAsync(() => service.inspect(service.entries.single));
+    final sourcePolicy = ModelDownloadSourcePolicy(
+      settingsPath: p.join(cache.path, 'source.json'),
+    );
+    await tester.runAsync(sourcePolicy.load);
 
     await tester.pumpWidget(
       MaterialApp(
         home: TaobaoMnnCatalogPage(
           service: service,
-          sourcePolicy: ModelDownloadSourcePolicy(
-            settingsPath: p.join(cache.path, 'source.json'),
-          ),
+          sourcePolicy: sourcePolicy,
           curatedRepositories: const {},
           onInstall: (model) async => installed = model,
         ),
       ),
     );
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.text('Qwen3-VL-Test'), findsOneWidget);
     expect(find.text('42 次下载'), findsOneWidget);
@@ -112,7 +117,7 @@ void main() {
       'not-found',
     );
     await tester.pump();
-    expect(find.text('没有匹配的 MNN 模型'), findsOneWidget);
+    expect(find.text('没有匹配的本地模型'), findsOneWidget);
     await tester.enterText(find.byKey(const Key('taobao-mnn-search')), 'qwen');
     await tester.pump();
 
@@ -154,14 +159,16 @@ void main() {
       ),
     );
     await tester.runAsync(service.loadCache);
+    final sourcePolicy = ModelDownloadSourcePolicy(
+      settingsPath: p.join(cache.path, 'source.json'),
+    );
+    await tester.runAsync(sourcePolicy.load);
 
     await tester.pumpWidget(
       MaterialApp(
         home: TaobaoMnnCatalogPage(
           service: service,
-          sourcePolicy: ModelDownloadSourcePolicy(
-            settingsPath: p.join(cache.path, 'source.json'),
-          ),
+          sourcePolicy: sourcePolicy,
         ),
       ),
     );
@@ -173,6 +180,69 @@ void main() {
     expect(find.textContaining('huggingface.co'), findsNothing);
     expect(find.text('重试'), findsOneWidget);
     expect(find.text('切换网络源'), findsOneWidget);
+  });
+
+  testWidgets('unified catalog can add a verified LiteRT community model', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 3;
+    tester.view.physicalSize = const Size(1080, 2400);
+    addTearDown(tester.view.reset);
+    final cache = (await tester.runAsync(
+      () => Directory.systemTemp.createTemp('fknotes_litert_catalog_page_'),
+    ))!;
+    addTearDown(
+      () => tester.runAsync(() async {
+        if (await cache.exists()) await cache.delete(recursive: true);
+      }),
+    );
+    final mnnService = TaobaoMnnCatalogService(
+      cacheDirectory: p.join(cache.path, 'mnn'),
+    );
+    final liteRtService = LiteRtCatalogService(
+      cacheDirectory: p.join(cache.path, 'litert'),
+    );
+    LiteRtModelSpec? installed;
+    await tester.runAsync(() async {
+      await mnnService.loadCache();
+      await liteRtService.loadCache();
+    });
+    final sourcePolicy = ModelDownloadSourcePolicy(
+      settingsPath: p.join(cache.path, 'source.json'),
+    );
+    await tester.runAsync(sourcePolicy.load);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TaobaoMnnCatalogPage(
+          service: mnnService,
+          liteRtService: liteRtService,
+          includeLiteRt: true,
+          curatedRepositories: const {},
+          sourcePolicy: sourcePolicy,
+          onInstallLiteRt: (model) async => installed = model,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('Qwen3-0.6B'), findsOneWidget);
+    expect(find.text('LiteRT-LM'), findsWidgets);
+
+    await tester.tap(find.text('Qwen3-0.6B'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.textContaining('LiteRT-LM 文件'), findsOneWidget);
+    expect(find.text('qwen3_0_6b_mixed_int4.litertlm'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('add-litert-model')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(installed?.repository, 'litert-community/Qwen3-0.6B');
+    expect(tester.takeException(), isNull);
   });
 }
 

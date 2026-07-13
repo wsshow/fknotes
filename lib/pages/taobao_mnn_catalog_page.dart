@@ -5,8 +5,10 @@ import 'package:flutter/foundation.dart';
 
 import '../app.dart';
 import '../l10n/l10n.dart';
+import '../models/litert_model.dart';
 import '../models/taobao_mnn_model.dart';
 import '../services/language_model_service.dart';
+import '../services/litert_catalog_service.dart';
 import '../services/local_model_manager.dart';
 import '../services/model_catalog_http_client.dart';
 import '../services/model_download_source_policy.dart';
@@ -16,16 +18,22 @@ import '../widgets/editor_context_menu.dart';
 
 class TaobaoMnnCatalogPage extends StatefulWidget {
   final TaobaoMnnCatalogService? service;
+  final LiteRtCatalogService? liteRtService;
   final Set<String>? curatedRepositories;
   final Future<void> Function(TaobaoMnnModelSpec model)? onInstall;
+  final Future<void> Function(LiteRtModelSpec model)? onInstallLiteRt;
   final ModelDownloadSourcePolicy? sourcePolicy;
+  final bool? includeLiteRt;
 
   const TaobaoMnnCatalogPage({
     super.key,
     this.service,
+    this.liteRtService,
     this.curatedRepositories,
     this.onInstall,
+    this.onInstallLiteRt,
     this.sourcePolicy,
+    this.includeLiteRt,
   });
 
   @override
@@ -34,6 +42,8 @@ class TaobaoMnnCatalogPage extends StatefulWidget {
 
 class _TaobaoMnnCatalogPageState extends State<TaobaoMnnCatalogPage> {
   late final TaobaoMnnCatalogService _service;
+  late final LiteRtCatalogService _liteRtService;
+  late final bool _includeLiteRt;
   late final Set<String> _curatedRepositories;
   late final ModelDownloadSourcePolicy _sourcePolicy;
   final _search = TextEditingController();
@@ -45,6 +55,8 @@ class _TaobaoMnnCatalogPageState extends State<TaobaoMnnCatalogPage> {
   void initState() {
     super.initState();
     _service = widget.service ?? TaobaoMnnCatalogService.instance;
+    _liteRtService = widget.liteRtService ?? LiteRtCatalogService.instance;
+    _includeLiteRt = widget.includeLiteRt ?? widget.service == null;
     _sourcePolicy = widget.sourcePolicy ?? ModelDownloadSourcePolicy.instance;
     _curatedRepositories =
         widget.curatedRepositories ??
@@ -68,11 +80,17 @@ class _TaobaoMnnCatalogPageState extends State<TaobaoMnnCatalogPage> {
   }
 
   Future<void> _initialize() async {
-    unawaited(_sourcePolicy.load());
-    await _service.loadCache();
+    await Future.wait([
+      _sourcePolicy.load(),
+      _service.loadCache(),
+      if (_includeLiteRt) _liteRtService.loadCache(),
+    ]);
     if (!mounted) return;
     setState(() => _loading = false);
-    if (_service.entries.isEmpty) await _sync();
+    if (_service.entries.isEmpty &&
+        (!_includeLiteRt || _liteRtService.entries.isEmpty)) {
+      await _sync();
+    }
   }
 
   Future<void> _sync() async {
@@ -82,12 +100,23 @@ class _TaobaoMnnCatalogPageState extends State<TaobaoMnnCatalogPage> {
       _error = null;
     });
     try {
-      await _service.sync();
-    } catch (error) {
-      _error = error;
-      if (kDebugMode) debugPrint('Model catalog refresh failed: $error');
+      final errors = await Future.wait([
+        _captureSync(_service.sync),
+        if (_includeLiteRt) _captureSync(_liteRtService.sync),
+      ]);
+      _error = errors.whereType<Object>().firstOrNull;
     } finally {
       if (mounted) setState(() => _syncing = false);
+    }
+  }
+
+  Future<Object?> _captureSync(Future<Object?> Function() sync) async {
+    try {
+      await sync();
+      return null;
+    } catch (error) {
+      if (kDebugMode) debugPrint('Model catalog refresh failed: $error');
+      return error;
     }
   }
 
@@ -134,9 +163,14 @@ class _TaobaoMnnCatalogPageState extends State<TaobaoMnnCatalogPage> {
     if (mounted) unawaited(_sync());
   }
 
-  List<TaobaoMnnCatalogEntry> get _visibleEntries {
+  List<_CatalogEntryView> get _visibleEntries {
     final query = _search.text.trim().toLowerCase();
-    return _service.entries.where((entry) {
+    final entries = <_CatalogEntryView>[
+      ..._service.entries.map(_CatalogEntryView.mnn),
+      if (_includeLiteRt)
+        ..._liteRtService.entries.map(_CatalogEntryView.liteRt),
+    ];
+    return entries.where((entry) {
       if (_curatedRepositories.contains(entry.repository.toLowerCase())) {
         return false;
       }
@@ -146,15 +180,21 @@ class _TaobaoMnnCatalogPageState extends State<TaobaoMnnCatalogPage> {
     }).toList();
   }
 
-  Future<void> _open(TaobaoMnnCatalogEntry entry) async {
+  Future<void> _open(_CatalogEntryView entry) async {
     final installed = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
-        builder: (_) => _TaobaoMnnModelDetailPage(
-          entry: entry,
-          service: _service,
-          onInstall: widget.onInstall ?? _install,
-        ),
+        builder: (_) => entry.mnnEntry != null
+            ? _TaobaoMnnModelDetailPage(
+                entry: entry.mnnEntry!,
+                service: _service,
+                onInstall: widget.onInstall ?? _install,
+              )
+            : _LiteRtModelDetailPage(
+                entry: entry.liteRtEntry!,
+                service: _liteRtService,
+                onInstall: widget.onInstallLiteRt ?? _installLiteRt,
+              ),
       ),
     );
     if (installed == true && mounted) Navigator.pop(context, true);
@@ -163,6 +203,12 @@ class _TaobaoMnnCatalogPageState extends State<TaobaoMnnCatalogPage> {
   Future<void> _install(TaobaoMnnModelSpec model) async {
     final manager = LocalModelManager.instance;
     await manager.registerRemoteModel(model);
+    unawaited(manager.download(model.id));
+  }
+
+  Future<void> _installLiteRt(LiteRtModelSpec model) async {
+    final manager = LocalModelManager.instance;
+    await manager.registerRemoteLiteRtModel(model);
     unawaited(manager.download(model.id));
   }
 
@@ -224,7 +270,9 @@ class _TaobaoMnnCatalogPageState extends State<TaobaoMnnCatalogPage> {
                         message: errorPresentation!.title,
                         secondary: [
                           errorPresentation.description,
-                          if (_service.entries.isNotEmpty)
+                          if (_service.entries.isNotEmpty ||
+                              (_includeLiteRt &&
+                                  _liteRtService.entries.isNotEmpty))
                             context.l10n.cachedCatalogInUse,
                         ].join('\n'),
                         error: true,
@@ -261,8 +309,27 @@ class _TaobaoMnnCatalogPageState extends State<TaobaoMnnCatalogPage> {
   }
 }
 
+class _CatalogEntryView {
+  final TaobaoMnnCatalogEntry? mnnEntry;
+  final LiteRtCatalogEntry? liteRtEntry;
+
+  const _CatalogEntryView.mnn(TaobaoMnnCatalogEntry entry)
+    : mnnEntry = entry,
+      liteRtEntry = null;
+
+  const _CatalogEntryView.liteRt(LiteRtCatalogEntry entry)
+    : mnnEntry = null,
+      liteRtEntry = entry;
+
+  String get repository => mnnEntry?.repository ?? liteRtEntry!.repository;
+  String get name => mnnEntry?.name ?? liteRtEntry!.name;
+  String get collection => mnnEntry?.collection ?? liteRtEntry!.collection;
+  int get downloads => mnnEntry?.downloads ?? liteRtEntry!.downloads;
+  String get engineLabel => mnnEntry != null ? 'MNN' : 'LiteRT-LM';
+}
+
 class _CatalogModelCard extends StatelessWidget {
-  final TaobaoMnnCatalogEntry entry;
+  final _CatalogEntryView entry;
   final VoidCallback onTap;
 
   const _CatalogModelCard({required this.entry, required this.onTap});
@@ -307,6 +374,15 @@ class _CatalogModelCard extends StatelessWidget {
                   Text(
                     entry.collection,
                     style: const TextStyle(color: AppColors.muted),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    entry.engineLabel,
+                    style: const TextStyle(
+                      color: AppColors.moss,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   if (entry.downloads > 0) ...[
                     const SizedBox(height: 5),
@@ -495,6 +571,164 @@ class _TaobaoMnnModelDetailPageState extends State<_TaobaoMnnModelDetailPage> {
   }
 }
 
+class _LiteRtModelDetailPage extends StatefulWidget {
+  final LiteRtCatalogEntry entry;
+  final LiteRtCatalogService service;
+  final Future<void> Function(LiteRtModelSpec model) onInstall;
+
+  const _LiteRtModelDetailPage({
+    required this.entry,
+    required this.service,
+    required this.onInstall,
+  });
+
+  @override
+  State<_LiteRtModelDetailPage> createState() => _LiteRtModelDetailPageState();
+}
+
+class _LiteRtModelDetailPageState extends State<_LiteRtModelDetailPage> {
+  LiteRtModelSpec? _model;
+  Object? _error;
+  bool _installing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_inspect());
+  }
+
+  Future<void> _inspect() async {
+    try {
+      final model = await widget.service.inspect(widget.entry);
+      if (mounted) setState(() => _model = model);
+    } catch (error) {
+      if (kDebugMode) debugPrint('LiteRT compatibility check failed: $error');
+      if (mounted) setState(() => _error = error);
+    }
+  }
+
+  Future<void> _install() async {
+    final model = _model;
+    if (model == null || _installing) return;
+    setState(() => _installing = true);
+    try {
+      await widget.onInstall(model);
+      if (mounted) Navigator.pop(context, true);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _installing = false;
+          _error = error;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final model = _model;
+    final errorPresentation = _error == null
+        ? null
+        : _catalogErrorPresentation(context, _error!);
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.entry.name)),
+      body: SafeArea(
+        top: false,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
+          children: [
+            if (model == null && _error == null) ...[
+              const SizedBox(height: 80),
+              const Center(child: CircularProgressIndicator()),
+              const SizedBox(height: 18),
+              Center(child: Text(context.l10n.checkingModelCompatibility)),
+            ] else if (_error != null && model == null)
+              EmptyState(
+                icon: Icons.error_outline_rounded,
+                message: errorPresentation!.title,
+                actionLabel: context.l10n.retry,
+                onAction: () {
+                  setState(() => _error = null);
+                  unawaited(_inspect());
+                },
+              )
+            else if (model != null) ...[
+              _CatalogNotice(message: context.l10n.liteRtCompatibilityPassed),
+              const SizedBox(height: 18),
+              _DetailCard(
+                children: [
+                  _DetailRow(
+                    context.l10n.officialLiteRtCollection,
+                    model.collection,
+                  ),
+                  _DetailRow(context.l10n.source, model.repository),
+                  _DetailRow(
+                    context.l10n.pinnedCommit,
+                    model.revision.substring(0, 12),
+                  ),
+                  _DetailRow(context.l10n.modelFile, model.file.name),
+                  _DetailRow(
+                    context.l10n.fileSize,
+                    _formatBytes(model.downloadSizeBytes),
+                  ),
+                  _DetailRow(
+                    context.l10n.recommendedMemory,
+                    context.l10n.memoryAndAbove(
+                      _formatBytes(model.recommendedMemoryBytes),
+                    ),
+                  ),
+                  if (model.license.isNotEmpty)
+                    _DetailRow(context.l10n.license, model.license),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                context.l10n.modelCapabilities,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _CapabilityChip(label: context.l10n.textGenerationCapability),
+                  if (model.capabilities.imageInput)
+                    _CapabilityChip(label: context.l10n.imageInputCapability),
+                  if (model.capabilities.audioInput)
+                    _CapabilityChip(label: context.l10n.audioInputCapability),
+                ],
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 16),
+                _CatalogNotice(
+                  message: errorPresentation!.title,
+                  secondary: errorPresentation.description,
+                  error: true,
+                ),
+              ],
+              const SizedBox(height: 28),
+              FilledButton.icon(
+                key: const Key('add-litert-model'),
+                onPressed: _installing ? null : _install,
+                icon: _installing
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.download_rounded),
+                label: Text(context.l10n.addAndDownloadModel),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _CatalogNotice extends StatelessWidget {
   final String message;
   final String? secondary;
@@ -583,7 +817,9 @@ _CatalogErrorPresentation _catalogErrorPresentation(
   final l10n = context.l10n;
   final kind = error is ModelCatalogRequestException
       ? error.kind
-      : error is FormatException || error is TaobaoMnnCatalogException
+      : error is FormatException ||
+            error is TaobaoMnnCatalogException ||
+            error is LiteRtCatalogException
       ? ModelCatalogFailureKind.invalidResponse
       : ModelCatalogFailureKind.serviceUnavailable;
   return switch (kind) {

@@ -6,8 +6,10 @@ import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 
 import '../models/local_llm.dart';
+import '../models/litert_model.dart';
 import '../models/taobao_mnn_model.dart';
 import 'file_storage_service.dart';
+import 'litert_catalog_service.dart';
 import 'model_download_source_policy.dart';
 import 'model_download_transport.dart';
 import 'model_install_coordinator.dart';
@@ -514,6 +516,42 @@ class LanguageModelService {
     }
   }
 
+  void registerRemoteLiteRtModels(Iterable<LiteRtModelSpec> models) {
+    for (final model in models) {
+      if (curatedRepositories.contains(model.repository.toLowerCase())) {
+        continue;
+      }
+      final folderHash = sha1
+          .convert(utf8.encode(model.repository.toLowerCase()))
+          .toString()
+          .substring(0, 10);
+      final safeName = model.name
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+          .replaceAll(RegExp(r'^-+|-+$'), '');
+      _dynamicSpecs[model.id] = _LanguageModelSpec(
+        engine: LocalLlmEngineKind.liteRtLm,
+        id: model.id,
+        displayName: model.name,
+        storageFolder: 'remote-litert-$safeName-$folderHash',
+        repository: model.repository,
+        revision: model.revision,
+        license: model.license,
+        nativeContextTokens: model.nativeContextTokens,
+        minimumMemoryBytes: model.recommendedMemoryBytes,
+        capabilities: model.capabilities,
+        generationOptions: model.generationOptions,
+        files: [
+          _LanguageModelFile(
+            model.file.name,
+            model.file.sizeBytes,
+            model.file.sha256,
+          ),
+        ],
+      );
+    }
+  }
+
   _LanguageModelSpec _spec(String id) =>
       _dynamicSpecs[id] ?? _specs.firstWhere((spec) => spec.id == id);
 
@@ -575,9 +613,11 @@ class LanguageModelService {
 
   Future<void> _ensureRemoteModelsLoaded() async {
     if (_remoteCacheLoaded) return;
-    final catalog = TaobaoMnnCatalogService.instance;
-    await catalog.loadCache();
-    registerRemoteModels(catalog.cachedDetails);
+    final mnnCatalog = TaobaoMnnCatalogService.instance;
+    final liteRtCatalog = LiteRtCatalogService.instance;
+    await Future.wait([mnnCatalog.loadCache(), liteRtCatalog.loadCache()]);
+    registerRemoteModels(mnnCatalog.cachedDetails);
+    registerRemoteLiteRtModels(liteRtCatalog.managedDetails);
     _remoteCacheLoaded = true;
   }
 

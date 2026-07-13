@@ -33,6 +33,8 @@ class ModelDownloadSourcePolicy extends ChangeNotifier {
   DateTime? _persistedHealthyAt;
   String? _lastUsedSourceLabel;
   Future<void> _writeQueue = Future.value();
+  Future<void>? _loadFuture;
+  bool _loaded = false;
 
   ModelDownloadSourcePreference get preference => _preference;
   String? get lastUsedSourceLabel => _lastUsedSourceLabel;
@@ -61,11 +63,16 @@ class ModelDownloadSourcePolicy extends ChangeNotifier {
               : ModelDownloadSourceKind.official),
   };
 
-  Future<void> load() async {
-    final file = File(_settingsPath);
-    if (!await file.exists()) return;
+  Future<void> load() {
+    if (_loaded) return SynchronousFuture<void>(null);
+    return _loadFuture ??= _load();
+  }
+
+  Future<void> _load() async {
     final previous = _preference;
     try {
+      final file = File(_settingsPath);
+      if (!await file.exists()) return;
       final decoded = jsonDecode(await file.readAsString());
       if (decoded is! Map) return;
       final name = decoded['preference'];
@@ -88,8 +95,10 @@ class ModelDownloadSourcePolicy extends ChangeNotifier {
       _preference = ModelDownloadSourcePreference.automatic;
     } on FileSystemException {
       _preference = ModelDownloadSourcePreference.automatic;
+    } finally {
+      _loaded = true;
+      if (_preference != previous) notifyListeners();
     }
-    if (_preference != previous) notifyListeners();
   }
 
   Future<void> setPreference(ModelDownloadSourcePreference preference) async {

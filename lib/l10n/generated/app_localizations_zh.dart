@@ -377,11 +377,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get languageModelsDescription => '由用户下载并选择本地助手使用的模型，默认上下文为 4096。';
 
   @override
-  String get discoverMnnModels => '发现 MNN 模型';
+  String get discoverMnnModels => '发现本地模型';
 
   @override
   String get discoverMnnModelsDescription =>
-      '直接浏览从 taobao-mnn Collections 同步的公开语言模型。';
+      '浏览从 taobao-mnn 与 litert-community Collections 同步并通过兼容性筛选的公开模型。';
 
   @override
   String get browseModels => '浏览模型';
@@ -439,13 +439,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cachedCatalogInUse => '正在显示上次成功同步的目录';
 
   @override
-  String get searchMnnModels => '搜索 MNN 模型';
+  String get searchMnnModels => '搜索本地模型';
 
   @override
-  String get noMnnModelsFound => '没有匹配的 MNN 模型';
+  String get noMnnModelsFound => '没有匹配的本地模型';
 
   @override
   String get officialMnnCollection => 'taobao-mnn 官方 Collection';
+
+  @override
+  String get officialLiteRtCollection => 'litert-community 官方 Collection';
 
   @override
   String downloadCount(int count) {
@@ -459,6 +462,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get modelCompatibilityPassed => 'MNN 文件与运行配置检查通过';
 
   @override
+  String get liteRtCompatibilityPassed => 'LiteRT-LM 文件、固定版本与校验值检查通过';
+
+  @override
   String modelCompatibilityFailed(String error) {
     return '无法添加该模型：$error';
   }
@@ -468,6 +474,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get modelFileCount => '模型文件';
+
+  @override
+  String get modelFile => '模型文件';
 
   @override
   String fileCountValue(int count) {
