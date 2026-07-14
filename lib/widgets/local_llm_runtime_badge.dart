@@ -84,6 +84,9 @@ class LocalLlmRuntimeBadge extends StatelessWidget {
       final gpu = backend != LocalLlmBackend.cpu;
       final backendName = switch (backend) {
         LocalLlmBackend.cpu => 'CPU',
+        LocalLlmBackend.openCl
+            when snapshot.model?.engine == LocalLlmEngineKind.liteRtLm =>
+          'GPU',
         LocalLlmBackend.openCl => 'OpenCL · GPU',
         LocalLlmBackend.vulkan => 'Vulkan · GPU',
         LocalLlmBackend.metal => 'Metal · GPU',

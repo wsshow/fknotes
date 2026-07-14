@@ -102,6 +102,31 @@ void main() {
     expect(find.bySemanticsLabel('当前运行后端：OpenCL · GPU'), findsOneWidget);
   });
 
+  testWidgets('does not claim a specific GPU API for LiteRT-LM', (
+    tester,
+  ) async {
+    const liteRtModel = LocalLlmModelDescriptor(
+      engine: LocalLlmEngineKind.liteRtLm,
+      id: 'model-a',
+      name: 'Model A',
+      configPath: '/model',
+      nativeContextTokens: 4096,
+    );
+    await _pumpBadge(
+      tester,
+      const LocalLlmRuntimeSnapshot(
+        state: LocalLlmEngineState.ready,
+        model: liteRtModel,
+        requestedBackend: LocalLlmBackend.openCl,
+        activeBackend: LocalLlmBackend.openCl,
+      ),
+    );
+
+    expect(find.text('GPU'), findsOneWidget);
+    expect(find.bySemanticsLabel('当前运行后端：GPU'), findsOneWidget);
+    expect(find.textContaining('OpenCL'), findsNothing);
+  });
+
   testWidgets('shows CPU after an accelerated backend falls back', (
     tester,
   ) async {

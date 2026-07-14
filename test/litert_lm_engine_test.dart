@@ -69,6 +69,76 @@ void main() {
     expect(engine.state, LocalLlmEngineState.failed);
   });
 
+  test(
+    'retries generation on CPU when the GPU worker dies before output',
+    () async {
+      final transport = _FakeTransport(crashGpuOnGenerate: true);
+      final engine = LiteRtLmEngine(transport: transport);
+      await engine.loadModel(
+        _descriptor(modelFile.path),
+        options: const LocalLlmLoadOptions(backend: LocalLlmBackend.openCl),
+      );
+
+      final events = await engine
+          .generate(
+            LocalLlmGenerationRequest(
+              messages: const [
+                LocalLlmMessage(role: LocalLlmRole.user, content: '测试'),
+              ],
+            ),
+          )
+          .toList();
+
+      expect(transport.loadBackends, [
+        LocalLlmBackend.openCl,
+        LocalLlmBackend.cpu,
+      ]);
+      expect(events.whereType<LocalLlmTextDelta>().single.text, '你好！');
+      expect(engine.activeBackend, LocalLlmBackend.cpu);
+      expect(engine.state, LocalLlmEngineState.ready);
+    },
+  );
+
+  test(
+    'does not replay a request after the GPU already emitted text',
+    () async {
+      final transport = _FakeTransport(crashGpuAfterText: true);
+      final engine = LiteRtLmEngine(transport: transport);
+      await engine.loadModel(
+        _descriptor(modelFile.path),
+        options: const LocalLlmLoadOptions(backend: LocalLlmBackend.openCl),
+      );
+
+      final events = <LocalLlmGenerationEvent>[];
+      Object? failure;
+      final terminal = Completer<void>();
+      engine
+          .generate(
+            LocalLlmGenerationRequest(
+              messages: const [
+                LocalLlmMessage(role: LocalLlmRole.user, content: '测试'),
+              ],
+            ),
+          )
+          .listen(
+            events.add,
+            onError: (Object error) {
+              failure = error;
+              if (!terminal.isCompleted) terminal.complete();
+            },
+            onDone: () {
+              if (!terminal.isCompleted) terminal.complete();
+            },
+          );
+      await terminal.future;
+
+      expect(events.whereType<LocalLlmTextDelta>().single.text, '部分回答');
+      expect(failure, isA<LocalLlmException>());
+      expect(transport.loadBackends, [LocalLlmBackend.openCl]);
+      expect(engine.state, LocalLlmEngineState.failed);
+    },
+  );
+
   test('falls back to CPU when the GPU backend cannot initialize', () async {
     final transport = _FakeTransport(failGpuLoad: true);
     final engine = LiteRtLmEngine(transport: transport);
@@ -160,6 +230,8 @@ LocalLlmModelDescriptor _descriptor(String path) => LocalLlmModelDescriptor(
 
 class _FakeTransport implements LiteRtLmTransport {
   final bool crashOnGenerate;
+  final bool crashGpuOnGenerate;
+  final bool crashGpuAfterText;
   final bool crashOnLoad;
   final bool crashGpuWorker;
   final bool failGpuLoad;
@@ -167,9 +239,12 @@ class _FakeTransport implements LiteRtLmTransport {
   String? loadedModelPath;
   final loadBackends = <LocalLlmBackend>[];
   final loadOptions = <LocalLlmLoadOptions>[];
+  LocalLlmBackend? _loadedBackend;
 
   _FakeTransport({
     this.crashOnGenerate = false,
+    this.crashGpuOnGenerate = false,
+    this.crashGpuAfterText = false,
     this.crashOnLoad = false,
     this.crashGpuWorker = false,
     this.failGpuLoad = false,
@@ -206,6 +281,9 @@ class _FakeTransport implements LiteRtLmTransport {
       );
       return false;
     }
+    if (!(failGpuLoad && options.backend != LocalLlmBackend.cpu)) {
+      _loadedBackend = options.backend;
+    }
     scheduleMicrotask(
       () => _events.add(
         LiteRtLmNativeEvent(
@@ -230,7 +308,24 @@ class _FakeTransport implements LiteRtLmTransport {
     required LocalLlmGenerationRequest request,
   }) async {
     scheduleMicrotask(() {
-      if (crashOnGenerate) {
+      final gpuAttempt = _loadedBackend != LocalLlmBackend.cpu;
+      if (crashGpuAfterText && gpuAttempt) {
+        _events
+          ..add(
+            LiteRtLmNativeEvent(
+              requestId: requestId,
+              type: LiteRtLmNativeEventType.textDelta,
+              data: '部分回答',
+            ),
+          )
+          ..add(
+            const LiteRtLmNativeEvent(
+              requestId: -1,
+              type: LiteRtLmNativeEventType.serviceDied,
+              data: 'LiteRT-LM 推理进程意外终止',
+            ),
+          );
+      } else if (crashOnGenerate || (crashGpuOnGenerate && gpuAttempt)) {
         _events.add(
           const LiteRtLmNativeEvent(
             requestId: -1,

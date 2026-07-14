@@ -67,8 +67,34 @@ void main() {
     expect(engine.activeBackend, LocalLlmBackend.cpu);
   });
 
-  test('falls back to CPU when the selected GPU backend fails', () async {
-    final transport = _FakeMnnTransport(failAcceleratedLoad: true);
+  test(
+    'tries the other Android GPU backend before falling back to CPU',
+    () async {
+      final transport = _FakeMnnTransport(failAcceleratedLoad: true);
+      final engine = MnnLocalLlmEngine(
+        transport: transport,
+        supportDirectoryProvider: () async => temporaryDirectory,
+      );
+
+      await engine.loadModel(
+        model(),
+        options: const LocalLlmLoadOptions(backend: LocalLlmBackend.openCl),
+      );
+
+      expect(transport.loadBackends, [
+        LocalLlmBackend.openCl,
+        LocalLlmBackend.vulkan,
+        LocalLlmBackend.cpu,
+      ]);
+      expect(engine.activeBackend, LocalLlmBackend.cpu);
+      expect(engine.state, LocalLlmEngineState.ready);
+    },
+  );
+
+  test('keeps GPU acceleration when OpenCL fails but Vulkan works', () async {
+    final transport = _FakeMnnTransport(
+      failedBackends: const {LocalLlmBackend.openCl},
+    );
     final engine = MnnLocalLlmEngine(
       transport: transport,
       supportDirectoryProvider: () async => temporaryDirectory,
@@ -81,9 +107,9 @@ void main() {
 
     expect(transport.loadBackends, [
       LocalLlmBackend.openCl,
-      LocalLlmBackend.cpu,
+      LocalLlmBackend.vulkan,
     ]);
-    expect(engine.activeBackend, LocalLlmBackend.cpu);
+    expect(engine.activeBackend, LocalLlmBackend.vulkan);
     expect(engine.state, LocalLlmEngineState.ready);
   });
 
@@ -307,6 +333,7 @@ void main() {
 class _FakeMnnTransport implements MnnNativeTransport {
   final bool blockGeneration;
   final bool failAcceleratedLoad;
+  final Set<LocalLlmBackend> failedBackends;
   final bool dropLifecycleEvents;
   final _events = StreamController<MnnNativeEvent>.broadcast();
   final generationStarted = Completer<void>();
@@ -317,6 +344,7 @@ class _FakeMnnTransport implements MnnNativeTransport {
   _FakeMnnTransport({
     this.blockGeneration = false,
     this.failAcceleratedLoad = false,
+    this.failedBackends = const {},
     this.dropLifecycleEvents = false,
   });
 
@@ -338,14 +366,17 @@ class _FakeMnnTransport implements MnnNativeTransport {
   }) {
     loadBackends.add(options.backend);
     if (dropLifecycleEvents) return true;
+    final loadFails =
+        (failAcceleratedLoad && options.backend != LocalLlmBackend.cpu) ||
+        failedBackends.contains(options.backend);
     scheduleMicrotask(
       () => _events.add(
         MnnNativeEvent(
           requestId: requestId,
-          type: failAcceleratedLoad && options.backend != LocalLlmBackend.cpu
+          type: loadFails
               ? MnnNativeEventType.error
               : MnnNativeEventType.loaded,
-          data: failAcceleratedLoad && options.backend != LocalLlmBackend.cpu
+          data: loadFails
               ? 'GPU unavailable'
               : options.backend.name.toLowerCase(),
         ),

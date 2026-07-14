@@ -18,6 +18,7 @@ class LiteRtLmEngine implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
   LocalLlmEngineState _state = LocalLlmEngineState.idle;
   LocalLlmModelDescriptor? _loadedModel;
   LocalLlmBackend? _activeBackend;
+  LocalLlmLoadOptions? _activeLoadOptions;
   int? _activeRequestId;
   Completer<void>? _activeDone;
   bool _timedOut = false;
@@ -84,6 +85,7 @@ class LiteRtLmEngine implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
     }
     _state = LocalLlmEngineState.loading;
     _activeBackend = null;
+    _activeLoadOptions = null;
     try {
       try {
         _activeBackend = await _load(model, options);
@@ -120,10 +122,12 @@ class LiteRtLmEngine implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
           ),
         );
       }
+      _activeLoadOptions = _optionsForBackend(options, _activeBackend!);
       _loadedModel = model;
       _state = LocalLlmEngineState.ready;
     } catch (_) {
       _activeBackend = null;
+      _activeLoadOptions = null;
       _state = LocalLlmEngineState.failed;
       rethrow;
     }
@@ -155,6 +159,184 @@ class LiteRtLmEngine implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
     late StreamController<LocalLlmGenerationEvent> controller;
     StreamSubscription<LiteRtLmNativeEvent>? subscription;
     Timer? timeout;
+    var emittedText = false;
+    var fallbackAttempted = false;
+    var streamFinished = false;
+
+    Future<void> closeWithError(Object error, StackTrace stackTrace) async {
+      if (streamFinished) return;
+      streamFinished = true;
+      _state = LocalLlmEngineState.failed;
+      _activeBackend = null;
+      _activeLoadOptions = null;
+      timeout?.cancel();
+      timeout = null;
+      final activeSubscription = subscription;
+      subscription = null;
+      await activeSubscription?.cancel();
+      final done = _activeDone;
+      if (done != null && !done.isCompleted) done.complete();
+      _activeDone = null;
+      _activeRequestId = null;
+      if (!controller.isClosed) {
+        controller.addError(error, stackTrace);
+        await controller.close();
+      }
+    }
+
+    Future<void> runAttempt(LocalLlmGenerationRequest prepared) async {
+      if (streamFinished || controller.isClosed) return;
+      final requestId = _newRequestId();
+      final done = Completer<void>();
+      var attemptFinished = false;
+      _activeRequestId = requestId;
+      _activeDone = done;
+      _timedOut = false;
+      _state = LocalLlmEngineState.generating;
+
+      Future<void> finishAttempt({
+        required bool closeStream,
+        required bool restoreReady,
+      }) async {
+        timeout?.cancel();
+        timeout = null;
+        final activeSubscription = subscription;
+        subscription = null;
+        await _finish(
+          controller,
+          activeSubscription,
+          done,
+          null,
+          closeController: closeStream,
+          restoreReady: restoreReady,
+        );
+        if (closeStream) streamFinished = true;
+      }
+
+      Future<void> handleFailure({
+        required String message,
+        required bool workerDied,
+      }) async {
+        if (attemptFinished || streamFinished) return;
+        attemptFinished = true;
+        final model = _loadedModel;
+        final previousOptions = _activeLoadOptions;
+        final canRetryOnCpu =
+            workerDied &&
+            !fallbackAttempted &&
+            !emittedText &&
+            _activeBackend != LocalLlmBackend.cpu &&
+            model != null &&
+            previousOptions != null;
+        if (!canRetryOnCpu) {
+          await closeWithError(LocalLlmException(message), StackTrace.current);
+          return;
+        }
+
+        fallbackAttempted = true;
+        await finishAttempt(closeStream: false, restoreReady: false);
+        _state = LocalLlmEngineState.loading;
+        _activeBackend = null;
+        final cpuOptions = _optionsForBackend(
+          previousOptions,
+          LocalLlmBackend.cpu,
+        );
+        if (kDebugMode) {
+          AppDiagnostics.warning(
+            AppLogCategory.inference,
+            'litert_generation_cpu_fallback_started',
+            data: {'modelId': model.id, 'reason': message},
+            traceId: model.id,
+          );
+        }
+        try {
+          // Let Android reap the failed GPU worker before binding a clean
+          // CPU-only process and replaying the request.
+          await Future<void>.delayed(const Duration(milliseconds: 350));
+          _activeBackend = await _load(model, cpuOptions);
+          _activeLoadOptions = cpuOptions;
+          _state = LocalLlmEngineState.ready;
+          if (kDebugMode) {
+            AppDiagnostics.info(
+              AppLogCategory.inference,
+              'litert_generation_cpu_fallback_completed',
+              data: {'modelId': model.id},
+              traceId: model.id,
+            );
+          }
+          await runAttempt(prepared);
+        } catch (error, stackTrace) {
+          await closeWithError(error, stackTrace);
+        }
+      }
+
+      subscription = _transport.events
+          .where(
+            (event) =>
+                event.requestId == requestId ||
+                event.type == LiteRtLmNativeEventType.serviceDied,
+          )
+          .listen((event) {
+            switch (event.type) {
+              case LiteRtLmNativeEventType.textDelta:
+                if (attemptFinished || streamFinished) break;
+                if (!controller.isClosed && event.data.isNotEmpty) {
+                  emittedText = true;
+                  controller.add(LocalLlmTextDelta(event.data));
+                }
+              case LiteRtLmNativeEventType.completed:
+                if (attemptFinished || streamFinished) break;
+                attemptFinished = true;
+                if (!controller.isClosed) {
+                  controller.add(_completed(event.data));
+                }
+                unawaited(finishAttempt(closeStream: true, restoreReady: true));
+              case LiteRtLmNativeEventType.canceled:
+                if (attemptFinished || streamFinished) break;
+                attemptFinished = true;
+                if (!controller.isClosed) {
+                  controller.add(
+                    LocalLlmGenerationCompleted(
+                      reason: _timedOut
+                          ? LocalLlmFinishReason.timeout
+                          : LocalLlmFinishReason.canceled,
+                    ),
+                  );
+                }
+                unawaited(finishAttempt(closeStream: true, restoreReady: true));
+              case LiteRtLmNativeEventType.error:
+                unawaited(
+                  handleFailure(
+                    message: event.data.isEmpty ? 'LiteRT-LM 推理失败' : event.data,
+                    workerDied: false,
+                  ),
+                );
+              case LiteRtLmNativeEventType.serviceDied:
+                unawaited(
+                  handleFailure(
+                    message: event.data.isEmpty
+                        ? 'LiteRT-LM 推理进程意外终止'
+                        : event.data,
+                    workerDied: true,
+                  ),
+                );
+              case LiteRtLmNativeEventType.loaded ||
+                  LiteRtLmNativeEventType.unloaded:
+                break;
+            }
+          });
+      timeout = Timer(prepared.options.timeout, () {
+        _timedOut = true;
+        unawaited(_transport.cancel(requestId));
+      });
+      if (!await _transport.generate(requestId: requestId, request: prepared)) {
+        // A dead Binder may report the failed method call before its
+        // serviceDied event reaches Dart. Treat a rejected GPU request as the
+        // same recoverable connection failure.
+        await Future<void>.delayed(Duration.zero);
+        await handleFailure(message: 'LiteRT-LM 推理进程连接已断开', workerDied: true);
+      }
+    }
 
     Future<void> start() async {
       if (_state != LocalLlmEngineState.ready || _loadedModel == null) {
@@ -170,65 +352,7 @@ class LiteRtLmEngine implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
         await controller.close();
         return;
       }
-      final requestId = _newRequestId();
-      final done = Completer<void>();
-      _activeRequestId = requestId;
-      _activeDone = done;
-      _timedOut = false;
-      _state = LocalLlmEngineState.generating;
-      subscription = _transport.events
-          .where(
-            (event) =>
-                event.requestId == requestId ||
-                event.type == LiteRtLmNativeEventType.serviceDied,
-          )
-          .listen((event) {
-            switch (event.type) {
-              case LiteRtLmNativeEventType.textDelta:
-                if (!controller.isClosed && event.data.isNotEmpty) {
-                  controller.add(LocalLlmTextDelta(event.data));
-                }
-              case LiteRtLmNativeEventType.completed:
-                if (!controller.isClosed) {
-                  controller.add(_completed(event.data));
-                }
-                unawaited(_finish(controller, subscription, done, timeout));
-              case LiteRtLmNativeEventType.canceled:
-                if (!controller.isClosed) {
-                  controller.add(
-                    LocalLlmGenerationCompleted(
-                      reason: _timedOut
-                          ? LocalLlmFinishReason.timeout
-                          : LocalLlmFinishReason.canceled,
-                    ),
-                  );
-                }
-                unawaited(_finish(controller, subscription, done, timeout));
-              case LiteRtLmNativeEventType.error ||
-                  LiteRtLmNativeEventType.serviceDied:
-                _state = LocalLlmEngineState.failed;
-                if (!controller.isClosed) {
-                  controller.addError(
-                    LocalLlmException(
-                      event.data.isEmpty ? 'LiteRT-LM 推理进程意外终止' : event.data,
-                    ),
-                  );
-                }
-                unawaited(_finish(controller, subscription, done, timeout));
-              case LiteRtLmNativeEventType.loaded ||
-                  LiteRtLmNativeEventType.unloaded:
-                break;
-            }
-          });
-      timeout = Timer(prepared.options.timeout, () {
-        _timedOut = true;
-        unawaited(_transport.cancel(requestId));
-      });
-      if (!await _transport.generate(requestId: requestId, request: prepared)) {
-        timeout?.cancel();
-        controller.addError(const LocalLlmException('LiteRT-LM 当前无法开始生成任务'));
-        await _finish(controller, subscription, done, timeout);
-      }
+      await runAttempt(prepared);
     }
 
     controller = StreamController<LocalLlmGenerationEvent>(
@@ -262,9 +386,11 @@ class LiteRtLmEngine implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
       );
       _loadedModel = null;
       _activeBackend = null;
+      _activeLoadOptions = null;
       _state = LocalLlmEngineState.idle;
     } catch (_) {
       _activeBackend = null;
+      _activeLoadOptions = null;
       _state = LocalLlmEngineState.failed;
       rethrow;
     }
@@ -330,20 +456,35 @@ class LiteRtLmEngine implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
     StreamController<LocalLlmGenerationEvent> controller,
     StreamSubscription<LiteRtLmNativeEvent>? subscription,
     Completer<void> done,
-    Timer? timeout,
-  ) async {
+    Timer? timeout, {
+    bool closeController = true,
+    bool restoreReady = true,
+  }) async {
     timeout?.cancel();
     await subscription?.cancel();
     if (!done.isCompleted) done.complete();
     if (identical(_activeDone, done)) {
       _activeDone = null;
       _activeRequestId = null;
-      if (_state != LocalLlmEngineState.failed) {
+      if (restoreReady && _state != LocalLlmEngineState.failed) {
         _state = LocalLlmEngineState.ready;
       }
     }
-    if (!controller.isClosed) await controller.close();
+    if (closeController && !controller.isClosed) await controller.close();
   }
+
+  LocalLlmLoadOptions _optionsForBackend(
+    LocalLlmLoadOptions options,
+    LocalLlmBackend backend,
+  ) => LocalLlmLoadOptions(
+    backend: backend,
+    threads: options.threads,
+    contextTokens: options.contextTokens,
+    enableThinking: options.enableThinking,
+    enablePromptCache: options.enablePromptCache,
+    enableImageInput: options.enableImageInput,
+    enableAudioInput: options.enableAudioInput,
+  );
 
   LocalLlmGenerationCompleted _completed(String payload) {
     try {

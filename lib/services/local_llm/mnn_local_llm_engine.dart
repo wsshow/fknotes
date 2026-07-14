@@ -112,34 +112,41 @@ class MnnLocalLlmEngine
     _state = LocalLlmEngineState.loading;
     _activeBackend = null;
     try {
-      try {
-        _activeBackend = await _load(model, cache.path, options);
-      } catch (error) {
-        if (options.backend == LocalLlmBackend.cpu) rethrow;
-        if (kDebugMode) {
-          AppDiagnostics.warning(
-            AppLogCategory.inference,
-            'mnn_cpu_fallback_started',
-            data: {
-              'modelId': model.id,
-              'requestedBackend': options.backend.name,
-              'reason': error.toString(),
-            },
-            traceId: model.id,
+      final candidates = _backendCandidates(options.backend);
+      Object? lastError;
+      StackTrace? lastStackTrace;
+      for (var index = 0; index < candidates.length; index++) {
+        final backend = candidates[index];
+        try {
+          _activeBackend = await _load(
+            model,
+            cache.path,
+            _optionsForBackend(options, backend),
           );
+          break;
+        } catch (error, stackTrace) {
+          lastError = error;
+          lastStackTrace = stackTrace;
+          if (index + 1 >= candidates.length) break;
+          if (kDebugMode) {
+            AppDiagnostics.warning(
+              AppLogCategory.inference,
+              'mnn_backend_fallback_started',
+              data: {
+                'modelId': model.id,
+                'fromBackend': backend.name,
+                'toBackend': candidates[index + 1].name,
+                'reason': error.toString(),
+              },
+              traceId: model.id,
+            );
+          }
         }
-        _activeBackend = await _load(
-          model,
-          cache.path,
-          LocalLlmLoadOptions(
-            backend: LocalLlmBackend.cpu,
-            threads: options.threads,
-            contextTokens: options.contextTokens,
-            enableThinking: options.enableThinking,
-            enablePromptCache: options.enablePromptCache,
-            enableImageInput: options.enableImageInput,
-            enableAudioInput: options.enableAudioInput,
-          ),
+      }
+      if (_activeBackend == null) {
+        Error.throwWithStackTrace(
+          lastError ?? const LocalLlmException('MNN 没有可用的推理后端'),
+          lastStackTrace ?? StackTrace.current,
         );
       }
       _loadedModel = model;
@@ -175,6 +182,38 @@ class MnnLocalLlmEngine
       _ => options.backend,
     };
   }
+
+  List<LocalLlmBackend> _backendCandidates(LocalLlmBackend requested) =>
+      switch (requested) {
+        LocalLlmBackend.cpu => const [LocalLlmBackend.cpu],
+        LocalLlmBackend.openCl => const [
+          LocalLlmBackend.openCl,
+          LocalLlmBackend.vulkan,
+          LocalLlmBackend.cpu,
+        ],
+        LocalLlmBackend.vulkan => const [
+          LocalLlmBackend.vulkan,
+          LocalLlmBackend.openCl,
+          LocalLlmBackend.cpu,
+        ],
+        LocalLlmBackend.metal => const [
+          LocalLlmBackend.metal,
+          LocalLlmBackend.cpu,
+        ],
+      };
+
+  LocalLlmLoadOptions _optionsForBackend(
+    LocalLlmLoadOptions options,
+    LocalLlmBackend backend,
+  ) => LocalLlmLoadOptions(
+    backend: backend,
+    threads: options.threads,
+    contextTokens: options.contextTokens,
+    enableThinking: options.enableThinking,
+    enablePromptCache: options.enablePromptCache,
+    enableImageInput: options.enableImageInput,
+    enableAudioInput: options.enableAudioInput,
+  );
 
   @override
   Stream<LocalLlmGenerationEvent> generate(LocalLlmGenerationRequest request) {
