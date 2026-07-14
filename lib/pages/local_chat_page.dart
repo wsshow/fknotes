@@ -66,7 +66,8 @@ class LocalChatPage extends StatefulWidget {
   State<LocalChatPage> createState() => _LocalChatPageState();
 }
 
-class _LocalChatPageState extends State<LocalChatPage> {
+class _LocalChatPageState extends State<LocalChatPage>
+    with WidgetsBindingObserver {
   final _store = LocalChatStore.instance;
   final _assistant = LocalAssistantService.instance;
   final _models = LanguageModelService.instance;
@@ -91,6 +92,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
   bool _closed = false;
   bool _autoFollowOutput = true;
   bool _showJumpToBottom = false;
+  bool _waitingForKeyboardDismiss = false;
   final List<LocalChatAttachment> _pendingAttachments = [];
   bool _pickingImages = false;
   bool _chatDictating = false;
@@ -99,8 +101,18 @@ class _LocalChatPageState extends State<LocalChatPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _dictation.addListener(_handleDictationChanged);
     unawaited(_initialize());
+  }
+
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    if (!_waitingForKeyboardDismiss || !mounted) return;
+    if (View.of(context).viewInsets.bottom > 0) return;
+    _waitingForKeyboardDismiss = false;
+    _scrollToEnd(force: true);
   }
 
   Future<void> _initialize() async {
@@ -151,6 +163,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
   @override
   void dispose() {
     _closed = true;
+    WidgetsBinding.instance.removeObserver(this);
     if (_generating) unawaited(_assistant.cancel());
     if (_chatDictating) unawaited(_dictation.cancel());
     _dictation.removeListener(_handleDictationChanged);
@@ -407,6 +420,9 @@ class _LocalChatPageState extends State<LocalChatPage> {
       AppFeedback.error(context, l10n.textOnlyRuntimeImageWarning);
       return;
     }
+    // Dismiss the IME explicitly before the composer becomes disabled. The
+    // timeline will wait for the resulting viewport resize before scrolling.
+    _inputFocus.unfocus();
     if (!await _ensureModelInstalled()) return;
     final attachments = List<LocalChatAttachment>.unmodifiable(
       _pendingAttachments,
@@ -431,9 +447,8 @@ class _LocalChatPageState extends State<LocalChatPage> {
       messages: messages,
       updatedAt: DateTime.now(),
     );
-    setState(() => _generationError = null);
-    await _persist();
-    await _generateResponse();
+    _generationError = null;
+    await _generateResponse(waitForKeyboardDismiss: true);
   }
 
   Future<void> _retryLastMessage() async {
@@ -444,33 +459,48 @@ class _LocalChatPageState extends State<LocalChatPage> {
         updatedAt: DateTime.now(),
       );
     }
-    setState(() => _generationError = null);
+    _generationError = null;
     await _generateResponse();
   }
 
-  Future<void> _generateResponse() async {
+  Future<void> _generateResponse({bool waitForKeyboardDismiss = false}) async {
     final request = LocalChatPromptBuilder.build(
       systemPrompt: _session.systemPrompt,
       messages: _session.messages,
       languageCode: Localizations.localeOf(context).languageCode,
     );
+    final sessionBeforeDraft = _session;
     final draft = _store.createMessage(
       role: LocalChatRole.assistant,
       content: '',
       status: LocalChatMessageStatus.stopped,
     );
     final raw = StringBuffer();
-    _session = _session.copyWith(messages: [..._session.messages, draft]);
+    final sessionWithDraft = _session.copyWith(
+      messages: [..._session.messages, draft],
+    );
     if (mounted) {
+      _waitingForKeyboardDismiss =
+          LocalChatScrollFollowPolicy.shouldDeferUntilKeyboardClosed(
+            keyboardDismissRequested: waitForKeyboardDismiss,
+            keyboardInset: MediaQuery.viewInsetsOf(context).bottom,
+          );
       setState(() {
+        _session = sessionWithDraft;
         _generating = true;
         _draftMessageId = draft.id;
       });
       _scrollToEnd(force: true);
+    } else {
+      _session = sessionWithDraft;
     }
 
     var finishStatus = LocalChatMessageStatus.stopped;
     try {
+      // Persist the user turn without the transient empty assistant bubble.
+      // The UI has already committed both bubbles in one frame, so storage I/O
+      // cannot split the visible insertion into two layout jumps.
+      await _persist(sessionBeforeDraft);
       final attachments = request.messages.expand(
         (message) => message.attachments,
       );
@@ -526,6 +556,10 @@ class _LocalChatPageState extends State<LocalChatPage> {
       }
       await _persist();
       if (mounted) {
+        if (_waitingForKeyboardDismiss &&
+            MediaQuery.viewInsetsOf(context).bottom <= 0) {
+          _waitingForKeyboardDismiss = false;
+        }
         setState(() {
           _generating = false;
           _draftMessageId = null;
@@ -879,16 +913,17 @@ class _LocalChatPageState extends State<LocalChatPage> {
     });
   }
 
-  Future<void> _persist() async {
+  Future<void> _persist([LocalChatSession? value]) async {
     final l10n = context.l10n;
+    final session = value ?? _session;
     try {
-      await _store.saveSession(_session);
+      await _store.saveSession(session);
       // Rebuild the collection instead of mutating a list returned by a
       // persistence adapter. Database/query implementations are free to
       // return fixed-length lists; UI state must own its growable copy.
       _sessions = <LocalChatSession>[
-        _session,
-        ..._sessions.where((item) => item.id != _session.id),
+        session,
+        ..._sessions.where((item) => item.id != session.id),
       ]..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     } catch (error) {
       _generationError = l10n.chatSaveFailed(_cleanError(error));
@@ -903,6 +938,7 @@ class _LocalChatPageState extends State<LocalChatPage> {
   }
 
   void _scrollToEnd({bool force = false}) {
+    if (_waitingForKeyboardDismiss) return;
     if (!force && !_autoFollowOutput) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scroll.hasClients) return;
@@ -954,6 +990,11 @@ class LocalChatScrollFollowPolicy {
 
   static bool shouldFollow(double extentAfter) =>
       extentAfter <= bottomThreshold;
+
+  static bool shouldDeferUntilKeyboardClosed({
+    required bool keyboardDismissRequested,
+    required double keyboardInset,
+  }) => keyboardDismissRequested && keyboardInset > 0;
 }
 
 class LocalChatVoiceInputText {

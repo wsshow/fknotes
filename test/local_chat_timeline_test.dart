@@ -22,6 +22,30 @@ void main() {
     expect(LocalChatScrollFollowPolicy.shouldFollow(500), isFalse);
   });
 
+  test('send scroll waits only while the keyboard is closing', () {
+    expect(
+      LocalChatScrollFollowPolicy.shouldDeferUntilKeyboardClosed(
+        keyboardDismissRequested: true,
+        keyboardInset: 320,
+      ),
+      isTrue,
+    );
+    expect(
+      LocalChatScrollFollowPolicy.shouldDeferUntilKeyboardClosed(
+        keyboardDismissRequested: true,
+        keyboardInset: 0,
+      ),
+      isFalse,
+    );
+    expect(
+      LocalChatScrollFollowPolicy.shouldDeferUntilKeyboardClosed(
+        keyboardDismissRequested: false,
+        keyboardInset: 320,
+      ),
+      isFalse,
+    );
+  });
+
   test('voice input appends recognized text without damaging the draft', () {
     expect(LocalChatVoiceInputText.combine('', ' 你好 '), '你好');
     expect(LocalChatVoiceInputText.combine('已有文字  ', '继续说'), '已有文字 继续说');
