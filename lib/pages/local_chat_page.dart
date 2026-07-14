@@ -2078,21 +2078,6 @@ class LocalChatComposer extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             IconButton(
-                              key: const Key('local-chat-add-note-context'),
-                              tooltip: context.l10n.referenceNotes,
-                              onPressed: canReferenceNotes
-                                  ? onPickNoteContexts
-                                  : null,
-                              style: IconButton.styleFrom(
-                                fixedSize: const Size(40, 44),
-                                foregroundColor: AppColors.ink,
-                              ),
-                              icon: const Icon(
-                                Icons.library_add_outlined,
-                                size: 22,
-                              ),
-                            ),
-                            IconButton(
                               key: const Key('local-chat-take-photo'),
                               tooltip: imageInputAvailable
                                   ? context.l10n.takePhoto
@@ -2188,11 +2173,16 @@ class LocalChatComposer extends StatelessWidget {
                               ),
                               const SizedBox(width: 5),
                               _ChatComposerAction(
-                                key: const Key('local-chat-add-image'),
-                                tooltip: imageInputAvailable
-                                    ? context.l10n.addImage
-                                    : context.l10n.addImageUnsupported,
-                                onPressed: canAddImage ? onPickImages : null,
+                                key: const Key('local-chat-more-actions'),
+                                tooltip: context.l10n.moreActions,
+                                onPressed: canReferenceNotes
+                                    ? () => _showLocalChatAddMenu(
+                                        context,
+                                        canAddImage: canAddImage,
+                                        onPickImages: onPickImages,
+                                        onPickNoteContexts: onPickNoteContexts,
+                                      )
+                                    : null,
                                 icon: Icons.add_rounded,
                               ),
                             ],
@@ -2228,6 +2218,72 @@ class LocalChatComposer extends StatelessWidget {
       ),
     ),
   );
+}
+
+enum _LocalChatAddAction { image, noteContext }
+
+Future<void> _showLocalChatAddMenu(
+  BuildContext context, {
+  required bool canAddImage,
+  required VoidCallback onPickImages,
+  required VoidCallback onPickNoteContexts,
+}) async {
+  final action = await showModalBottomSheet<_LocalChatAddAction>(
+    context: context,
+    showDragHandle: true,
+    useSafeArea: true,
+    builder: (context) => Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
+            child: Text(
+              context.l10n.moreActions,
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+            ),
+          ),
+          ListTile(
+            key: const Key('local-chat-add-menu-image'),
+            leading: const Icon(Icons.image_outlined),
+            title: Text(context.l10n.addImage),
+            subtitle: canAddImage
+                ? null
+                : Text(context.l10n.addImageUnsupported),
+            enabled: canAddImage,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            onTap: canAddImage
+                ? () => Navigator.pop(context, _LocalChatAddAction.image)
+                : null,
+          ),
+          ListTile(
+            key: const Key('local-chat-add-menu-note-context'),
+            leading: const Icon(Icons.library_add_outlined),
+            title: Text(context.l10n.referenceNotes),
+            subtitle: Text(context.l10n.referenceNotesDescription),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            onTap: () =>
+                Navigator.pop(context, _LocalChatAddAction.noteContext),
+          ),
+        ],
+      ),
+    ),
+  );
+  if (!context.mounted || action == null) return;
+  switch (action) {
+    case _LocalChatAddAction.image:
+      onPickImages();
+    case _LocalChatAddAction.noteContext:
+      onPickNoteContexts();
+  }
 }
 
 class _ChatComposerAction extends StatelessWidget {
