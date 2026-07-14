@@ -11,12 +11,13 @@ import '../file_storage_service.dart';
 import 'litert_lm_transport.dart';
 import 'local_llm_engine.dart';
 
-class LiteRtLmEngine implements LocalLlmEngine {
+class LiteRtLmEngine implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
   final LiteRtLmTransport _transport;
   final String Function(String relativePath) _attachmentPathResolver;
   int _nextRequestId = 1;
   LocalLlmEngineState _state = LocalLlmEngineState.idle;
   LocalLlmModelDescriptor? _loadedModel;
+  LocalLlmBackend? _activeBackend;
   int? _activeRequestId;
   Completer<void>? _activeDone;
   bool _timedOut = false;
@@ -36,6 +37,9 @@ class LiteRtLmEngine implements LocalLlmEngine {
 
   @override
   LocalLlmModelDescriptor? get loadedModel => _loadedModel;
+
+  @override
+  LocalLlmBackend? get activeBackend => _activeBackend;
 
   @override
   Future<LocalLlmEngineAvailability> probe() async =>
@@ -79,9 +83,10 @@ class LiteRtLmEngine implements LocalLlmEngine {
       throw const LocalLlmException('当前 LiteRT-LM 模型不支持音频输入');
     }
     _state = LocalLlmEngineState.loading;
+    _activeBackend = null;
     try {
       try {
-        await _load(model, options);
+        _activeBackend = await _load(model, options);
       } catch (error) {
         if (options.backend == LocalLlmBackend.cpu) rethrow;
         if (kDebugMode) {
@@ -102,7 +107,7 @@ class LiteRtLmEngine implements LocalLlmEngine {
           // CPU-only process. The worker boundary keeps the Flutter UI safe.
           await Future<void>.delayed(const Duration(milliseconds: 350));
         }
-        await _load(
+        _activeBackend = await _load(
           model,
           LocalLlmLoadOptions(
             backend: LocalLlmBackend.cpu,
@@ -118,17 +123,18 @@ class LiteRtLmEngine implements LocalLlmEngine {
       _loadedModel = model;
       _state = LocalLlmEngineState.ready;
     } catch (_) {
+      _activeBackend = null;
       _state = LocalLlmEngineState.failed;
       rethrow;
     }
   }
 
-  Future<void> _load(
+  Future<LocalLlmBackend> _load(
     LocalLlmModelDescriptor model,
     LocalLlmLoadOptions options,
-  ) {
+  ) async {
     final requestId = _newRequestId();
-    return _runOperation(
+    final backendName = await _runOperation(
       requestId: requestId,
       successType: LiteRtLmNativeEventType.loaded,
       start: () => _transport.load(
@@ -137,6 +143,11 @@ class LiteRtLmEngine implements LocalLlmEngine {
         options: options,
       ),
     );
+    return switch (backendName) {
+      'cpu' => LocalLlmBackend.cpu,
+      'gpu' => LocalLlmBackend.openCl,
+      _ => options.backend,
+    };
   }
 
   @override
@@ -250,14 +261,16 @@ class LiteRtLmEngine implements LocalLlmEngine {
         start: () => _transport.unload(requestId),
       );
       _loadedModel = null;
+      _activeBackend = null;
       _state = LocalLlmEngineState.idle;
     } catch (_) {
+      _activeBackend = null;
       _state = LocalLlmEngineState.failed;
       rethrow;
     }
   }
 
-  Future<void> _runOperation({
+  Future<String> _runOperation({
     required int requestId,
     required LiteRtLmNativeEventType successType,
     required Future<bool> Function() start,
@@ -267,7 +280,7 @@ class LiteRtLmEngine implements LocalLlmEngine {
     late final StreamSubscription<LiteRtLmNativeEvent> subscription;
     subscription = _transport.events.listen((event) {
       if (event.requestId == requestId && event.type == successType) {
-        final result = const _LiteRtLmOperationResult.success();
+        final result = _LiteRtLmOperationResult.success(event.data);
         observedResult = result;
         if (!completer.isCompleted) completer.complete(result);
       } else if ((event.requestId == requestId &&
@@ -298,6 +311,7 @@ class LiteRtLmEngine implements LocalLlmEngine {
       }
       final result = await completer.future.timeout(const Duration(minutes: 2));
       _throwIfFailed(result);
+      return result.data;
     } finally {
       await subscription.cancel();
     }
@@ -452,8 +466,9 @@ class _LiteRtLmOperationResult {
   final bool success;
   final bool workerDied;
   final String message;
+  final String data;
 
-  const _LiteRtLmOperationResult.success()
+  const _LiteRtLmOperationResult.success(this.data)
     : success = true,
       workerDied = false,
       message = '';
@@ -461,7 +476,8 @@ class _LiteRtLmOperationResult {
   const _LiteRtLmOperationResult.failure(
     this.message, {
     required this.workerDied,
-  }) : success = false;
+  }) : success = false,
+       data = '';
 }
 
 class _LiteRtLmWorkerDiedException extends LocalLlmException {

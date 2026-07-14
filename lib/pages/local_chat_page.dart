@@ -35,6 +35,7 @@ import '../widgets/editor_context_menu.dart';
 import '../widgets/fk_markdown_view.dart';
 import '../widgets/local_chat_note_picker.dart';
 import '../widgets/local_chat_tool_action_sheet.dart';
+import '../widgets/local_llm_runtime_badge.dart';
 import 'local_chat_roles_page.dart';
 import 'model_management_page.dart';
 
@@ -145,10 +146,15 @@ class _LocalChatPageState extends State<LocalChatPage>
   bool _pickingImages = false;
   bool _chatDictating = false;
   String _dictationBaseText = '';
+  late LocalLlmRuntimeSnapshot _runtimeSnapshot;
+  StreamSubscription<LocalLlmRuntimeSnapshot>? _runtimeSubscription;
+  String? _reportedBackendFallbackKey;
 
   @override
   void initState() {
     super.initState();
+    _runtimeSnapshot = _assistant.snapshot;
+    _runtimeSubscription = _assistant.snapshots.listen(_handleRuntimeSnapshot);
     WidgetsBinding.instance.addObserver(this);
     _dictation.addListener(_handleDictationChanged);
     unawaited(_initialize());
@@ -211,6 +217,7 @@ class _LocalChatPageState extends State<LocalChatPage>
   @override
   void dispose() {
     _closed = true;
+    unawaited(_runtimeSubscription?.cancel() ?? Future<void>.value());
     WidgetsBinding.instance.removeObserver(this);
     if (_generating) unawaited(_assistant.cancel());
     if (_chatDictating) unawaited(_dictation.cancel());
@@ -222,6 +229,27 @@ class _LocalChatPageState extends State<LocalChatPage>
     _inputFocus.dispose();
     _scroll.dispose();
     super.dispose();
+  }
+
+  void _handleRuntimeSnapshot(LocalLlmRuntimeSnapshot snapshot) {
+    if (_closed || !mounted) return;
+    if (snapshot.state == LocalLlmEngineState.idle) {
+      _reportedBackendFallbackKey = null;
+    }
+    final fallbackKey =
+        snapshot.usedBackendFallback &&
+            snapshot.activeBackend == LocalLlmBackend.cpu
+        ? '${snapshot.model?.id}:${snapshot.requestedBackend?.name}:${snapshot.activeBackend?.name}'
+        : null;
+    setState(() => _runtimeSnapshot = snapshot);
+    if (fallbackKey == null || fallbackKey == _reportedBackendFallbackKey) {
+      return;
+    }
+    _reportedBackendFallbackKey = fallbackKey;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_closed || !mounted) return;
+      AppFeedback.show(context, context.l10n.modelRuntimeFallbackToCpu);
+    });
   }
 
   @override
@@ -292,7 +320,9 @@ class _LocalChatPageState extends State<LocalChatPage>
                 name: _modelId.isEmpty
                     ? context.l10n.localLanguageModel
                     : _localizedModelName(context, _modelId),
+                modelId: _modelId,
                 installed: _modelInstalled,
+                runtimeSnapshot: _runtimeSnapshot,
                 roleLabel: _roleLabel(context),
                 onModelTap: _generating ? null : _openModels,
                 onRoleTap: _generating ? null : _showPersonaSwitcher,
@@ -1376,14 +1406,18 @@ class _ChatDateDivider extends StatelessWidget {
 
 class _ModelBar extends StatelessWidget {
   final String name;
+  final String modelId;
   final bool installed;
+  final LocalLlmRuntimeSnapshot runtimeSnapshot;
   final String roleLabel;
   final VoidCallback? onModelTap;
   final VoidCallback? onRoleTap;
 
   const _ModelBar({
     required this.name,
+    required this.modelId,
     required this.installed,
+    required this.runtimeSnapshot,
     required this.roleLabel,
     required this.onModelTap,
     required this.onRoleTap,
@@ -1420,6 +1454,13 @@ class _ModelBar extends StatelessWidget {
                   style: const TextStyle(fontSize: 12),
                 ),
               ),
+              const SizedBox(width: 6),
+              LocalLlmRuntimeBadge(
+                snapshot: runtimeSnapshot,
+                modelId: modelId,
+                installed: installed,
+              ),
+              const SizedBox(width: 6),
               Material(
                 color: AppColors.softGreen,
                 borderRadius: BorderRadius.circular(20),

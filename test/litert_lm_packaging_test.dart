@@ -45,6 +45,10 @@ void main() {
     expect(service, contains('requestedBackend == "gpu" && isEmulator()'));
     expect(service, contains('Build.MODEL.startsWith("sdk_gphone")'));
     expect(service, contains('Build.HARDWARE.contains("ranchu")'));
+    expect(
+      service,
+      contains('emit(command, requestId, "loaded", backendName)'),
+    );
     expect(service, contains('onInferenceDiagnostic(stage = 11'));
     expect(service, contains('executor.execute {'));
     expect(

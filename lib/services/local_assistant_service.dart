@@ -13,6 +13,21 @@ import 'local_llm/mnn_local_llm_engine.dart';
 import 'local_llm/routing_local_llm_engine.dart';
 
 /// Application-level entry point for all future local assistant features.
+class LocalAssistantBackendPolicy {
+  const LocalAssistantBackendPolicy._();
+
+  static LocalLlmBackend preferredFor(
+    LocalLlmEngineKind engine, {
+    required bool isAndroid,
+    required bool isIOS,
+  }) => switch (engine) {
+    LocalLlmEngineKind.liteRtLm => LocalLlmBackend.openCl,
+    LocalLlmEngineKind.mnn when isAndroid => LocalLlmBackend.openCl,
+    LocalLlmEngineKind.mnn when isIOS => LocalLlmBackend.metal,
+    LocalLlmEngineKind.mnn => LocalLlmBackend.cpu,
+  };
+}
+
 class LocalAssistantService with WidgetsBindingObserver {
   LocalAssistantService._({LocalLlmCoordinator? coordinator})
     : _coordinator =
@@ -59,9 +74,11 @@ class LocalAssistantService with WidgetsBindingObserver {
       final descriptor = await _models.descriptor(selectedId);
       final selectedBackend =
           backend ??
-          (descriptor.engine == LocalLlmEngineKind.liteRtLm
-              ? LocalLlmBackend.openCl
-              : LocalLlmBackend.cpu);
+          LocalAssistantBackendPolicy.preferredFor(
+            descriptor.engine,
+            isAndroid: Platform.isAndroid,
+            isIOS: Platform.isIOS,
+          );
       await _coordinator.loadModel(
         descriptor,
         options: LocalLlmLoadOptions(

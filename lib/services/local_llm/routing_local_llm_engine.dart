@@ -1,7 +1,8 @@
 import '../../models/local_llm.dart';
 import 'local_llm_engine.dart';
 
-class RoutingLocalLlmEngine implements LocalLlmEngine {
+class RoutingLocalLlmEngine
+    implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
   final Map<LocalLlmEngineKind, LocalLlmEngine> _engines;
   LocalLlmEngine? _active;
 
@@ -21,6 +22,13 @@ class RoutingLocalLlmEngine implements LocalLlmEngine {
 
   @override
   LocalLlmModelDescriptor? get loadedModel => _active?.loadedModel;
+
+  @override
+  LocalLlmBackend? get activeBackend {
+    final active = _active;
+    if (active is! LocalLlmRuntimeBackendProvider) return null;
+    return (active as LocalLlmRuntimeBackendProvider).activeBackend;
+  }
 
   @override
   Future<LocalLlmEngineAvailability> probe() async {

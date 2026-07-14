@@ -152,7 +152,7 @@ open class LiteRtLmService : Service() {
             created.initialize()
             onInferenceDiagnostic(stage = 6, requestId = requestId)
             engine = created
-            emit(command, requestId, "loaded")
+            emit(command, requestId, "loaded", backendName)
         } catch (error: Throwable) {
             runCatching { created.close() }
             throw error

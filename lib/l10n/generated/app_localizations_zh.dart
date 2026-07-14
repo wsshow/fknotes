@@ -2057,6 +2057,26 @@ class AppLocalizationsZh extends AppLocalizations {
   String get notInstalledState => '未安装';
 
   @override
+  String get modelRuntimeNotLoaded => '未加载';
+
+  @override
+  String get modelRuntimeDetecting => '检测中';
+
+  @override
+  String get modelRuntimeGpu => 'GPU';
+
+  @override
+  String get modelRuntimeCpu => 'CPU';
+
+  @override
+  String modelRuntimeBackendDetail(String backend) {
+    return '当前运行后端：$backend';
+  }
+
+  @override
+  String get modelRuntimeFallbackToCpu => 'GPU 加速不可用，已切换至 CPU';
+
+  @override
   String get chatEmptyTitle => '你想聊什么？';
 
   @override

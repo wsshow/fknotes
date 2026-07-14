@@ -20,3 +20,10 @@ abstract interface class LocalLlmEngine {
 
   Future<void> unload();
 }
+
+/// Optional runtime capability for engines that can report the backend that
+/// actually survived initialization. This may differ from the requested
+/// backend after a safe fallback.
+abstract interface class LocalLlmRuntimeBackendProvider {
+  LocalLlmBackend? get activeBackend;
+}

@@ -220,9 +220,22 @@ class LocalLlmGenerationCompleted extends LocalLlmGenerationEvent {
 class LocalLlmRuntimeSnapshot {
   final LocalLlmEngineState state;
   final LocalLlmModelDescriptor? model;
+  final LocalLlmBackend? requestedBackend;
+  final LocalLlmBackend? activeBackend;
   final Object? error;
 
-  const LocalLlmRuntimeSnapshot({required this.state, this.model, this.error});
+  const LocalLlmRuntimeSnapshot({
+    required this.state,
+    this.model,
+    this.requestedBackend,
+    this.activeBackend,
+    this.error,
+  });
+
+  bool get usedBackendFallback =>
+      requestedBackend != null &&
+      activeBackend != null &&
+      requestedBackend != activeBackend;
 }
 
 class LocalLlmException implements Exception {

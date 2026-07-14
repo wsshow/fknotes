@@ -68,7 +68,11 @@ class LocalLlmCoordinator {
     if (_snapshot.model != null) {
       await _unloadInternal();
     }
-    _emit(LocalLlmEngineState.loading, model: model);
+    _emit(
+      LocalLlmEngineState.loading,
+      model: model,
+      requestedBackend: options.backend,
+    );
     try {
       await _engine.loadModel(model, options: options);
       _loadedOptions = options;
@@ -83,7 +87,12 @@ class LocalLlmCoordinator {
       }
     } catch (error, stackTrace) {
       _loadedOptions = null;
-      _emit(LocalLlmEngineState.failed, model: model, error: error);
+      _emit(
+        LocalLlmEngineState.failed,
+        model: model,
+        requestedBackend: options.backend,
+        error: error,
+      );
       if (kDebugMode) {
         AppDiagnostics.error(
           AppLogCategory.inference,
@@ -290,18 +299,29 @@ class LocalLlmCoordinator {
   void _emit(
     LocalLlmEngineState state, {
     LocalLlmModelDescriptor? model,
+    LocalLlmBackend? requestedBackend,
     Object? error,
   }) {
+    final backendProvider = _engine is LocalLlmRuntimeBackendProvider
+        ? _engine as LocalLlmRuntimeBackendProvider
+        : null;
     _snapshot = LocalLlmRuntimeSnapshot(
       state: state,
       model: model,
+      requestedBackend: requestedBackend ?? _loadedOptions?.backend,
+      activeBackend: backendProvider?.activeBackend,
       error: error,
     );
     if (kDebugMode) {
       AppDiagnostics.debug(
         AppLogCategory.inference,
         'llm_runtime_state_changed',
-        data: {'state': state.name, 'modelId': model?.id},
+        data: {
+          'state': state.name,
+          'modelId': model?.id,
+          'requestedBackend': _snapshot.requestedBackend?.name,
+          'activeBackend': _snapshot.activeBackend?.name,
+        },
         traceId: model?.id,
       );
     }

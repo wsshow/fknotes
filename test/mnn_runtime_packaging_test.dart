@@ -20,5 +20,12 @@ void main() {
     expect(cmake, contains('llm MNN_Express'));
     expect(preparation, isNot(contains('mnn_chat_')));
     expect(preparation, contains('libllm.so'));
+    final bridge = File('native/mnn/fknotes_mnn_bridge.cpp').readAsStringSync();
+    expect(
+      bridge,
+      contains(
+        'emit_event(callback, request_id, FK_MNN_EVENT_LOADED, backend)',
+      ),
+    );
   });
 }

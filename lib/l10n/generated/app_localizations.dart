@@ -3830,6 +3830,42 @@ abstract class AppLocalizations {
   /// **'未安装'**
   String get notInstalledState;
 
+  /// No description provided for @modelRuntimeNotLoaded.
+  ///
+  /// In zh, this message translates to:
+  /// **'未加载'**
+  String get modelRuntimeNotLoaded;
+
+  /// No description provided for @modelRuntimeDetecting.
+  ///
+  /// In zh, this message translates to:
+  /// **'检测中'**
+  String get modelRuntimeDetecting;
+
+  /// No description provided for @modelRuntimeGpu.
+  ///
+  /// In zh, this message translates to:
+  /// **'GPU'**
+  String get modelRuntimeGpu;
+
+  /// No description provided for @modelRuntimeCpu.
+  ///
+  /// In zh, this message translates to:
+  /// **'CPU'**
+  String get modelRuntimeCpu;
+
+  /// No description provided for @modelRuntimeBackendDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前运行后端：{backend}'**
+  String modelRuntimeBackendDetail(String backend);
+
+  /// No description provided for @modelRuntimeFallbackToCpu.
+  ///
+  /// In zh, this message translates to:
+  /// **'GPU 加速不可用，已切换至 CPU'**
+  String get modelRuntimeFallbackToCpu;
+
   /// No description provided for @chatEmptyTitle.
   ///
   /// In zh, this message translates to:

@@ -121,17 +121,34 @@ void main() {
     ]);
     await coordinator.dispose();
   });
+
+  test('publishes the requested and actual runtime backends', () async {
+    final engine = _FakeEngine(forcedActiveBackend: LocalLlmBackend.cpu);
+    final coordinator = LocalLlmCoordinator(engine);
+
+    await coordinator.loadModel(
+      modelA,
+      options: const LocalLlmLoadOptions(backend: LocalLlmBackend.openCl),
+    );
+
+    expect(coordinator.snapshot.requestedBackend, LocalLlmBackend.openCl);
+    expect(coordinator.snapshot.activeBackend, LocalLlmBackend.cpu);
+    expect(coordinator.snapshot.usedBackendFallback, isTrue);
+    await coordinator.dispose();
+  });
 }
 
-class _FakeEngine implements LocalLlmEngine {
+class _FakeEngine implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
   final bool blockGeneration;
+  final LocalLlmBackend? forcedActiveBackend;
   final operations = <String>[];
   final generationStarted = Completer<void>();
   final _releaseGeneration = Completer<void>();
   LocalLlmModelDescriptor? _model;
   LocalLlmEngineState _state = LocalLlmEngineState.idle;
+  LocalLlmBackend? _activeBackend;
 
-  _FakeEngine({this.blockGeneration = false});
+  _FakeEngine({this.blockGeneration = false, this.forcedActiveBackend});
 
   @override
   String get id => 'fake';
@@ -141,6 +158,9 @@ class _FakeEngine implements LocalLlmEngine {
 
   @override
   LocalLlmEngineState get state => _state;
+
+  @override
+  LocalLlmBackend? get activeBackend => _activeBackend;
 
   @override
   Future<LocalLlmEngineAvailability> probe() async =>
@@ -153,6 +173,7 @@ class _FakeEngine implements LocalLlmEngine {
   }) async {
     operations.add('load:${model.id}');
     _model = model;
+    _activeBackend = forcedActiveBackend ?? options.backend;
     _state = LocalLlmEngineState.ready;
   }
 
@@ -182,6 +203,7 @@ class _FakeEngine implements LocalLlmEngine {
   Future<void> unload() async {
     operations.add('unload:${_model?.id}');
     _model = null;
+    _activeBackend = null;
     _state = LocalLlmEngineState.idle;
   }
 }

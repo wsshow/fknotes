@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../../debug/app_diagnostics.dart';
 import '../../models/local_llm.dart';
 import '../file_storage_service.dart';
 import 'local_llm_engine.dart';
@@ -19,13 +21,15 @@ class MnnMultimodalLimits {
   const MnnMultimodalLimits._();
 }
 
-class MnnLocalLlmEngine implements LocalLlmEngine {
+class MnnLocalLlmEngine
+    implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
   final MnnNativeTransport _transport;
   final Future<Directory> Function() _supportDirectoryProvider;
   final String Function(String relativePath) _attachmentPathResolver;
   int _nextRequestId = 1;
   LocalLlmEngineState _state = LocalLlmEngineState.idle;
   LocalLlmModelDescriptor? _loadedModel;
+  LocalLlmBackend? _activeBackend;
   int? _activeGenerationRequestId;
   Completer<void>? _activeGenerationDone;
 
@@ -44,6 +48,9 @@ class MnnLocalLlmEngine implements LocalLlmEngine {
 
   @override
   LocalLlmModelDescriptor? get loadedModel => _loadedModel;
+
+  @override
+  LocalLlmBackend? get activeBackend => _activeBackend;
 
   @override
   LocalLlmEngineState get state => _state;
@@ -100,24 +107,70 @@ class MnnLocalLlmEngine implements LocalLlmEngine {
     await cache.create(recursive: true);
 
     _state = LocalLlmEngineState.loading;
-    final requestId = _newRequestId();
+    _activeBackend = null;
     try {
-      await _runOperation(
-        requestId: requestId,
-        successType: MnnNativeEventType.loaded,
-        start: () => _transport.load(
-          requestId: requestId,
-          configPath: model.configPath,
-          cachePath: cache.path,
-          options: options,
-        ),
-      );
+      try {
+        _activeBackend = await _load(model, cache.path, options);
+      } catch (error) {
+        if (options.backend == LocalLlmBackend.cpu) rethrow;
+        if (kDebugMode) {
+          AppDiagnostics.warning(
+            AppLogCategory.inference,
+            'mnn_cpu_fallback_started',
+            data: {
+              'modelId': model.id,
+              'requestedBackend': options.backend.name,
+              'reason': error.toString(),
+            },
+            traceId: model.id,
+          );
+        }
+        _activeBackend = await _load(
+          model,
+          cache.path,
+          LocalLlmLoadOptions(
+            backend: LocalLlmBackend.cpu,
+            threads: options.threads,
+            contextTokens: options.contextTokens,
+            enableThinking: options.enableThinking,
+            enablePromptCache: options.enablePromptCache,
+            enableImageInput: options.enableImageInput,
+            enableAudioInput: options.enableAudioInput,
+          ),
+        );
+      }
       _loadedModel = model;
       _state = LocalLlmEngineState.ready;
     } catch (_) {
+      _activeBackend = null;
       _state = LocalLlmEngineState.failed;
       rethrow;
     }
+  }
+
+  Future<LocalLlmBackend> _load(
+    LocalLlmModelDescriptor model,
+    String cachePath,
+    LocalLlmLoadOptions options,
+  ) async {
+    final requestId = _newRequestId();
+    final backendName = await _runOperation(
+      requestId: requestId,
+      successType: MnnNativeEventType.loaded,
+      start: () => _transport.load(
+        requestId: requestId,
+        configPath: model.configPath,
+        cachePath: cachePath,
+        options: options,
+      ),
+    );
+    return switch (backendName) {
+      'cpu' => LocalLlmBackend.cpu,
+      'opencl' => LocalLlmBackend.openCl,
+      'vulkan' => LocalLlmBackend.vulkan,
+      'metal' => LocalLlmBackend.metal,
+      _ => options.backend,
+    };
   }
 
   @override
@@ -230,25 +283,27 @@ class MnnLocalLlmEngine implements LocalLlmEngine {
         start: () => _transport.unload(requestId),
       );
       _loadedModel = null;
+      _activeBackend = null;
       _state = LocalLlmEngineState.idle;
     } catch (_) {
+      _activeBackend = null;
       _state = LocalLlmEngineState.failed;
       rethrow;
     }
   }
 
-  Future<void> _runOperation({
+  Future<String> _runOperation({
     required int requestId,
     required MnnNativeEventType successType,
     required bool Function() start,
   }) async {
-    final completer = Completer<void>();
+    final completer = Completer<String>();
     late final StreamSubscription<MnnNativeEvent> subscription;
     subscription = _transport.events
         .where((event) => event.requestId == requestId)
         .listen((event) {
           if (event.type == successType) {
-            if (!completer.isCompleted) completer.complete();
+            if (!completer.isCompleted) completer.complete(event.data);
           } else if (event.type == MnnNativeEventType.error) {
             if (!completer.isCompleted) {
               completer.completeError(
@@ -262,7 +317,7 @@ class MnnLocalLlmEngine implements LocalLlmEngine {
       throw const LocalLlmException('MNN 正在执行其他任务');
     }
     try {
-      await completer.future;
+      return await completer.future;
     } finally {
       await subscription.cancel();
     }

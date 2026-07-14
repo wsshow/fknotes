@@ -253,7 +253,7 @@ public:
                 load_microseconds_ = elapsed.count();
                 busy_ = false;
             }
-            emit_event(callback, request_id, FK_MNN_EVENT_LOADED);
+            emit_event(callback, request_id, FK_MNN_EVENT_LOADED, backend);
         }).detach();
         return true;
     }

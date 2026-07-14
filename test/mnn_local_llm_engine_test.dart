@@ -64,6 +64,27 @@ void main() {
     expect(completed.metrics.audioTime, const Duration(milliseconds: 30));
     expect(completed.metrics.imageMegapixels, 1.5);
     expect(completed.metrics.audioInputSeconds, 2.25);
+    expect(engine.activeBackend, LocalLlmBackend.cpu);
+  });
+
+  test('falls back to CPU when the selected GPU backend fails', () async {
+    final transport = _FakeMnnTransport(failAcceleratedLoad: true);
+    final engine = MnnLocalLlmEngine(
+      transport: transport,
+      supportDirectoryProvider: () async => temporaryDirectory,
+    );
+
+    await engine.loadModel(
+      model(),
+      options: const LocalLlmLoadOptions(backend: LocalLlmBackend.openCl),
+    );
+
+    expect(transport.loadBackends, [
+      LocalLlmBackend.openCl,
+      LocalLlmBackend.cpu,
+    ]);
+    expect(engine.activeBackend, LocalLlmBackend.cpu);
+    expect(engine.state, LocalLlmEngineState.ready);
   });
 
   test('cancel waits for native terminal event', () async {
@@ -262,12 +283,17 @@ void main() {
 
 class _FakeMnnTransport implements MnnNativeTransport {
   final bool blockGeneration;
+  final bool failAcceleratedLoad;
   final _events = StreamController<MnnNativeEvent>.broadcast();
   final generationStarted = Completer<void>();
+  final loadBackends = <LocalLlmBackend>[];
   int? canceledRequestId;
   LocalLlmGenerationRequest? lastRequest;
 
-  _FakeMnnTransport({this.blockGeneration = false});
+  _FakeMnnTransport({
+    this.blockGeneration = false,
+    this.failAcceleratedLoad = false,
+  });
 
   @override
   bool get available => true;
@@ -285,9 +311,18 @@ class _FakeMnnTransport implements MnnNativeTransport {
     required String cachePath,
     required LocalLlmLoadOptions options,
   }) {
+    loadBackends.add(options.backend);
     scheduleMicrotask(
       () => _events.add(
-        MnnNativeEvent(requestId: requestId, type: MnnNativeEventType.loaded),
+        MnnNativeEvent(
+          requestId: requestId,
+          type: failAcceleratedLoad && options.backend != LocalLlmBackend.cpu
+              ? MnnNativeEventType.error
+              : MnnNativeEventType.loaded,
+          data: failAcceleratedLoad && options.backend != LocalLlmBackend.cpu
+              ? 'GPU unavailable'
+              : options.backend.name.toLowerCase(),
+        ),
       ),
     );
     return true;

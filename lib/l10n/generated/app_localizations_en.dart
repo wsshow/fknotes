@@ -2226,6 +2226,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get notInstalledState => 'Not installed';
 
   @override
+  String get modelRuntimeNotLoaded => 'Not loaded';
+
+  @override
+  String get modelRuntimeDetecting => 'Detecting';
+
+  @override
+  String get modelRuntimeGpu => 'GPU';
+
+  @override
+  String get modelRuntimeCpu => 'CPU';
+
+  @override
+  String modelRuntimeBackendDetail(String backend) {
+    return 'Current runtime backend: $backend';
+  }
+
+  @override
+  String get modelRuntimeFallbackToCpu =>
+      'GPU acceleration is unavailable. Switched to CPU.';
+
+  @override
   String get chatEmptyTitle => 'What would you like to explore?';
 
   @override

@@ -42,6 +42,7 @@ void main() {
       LocalLlmFinishReason.completed,
     );
     expect(transport.loadedModelPath, modelFile.path);
+    expect(engine.activeBackend, LocalLlmBackend.cpu);
   });
 
   test('reports an isolated worker death without hanging', () async {
@@ -82,6 +83,7 @@ void main() {
       LocalLlmBackend.cpu,
     ]);
     expect(engine.state, LocalLlmEngineState.ready);
+    expect(engine.activeBackend, LocalLlmBackend.cpu);
   });
 
   test('enables multimodal pipelines only when explicitly requested', () async {
@@ -213,7 +215,9 @@ class _FakeTransport implements LiteRtLmTransport {
               : LiteRtLmNativeEventType.loaded,
           data: failGpuLoad && options.backend != LocalLlmBackend.cpu
               ? 'GPU unavailable'
-              : '',
+              : options.backend == LocalLlmBackend.cpu
+              ? 'cpu'
+              : 'gpu',
         ),
       ),
     );
