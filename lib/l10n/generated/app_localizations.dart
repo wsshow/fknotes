@@ -2516,6 +2516,60 @@ abstract class AppLocalizations {
   /// **'笔记来源'**
   String get noteSources;
 
+  /// No description provided for @referenceNotes.
+  ///
+  /// In zh, this message translates to:
+  /// **'引用资料库笔记'**
+  String get referenceNotes;
+
+  /// No description provided for @referenceNotesDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择多篇笔记作为下一条消息的来源'**
+  String get referenceNotesDescription;
+
+  /// No description provided for @recentNotes.
+  ///
+  /// In zh, this message translates to:
+  /// **'最近笔记'**
+  String get recentNotes;
+
+  /// No description provided for @selectedNoteCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'已选择 {count} 篇'**
+  String selectedNoteCount(int count);
+
+  /// No description provided for @noteReferenceLimit.
+  ///
+  /// In zh, this message translates to:
+  /// **'每次最多引用 {count} 篇笔记'**
+  String noteReferenceLimit(int count);
+
+  /// No description provided for @noMatchingNotes.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有找到匹配的笔记'**
+  String get noMatchingNotes;
+
+  /// No description provided for @addSelectedNotes.
+  ///
+  /// In zh, this message translates to:
+  /// **'引用所选笔记'**
+  String get addSelectedNotes;
+
+  /// No description provided for @removeNoteReference.
+  ///
+  /// In zh, this message translates to:
+  /// **'移除笔记引用'**
+  String get removeNoteReference;
+
+  /// No description provided for @pendingNoteSources.
+  ///
+  /// In zh, this message translates to:
+  /// **'下一条消息将引用'**
+  String get pendingNoteSources;
+
   /// No description provided for @writeReplyToNote.
   ///
   /// In zh, this message translates to:

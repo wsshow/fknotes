@@ -21,6 +21,14 @@ class LocalChatNoteContext {
     required this.updatedAt,
   });
 
+  LocalChatNoteContext copyWith({String? content}) => LocalChatNoteContext(
+    noteId: noteId,
+    title: title,
+    scope: scope,
+    content: content ?? this.content,
+    updatedAt: updatedAt,
+  );
+
   Map<String, Object> toJson() => {
     'noteId': noteId,
     'title': title,

@@ -1331,6 +1331,37 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noteSources => '笔记来源';
 
   @override
+  String get referenceNotes => '引用资料库笔记';
+
+  @override
+  String get referenceNotesDescription => '选择多篇笔记作为下一条消息的来源';
+
+  @override
+  String get recentNotes => '最近笔记';
+
+  @override
+  String selectedNoteCount(int count) {
+    return '已选择 $count 篇';
+  }
+
+  @override
+  String noteReferenceLimit(int count) {
+    return '每次最多引用 $count 篇笔记';
+  }
+
+  @override
+  String get noMatchingNotes => '没有找到匹配的笔记';
+
+  @override
+  String get addSelectedNotes => '引用所选笔记';
+
+  @override
+  String get removeNoteReference => '移除笔记引用';
+
+  @override
+  String get pendingNoteSources => '下一条消息将引用';
+
+  @override
   String get writeReplyToNote => '写入笔记';
 
   @override

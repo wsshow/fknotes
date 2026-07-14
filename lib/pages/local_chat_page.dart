@@ -14,6 +14,7 @@ import '../models/local_llm.dart';
 import '../services/language_model_service.dart';
 import '../services/local_assistant_service.dart';
 import '../services/local_chat_prompt_builder.dart';
+import '../services/local_chat_note_context_builder.dart';
 import '../services/local_chat_store.dart';
 import '../services/local_model_manager.dart';
 import '../services/local_llm/local_llm_output_filter.dart';
@@ -24,6 +25,7 @@ import '../widgets/app_feedback.dart';
 import '../widgets/app_popup_menu.dart';
 import '../widgets/editor_context_menu.dart';
 import '../widgets/fk_markdown_view.dart';
+import '../widgets/local_chat_note_picker.dart';
 import 'local_chat_roles_page.dart';
 import 'model_management_page.dart';
 
@@ -107,6 +109,7 @@ class _LocalChatPageState extends State<LocalChatPage>
   bool _showJumpToBottom = false;
   bool _waitingForKeyboardDismiss = false;
   final List<LocalChatAttachment> _pendingAttachments = [];
+  final List<LocalChatNoteContext> _pendingNoteContexts = [];
   bool _pickingImages = false;
   bool _chatDictating = false;
   String _dictationBaseText = '';
@@ -276,6 +279,7 @@ class _LocalChatPageState extends State<LocalChatPage>
                 focusNode: _inputFocus,
                 generating: _generating,
                 pendingAttachments: _pendingAttachments,
+                pendingNoteContexts: _pendingNoteContexts,
                 imageInputAvailable: _modelCapabilities.imageInput,
                 pickingImages: _pickingImages,
                 dictating: _chatDictating,
@@ -285,6 +289,8 @@ class _LocalChatPageState extends State<LocalChatPage>
                 onTakePhoto: _takeChatPhoto,
                 onPickImages: _pickChatImages,
                 onRemoveAttachment: _removePendingAttachment,
+                onPickNoteContexts: _pickNoteContexts,
+                onRemoveNoteContext: _removePendingNoteContext,
                 onToggleDictation: _toggleDictation,
                 onSend: _send,
                 onStop: _stop,
@@ -446,8 +452,13 @@ class _LocalChatPageState extends State<LocalChatPage>
     final attachments = List<LocalChatAttachment>.unmodifiable(
       _pendingAttachments,
     );
+    final noteContexts = LocalChatNoteContextBuilder.fit([
+      ?widget.initialNoteContext,
+      ..._pendingNoteContexts,
+    ]);
     _input.clear();
     _pendingAttachments.clear();
+    _pendingNoteContexts.clear();
     final firstUserMessage = !_session.messages.any(
       (message) => message.role == LocalChatRole.user,
     );
@@ -457,7 +468,7 @@ class _LocalChatPageState extends State<LocalChatPage>
         role: LocalChatRole.user,
         content: content,
         attachments: attachments,
-        noteContexts: [?widget.initialNoteContext],
+        noteContexts: noteContexts,
       ),
     ];
     _session = _session.copyWith(
@@ -761,6 +772,30 @@ class _LocalChatPageState extends State<LocalChatPage>
     await _storage.deleteFile(attachment.filePath);
   }
 
+  Future<void> _pickNoteContexts() async {
+    if (_generating || _chatDictating) return;
+    final activeNoteId = widget.initialNoteContext?.noteId;
+    final selected = await showLocalChatNotePicker(
+      context,
+      initialSelection: _pendingNoteContexts,
+      excludedNoteIds: {?activeNoteId},
+      maxSelection:
+          LocalChatNoteContextBuilder.maxNotes - (activeNoteId == null ? 0 : 1),
+    );
+    if (selected == null || !mounted) return;
+    setState(() {
+      _pendingNoteContexts
+        ..clear()
+        ..addAll(selected);
+    });
+  }
+
+  void _removePendingNoteContext(LocalChatNoteContext context) {
+    setState(() {
+      _pendingNoteContexts.removeWhere((item) => item.noteId == context.noteId);
+    });
+  }
+
   Future<void> _toggleDictation() async {
     if (_generating) return;
     if (_chatDictating) {
@@ -910,6 +945,7 @@ class _LocalChatPageState extends State<LocalChatPage>
     if (selected.isEmpty) return;
     setState(() {
       _session = selected.first;
+      _pendingNoteContexts.clear();
       _generationError = null;
       _autoFollowOutput = true;
       _showJumpToBottom = false;
@@ -920,6 +956,7 @@ class _LocalChatPageState extends State<LocalChatPage>
   Future<void> _newConversation() async {
     if (_session.messages.isEmpty) {
       _input.clear();
+      setState(() => _pendingNoteContexts.clear());
       _inputFocus.requestFocus();
       return;
     }
@@ -930,6 +967,7 @@ class _LocalChatPageState extends State<LocalChatPage>
         systemPrompt:
             persona?.systemPrompt ?? LocalChatPersona.defaultSystemPrompt,
       );
+      _pendingNoteContexts.clear();
       _generationError = null;
       _autoFollowOutput = true;
       _showJumpToBottom = false;
@@ -968,6 +1006,7 @@ class _LocalChatPageState extends State<LocalChatPage>
     setState(() {
       _sessions = List<LocalChatSession>.of(sessions);
       _session = sessions.isEmpty ? _store.createSession() : sessions.first;
+      _pendingNoteContexts.clear();
       _generationError = null;
       _autoFollowOutput = true;
       _showJumpToBottom = false;
@@ -1652,6 +1691,7 @@ class LocalChatComposer extends StatelessWidget {
   final FocusNode focusNode;
   final bool generating;
   final List<LocalChatAttachment> pendingAttachments;
+  final List<LocalChatNoteContext> pendingNoteContexts;
   final bool imageInputAvailable;
   final bool pickingImages;
   final bool dictating;
@@ -1659,6 +1699,8 @@ class LocalChatComposer extends StatelessWidget {
   final VoidCallback onTakePhoto;
   final VoidCallback onPickImages;
   final ValueChanged<LocalChatAttachment> onRemoveAttachment;
+  final VoidCallback onPickNoteContexts;
+  final ValueChanged<LocalChatNoteContext> onRemoveNoteContext;
   final VoidCallback onToggleDictation;
   final VoidCallback onSend;
   final VoidCallback onStop;
@@ -1669,6 +1711,7 @@ class LocalChatComposer extends StatelessWidget {
     required this.focusNode,
     required this.generating,
     required this.pendingAttachments,
+    required this.pendingNoteContexts,
     required this.imageInputAvailable,
     required this.pickingImages,
     required this.dictating,
@@ -1676,6 +1719,8 @@ class LocalChatComposer extends StatelessWidget {
     required this.onTakePhoto,
     required this.onPickImages,
     required this.onRemoveAttachment,
+    required this.onPickNoteContexts,
+    required this.onRemoveNoteContext,
     required this.onToggleDictation,
     required this.onSend,
     required this.onStop,
@@ -1702,6 +1747,7 @@ class LocalChatComposer extends StatelessWidget {
                     !dictating &&
                     !pickingImages &&
                     pendingAttachments.length < 4;
+                final canReferenceNotes = !generating && !dictating;
                 return Container(
                   decoration: BoxDecoration(
                     color: AppColors.surface,
@@ -1721,6 +1767,51 @@ class LocalChatComposer extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      if (pendingNoteContexts.isNotEmpty) ...[
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  context.l10n.pendingNoteSources,
+                                  style: const TextStyle(
+                                    color: AppColors.muted,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  children: [
+                                    for (final note in pendingNoteContexts)
+                                      InputChip(
+                                        key: Key(
+                                          'pending-chat-note-${note.noteId}',
+                                        ),
+                                        avatar: const Icon(
+                                          Icons.description_outlined,
+                                          size: 16,
+                                        ),
+                                        label: Text(note.title),
+                                        onDeleted: generating
+                                            ? null
+                                            : () => onRemoveNoteContext(note),
+                                        deleteButtonTooltipMessage:
+                                            context.l10n.removeNoteReference,
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const Divider(height: 1, color: AppColors.line),
+                      ],
                       if (pendingAttachments.isNotEmpty) ...[
                         Padding(
                           padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
@@ -1777,6 +1868,21 @@ class LocalChatComposer extends StatelessWidget {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
+                            IconButton(
+                              key: const Key('local-chat-add-note-context'),
+                              tooltip: context.l10n.referenceNotes,
+                              onPressed: canReferenceNotes
+                                  ? onPickNoteContexts
+                                  : null,
+                              style: IconButton.styleFrom(
+                                fixedSize: const Size(40, 44),
+                                foregroundColor: AppColors.ink,
+                              ),
+                              icon: const Icon(
+                                Icons.library_add_outlined,
+                                size: 22,
+                              ),
+                            ),
                             IconButton(
                               key: const Key('local-chat-take-photo'),
                               tooltip: imageInputAvailable

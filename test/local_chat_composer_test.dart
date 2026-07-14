@@ -30,6 +30,7 @@ void main() {
             focusNode: focusNode,
             generating: false,
             pendingAttachments: const [],
+            pendingNoteContexts: const [],
             imageInputAvailable: false,
             pickingImages: false,
             dictating: false,
@@ -37,6 +38,8 @@ void main() {
             onTakePhoto: () {},
             onPickImages: () {},
             onRemoveAttachment: (_) {},
+            onPickNoteContexts: () {},
+            onRemoveNoteContext: (_) {},
             onToggleDictation: () {},
             onSend: () => sendCount++,
             onStop: () {},
@@ -46,6 +49,10 @@ void main() {
     );
 
     expect(find.byKey(const Key('local-chat-take-photo')), findsOneWidget);
+    expect(
+      find.byKey(const Key('local-chat-add-note-context')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('local-chat-add-image')), findsOneWidget);
     expect(find.byKey(const Key('local-chat-voice-input')), findsOneWidget);
     expect(find.byKey(const Key('local-chat-input')), findsOneWidget);
@@ -89,6 +96,7 @@ void main() {
             focusNode: focusNode,
             generating: false,
             pendingAttachments: const [],
+            pendingNoteContexts: const [],
             imageInputAvailable: true,
             pickingImages: false,
             dictating: false,
@@ -96,6 +104,8 @@ void main() {
             onTakePhoto: () {},
             onPickImages: () {},
             onRemoveAttachment: (_) {},
+            onPickNoteContexts: () {},
+            onRemoveNoteContext: (_) {},
             onToggleDictation: () {},
             onSend: () {},
             onStop: () {},
@@ -105,8 +115,62 @@ void main() {
     );
 
     expect(find.byTooltip('Take photo'), findsOneWidget);
+    expect(find.byTooltip('Reference library notes'), findsOneWidget);
     expect(find.byTooltip('Voice input'), findsOneWidget);
     expect(find.byTooltip('Add image'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('chat composer previews and removes pending note sources', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = TextEditingController();
+    final focusNode = FocusNode();
+    var removed = false;
+    final note = LocalChatNoteContext(
+      noteId: 12,
+      title: '产品路线图',
+      scope: LocalChatNoteScope.fullNote,
+      content: '路线图正文',
+      updatedAt: DateTime(2026),
+    );
+    addTearDown(controller.dispose);
+    addTearDown(focusNode.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          bottomNavigationBar: LocalChatComposer(
+            controller: controller,
+            focusNode: focusNode,
+            generating: false,
+            pendingAttachments: const [],
+            pendingNoteContexts: [note],
+            imageInputAvailable: true,
+            pickingImages: false,
+            dictating: false,
+            dictationPreparing: false,
+            onTakePhoto: () {},
+            onPickImages: () {},
+            onRemoveAttachment: (_) {},
+            onPickNoteContexts: () {},
+            onRemoveNoteContext: (_) => removed = true,
+            onToggleDictation: () {},
+            onSend: () {},
+            onStop: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('下一条消息将引用'), findsOneWidget);
+    expect(find.text('产品路线图'), findsOneWidget);
+    await tester.tap(find.byTooltip('移除笔记引用'));
+    expect(removed, isTrue);
     expect(tester.takeException(), isNull);
   });
 
@@ -155,6 +219,7 @@ void main() {
               focusNode: focusNode,
               generating: false,
               pendingAttachments: attachments,
+              pendingNoteContexts: const [],
               imageInputAvailable: true,
               pickingImages: false,
               dictating: false,
@@ -162,6 +227,8 @@ void main() {
               onTakePhoto: () {},
               onPickImages: () {},
               onRemoveAttachment: (_) {},
+              onPickNoteContexts: () {},
+              onRemoveNoteContext: (_) {},
               onToggleDictation: () {},
               onSend: () {},
               onStop: () {},

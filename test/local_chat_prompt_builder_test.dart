@@ -116,6 +116,31 @@ void main() {
     );
   });
 
+  test('labels multiple note sources in selection order', () {
+    final second = LocalChatNoteContext(
+      noteId: 9,
+      title: '风险清单',
+      scope: LocalChatNoteScope.fullNote,
+      content: '主要风险是测试时间不足。',
+      updatedAt: DateTime(2026),
+    );
+    final request = LocalChatPromptBuilder.build(
+      systemPrompt: '',
+      messages: [
+        message(
+          '1',
+          LocalChatRole.user,
+          '综合两篇笔记说明预算与风险',
+          noteContexts: [noteContext(), second],
+        ),
+      ],
+    );
+
+    expect(request.messages.last.content, contains('笔记来源 [N1]'));
+    expect(request.messages.last.content, contains('笔记来源 [N2]'));
+    expect(request.messages.last.content, contains('标题：风险清单'));
+  });
+
   test('English locale localizes the built-in system and Markdown prompt', () {
     final request = LocalChatPromptBuilder.build(
       systemPrompt: LocalChatPersona.defaultSystemPrompt,

@@ -1464,6 +1464,38 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noteSources => 'Note sources';
 
   @override
+  String get referenceNotes => 'Reference library notes';
+
+  @override
+  String get referenceNotesDescription =>
+      'Choose multiple notes as sources for your next message';
+
+  @override
+  String get recentNotes => 'Recent notes';
+
+  @override
+  String selectedNoteCount(int count) {
+    return '$count selected';
+  }
+
+  @override
+  String noteReferenceLimit(int count) {
+    return 'You can reference up to $count notes at a time.';
+  }
+
+  @override
+  String get noMatchingNotes => 'No matching notes found';
+
+  @override
+  String get addSelectedNotes => 'Reference selected notes';
+
+  @override
+  String get removeNoteReference => 'Remove note reference';
+
+  @override
+  String get pendingNoteSources => 'Next message will reference';
+
+  @override
   String get writeReplyToNote => 'Write to note';
 
   @override

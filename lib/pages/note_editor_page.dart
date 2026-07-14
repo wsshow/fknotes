@@ -17,6 +17,7 @@ import '../providers/note_provider.dart';
 import '../services/file_storage_service.dart';
 import '../services/editor_draft_recovery_service.dart';
 import '../services/language_model_service.dart';
+import '../services/local_chat_note_context_builder.dart';
 import '../services/local_model_manager.dart';
 import '../services/kokoro_tts_model_service.dart';
 import '../services/note_read_aloud_service.dart';
@@ -687,17 +688,18 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       AppFeedback.show(context, context.l10n.chatNoteEmpty);
       return;
     }
-    final noteContext = LocalChatNoteContext(
-      noteId: entry!.id!,
-      title: entry.title.trim().isEmpty ? context.l10n.untitled : entry.title,
-      scope: switch (scope) {
-        NoteAssistantScope.selection => LocalChatNoteScope.selection,
-        NoteAssistantScope.currentBlock => LocalChatNoteScope.currentBlock,
-        NoteAssistantScope.fullNote => LocalChatNoteScope.fullNote,
-      },
-      content: sourceContent,
-      updatedAt: entry.updatedAt,
-    );
+    final noteContext = LocalChatNoteContextBuilder.fit([
+      LocalChatNoteContextBuilder.fromNote(
+        entry!,
+        untitledLabel: context.l10n.untitled,
+        scope: switch (scope) {
+          NoteAssistantScope.selection => LocalChatNoteScope.selection,
+          NoteAssistantScope.currentBlock => LocalChatNoteScope.currentBlock,
+          NoteAssistantScope.fullNote => LocalChatNoteScope.fullNote,
+        },
+        content: sourceContent,
+      ),
+    ]).single;
     await Navigator.push<void>(
       context,
       MaterialPageRoute(
