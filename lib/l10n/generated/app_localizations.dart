@@ -2492,6 +2492,72 @@ abstract class AppLocalizations {
   /// **'整篇笔记'**
   String get scopeFullNote;
 
+  /// No description provided for @chatWithThisNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'和这篇笔记对话'**
+  String get chatWithThisNote;
+
+  /// No description provided for @chatWithThisNoteDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'把所选范围作为上下文，连续追问和整理'**
+  String get chatWithThisNoteDescription;
+
+  /// No description provided for @linkedNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'关联笔记'**
+  String get linkedNote;
+
+  /// No description provided for @noteSources.
+  ///
+  /// In zh, this message translates to:
+  /// **'笔记来源'**
+  String get noteSources;
+
+  /// No description provided for @writeReplyToNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'写入笔记'**
+  String get writeReplyToNote;
+
+  /// No description provided for @writeReplyToNoteDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'预览内容并确认写入位置'**
+  String get writeReplyToNoteDescription;
+
+  /// No description provided for @confirmWriteToNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认写入'**
+  String get confirmWriteToNote;
+
+  /// No description provided for @replyWrittenToNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'回答已写入笔记'**
+  String get replyWrittenToNote;
+
+  /// No description provided for @replyWriteToNoteFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'笔记内容已经变化，请返回笔记后重试'**
+  String get replyWriteToNoteFailed;
+
+  /// No description provided for @assistantChatResultHeading.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地助手回答'**
+  String get assistantChatResultHeading;
+
+  /// No description provided for @chatNoteEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先输入笔记内容，再开始对话'**
+  String get chatNoteEmpty;
+
   /// No description provided for @assistantCustomHint.
   ///
   /// In zh, this message translates to:

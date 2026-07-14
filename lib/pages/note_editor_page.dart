@@ -11,6 +11,7 @@ import '../app.dart';
 import '../debug/app_diagnostics.dart';
 import '../l10n/l10n.dart';
 import '../l10n/local_model_l10n.dart';
+import '../models/local_chat.dart';
 import '../models/note_entry.dart';
 import '../providers/note_provider.dart';
 import '../services/file_storage_service.dart';
@@ -31,6 +32,7 @@ import '../widgets/note_assistant_sheet.dart';
 import '../widgets/note_block_editor.dart';
 import '../widgets/note_card.dart';
 import 'media_detail_page.dart';
+import 'local_chat_page.dart';
 import 'model_management_page.dart';
 import 'record_audio_page.dart';
 
@@ -559,6 +561,11 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       );
       if (invocation == null || !mounted || anchor == null) return;
 
+      if (invocation.opensChat) {
+        await _openNoteChat(anchor: anchor, scope: invocation.scope);
+        return;
+      }
+
       final models = LanguageModelService.instance;
       final selectedId = await models.selectedModelId();
       final installed = await models.inspect(selectedId);
@@ -659,6 +666,60 @@ class _NoteEditorPageState extends State<NoteEditorPage>
         context.l10n.assistantLaunchFailed(error.toString()),
       );
     }
+  }
+
+  Future<void> _openNoteChat({
+    required NoteAssistantEditorContext anchor,
+    required NoteAssistantScope scope,
+  }) async {
+    final sourceContent = switch (scope) {
+      NoteAssistantScope.selection => anchor.selectedText,
+      NoteAssistantScope.currentBlock => anchor.currentBlockContent,
+      NoteAssistantScope.fullNote => _content.text,
+    };
+    if (_title.text.trim().isEmpty && sourceContent.trim().isEmpty) {
+      AppFeedback.show(context, context.l10n.chatNoteEmpty);
+      return;
+    }
+    if (!await _persist() || !mounted) return;
+    final entry = _entry;
+    if (entry?.id == null) {
+      AppFeedback.show(context, context.l10n.chatNoteEmpty);
+      return;
+    }
+    final noteContext = LocalChatNoteContext(
+      noteId: entry!.id!,
+      title: entry.title.trim().isEmpty ? context.l10n.untitled : entry.title,
+      scope: switch (scope) {
+        NoteAssistantScope.selection => LocalChatNoteScope.selection,
+        NoteAssistantScope.currentBlock => LocalChatNoteScope.currentBlock,
+        NoteAssistantScope.fullNote => LocalChatNoteScope.fullNote,
+      },
+      content: sourceContent,
+      updatedAt: entry.updatedAt,
+    );
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LocalChatPage(
+          initialNoteContext: noteContext,
+          onWriteBack: (source, text, placement) async {
+            if (!mounted || source.noteId != _entry?.id) return false;
+            final inserted =
+                _blockEditorKey.currentState?.applyAssistantResult(
+                  anchor: anchor,
+                  scope: scope,
+                  placement: placement,
+                  text: text,
+                  heading: context.l10n.assistantChatResultHeading,
+                ) ??
+                false;
+            if (!inserted) return false;
+            return _persist(showError: false);
+          },
+        ),
+      ),
+    );
   }
 
   Future<void> _stopDictation() async {

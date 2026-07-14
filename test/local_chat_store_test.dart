@@ -109,10 +109,12 @@ void main() {
     await store.saveSession(session);
 
     final restored = (await store.loadSessions()).single;
-    expect(
-      restored.messages.map((message) => message.content),
-      ['第一问', '第一答', '第二问', '第二答'],
-    );
+    expect(restored.messages.map((message) => message.content), [
+      '第一问',
+      '第一答',
+      '第二问',
+      '第二答',
+    ]);
   });
 
   test('deletes only the selected conversation', () async {
@@ -166,5 +168,40 @@ void main() {
 
     await store.deleteSession(session.id);
     expect(await FileStorageService.instance.fileExists(filePath), isFalse);
+  });
+
+  test('persists note contexts used by a conversation', () async {
+    final noteContext = LocalChatNoteContext(
+      noteId: 42,
+      title: '发布计划',
+      scope: LocalChatNoteScope.currentBlock,
+      content: '周五发布测试版本。',
+      updatedAt: DateTime(2026, 7, 14),
+    );
+    final session = store.createSession().copyWith(
+      messages: [
+        store.createMessage(
+          role: LocalChatRole.user,
+          content: '什么时候发布？',
+          noteContexts: [noteContext],
+        ),
+        store.createMessage(
+          role: LocalChatRole.assistant,
+          content: '计划在周五发布。[N1]',
+          noteContexts: [noteContext],
+        ),
+      ],
+    );
+
+    await store.saveSession(session);
+    final restored = (await store.loadSessions()).single;
+
+    expect(restored.messages.last.noteContexts, hasLength(1));
+    expect(restored.messages.last.noteContexts.single.noteId, 42);
+    expect(restored.messages.last.noteContexts.single.title, '发布计划');
+    expect(
+      restored.messages.last.noteContexts.single.scope,
+      LocalChatNoteScope.currentBlock,
+    );
   });
 }

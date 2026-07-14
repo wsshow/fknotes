@@ -55,10 +55,22 @@ class NoteAssistantAction {
 }
 
 class NoteAssistantInvocation {
-  final NoteAssistantAction action;
+  final NoteAssistantAction? _action;
   final NoteAssistantScope scope;
+  final bool opensChat;
 
-  const NoteAssistantInvocation({required this.action, required this.scope});
+  NoteAssistantAction get action => _action!;
+
+  factory NoteAssistantInvocation({
+    required NoteAssistantAction action,
+    required NoteAssistantScope scope,
+  }) => NoteAssistantInvocation._(action, scope);
+
+  const NoteAssistantInvocation._(this._action, this.scope) : opensChat = false;
+
+  const NoteAssistantInvocation.chat({required this.scope})
+    : _action = null,
+      opensChat = true;
 }
 
 class NoteAssistantResult {

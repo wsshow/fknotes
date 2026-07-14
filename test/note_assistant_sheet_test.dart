@@ -110,4 +110,37 @@ void main() {
     expect(selected?.scope, NoteAssistantScope.currentBlock);
     expect(selected?.action.task, NoteAssistantTask.summarize);
   });
+
+  testWidgets('note assistant can start a context-bound chat', (tester) async {
+    NoteAssistantInvocation? selected;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: FilledButton(
+              onPressed: () async {
+                selected = await showNoteAssistantTaskSheet(
+                  context,
+                  availableScopes: const {
+                    NoteAssistantScope.currentBlock,
+                    NoteAssistantScope.fullNote,
+                  },
+                  initialScope: NoteAssistantScope.currentBlock,
+                );
+              },
+              child: const Text('打开笔记助手'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('打开笔记助手'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('note-assistant-open-chat')));
+    await tester.pumpAndSettle();
+
+    expect(selected?.opensChat, isTrue);
+    expect(selected?.scope, NoteAssistantScope.currentBlock);
+  });
 }

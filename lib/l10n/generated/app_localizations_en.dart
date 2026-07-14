@@ -1451,6 +1451,42 @@ class AppLocalizationsEn extends AppLocalizations {
   String get scopeFullNote => 'Entire note';
 
   @override
+  String get chatWithThisNote => 'Chat with this note';
+
+  @override
+  String get chatWithThisNoteDescription =>
+      'Use the selected scope as context for follow-up questions';
+
+  @override
+  String get linkedNote => 'Linked note';
+
+  @override
+  String get noteSources => 'Note sources';
+
+  @override
+  String get writeReplyToNote => 'Write to note';
+
+  @override
+  String get writeReplyToNoteDescription =>
+      'Preview the reply and confirm where it should go';
+
+  @override
+  String get confirmWriteToNote => 'Write to note';
+
+  @override
+  String get replyWrittenToNote => 'Reply written to the note';
+
+  @override
+  String get replyWriteToNoteFailed =>
+      'The note changed. Return to it and try again.';
+
+  @override
+  String get assistantChatResultHeading => 'Local assistant reply';
+
+  @override
+  String get chatNoteEmpty => 'Add some note content before starting a chat.';
+
+  @override
   String get assistantCustomHint =>
       'For example: Turn these ideas into a concise email…';
 

@@ -17,6 +17,7 @@ import '../services/local_chat_prompt_builder.dart';
 import '../services/local_chat_store.dart';
 import '../services/local_model_manager.dart';
 import '../services/local_llm/local_llm_output_filter.dart';
+import '../services/note_assistant_prompt_builder.dart';
 import '../services/file_storage_service.dart';
 import '../services/realtime_dictation_service.dart';
 import '../widgets/app_feedback.dart';
@@ -59,8 +60,20 @@ String _localizedChatDate(BuildContext context, DateTime value) {
 
 class LocalChatPage extends StatefulWidget {
   final String? initialSessionId;
+  final LocalChatNoteContext? initialNoteContext;
+  final Future<bool> Function(
+    LocalChatNoteContext source,
+    String text,
+    NoteAssistantPlacement placement,
+  )?
+  onWriteBack;
 
-  const LocalChatPage({super.key, this.initialSessionId});
+  const LocalChatPage({
+    super.key,
+    this.initialSessionId,
+    this.initialNoteContext,
+    this.onWriteBack,
+  });
 
   @override
   State<LocalChatPage> createState() => _LocalChatPageState();
@@ -249,6 +262,8 @@ class _LocalChatPageState extends State<LocalChatPage>
                 onModelTap: _generating ? null : _openModels,
                 onRoleTap: _generating ? null : _showPersonaSwitcher,
               ),
+              if (widget.initialNoteContext case final noteContext?)
+                _ActiveNoteContextBar(noteContext: noteContext),
               Expanded(child: _buildConversationBody()),
               if (_generationError != null)
                 _GenerationError(
@@ -297,6 +312,7 @@ class _LocalChatPageState extends State<LocalChatPage>
               itemCount: _session.messages.length,
               itemBuilder: (context, index) {
                 final message = _session.messages[index];
+                final writeBackSource = _writeBackSource(message);
                 final previous = index == 0
                     ? null
                     : _session.messages[index - 1];
@@ -314,6 +330,9 @@ class _LocalChatPageState extends State<LocalChatPage>
                     _ChatBubble(
                       message: message,
                       generating: _generating && message.id == _draftMessageId,
+                      onWriteBack: writeBackSource == null
+                          ? null
+                          : () => _showWriteBackSheet(message, writeBackSource),
                     ),
                   ],
                 );
@@ -438,6 +457,7 @@ class _LocalChatPageState extends State<LocalChatPage>
         role: LocalChatRole.user,
         content: content,
         attachments: attachments,
+        noteContexts: [?widget.initialNoteContext],
       ),
     ];
     _session = _session.copyWith(
@@ -473,6 +493,9 @@ class _LocalChatPageState extends State<LocalChatPage>
     final draft = _store.createMessage(
       role: LocalChatRole.assistant,
       content: '',
+      noteContexts: sessionBeforeDraft.messages.isEmpty
+          ? const []
+          : sessionBeforeDraft.messages.last.noteContexts,
       status: LocalChatMessageStatus.stopped,
     );
     final raw = StringBuffer();
@@ -575,6 +598,44 @@ class _LocalChatPageState extends State<LocalChatPage>
           .map((message) => message.id == id ? replacement : message)
           .toList(growable: false),
     );
+  }
+
+  LocalChatNoteContext? _writeBackSource(LocalChatMessage message) {
+    final active = widget.initialNoteContext;
+    if (active == null ||
+        widget.onWriteBack == null ||
+        message.role != LocalChatRole.assistant ||
+        message.content.trim().isEmpty) {
+      return null;
+    }
+    for (final source in message.noteContexts) {
+      if (source.noteId == active.noteId) return source;
+    }
+    return null;
+  }
+
+  Future<void> _showWriteBackSheet(
+    LocalChatMessage message,
+    LocalChatNoteContext source,
+  ) async {
+    final placement = await showModalBottomSheet<NoteAssistantPlacement>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) =>
+          _NoteWriteBackSheet(source: source, content: message.content),
+    );
+    if (placement == null || !mounted) return;
+    final written = await widget.onWriteBack?.call(
+      source,
+      message.content,
+      placement,
+    );
+    if (!mounted) return;
+    if (written == true) {
+      AppFeedback.success(context, context.l10n.replyWrittenToNote);
+    } else {
+      AppFeedback.error(context, context.l10n.replyWriteToNoteFailed);
+    }
   }
 
   Future<void> _stop() async {
@@ -1131,6 +1192,41 @@ class _ModelBar extends StatelessWidget {
   );
 }
 
+class _ActiveNoteContextBar extends StatelessWidget {
+  final LocalChatNoteContext noteContext;
+
+  const _ActiveNoteContextBar({required this.noteContext});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const Key('local-chat-active-note-context'),
+    width: double.infinity,
+    padding: const EdgeInsets.fromLTRB(16, 9, 16, 9),
+    decoration: const BoxDecoration(
+      color: AppColors.softGreen,
+      border: Border(bottom: BorderSide(color: AppColors.line)),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.description_outlined, size: 18, color: AppColors.moss),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            '${context.l10n.linkedNote} · ${noteContext.title} · ${_noteScopeLabel(context, noteContext.scope)}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.ink,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 class _EmptyChat extends StatelessWidget {
   final ValueChanged<String> onSuggestion;
   const _EmptyChat({required this.onSuggestion});
@@ -1207,7 +1303,13 @@ class _Suggestion extends StatelessWidget {
 class _ChatBubble extends StatelessWidget {
   final LocalChatMessage message;
   final bool generating;
-  const _ChatBubble({required this.message, required this.generating});
+  final VoidCallback? onWriteBack;
+
+  const _ChatBubble({
+    required this.message,
+    required this.generating,
+    this.onWriteBack,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1273,6 +1375,22 @@ class _ChatBubble extends StatelessWidget {
                 )
               else
                 FkMarkdownView(data: message.content, compact: true),
+              if (!user &&
+                  message.content.isNotEmpty &&
+                  message.noteContexts.isNotEmpty) ...[
+                const SizedBox(height: 9),
+                _ChatNoteSources(noteContexts: message.noteContexts),
+                if (onWriteBack != null)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      key: const Key('local-chat-write-back'),
+                      onPressed: onWriteBack,
+                      icon: const Icon(Icons.edit_note_rounded, size: 18),
+                      label: Text(context.l10n.writeReplyToNote),
+                    ),
+                  ),
+              ],
               if (user && message.content.isNotEmpty) ...[
                 const SizedBox(height: 5),
                 Align(
@@ -1356,6 +1474,178 @@ class _ChatBubble extends StatelessWidget {
     );
   }
 }
+
+class _ChatNoteSources extends StatelessWidget {
+  final List<LocalChatNoteContext> noteContexts;
+
+  const _ChatNoteSources({required this.noteContexts});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(
+      color: AppColors.canvas,
+      borderRadius: BorderRadius.circular(11),
+      border: Border.all(color: AppColors.line),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          context.l10n.noteSources,
+          style: const TextStyle(
+            color: AppColors.muted,
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 5),
+        for (var index = 0; index < noteContexts.length; index++)
+          Padding(
+            padding: EdgeInsets.only(
+              bottom: index == noteContexts.length - 1 ? 0 : 4,
+            ),
+            child: Row(
+              children: [
+                Text(
+                  '[N${index + 1}]',
+                  style: const TextStyle(
+                    color: AppColors.moss,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    '${noteContexts[index].title} · ${_noteScopeLabel(context, noteContexts[index].scope)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
+class _NoteWriteBackSheet extends StatefulWidget {
+  final LocalChatNoteContext source;
+  final String content;
+
+  const _NoteWriteBackSheet({required this.source, required this.content});
+
+  @override
+  State<_NoteWriteBackSheet> createState() => _NoteWriteBackSheetState();
+}
+
+class _NoteWriteBackSheetState extends State<_NoteWriteBackSheet> {
+  NoteAssistantPlacement _placement = NoteAssistantPlacement.append;
+
+  List<NoteAssistantPlacement> get _placements =>
+      widget.source.scope == LocalChatNoteScope.fullNote
+      ? const [NoteAssistantPlacement.replace, NoteAssistantPlacement.append]
+      : NoteAssistantPlacement.values;
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    top: false,
+    child: SizedBox(
+      height: MediaQuery.sizeOf(context).height * .72,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              context.l10n.writeReplyToNote,
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${widget.source.title} · ${_noteScopeLabel(context, widget.source.scope)}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: AppColors.muted),
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final placement in _placements)
+                  ChoiceChip(
+                    key: Key('local-chat-write-back-${placement.name}'),
+                    label: Text(_placementLabel(context, placement)),
+                    selected: _placement == placement,
+                    onSelected: (_) => setState(() => _placement = placement),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppColors.canvas,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.line),
+                ),
+                child: SingleChildScrollView(
+                  child: FkMarkdownView(data: widget.content, compact: true),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(
+                      MaterialLocalizations.of(context).cancelButtonLabel,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton(
+                    key: const Key('local-chat-confirm-write-back'),
+                    onPressed: () => Navigator.pop(context, _placement),
+                    child: Text(context.l10n.confirmWriteToNote),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+String _noteScopeLabel(BuildContext context, LocalChatNoteScope scope) =>
+    switch (scope) {
+      LocalChatNoteScope.selection => context.l10n.scopeSelection,
+      LocalChatNoteScope.currentBlock => context.l10n.scopeCurrentBlock,
+      LocalChatNoteScope.fullNote => context.l10n.scopeFullNote,
+    };
+
+String _placementLabel(
+  BuildContext context,
+  NoteAssistantPlacement placement,
+) => switch (placement) {
+  NoteAssistantPlacement.replace => context.l10n.placementReplace,
+  NoteAssistantPlacement.insertBelow => context.l10n.placementInsertBelow,
+  NoteAssistantPlacement.append => context.l10n.placementAppend,
+};
 
 class LocalChatComposer extends StatelessWidget {
   final TextEditingController controller;

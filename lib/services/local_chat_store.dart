@@ -38,12 +38,14 @@ class LocalChatStore {
     required LocalChatRole role,
     required String content,
     List<LocalChatAttachment> attachments = const [],
+    List<LocalChatNoteContext> noteContexts = const [],
     LocalChatMessageStatus status = LocalChatMessageStatus.complete,
   }) => LocalChatMessage(
     id: _uuid.v4(),
     role: role,
     content: content,
     attachments: List.unmodifiable(attachments),
+    noteContexts: List.unmodifiable(noteContexts),
     createdAt: DateTime.now(),
     status: status,
   );
@@ -173,6 +175,9 @@ class LocalChatStore {
               attachments: _decodeAttachments(
                 row['attachments_json'] as String? ?? '[]',
               ),
+              noteContexts: _decodeNoteContexts(
+                row['note_contexts_json'] as String? ?? '[]',
+              ),
               createdAt: DateTime.parse(row['created_at'] as String),
               status: row['status'] == 'stopped'
                   ? LocalChatMessageStatus.stopped
@@ -237,6 +242,9 @@ class LocalChatStore {
                   .map((attachment) => attachment.toJson())
                   .toList(),
             ),
+            'note_contexts_json': jsonEncode(
+              message.noteContexts.map((context) => context.toJson()).toList(),
+            ),
             'status': message.status.name,
             'created_at': message.createdAt.toIso8601String(),
             'sort_order': index,
@@ -267,6 +275,22 @@ class LocalChatStore {
     });
     _writeQueue = result.catchError((_) {});
     return result;
+  }
+
+  List<LocalChatNoteContext> _decodeNoteContexts(String encoded) {
+    try {
+      final decoded = jsonDecode(encoded);
+      if (decoded is! List) return const [];
+      return decoded
+          .map(
+            (item) => LocalChatNoteContext.fromJson(
+              Map<String, Object?>.from(item as Map),
+            ),
+          )
+          .toList(growable: false);
+    } catch (_) {
+      return const [];
+    }
   }
 
   Future<void> deleteSession(String id) {

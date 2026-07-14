@@ -23,13 +23,13 @@ class DatabaseService {
       AppDiagnostics.info(
         AppLogCategory.database,
         'database_open_started',
-        data: {'schemaVersion': 8},
+        data: {'schemaVersion': 9},
       );
     }
     try {
       final database = await openDatabase(
         path,
-        version: 8,
+        version: 9,
         onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
@@ -174,6 +174,16 @@ class DatabaseService {
         );
       }
     }
+    if (oldVersion < 9) {
+      final columns = (await db.rawQuery(
+        'PRAGMA table_info(chat_messages)',
+      )).map((column) => column['name'] as String).toSet();
+      if (!columns.contains('note_contexts_json')) {
+        await db.execute(
+          "ALTER TABLE chat_messages ADD COLUMN note_contexts_json TEXT NOT NULL DEFAULT '[]'",
+        );
+      }
+    }
     if (kDebugMode) {
       AppDiagnostics.info(
         AppLogCategory.database,
@@ -224,6 +234,7 @@ class DatabaseService {
         role TEXT NOT NULL,
         content TEXT NOT NULL,
         attachments_json TEXT NOT NULL DEFAULT '[]',
+        note_contexts_json TEXT NOT NULL DEFAULT '[]',
         status TEXT NOT NULL DEFAULT 'complete',
         created_at TEXT NOT NULL,
         sort_order INTEGER NOT NULL,

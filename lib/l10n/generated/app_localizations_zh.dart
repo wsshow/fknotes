@@ -1319,6 +1319,39 @@ class AppLocalizationsZh extends AppLocalizations {
   String get scopeFullNote => '整篇笔记';
 
   @override
+  String get chatWithThisNote => '和这篇笔记对话';
+
+  @override
+  String get chatWithThisNoteDescription => '把所选范围作为上下文，连续追问和整理';
+
+  @override
+  String get linkedNote => '关联笔记';
+
+  @override
+  String get noteSources => '笔记来源';
+
+  @override
+  String get writeReplyToNote => '写入笔记';
+
+  @override
+  String get writeReplyToNoteDescription => '预览内容并确认写入位置';
+
+  @override
+  String get confirmWriteToNote => '确认写入';
+
+  @override
+  String get replyWrittenToNote => '回答已写入笔记';
+
+  @override
+  String get replyWriteToNoteFailed => '笔记内容已经变化，请返回笔记后重试';
+
+  @override
+  String get assistantChatResultHeading => '本地助手回答';
+
+  @override
+  String get chatNoteEmpty => '请先输入笔记内容，再开始对话';
+
+  @override
   String get assistantCustomHint => '例如：把这些想法整理成一封简洁的英文邮件…';
 
   @override

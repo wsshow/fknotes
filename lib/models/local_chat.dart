@@ -4,6 +4,56 @@ enum LocalChatMessageStatus { complete, stopped }
 
 enum LocalChatAttachmentType { image }
 
+enum LocalChatNoteScope { selection, currentBlock, fullNote }
+
+class LocalChatNoteContext {
+  final int noteId;
+  final String title;
+  final LocalChatNoteScope scope;
+  final String content;
+  final DateTime updatedAt;
+
+  const LocalChatNoteContext({
+    required this.noteId,
+    required this.title,
+    required this.scope,
+    required this.content,
+    required this.updatedAt,
+  });
+
+  Map<String, Object> toJson() => {
+    'noteId': noteId,
+    'title': title,
+    'scope': scope.name,
+    'content': content,
+    'updatedAt': updatedAt.toIso8601String(),
+  };
+
+  factory LocalChatNoteContext.fromJson(Map<String, Object?> json) {
+    final noteId = json['noteId'];
+    final title = json['title'];
+    final content = json['content'];
+    final updatedAt = DateTime.tryParse(json['updatedAt'] as String? ?? '');
+    if (noteId is! int ||
+        noteId <= 0 ||
+        title is! String ||
+        content is! String ||
+        updatedAt == null) {
+      throw const FormatException('聊天笔记上下文格式不正确');
+    }
+    return LocalChatNoteContext(
+      noteId: noteId,
+      title: title,
+      scope: LocalChatNoteScope.values.firstWhere(
+        (value) => value.name == json['scope'],
+        orElse: () => LocalChatNoteScope.fullNote,
+      ),
+      content: content,
+      updatedAt: updatedAt,
+    );
+  }
+}
+
 class LocalChatAttachment {
   final String id;
   final LocalChatAttachmentType type;
@@ -99,6 +149,7 @@ class LocalChatMessage {
   final LocalChatRole role;
   final String content;
   final List<LocalChatAttachment> attachments;
+  final List<LocalChatNoteContext> noteContexts;
   final DateTime createdAt;
   final LocalChatMessageStatus status;
 
@@ -108,12 +159,14 @@ class LocalChatMessage {
     required this.content,
     required this.createdAt,
     this.attachments = const [],
+    this.noteContexts = const [],
     this.status = LocalChatMessageStatus.complete,
   });
 
   LocalChatMessage copyWith({
     String? content,
     List<LocalChatAttachment>? attachments,
+    List<LocalChatNoteContext>? noteContexts,
     LocalChatMessageStatus? status,
   }) => LocalChatMessage(
     id: id,
@@ -121,6 +174,7 @@ class LocalChatMessage {
     content: content ?? this.content,
     createdAt: createdAt,
     attachments: attachments ?? this.attachments,
+    noteContexts: noteContexts ?? this.noteContexts,
     status: status ?? this.status,
   );
 
@@ -131,6 +185,7 @@ class LocalChatMessage {
     'attachments': attachments
         .map((attachment) => attachment.toJson())
         .toList(),
+    'noteContexts': noteContexts.map((context) => context.toJson()).toList(),
     'createdAt': createdAt.toIso8601String(),
     'status': status.name,
   };
@@ -158,6 +213,13 @@ class LocalChatMessage {
           .map(
             (attachment) => LocalChatAttachment.fromJson(
               Map<String, Object?>.from(attachment as Map),
+            ),
+          )
+          .toList(growable: false),
+      noteContexts: (json['noteContexts'] as List? ?? const [])
+          .map(
+            (context) => LocalChatNoteContext.fromJson(
+              Map<String, Object?>.from(context as Map),
             ),
           )
           .toList(growable: false),

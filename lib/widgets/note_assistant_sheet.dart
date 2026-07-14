@@ -134,6 +134,33 @@ class _NoteAssistantTaskSheetState extends State<_NoteAssistantTaskSheet> {
                 ],
               ),
               const SizedBox(height: 14),
+              ListTile(
+                key: const Key('note-assistant-open-chat'),
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: AppColors.softCoral,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.forum_outlined,
+                    color: AppColors.coral,
+                  ),
+                ),
+                title: Text(
+                  context.l10n.chatWithThisNote,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                subtitle: Text(context.l10n.chatWithThisNoteDescription),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => Navigator.pop(
+                  context,
+                  NoteAssistantInvocation.chat(scope: _scope),
+                ),
+              ),
+              const SizedBox(height: 4),
               TextField(
                 key: const Key('note-assistant-custom-instruction'),
                 controller: _controller,
