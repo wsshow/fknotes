@@ -12,7 +12,7 @@ void main() {
     nativeContextTokens: 4096,
   );
 
-  testWidgets('shows detecting while the matching model loads', (tester) async {
+  testWidgets('shows starting while the matching model loads', (tester) async {
     await _pumpBadge(
       tester,
       const LocalLlmRuntimeSnapshot(
@@ -22,7 +22,69 @@ void main() {
       ),
     );
 
-    expect(find.text('检测中'), findsOneWidget);
+    expect(find.text('启动中'), findsOneWidget);
+    expect(find.bySemanticsLabel('正在启动本地模型，首次启动可能需要一点时间。'), findsOneWidget);
+  });
+
+  testWidgets('explains that a standby model starts automatically', (
+    tester,
+  ) async {
+    await _pumpBadge(
+      tester,
+      const LocalLlmRuntimeSnapshot(state: LocalLlmEngineState.idle),
+    );
+
+    expect(find.text('待命'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel('发送消息时会自动启动；空闲 2 分钟后自动释放，以节省内存。'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('local-llm-runtime-badge')));
+    await tester.pump();
+    expect(find.text('发送消息时会自动启动；空闲 2 分钟后自动释放，以节省内存。'), findsOneWidget);
+  });
+
+  testWidgets('shows releasing before a stale backend label', (tester) async {
+    await _pumpBadge(
+      tester,
+      const LocalLlmRuntimeSnapshot(
+        state: LocalLlmEngineState.unloading,
+        model: model,
+        activeBackend: LocalLlmBackend.openCl,
+      ),
+    );
+
+    expect(find.text('释放中'), findsOneWidget);
+    expect(find.text('GPU'), findsNothing);
+  });
+
+  testWidgets('shows a failed state before a stale backend label', (
+    tester,
+  ) async {
+    await _pumpBadge(
+      tester,
+      const LocalLlmRuntimeSnapshot(
+        state: LocalLlmEngineState.failed,
+        model: model,
+        activeBackend: LocalLlmBackend.openCl,
+      ),
+    );
+
+    expect(find.text('启动失败'), findsOneWidget);
+    expect(find.text('GPU'), findsNothing);
+  });
+
+  testWidgets('does not describe an unavailable runtime as standby', (
+    tester,
+  ) async {
+    await _pumpBadge(
+      tester,
+      const LocalLlmRuntimeSnapshot(state: LocalLlmEngineState.unavailable),
+    );
+
+    expect(find.text('不可用'), findsOneWidget);
+    expect(find.text('待命'), findsNothing);
   });
 
   testWidgets('shows the actual GPU backend', (tester) async {

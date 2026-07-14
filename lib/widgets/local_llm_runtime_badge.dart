@@ -25,6 +25,8 @@ class LocalLlmRuntimeBadge extends StatelessWidget {
       child: ExcludeSemantics(
         child: Tooltip(
           message: status.detail,
+          triggerMode: TooltipTriggerMode.tap,
+          showDuration: const Duration(seconds: 4),
           child: Container(
             key: const Key('local-llm-runtime-badge'),
             constraints: const BoxConstraints(minWidth: 38),
@@ -53,10 +55,28 @@ class LocalLlmRuntimeBadge extends StatelessWidget {
 
   _LocalLlmRuntimeStatus _status(BuildContext context) {
     final matchesModel = snapshot.model?.id == modelId;
+    if (snapshot.state == LocalLlmEngineState.unavailable) {
+      return _LocalLlmRuntimeStatus.alert(
+        label: context.l10n.modelRuntimeUnavailable,
+        detail: context.l10n.modelRuntimeUnavailableDetail,
+      );
+    }
     if (matchesModel && snapshot.state == LocalLlmEngineState.loading) {
       return _LocalLlmRuntimeStatus.neutral(
-        label: context.l10n.modelRuntimeDetecting,
-        detail: context.l10n.modelRuntimeDetecting,
+        label: context.l10n.modelRuntimeStarting,
+        detail: context.l10n.modelRuntimeStartingDetail,
+      );
+    }
+    if (matchesModel && snapshot.state == LocalLlmEngineState.unloading) {
+      return _LocalLlmRuntimeStatus.neutral(
+        label: context.l10n.modelRuntimeReleasing,
+        detail: context.l10n.modelRuntimeReleasingDetail,
+      );
+    }
+    if (matchesModel && snapshot.state == LocalLlmEngineState.failed) {
+      return _LocalLlmRuntimeStatus.alert(
+        label: context.l10n.modelRuntimeFailed,
+        detail: context.l10n.modelRuntimeFailedDetail,
       );
     }
     final backend = snapshot.activeBackend;
@@ -79,8 +99,8 @@ class LocalLlmRuntimeBadge extends StatelessWidget {
       );
     }
     return _LocalLlmRuntimeStatus.neutral(
-      label: context.l10n.modelRuntimeNotLoaded,
-      detail: context.l10n.modelRuntimeNotLoaded,
+      label: context.l10n.modelRuntimeStandby,
+      detail: context.l10n.modelRuntimeStandbyDetail,
     );
   }
 }
@@ -109,5 +129,16 @@ class _LocalLlmRuntimeStatus {
     background: AppColors.canvas,
     foreground: AppColors.muted,
     border: AppColors.line,
+  );
+
+  factory _LocalLlmRuntimeStatus.alert({
+    required String label,
+    required String detail,
+  }) => _LocalLlmRuntimeStatus(
+    label: label,
+    detail: detail,
+    background: AppColors.softCoral,
+    foreground: AppColors.coral,
+    border: AppColors.coral.withValues(alpha: 0.42),
   );
 }

@@ -2057,10 +2057,34 @@ class AppLocalizationsZh extends AppLocalizations {
   String get notInstalledState => '未安装';
 
   @override
-  String get modelRuntimeNotLoaded => '未加载';
+  String get modelRuntimeStandby => '待命';
 
   @override
-  String get modelRuntimeDetecting => '检测中';
+  String get modelRuntimeStandbyDetail => '发送消息时会自动启动；空闲 2 分钟后自动释放，以节省内存。';
+
+  @override
+  String get modelRuntimeStarting => '启动中';
+
+  @override
+  String get modelRuntimeStartingDetail => '正在启动本地模型，首次启动可能需要一点时间。';
+
+  @override
+  String get modelRuntimeReleasing => '释放中';
+
+  @override
+  String get modelRuntimeReleasingDetail => '正在释放本地模型占用的内存。';
+
+  @override
+  String get modelRuntimeFailed => '启动失败';
+
+  @override
+  String get modelRuntimeFailedDetail => '本地模型暂时无法启动；发送消息时会自动重试。';
+
+  @override
+  String get modelRuntimeUnavailable => '不可用';
+
+  @override
+  String get modelRuntimeUnavailableDetail => '当前设备暂时无法运行本地模型。';
 
   @override
   String get modelRuntimeGpu => 'GPU';

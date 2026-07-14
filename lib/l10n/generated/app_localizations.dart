@@ -3830,17 +3830,65 @@ abstract class AppLocalizations {
   /// **'未安装'**
   String get notInstalledState;
 
-  /// No description provided for @modelRuntimeNotLoaded.
+  /// No description provided for @modelRuntimeStandby.
   ///
   /// In zh, this message translates to:
-  /// **'未加载'**
-  String get modelRuntimeNotLoaded;
+  /// **'待命'**
+  String get modelRuntimeStandby;
 
-  /// No description provided for @modelRuntimeDetecting.
+  /// No description provided for @modelRuntimeStandbyDetail.
   ///
   /// In zh, this message translates to:
-  /// **'检测中'**
-  String get modelRuntimeDetecting;
+  /// **'发送消息时会自动启动；空闲 2 分钟后自动释放，以节省内存。'**
+  String get modelRuntimeStandbyDetail;
+
+  /// No description provided for @modelRuntimeStarting.
+  ///
+  /// In zh, this message translates to:
+  /// **'启动中'**
+  String get modelRuntimeStarting;
+
+  /// No description provided for @modelRuntimeStartingDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在启动本地模型，首次启动可能需要一点时间。'**
+  String get modelRuntimeStartingDetail;
+
+  /// No description provided for @modelRuntimeReleasing.
+  ///
+  /// In zh, this message translates to:
+  /// **'释放中'**
+  String get modelRuntimeReleasing;
+
+  /// No description provided for @modelRuntimeReleasingDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在释放本地模型占用的内存。'**
+  String get modelRuntimeReleasingDetail;
+
+  /// No description provided for @modelRuntimeFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'启动失败'**
+  String get modelRuntimeFailed;
+
+  /// No description provided for @modelRuntimeFailedDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地模型暂时无法启动；发送消息时会自动重试。'**
+  String get modelRuntimeFailedDetail;
+
+  /// No description provided for @modelRuntimeUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'不可用'**
+  String get modelRuntimeUnavailable;
+
+  /// No description provided for @modelRuntimeUnavailableDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前设备暂时无法运行本地模型。'**
+  String get modelRuntimeUnavailableDetail;
 
   /// No description provided for @modelRuntimeGpu.
   ///

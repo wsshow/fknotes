@@ -2226,10 +2226,39 @@ class AppLocalizationsEn extends AppLocalizations {
   String get notInstalledState => 'Not installed';
 
   @override
-  String get modelRuntimeNotLoaded => 'Not loaded';
+  String get modelRuntimeStandby => 'Standby';
 
   @override
-  String get modelRuntimeDetecting => 'Detecting';
+  String get modelRuntimeStandbyDetail =>
+      'The model starts automatically when you send a message and is released after 2 minutes of inactivity to save memory.';
+
+  @override
+  String get modelRuntimeStarting => 'Starting';
+
+  @override
+  String get modelRuntimeStartingDetail =>
+      'Starting the local model. The first launch may take a moment.';
+
+  @override
+  String get modelRuntimeReleasing => 'Releasing';
+
+  @override
+  String get modelRuntimeReleasingDetail =>
+      'Releasing memory used by the local model.';
+
+  @override
+  String get modelRuntimeFailed => 'Start failed';
+
+  @override
+  String get modelRuntimeFailedDetail =>
+      'The local model could not start. Sending a message will retry automatically.';
+
+  @override
+  String get modelRuntimeUnavailable => 'Unavailable';
+
+  @override
+  String get modelRuntimeUnavailableDetail =>
+      'This device cannot currently run the local model.';
 
   @override
   String get modelRuntimeGpu => 'GPU';
