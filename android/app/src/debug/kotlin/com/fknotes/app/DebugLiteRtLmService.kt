@@ -111,6 +111,10 @@ class DebugLiteRtLmService : LiteRtLmService() {
             6 to "engine_initialized",
             7 to "operation_caught_error",
             8 to "service_destroyed",
+            11 to "generation_done_callback",
+            12 to "conversation_close_started",
+            13 to "conversation_closed",
+            14 to "generation_error_callback",
         )
     }
 }

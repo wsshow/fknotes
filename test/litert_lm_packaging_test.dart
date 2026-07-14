@@ -18,6 +18,10 @@ void main() {
     );
     expect(manifest, contains('android:process=":local_llm"'));
     expect(manifest, contains('android:exported="false"'));
+    expect(manifest, contains('android:name="libvndksupport.so"'));
+    expect(manifest, contains('android:name="libOpenCL.so"'));
+    expect(manifest, contains('android:name="libOpenCL-car.so"'));
+    expect(manifest, contains('android:name="libOpenCL-pixel.so"'));
     expect(service, contains('EngineConfig('));
     expect(service, contains('Content.ImageFile'));
     expect(service, contains('Content.AudioFile'));
@@ -41,5 +45,11 @@ void main() {
     expect(service, contains('requestedBackend == "gpu" && isEmulator()'));
     expect(service, contains('Build.MODEL.startsWith("sdk_gphone")'));
     expect(service, contains('Build.HARDWARE.contains("ranchu")'));
+    expect(service, contains('onInferenceDiagnostic(stage = 11'));
+    expect(service, contains('executor.execute {'));
+    expect(
+      service.indexOf('onInferenceDiagnostic(stage = 11'),
+      lessThan(service.indexOf('onInferenceDiagnostic(stage = 12')),
+    );
   });
 }

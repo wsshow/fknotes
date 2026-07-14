@@ -213,22 +213,38 @@ open class LiteRtLmService : Service() {
 
                 override fun onDone() {
                     if (!finished.compareAndSet(false, true)) return
-                    val metrics = runCatching {
-                        val benchmark = created.getBenchmarkInfo()
-                        JSONObject()
-                            .put("promptTokens", benchmark.lastPrefillTokenCount)
-                            .put("generatedTokens", benchmark.lastDecodeTokenCount)
-                            .put("prefillTokensPerSecond", benchmark.lastPrefillTokensPerSecond)
-                            .put("decodeTokensPerSecond", benchmark.lastDecodeTokensPerSecond)
-                    }.getOrElse { JSONObject() }
-                    finishConversation(created, requestId)
-                    emit(command, requestId, "completed", metrics.toString())
+                    onInferenceDiagnostic(stage = 11, requestId = requestId)
+                    // LiteRT-LM invokes this callback synchronously from its
+                    // native callback thread pool. Closing the conversation
+                    // here waits for that same pool to drain and deadlocks the
+                    // final callback. Return first, then finalize on our
+                    // serialized worker so the next generation cannot overtake
+                    // the cleanup.
+                    executor.execute {
+                        val metrics = runCatching {
+                            val benchmark = created.getBenchmarkInfo()
+                            JSONObject()
+                                .put("promptTokens", benchmark.lastPrefillTokenCount)
+                                .put("generatedTokens", benchmark.lastDecodeTokenCount)
+                                .put("prefillTokensPerSecond", benchmark.lastPrefillTokensPerSecond)
+                                .put("decodeTokensPerSecond", benchmark.lastDecodeTokensPerSecond)
+                        }.getOrElse { JSONObject() }
+                        onInferenceDiagnostic(stage = 12, requestId = requestId)
+                        finishConversation(created, requestId)
+                        onInferenceDiagnostic(stage = 13, requestId = requestId)
+                        emit(command, requestId, "completed", metrics.toString())
+                    }
                 }
 
                 override fun onError(throwable: Throwable) {
                     if (!finished.compareAndSet(false, true)) return
-                    finishConversation(created, requestId)
-                    emitError(command, throwable, requestId)
+                    onInferenceDiagnostic(stage = 14, requestId = requestId, error = throwable)
+                    // See onDone(): native owns the current callback thread, so
+                    // conversation teardown must happen after this returns.
+                    executor.execute {
+                        finishConversation(created, requestId)
+                        emitError(command, throwable, requestId)
+                    }
                 }
             },
         )
