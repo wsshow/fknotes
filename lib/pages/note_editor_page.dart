@@ -32,6 +32,7 @@ import '../widgets/editor_context_menu.dart';
 import '../widgets/note_assistant_sheet.dart';
 import '../widgets/note_block_editor.dart';
 import '../widgets/note_card.dart';
+import '../widgets/realtime_dictation_provider_badge.dart';
 import 'media_detail_page.dart';
 import 'local_chat_page.dart';
 import 'model_management_page.dart';
@@ -2144,15 +2145,28 @@ class _LiveDictationBar extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  service.status == RealtimeDictationStatus.listening
-                      ? context.l10n.liveDictationElapsed(time)
-                      : context.l10n.localVoiceInput,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.coral,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        service.status == RealtimeDictationStatus.listening
+                            ? context.l10n.liveDictationElapsed(time)
+                            : context.l10n.localVoiceInput,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.coral,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    RealtimeDictationProviderBadge(
+                      provider: service.activeExecutionProvider,
+                      fallback: service.usedExecutionProviderFallback,
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 2),
                 Text(

@@ -36,6 +36,7 @@ import '../widgets/fk_markdown_view.dart';
 import '../widgets/local_chat_note_picker.dart';
 import '../widgets/local_chat_tool_action_sheet.dart';
 import '../widgets/local_llm_runtime_badge.dart';
+import '../widgets/realtime_dictation_provider_badge.dart';
 import 'local_chat_roles_page.dart';
 import 'model_management_page.dart';
 
@@ -348,6 +349,9 @@ class _LocalChatPageState extends State<LocalChatPage>
                 dictationPreparing:
                     _chatDictating &&
                     _dictation.status == RealtimeDictationStatus.preparing,
+                dictationProvider: _dictation.activeExecutionProvider,
+                dictationProviderFallback:
+                    _dictation.usedExecutionProviderFallback,
                 onTakePhoto: _takeChatPhoto,
                 onPickImages: _pickChatImages,
                 onRemoveAttachment: _removePendingAttachment,
@@ -2124,6 +2128,8 @@ class LocalChatComposer extends StatelessWidget {
   final bool pickingImages;
   final bool dictating;
   final bool dictationPreparing;
+  final RealtimeDictationExecutionProvider? dictationProvider;
+  final bool dictationProviderFallback;
   final VoidCallback onTakePhoto;
   final VoidCallback onPickImages;
   final ValueChanged<LocalChatAttachment> onRemoveAttachment;
@@ -2144,6 +2150,8 @@ class LocalChatComposer extends StatelessWidget {
     required this.pickingImages,
     required this.dictating,
     required this.dictationPreparing,
+    this.dictationProvider,
+    this.dictationProviderFallback = false,
     required this.onTakePhoto,
     required this.onPickImages,
     required this.onRemoveAttachment,
@@ -2356,6 +2364,14 @@ class LocalChatComposer extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(width: 4),
+                            if ((dictating || dictationPreparing) &&
+                                dictationProvider != null) ...[
+                              RealtimeDictationProviderBadge(
+                                provider: dictationProvider,
+                                fallback: dictationProviderFallback,
+                              ),
+                              const SizedBox(width: 5),
+                            ],
                             if (generating)
                               _ChatComposerAction(
                                 key: const Key('stop-local-chat'),

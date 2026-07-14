@@ -2077,6 +2077,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get modelRuntimeFallbackToCpu => 'GPU 加速不可用，已切换至 CPU';
 
   @override
+  String dictationExecutionProvider(String provider) {
+    return '实时语音执行器：$provider';
+  }
+
+  @override
+  String get dictationExecutionProviderFallback => '硬件加速不可用，实时语音已回退至 CPU';
+
+  @override
   String get chatEmptyTitle => '你想聊什么？';
 
   @override

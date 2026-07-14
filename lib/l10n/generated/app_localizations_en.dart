@@ -2247,6 +2247,15 @@ class AppLocalizationsEn extends AppLocalizations {
       'GPU acceleration is unavailable. Switched to CPU.';
 
   @override
+  String dictationExecutionProvider(String provider) {
+    return 'Live speech provider: $provider';
+  }
+
+  @override
+  String get dictationExecutionProviderFallback =>
+      'Hardware acceleration is unavailable. Live speech fell back to CPU.';
+
+  @override
   String get chatEmptyTitle => 'What would you like to explore?';
 
   @override

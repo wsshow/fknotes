@@ -22,6 +22,37 @@ import 'streaming_speech_model_service.dart';
 
 enum RealtimeDictationStatus { idle, preparing, listening, stopping, failed }
 
+enum RealtimeDictationExecutionProvider {
+  cpu('cpu', 'CPU'),
+  nnapi('nnapi', 'NNAPI'),
+  coreMl('coreml', 'CoreML');
+
+  final String sherpaName;
+  final String label;
+
+  const RealtimeDictationExecutionProvider(this.sherpaName, this.label);
+}
+
+class RealtimeDictationExecutionPolicy {
+  const RealtimeDictationExecutionPolicy._();
+
+  static RealtimeDictationExecutionProvider preferredFor({
+    required bool isAndroid,
+    required bool isIOS,
+  }) {
+    if (isAndroid) return RealtimeDictationExecutionProvider.nnapi;
+    if (isIOS) return RealtimeDictationExecutionProvider.coreMl;
+    return RealtimeDictationExecutionProvider.cpu;
+  }
+
+  static RealtimeDictationExecutionProvider fromSherpaName(String? value) =>
+      switch (value?.trim().toLowerCase()) {
+        'nnapi' => RealtimeDictationExecutionProvider.nnapi,
+        'coreml' => RealtimeDictationExecutionProvider.coreMl,
+        _ => RealtimeDictationExecutionProvider.cpu,
+      };
+}
+
 const _initialSilenceEndpointSeconds = 15.0;
 const _recognizedSpeechEndpointSeconds = 1.2;
 const _maximumUtteranceSeconds = 20.0;
@@ -109,6 +140,18 @@ class RealtimeDictationService extends ChangeNotifier {
   String? errorMessage;
   Duration elapsed = Duration.zero;
   double inputLevel = 0;
+  RealtimeDictationExecutionProvider _requestedExecutionProvider =
+      RealtimeDictationExecutionProvider.cpu;
+  RealtimeDictationExecutionProvider? _activeExecutionProvider;
+
+  RealtimeDictationExecutionProvider get requestedExecutionProvider =>
+      _requestedExecutionProvider;
+  RealtimeDictationExecutionProvider? get activeExecutionProvider =>
+      _activeExecutionProvider;
+
+  bool get usedExecutionProviderFallback =>
+      _activeExecutionProvider != null &&
+      _activeExecutionProvider != _requestedExecutionProvider;
 
   bool get isActive => switch (status) {
     RealtimeDictationStatus.preparing ||
@@ -147,6 +190,9 @@ class RealtimeDictationService extends ChangeNotifier {
       '原生运行库: $_debugNativeRuntime',
       '原生 ABI: $_debugNativeAbi',
       'CPU 指纹: $_debugCpuFingerprint',
+      '请求执行器: ${requestedExecutionProvider.label}',
+      '实际执行器: ${activeExecutionProvider?.label ?? "-"}',
+      '执行器回退: ${usedExecutionProviderFallback ? "是" : "否"}',
       '热词: ${_debugHotwordsCount == 0 ? "未启用" : "$_debugHotwordsCount 个"}',
       if (_debugHotwordsCount > 0)
         '热词增强强度: ${_debugHotwordsScore.toStringAsFixed(1)}',
@@ -206,6 +252,11 @@ class RealtimeDictationService extends ChangeNotifier {
     errorMessage = null;
     elapsed = Duration.zero;
     inputLevel = 0;
+    _requestedExecutionProvider = RealtimeDictationExecutionPolicy.preferredFor(
+      isAndroid: Platform.isAndroid,
+      isIOS: Platform.isIOS,
+    );
+    _activeExecutionProvider = null;
     if (kDebugMode) {
       _debugStartedAt = DateTime.now();
       _debugEvents.clear();
@@ -479,6 +530,7 @@ class RealtimeDictationService extends ChangeNotifier {
             : '',
         'hotwordsScore': preferences.hotwordsScore,
         'denoiserModelPath': denoiserModelPath,
+        'provider': _requestedExecutionProvider.sherpaName,
       },
       onError: _errors!.sendPort,
       onExit: _exits!.sendPort,
@@ -493,14 +545,29 @@ class RealtimeDictationService extends ChangeNotifier {
         _debugNativeRuntime = message['runtime'] as String? ?? '-';
         _debugNativeAbi = message['abi'] as String? ?? '-';
         _debugCpuFingerprint = message['cpu'] as String? ?? '-';
+        _requestedExecutionProvider =
+            RealtimeDictationExecutionPolicy.fromSherpaName(
+              message['requestedProvider'] as String?,
+            );
+        _activeExecutionProvider =
+            RealtimeDictationExecutionPolicy.fromSherpaName(
+              message['activeProvider'] as String?,
+            );
         if (message['denoiserEnabled'] == true) {
           _debugNoiseSuppressionStatus =
               '已启用 · frameShift=${message['denoiserFrameShift']} samples';
         }
         _debugEvent(
           '识别工作线程已就绪: runtime=$_debugNativeRuntime, '
-          'abi=$_debugNativeAbi, cpu=$_debugCpuFingerprint',
+          'abi=$_debugNativeAbi, cpu=$_debugCpuFingerprint, '
+          'provider=${activeExecutionProvider?.label}',
         );
+        final providerFallbackReason =
+            message['providerFallbackReason'] as String?;
+        if (providerFallbackReason != null &&
+            providerFallbackReason.isNotEmpty) {
+          _debugEvent('硬件执行器不可用，已回退 CPU: $providerFallbackReason');
+        }
         _commandPort = message['commandPort'] as SendPort?;
         if (!(_readyCompleter?.isCompleted ?? true)) {
           _readyCompleter!.complete();
@@ -1135,38 +1202,17 @@ void _realtimeRecognitionWorker(Map<String, Object> args) {
         throw StateError('实时降噪模型没有提供有效帧步长');
       }
     }
-    recognizer = sherpa.OnlineRecognizer(
-      sherpa.OnlineRecognizerConfig(
-        model: sherpa.OnlineModelConfig(
-          transducer: sherpa.OnlineTransducerModelConfig(
-            encoder: args['encoderPath'] as String,
-            decoder: args['decoderPath'] as String,
-            joiner: args['joinerPath'] as String,
-          ),
-          tokens: args['tokensPath'] as String,
-          numThreads: 2,
-          debug: false,
-          // Match this model's official sherpa-onnx configuration exactly:
-          // model type is inferred from ONNX metadata and tokens are CJK chars.
-          modelType: '',
-          modelingUnit: args['modelingUnit'] as String? ?? '',
-          bpeVocab: args['bpeVocabPath'] as String? ?? '',
-        ),
-        decodingMethod: (args['hotwordsFilePath'] as String? ?? '').isNotEmpty
-            ? 'modified_beam_search'
-            : 'greedy_search',
-        maxActivePaths: 4,
-        hotwordsFile: args['hotwordsFilePath'] as String? ?? '',
-        hotwordsScore: args['hotwordsScore'] as double? ?? 2.0,
-        enableEndpoint: true,
-        // Treat leading silence, recognized-speech pauses, and long
-        // utterances as separate concerns. This mirrors mature continuous
-        // dictation systems instead of using one silence timeout for all.
-        rule1MinTrailingSilence: _initialSilenceEndpointSeconds,
-        rule2MinTrailingSilence: _recognizedSpeechEndpointSeconds,
-        rule3MinUtteranceLength: _maximumUtteranceSeconds,
-      ),
-    );
+    final requestedProvider = args['provider'] as String? ?? 'cpu';
+    var activeProvider = requestedProvider;
+    String? providerFallbackReason;
+    try {
+      recognizer = _createRealtimeRecognizer(args, requestedProvider);
+    } catch (error) {
+      if (requestedProvider == 'cpu') rethrow;
+      providerFallbackReason = error.toString();
+      activeProvider = 'cpu';
+      recognizer = _createRealtimeRecognizer(args, activeProvider);
+    }
     stream = recognizer.createStream();
     sendPort.send({
       'type': 'ready',
@@ -1176,6 +1222,9 @@ void _realtimeRecognitionWorker(Map<String, Object> args) {
           '${sherpa.getGitDate()})',
       'abi': ffi.Abi.current().toString(),
       'cpu': _androidCpuFingerprint(),
+      'requestedProvider': requestedProvider,
+      'activeProvider': activeProvider,
+      'providerFallbackReason': providerFallbackReason,
       'denoiserEnabled': denoiser != null,
       'denoiserFrameShift': denoiserFrameShift,
     });
@@ -1261,6 +1310,42 @@ void _realtimeRecognitionWorker(Map<String, Object> args) {
     denoiser?.free();
   }
 }
+
+sherpa.OnlineRecognizer _createRealtimeRecognizer(
+  Map<String, Object> args,
+  String provider,
+) => sherpa.OnlineRecognizer(
+  sherpa.OnlineRecognizerConfig(
+    model: sherpa.OnlineModelConfig(
+      transducer: sherpa.OnlineTransducerModelConfig(
+        encoder: args['encoderPath'] as String,
+        decoder: args['decoderPath'] as String,
+        joiner: args['joinerPath'] as String,
+      ),
+      tokens: args['tokensPath'] as String,
+      numThreads: 2,
+      provider: provider,
+      debug: false,
+      // Match this model's official sherpa-onnx configuration exactly:
+      // model type is inferred from ONNX metadata and tokens are CJK chars.
+      modelType: '',
+      modelingUnit: args['modelingUnit'] as String? ?? '',
+      bpeVocab: args['bpeVocabPath'] as String? ?? '',
+    ),
+    decodingMethod: (args['hotwordsFilePath'] as String? ?? '').isNotEmpty
+        ? 'modified_beam_search'
+        : 'greedy_search',
+    maxActivePaths: 4,
+    hotwordsFile: args['hotwordsFilePath'] as String? ?? '',
+    hotwordsScore: args['hotwordsScore'] as double? ?? 2.0,
+    enableEndpoint: true,
+    // Treat leading silence, recognized-speech pauses, and long utterances as
+    // separate concerns for continuous dictation.
+    rule1MinTrailingSilence: _initialSilenceEndpointSeconds,
+    rule2MinTrailingSilence: _recognizedSpeechEndpointSeconds,
+    rule3MinUtteranceLength: _maximumUtteranceSeconds,
+  ),
+);
 
 String _androidCpuFingerprint() {
   if (!Platform.isAndroid) return '-';

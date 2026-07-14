@@ -3866,6 +3866,18 @@ abstract class AppLocalizations {
   /// **'GPU 加速不可用，已切换至 CPU'**
   String get modelRuntimeFallbackToCpu;
 
+  /// No description provided for @dictationExecutionProvider.
+  ///
+  /// In zh, this message translates to:
+  /// **'实时语音执行器：{provider}'**
+  String dictationExecutionProvider(String provider);
+
+  /// No description provided for @dictationExecutionProviderFallback.
+  ///
+  /// In zh, this message translates to:
+  /// **'硬件加速不可用，实时语音已回退至 CPU'**
+  String get dictationExecutionProviderFallback;
+
   /// No description provided for @chatEmptyTitle.
   ///
   /// In zh, this message translates to:
