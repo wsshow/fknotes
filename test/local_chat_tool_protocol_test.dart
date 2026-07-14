@@ -11,6 +11,8 @@ void main() {
       '我来查找。',
     );
     expect(LocalChatToolProtocol.visibleText('准备检索<fknotes_to'), '准备检索');
+    expect(LocalChatToolProtocol.containsToolMarkup('准备检索<fknotes_to'), isTrue);
+    expect(LocalChatToolProtocol.containsToolMarkup('普通生成内容'), isFalse);
   });
 
   test('parses and validates controlled search and write calls', () {

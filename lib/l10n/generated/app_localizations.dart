@@ -3896,6 +3896,36 @@ abstract class AppLocalizations {
   /// **'正在生成…'**
   String get generating;
 
+  /// No description provided for @assistantPreparingModel.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在准备本地模型…'**
+  String get assistantPreparingModel;
+
+  /// No description provided for @assistantThinking.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在思考…'**
+  String get assistantThinking;
+
+  /// No description provided for @assistantUsingNoteTools.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在处理笔记请求…'**
+  String get assistantUsingNoteTools;
+
+  /// No description provided for @assistantSearchingNotes.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在搜索笔记：“{query}”…'**
+  String assistantSearchingNotes(String query);
+
+  /// No description provided for @assistantComposingWithNotes.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在结合笔记整理回答…'**
+  String get assistantComposingWithNotes;
+
   /// No description provided for @modelDoesNotSupportImages.
   ///
   /// In zh, this message translates to:

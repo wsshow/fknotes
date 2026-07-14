@@ -2259,6 +2259,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get generating => 'Generating…';
 
   @override
+  String get assistantPreparingModel => 'Preparing the local model…';
+
+  @override
+  String get assistantThinking => 'Thinking…';
+
+  @override
+  String get assistantUsingNoteTools => 'Working with your notes…';
+
+  @override
+  String assistantSearchingNotes(String query) {
+    return 'Searching notes for “$query”…';
+  }
+
+  @override
+  String get assistantComposingWithNotes =>
+      'Composing an answer from your notes…';
+
+  @override
   String get modelDoesNotSupportImages =>
       'The current model can\'t understand images. Switch models before sending.';
 

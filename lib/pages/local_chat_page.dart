@@ -75,6 +75,14 @@ class _LocalChatGenerationAttempt {
   const _LocalChatGenerationAttempt({required this.raw, required this.reason});
 }
 
+enum _LocalChatGenerationPhase {
+  preparingModel,
+  thinking,
+  usingNoteTools,
+  searchingNotes,
+  composingWithNotes,
+}
+
 class LocalChatPage extends StatefulWidget {
   final String? initialSessionId;
   final LocalChatNoteContext? initialNoteContext;
@@ -113,6 +121,9 @@ class _LocalChatPageState extends State<LocalChatPage>
   late LocalChatSession _session;
   bool _loading = true;
   bool _generating = false;
+  _LocalChatGenerationPhase _generationPhase =
+      _LocalChatGenerationPhase.preparingModel;
+  String? _generationSearchQuery;
   bool _modelInstalled = false;
   LocalLlmCapabilities _modelCapabilities = const LocalLlmCapabilities();
   String _modelId = '';
@@ -351,6 +362,7 @@ class _LocalChatPageState extends State<LocalChatPage>
                     _ChatBubble(
                       message: message,
                       generating: _generating && message.id == _draftMessageId,
+                      loadingLabel: _generationLoadingLabel(context),
                       onReviewTool: (call) => _reviewToolAction(message, call),
                       onWriteBack: writeBackSource == null
                           ? null
@@ -428,6 +440,31 @@ class _LocalChatPageState extends State<LocalChatPage>
       return context.l10n.generalAssistant;
     }
     return persona.name;
+  }
+
+  String _generationLoadingLabel(BuildContext context) =>
+      switch (_generationPhase) {
+        _LocalChatGenerationPhase.preparingModel =>
+          context.l10n.assistantPreparingModel,
+        _LocalChatGenerationPhase.thinking => context.l10n.assistantThinking,
+        _LocalChatGenerationPhase.usingNoteTools =>
+          context.l10n.assistantUsingNoteTools,
+        _LocalChatGenerationPhase.searchingNotes =>
+          context.l10n.assistantSearchingNotes(_generationSearchQuery ?? ''),
+        _LocalChatGenerationPhase.composingWithNotes =>
+          context.l10n.assistantComposingWithNotes,
+      };
+
+  void _setGenerationPhase(
+    _LocalChatGenerationPhase phase, {
+    String? searchQuery,
+  }) {
+    if (_generationPhase == phase && _generationSearchQuery == searchQuery) {
+      return;
+    }
+    _generationPhase = phase;
+    _generationSearchQuery = searchQuery;
+    if (mounted) setState(() {});
   }
 
   LocalChatPersona? get _currentPersona {
@@ -539,6 +576,8 @@ class _LocalChatPageState extends State<LocalChatPage>
       setState(() {
         _session = sessionWithDraft;
         _generating = true;
+        _generationPhase = _LocalChatGenerationPhase.preparingModel;
+        _generationSearchQuery = null;
         _draftMessageId = draft.id;
       });
       _scrollToEnd(force: true);
@@ -567,6 +606,7 @@ class _LocalChatPageState extends State<LocalChatPage>
         await _assistant.unload();
         return;
       }
+      _setGenerationPhase(_LocalChatGenerationPhase.thinking);
       var activeDraft = draft;
       var responseContexts = draft.noteContexts;
       for (var round = 0; round < 2; round++) {
@@ -578,6 +618,10 @@ class _LocalChatPageState extends State<LocalChatPage>
         );
         if (searchCalls.isNotEmpty && round == 0) {
           final searchCall = searchCalls.first;
+          _setGenerationPhase(
+            _LocalChatGenerationPhase.searchingNotes,
+            searchQuery: searchCall.query,
+          );
           responseContexts = await _searchNoteContexts(
             searchCall.query!,
             responseContexts,
@@ -609,7 +653,7 @@ class _LocalChatPageState extends State<LocalChatPage>
             toolCalls: const [],
           );
           _replaceMessage(draft.id, activeDraft);
-          if (mounted) setState(() {});
+          _setGenerationPhase(_LocalChatGenerationPhase.composingWithNotes);
           continue;
         }
         final writeCalls = calls.where((call) => call.isWrite).toList();
@@ -660,6 +704,8 @@ class _LocalChatPageState extends State<LocalChatPage>
         }
         setState(() {
           _generating = false;
+          _generationPhase = _LocalChatGenerationPhase.preparingModel;
+          _generationSearchQuery = null;
           _draftMessageId = null;
         });
         _scrollToEnd();
@@ -678,6 +724,9 @@ class _LocalChatPageState extends State<LocalChatPage>
         case LocalLlmTextDelta():
           raw.write(event.text);
           final filtered = LocalLlmOutputFilter.visibleText(raw.toString());
+          if (LocalChatToolProtocol.containsToolMarkup(filtered)) {
+            _setGenerationPhase(_LocalChatGenerationPhase.usingNoteTools);
+          }
           final visible = LocalChatToolProtocol.visibleText(filtered);
           _replaceMessage(draft.id, draft.copyWith(content: visible));
           if (mounted) {
@@ -1520,12 +1569,14 @@ class _Suggestion extends StatelessWidget {
 class _ChatBubble extends StatelessWidget {
   final LocalChatMessage message;
   final bool generating;
+  final String loadingLabel;
   final VoidCallback? onWriteBack;
   final ValueChanged<LocalChatToolCall>? onReviewTool;
 
   const _ChatBubble({
     required this.message,
     required this.generating,
+    required this.loadingLabel,
     this.onWriteBack,
     this.onReviewTool,
   });
@@ -1549,7 +1600,7 @@ class _ChatBubble extends StatelessWidget {
       label: user
           ? context.l10n.yourMessage
           : generating
-          ? context.l10n.aiReplying
+          ? loadingLabel
           : context.l10n.aiReply,
       child: Align(
         alignment: user ? Alignment.centerRight : Alignment.centerLeft,
@@ -1577,11 +1628,7 @@ class _ChatBubble extends StatelessWidget {
                 if (message.content.isNotEmpty) const SizedBox(height: 9),
               ],
               if (message.content.isEmpty && generating)
-                const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
+                LocalChatGenerationIndicator(label: loadingLabel)
               else if (user)
                 LocalChatUserMessageText(
                   content: message.content,
@@ -1700,6 +1747,41 @@ class _ChatBubble extends StatelessWidget {
       ),
     );
   }
+}
+
+class LocalChatGenerationIndicator extends StatelessWidget {
+  final String label;
+
+  const LocalChatGenerationIndicator({super.key, required this.label});
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    liveRegion: true,
+    child: Row(
+      key: const Key('local-chat-generation-status'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox.square(
+          dimension: 17,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+        const SizedBox(width: 9),
+        Flexible(
+          child: Text(
+            label,
+            key: ValueKey(label),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.muted,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _ChatNoteSources extends StatelessWidget {

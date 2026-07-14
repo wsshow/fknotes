@@ -11,6 +11,13 @@ class LocalChatToolProtocol {
   );
   static const _uuid = Uuid();
 
+  static bool containsToolMarkup(String raw) {
+    if (raw.contains(_openTag)) return true;
+    final lastAngle = raw.lastIndexOf('<');
+    if (lastAngle < 0) return false;
+    return _openTag.startsWith(raw.substring(lastAngle));
+  }
+
   static String visibleText(String raw) {
     var visible = raw.replaceAll(_completeCall, '');
     final openIndex = visible.lastIndexOf(_openTag);

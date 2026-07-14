@@ -2088,6 +2088,23 @@ class AppLocalizationsZh extends AppLocalizations {
   String get generating => '正在生成…';
 
   @override
+  String get assistantPreparingModel => '正在准备本地模型…';
+
+  @override
+  String get assistantThinking => '正在思考…';
+
+  @override
+  String get assistantUsingNoteTools => '正在处理笔记请求…';
+
+  @override
+  String assistantSearchingNotes(String query) {
+    return '正在搜索笔记：“$query”…';
+  }
+
+  @override
+  String get assistantComposingWithNotes => '正在结合笔记整理回答…';
+
+  @override
   String get modelDoesNotSupportImages => '当前模型不支持图片理解，请切换模型后发送';
 
   @override
