@@ -8,6 +8,7 @@ class EmptyState extends StatelessWidget {
   final String? description;
   final String? actionLabel;
   final VoidCallback? onAction;
+  final AlignmentGeometry alignment;
 
   const EmptyState({
     super.key,
@@ -16,12 +17,14 @@ class EmptyState extends StatelessWidget {
     this.description,
     this.actionLabel,
     this.onAction,
+    this.alignment = Alignment.center,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Center(
+    return Align(
+      alignment: alignment,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 36),
         child: Column(

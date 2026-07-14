@@ -1042,6 +1042,7 @@ class _LibraryTab extends StatelessWidget {
                 ? EmptyState(
                     icon: _scopeIcon(provider.scope),
                     message: _emptyMessage(context.l10n, provider.scope),
+                    alignment: const Alignment(0, -0.32),
                   )
                 : RefreshIndicator(
                     onRefresh: provider.loadEntries,
