@@ -1583,14 +1583,9 @@ class _ChatBubble extends StatelessWidget {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               else if (user)
-                SelectableText(
-                  message.content,
-                  contextMenuBuilder: buildAppEditableTextContextMenu,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    height: 1.55,
-                  ),
+                LocalChatUserMessageText(
+                  content: message.content,
+                  lineHeight: 1.55,
                 )
               else
                 FkMarkdownView(data: message.content, compact: true),
@@ -2518,14 +2513,9 @@ class _UserMediaMessage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SelectableText(
-                  message.content,
-                  contextMenuBuilder: buildAppEditableTextContextMenu,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    height: 1.5,
-                  ),
+                LocalChatUserMessageText(
+                  content: message.content,
+                  lineHeight: 1.5,
                 ),
                 const SizedBox(height: 3),
                 Align(
@@ -2549,6 +2539,33 @@ class _UserMediaMessage extends StatelessWidget {
           ),
         ],
       ],
+    ),
+  );
+}
+
+class LocalChatUserMessageText extends StatelessWidget {
+  static const selectionColor = Color(0x6B28231F);
+  static const selectionHandleColor = Colors.white;
+
+  final String content;
+  final double lineHeight;
+
+  const LocalChatUserMessageText({
+    super.key,
+    required this.content,
+    this.lineHeight = 1.55,
+  });
+
+  @override
+  Widget build(BuildContext context) => TextSelectionTheme(
+    data: TextSelectionTheme.of(context).copyWith(
+      selectionColor: selectionColor,
+      selectionHandleColor: selectionHandleColor,
+    ),
+    child: SelectableText(
+      content,
+      contextMenuBuilder: buildAppEditableTextContextMenu,
+      style: TextStyle(color: Colors.white, fontSize: 15, height: lineHeight),
     ),
   );
 }
