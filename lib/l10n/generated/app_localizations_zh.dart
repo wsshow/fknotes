@@ -1362,6 +1362,72 @@ class AppLocalizationsZh extends AppLocalizations {
   String get pendingNoteSources => '下一条消息将引用';
 
   @override
+  String get assistantProposedAction => '待确认的笔记操作';
+
+  @override
+  String get toolCreateNote => '创建新笔记';
+
+  @override
+  String get toolAppendNote => '追加到笔记';
+
+  @override
+  String get toolReplaceNote => '替换笔记正文';
+
+  @override
+  String get reviewToolAction => '预览并确认';
+
+  @override
+  String get toolActionCompleted => '已执行';
+
+  @override
+  String get toolActionConfirmationNotice => '此操作会修改本地笔记，确认前不会写入。';
+
+  @override
+  String get toolTargetNote => '目标笔记';
+
+  @override
+  String get toolCurrentContent => '当前内容';
+
+  @override
+  String get toolProposedContent => '拟写入内容';
+
+  @override
+  String get confirmCreateNote => '确认创建';
+
+  @override
+  String get confirmAppendNote => '确认追加';
+
+  @override
+  String get confirmReplaceNote => '确认替换';
+
+  @override
+  String get toolActionSucceeded => '笔记操作已完成';
+
+  @override
+  String get toolActionTargetMissing => '找不到目标笔记，可能已被删除';
+
+  @override
+  String toolActionFailed(String error) {
+    return '笔记操作失败：$error';
+  }
+
+  @override
+  String get toolProposalFallback => '我准备了一个笔记操作，请预览确认后再执行。';
+
+  @override
+  String toolSearchNoResults(String query) {
+    return '资料库中没有找到与“$query”匹配的笔记。请直接说明未找到，不要重复搜索。';
+  }
+
+  @override
+  String toolSearchResultsReady(String query) {
+    return 'FKNotes 已返回“$query”的笔记搜索结果。请使用来源回答原问题；不要重复搜索。';
+  }
+
+  @override
+  String get toolSearchRetryBlocked => '模型未能使用检索结果完成回答，请换个问法重试。';
+
+  @override
   String get writeReplyToNote => '写入笔记';
 
   @override

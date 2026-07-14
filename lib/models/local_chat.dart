@@ -6,6 +6,74 @@ enum LocalChatAttachmentType { image }
 
 enum LocalChatNoteScope { selection, currentBlock, fullNote }
 
+enum LocalChatToolName { searchNotes, createNote, appendNote, replaceNote }
+
+enum LocalChatToolStatus { proposed, completed }
+
+class LocalChatToolCall {
+  final String id;
+  final LocalChatToolName name;
+  final String? query;
+  final int? noteId;
+  final String? title;
+  final String? content;
+  final LocalChatToolStatus status;
+
+  const LocalChatToolCall({
+    required this.id,
+    required this.name,
+    this.query,
+    this.noteId,
+    this.title,
+    this.content,
+    this.status = LocalChatToolStatus.proposed,
+  });
+
+  bool get isWrite => name != LocalChatToolName.searchNotes;
+
+  LocalChatToolCall copyWith({LocalChatToolStatus? status}) =>
+      LocalChatToolCall(
+        id: id,
+        name: name,
+        query: query,
+        noteId: noteId,
+        title: title,
+        content: content,
+        status: status ?? this.status,
+      );
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'name': name.name,
+    'query': query,
+    'noteId': noteId,
+    'title': title,
+    'content': content,
+    'status': status.name,
+  };
+
+  factory LocalChatToolCall.fromJson(Map<String, Object?> json) {
+    final id = json['id'];
+    final name = LocalChatToolName.values.where(
+      (value) => value.name == json['name'],
+    );
+    if (id is! String || id.isEmpty || name.isEmpty) {
+      throw const FormatException('聊天工具调用格式不正确');
+    }
+    return LocalChatToolCall(
+      id: id,
+      name: name.first,
+      query: json['query'] as String?,
+      noteId: json['noteId'] as int?,
+      title: json['title'] as String?,
+      content: json['content'] as String?,
+      status: json['status'] == LocalChatToolStatus.completed.name
+          ? LocalChatToolStatus.completed
+          : LocalChatToolStatus.proposed,
+    );
+  }
+}
+
 class LocalChatNoteContext {
   final int noteId;
   final String title;
@@ -158,6 +226,7 @@ class LocalChatMessage {
   final String content;
   final List<LocalChatAttachment> attachments;
   final List<LocalChatNoteContext> noteContexts;
+  final List<LocalChatToolCall> toolCalls;
   final DateTime createdAt;
   final LocalChatMessageStatus status;
 
@@ -168,6 +237,7 @@ class LocalChatMessage {
     required this.createdAt,
     this.attachments = const [],
     this.noteContexts = const [],
+    this.toolCalls = const [],
     this.status = LocalChatMessageStatus.complete,
   });
 
@@ -175,6 +245,7 @@ class LocalChatMessage {
     String? content,
     List<LocalChatAttachment>? attachments,
     List<LocalChatNoteContext>? noteContexts,
+    List<LocalChatToolCall>? toolCalls,
     LocalChatMessageStatus? status,
   }) => LocalChatMessage(
     id: id,
@@ -183,6 +254,7 @@ class LocalChatMessage {
     createdAt: createdAt,
     attachments: attachments ?? this.attachments,
     noteContexts: noteContexts ?? this.noteContexts,
+    toolCalls: toolCalls ?? this.toolCalls,
     status: status ?? this.status,
   );
 
@@ -194,6 +266,7 @@ class LocalChatMessage {
         .map((attachment) => attachment.toJson())
         .toList(),
     'noteContexts': noteContexts.map((context) => context.toJson()).toList(),
+    'toolCalls': toolCalls.map((call) => call.toJson()).toList(),
     'createdAt': createdAt.toIso8601String(),
     'status': status.name,
   };
@@ -228,6 +301,13 @@ class LocalChatMessage {
           .map(
             (context) => LocalChatNoteContext.fromJson(
               Map<String, Object?>.from(context as Map),
+            ),
+          )
+          .toList(growable: false),
+      toolCalls: (json['toolCalls'] as List? ?? const [])
+          .map(
+            (call) => LocalChatToolCall.fromJson(
+              Map<String, Object?>.from(call as Map),
             ),
           )
           .toList(growable: false),

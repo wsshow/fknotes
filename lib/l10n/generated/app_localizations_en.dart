@@ -1496,6 +1496,76 @@ class AppLocalizationsEn extends AppLocalizations {
   String get pendingNoteSources => 'Next message will reference';
 
   @override
+  String get assistantProposedAction => 'Note action awaiting confirmation';
+
+  @override
+  String get toolCreateNote => 'Create a new note';
+
+  @override
+  String get toolAppendNote => 'Append to note';
+
+  @override
+  String get toolReplaceNote => 'Replace note body';
+
+  @override
+  String get reviewToolAction => 'Preview and confirm';
+
+  @override
+  String get toolActionCompleted => 'Completed';
+
+  @override
+  String get toolActionConfirmationNotice =>
+      'This changes a local note. Nothing is written until you confirm.';
+
+  @override
+  String get toolTargetNote => 'Target note';
+
+  @override
+  String get toolCurrentContent => 'Current content';
+
+  @override
+  String get toolProposedContent => 'Proposed content';
+
+  @override
+  String get confirmCreateNote => 'Create note';
+
+  @override
+  String get confirmAppendNote => 'Append';
+
+  @override
+  String get confirmReplaceNote => 'Replace';
+
+  @override
+  String get toolActionSucceeded => 'Note action completed';
+
+  @override
+  String get toolActionTargetMissing =>
+      'The target note was not found. It may have been deleted.';
+
+  @override
+  String toolActionFailed(String error) {
+    return 'Note action failed: $error';
+  }
+
+  @override
+  String get toolProposalFallback =>
+      'I prepared a note action. Preview and confirm it before anything is changed.';
+
+  @override
+  String toolSearchNoResults(String query) {
+    return 'No notes matched “$query”. Say that none were found and do not search again.';
+  }
+
+  @override
+  String toolSearchResultsReady(String query) {
+    return 'FKNotes returned note search results for “$query”. Answer the original question using these sources and do not search again.';
+  }
+
+  @override
+  String get toolSearchRetryBlocked =>
+      'The model did not use the search results. Try rephrasing your request.';
+
+  @override
   String get writeReplyToNote => 'Write to note';
 
   @override

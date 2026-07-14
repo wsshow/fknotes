@@ -39,6 +39,7 @@ class LocalChatStore {
     required String content,
     List<LocalChatAttachment> attachments = const [],
     List<LocalChatNoteContext> noteContexts = const [],
+    List<LocalChatToolCall> toolCalls = const [],
     LocalChatMessageStatus status = LocalChatMessageStatus.complete,
   }) => LocalChatMessage(
     id: _uuid.v4(),
@@ -46,6 +47,7 @@ class LocalChatStore {
     content: content,
     attachments: List.unmodifiable(attachments),
     noteContexts: List.unmodifiable(noteContexts),
+    toolCalls: List.unmodifiable(toolCalls),
     createdAt: DateTime.now(),
     status: status,
   );
@@ -178,6 +180,9 @@ class LocalChatStore {
               noteContexts: _decodeNoteContexts(
                 row['note_contexts_json'] as String? ?? '[]',
               ),
+              toolCalls: _decodeToolCalls(
+                row['tool_calls_json'] as String? ?? '[]',
+              ),
               createdAt: DateTime.parse(row['created_at'] as String),
               status: row['status'] == 'stopped'
                   ? LocalChatMessageStatus.stopped
@@ -245,6 +250,9 @@ class LocalChatStore {
             'note_contexts_json': jsonEncode(
               message.noteContexts.map((context) => context.toJson()).toList(),
             ),
+            'tool_calls_json': jsonEncode(
+              message.toolCalls.map((call) => call.toJson()).toList(),
+            ),
             'status': message.status.name,
             'created_at': message.createdAt.toIso8601String(),
             'sort_order': index,
@@ -284,6 +292,22 @@ class LocalChatStore {
       return decoded
           .map(
             (item) => LocalChatNoteContext.fromJson(
+              Map<String, Object?>.from(item as Map),
+            ),
+          )
+          .toList(growable: false);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  List<LocalChatToolCall> _decodeToolCalls(String encoded) {
+    try {
+      final decoded = jsonDecode(encoded);
+      if (decoded is! List) return const [];
+      return decoded
+          .map(
+            (item) => LocalChatToolCall.fromJson(
               Map<String, Object?>.from(item as Map),
             ),
           )

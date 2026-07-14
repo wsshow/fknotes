@@ -5,20 +5,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 import '../app.dart';
 import '../l10n/l10n.dart';
 import '../l10n/local_model_l10n.dart';
 import '../models/local_chat.dart';
 import '../models/local_llm.dart';
+import '../models/note_entry.dart';
+import '../providers/note_provider.dart';
 import '../services/language_model_service.dart';
 import '../services/local_assistant_service.dart';
 import '../services/local_chat_prompt_builder.dart';
 import '../services/local_chat_note_context_builder.dart';
 import '../services/local_chat_store.dart';
+import '../services/local_chat_tool_protocol.dart';
 import '../services/local_model_manager.dart';
 import '../services/local_llm/local_llm_output_filter.dart';
 import '../services/note_assistant_prompt_builder.dart';
+import '../services/local_chat_note_action.dart';
+import '../services/note_service.dart';
+import '../services/search_service.dart';
 import '../services/file_storage_service.dart';
 import '../services/realtime_dictation_service.dart';
 import '../widgets/app_feedback.dart';
@@ -26,6 +33,7 @@ import '../widgets/app_popup_menu.dart';
 import '../widgets/editor_context_menu.dart';
 import '../widgets/fk_markdown_view.dart';
 import '../widgets/local_chat_note_picker.dart';
+import '../widgets/local_chat_tool_action_sheet.dart';
 import 'local_chat_roles_page.dart';
 import 'model_management_page.dart';
 
@@ -58,6 +66,13 @@ String _localizedChatDate(BuildContext context, DateTime value) {
     return context.l10n.yesterday;
   }
   return MaterialLocalizations.of(context).formatShortDate(value);
+}
+
+class _LocalChatGenerationAttempt {
+  final String raw;
+  final LocalLlmFinishReason reason;
+
+  const _LocalChatGenerationAttempt({required this.raw, required this.reason});
 }
 
 class LocalChatPage extends StatefulWidget {
@@ -336,6 +351,7 @@ class _LocalChatPageState extends State<LocalChatPage>
                     _ChatBubble(
                       message: message,
                       generating: _generating && message.id == _draftMessageId,
+                      onReviewTool: (call) => _reviewToolAction(message, call),
                       onWriteBack: writeBackSource == null
                           ? null
                           : () => _showWriteBackSheet(message, writeBackSource),
@@ -495,10 +511,12 @@ class _LocalChatPageState extends State<LocalChatPage>
   }
 
   Future<void> _generateResponse({bool waitForKeyboardDismiss = false}) async {
-    final request = LocalChatPromptBuilder.build(
+    final l10n = context.l10n;
+    final languageCode = Localizations.localeOf(context).languageCode;
+    var request = LocalChatPromptBuilder.build(
       systemPrompt: _session.systemPrompt,
       messages: _session.messages,
-      languageCode: Localizations.localeOf(context).languageCode,
+      languageCode: languageCode,
     );
     final sessionBeforeDraft = _session;
     final draft = _store.createMessage(
@@ -509,7 +527,6 @@ class _LocalChatPageState extends State<LocalChatPage>
           : sessionBeforeDraft.messages.last.noteContexts,
       status: LocalChatMessageStatus.stopped,
     );
-    final raw = StringBuffer();
     final sessionWithDraft = _session.copyWith(
       messages: [..._session.messages, draft],
     );
@@ -550,23 +567,70 @@ class _LocalChatPageState extends State<LocalChatPage>
         await _assistant.unload();
         return;
       }
-      await for (final event in _assistant.generate(request)) {
-        switch (event) {
-          case LocalLlmTextDelta():
-            raw.write(event.text);
-            final visible = LocalLlmOutputFilter.visibleText(raw.toString());
-            _replaceMessage(draft.id, draft.copyWith(content: visible));
-            if (mounted) {
-              setState(() {});
-              _scrollToEnd();
-            }
-          case LocalLlmGenerationCompleted():
-            finishStatus =
-                event.reason == LocalLlmFinishReason.completed ||
-                    event.reason == LocalLlmFinishReason.maxTokens
-                ? LocalChatMessageStatus.complete
-                : LocalChatMessageStatus.stopped;
+      var activeDraft = draft;
+      var responseContexts = draft.noteContexts;
+      for (var round = 0; round < 2; round++) {
+        final attempt = await _runGenerationAttempt(request, activeDraft);
+        final filtered = LocalLlmOutputFilter.visibleText(attempt.raw);
+        final calls = LocalChatToolProtocol.parseCalls(filtered);
+        final searchCalls = calls.where(
+          (call) => call.name == LocalChatToolName.searchNotes,
+        );
+        if (searchCalls.isNotEmpty && round == 0) {
+          final searchCall = searchCalls.first;
+          responseContexts = await _searchNoteContexts(
+            searchCall.query!,
+            responseContexts,
+            untitledLabel: l10n.untitled,
+          );
+          final searchMessage =
+              responseContexts.length > draft.noteContexts.length
+              ? l10n.toolSearchResultsReady(searchCall.query!)
+              : l10n.toolSearchNoResults(searchCall.query!);
+          final previous = sessionBeforeDraft.messages;
+          final latestUser = previous.last.copyWith(noteContexts: const []);
+          final followupMessages = [
+            ...previous.take(previous.length - 1),
+            latestUser,
+            _store.createMessage(
+              role: LocalChatRole.user,
+              content: searchMessage,
+              noteContexts: responseContexts,
+            ),
+          ];
+          request = LocalChatPromptBuilder.build(
+            systemPrompt: sessionBeforeDraft.systemPrompt,
+            messages: followupMessages,
+            languageCode: languageCode,
+          );
+          activeDraft = draft.copyWith(
+            content: '',
+            noteContexts: responseContexts,
+            toolCalls: const [],
+          );
+          _replaceMessage(draft.id, activeDraft);
+          if (mounted) setState(() {});
+          continue;
         }
+        final writeCalls = calls.where((call) => call.isWrite).toList();
+        var visible = LocalChatToolProtocol.visibleText(filtered).trim();
+        if (visible.isEmpty && writeCalls.isNotEmpty) {
+          visible = l10n.toolProposalFallback;
+        } else if (visible.isEmpty && searchCalls.isNotEmpty) {
+          visible = l10n.toolSearchRetryBlocked;
+        }
+        activeDraft = draft.copyWith(
+          content: visible,
+          noteContexts: responseContexts,
+          toolCalls: writeCalls,
+        );
+        _replaceMessage(draft.id, activeDraft);
+        finishStatus =
+            attempt.reason == LocalLlmFinishReason.completed ||
+                attempt.reason == LocalLlmFinishReason.maxTokens
+            ? LocalChatMessageStatus.complete
+            : LocalChatMessageStatus.stopped;
+        break;
       }
     } catch (error) {
       _generationError = _cleanError(error);
@@ -576,7 +640,7 @@ class _LocalChatPageState extends State<LocalChatPage>
       );
       if (index >= 0) {
         final generated = _session.messages[index];
-        if (generated.content.trim().isEmpty) {
+        if (generated.content.trim().isEmpty && generated.toolCalls.isEmpty) {
           _session = _session.copyWith(
             messages: _session.messages
                 .where((message) => message.id != draft.id)
@@ -601,6 +665,51 @@ class _LocalChatPageState extends State<LocalChatPage>
         _scrollToEnd();
       }
     }
+  }
+
+  Future<_LocalChatGenerationAttempt> _runGenerationAttempt(
+    LocalLlmGenerationRequest request,
+    LocalChatMessage draft,
+  ) async {
+    final raw = StringBuffer();
+    var reason = LocalLlmFinishReason.canceled;
+    await for (final event in _assistant.generate(request)) {
+      switch (event) {
+        case LocalLlmTextDelta():
+          raw.write(event.text);
+          final filtered = LocalLlmOutputFilter.visibleText(raw.toString());
+          final visible = LocalChatToolProtocol.visibleText(filtered);
+          _replaceMessage(draft.id, draft.copyWith(content: visible));
+          if (mounted) {
+            setState(() {});
+            _scrollToEnd();
+          }
+        case LocalLlmGenerationCompleted():
+          reason = event.reason;
+      }
+    }
+    return _LocalChatGenerationAttempt(raw: raw.toString(), reason: reason);
+  }
+
+  Future<List<LocalChatNoteContext>> _searchNoteContexts(
+    String query,
+    List<LocalChatNoteContext> existing, {
+    required String untitledLabel,
+  }) async {
+    final results = await SearchService.instance.search(query);
+    final contexts = <LocalChatNoteContext>[...existing];
+    for (final result in results) {
+      final note = result.note;
+      if (note == null || note.id == null) continue;
+      contexts.add(
+        LocalChatNoteContextBuilder.fromNote(
+          note,
+          untitledLabel: untitledLabel,
+        ),
+      );
+      if (contexts.length >= LocalChatNoteContextBuilder.maxNotes) break;
+    }
+    return LocalChatNoteContextBuilder.fit(contexts);
   }
 
   void _replaceMessage(String id, LocalChatMessage replacement) {
@@ -646,6 +755,75 @@ class _LocalChatPageState extends State<LocalChatPage>
       AppFeedback.success(context, context.l10n.replyWrittenToNote);
     } else {
       AppFeedback.error(context, context.l10n.replyWriteToNoteFailed);
+    }
+  }
+
+  Future<void> _reviewToolAction(
+    LocalChatMessage message,
+    LocalChatToolCall call,
+  ) async {
+    if (call.status == LocalChatToolStatus.completed || !call.isWrite) return;
+    NoteEntry? target;
+    if (call.name != LocalChatToolName.createNote) {
+      target = await NoteService.instance.getEntry(call.noteId!);
+      if (!mounted) return;
+      if (target == null || target.isDeleted) {
+        AppFeedback.error(context, context.l10n.toolActionTargetMissing);
+        return;
+      }
+    }
+    final confirmed = await showLocalChatToolActionSheet(
+      context,
+      call: call,
+      target: target,
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      final provider = context.read<NoteProvider>();
+      final now = DateTime.now();
+      if (call.name == LocalChatToolName.createNote) {
+        await provider.addEntry(
+          LocalChatNoteAction.createNote(
+            call,
+            now: now,
+            untitledLabel: context.l10n.untitled,
+          ),
+        );
+      } else {
+        await provider.updateEntry(
+          LocalChatNoteAction.applyToNote(call, target!, now: now),
+        );
+      }
+      final currentIndex = _session.messages.indexWhere(
+        (item) => item.id == message.id,
+      );
+      if (currentIndex >= 0) {
+        final current = _session.messages[currentIndex];
+        _replaceMessage(
+          current.id,
+          current.copyWith(
+            toolCalls: current.toolCalls
+                .map(
+                  (item) => item.id == call.id
+                      ? item.copyWith(status: LocalChatToolStatus.completed)
+                      : item,
+                )
+                .toList(growable: false),
+          ),
+        );
+        _session = _session.copyWith(updatedAt: DateTime.now());
+        if (mounted) setState(() {});
+        await _persist();
+      }
+      if (mounted) {
+        AppFeedback.success(context, context.l10n.toolActionSucceeded);
+      }
+    } catch (error) {
+      if (!mounted) return;
+      AppFeedback.error(
+        context,
+        context.l10n.toolActionFailed(_cleanError(error)),
+      );
     }
   }
 
@@ -1343,11 +1521,13 @@ class _ChatBubble extends StatelessWidget {
   final LocalChatMessage message;
   final bool generating;
   final VoidCallback? onWriteBack;
+  final ValueChanged<LocalChatToolCall>? onReviewTool;
 
   const _ChatBubble({
     required this.message,
     required this.generating,
     this.onWriteBack,
+    this.onReviewTool,
   });
 
   @override
@@ -1430,6 +1610,19 @@ class _ChatBubble extends StatelessWidget {
                     ),
                   ),
               ],
+              if (!user && message.toolCalls.any((call) => call.isWrite))
+                for (final call in message.toolCalls.where(
+                  (item) => item.isWrite,
+                ))
+                  LocalChatToolActionCard(
+                    call: call,
+                    targetLabel: _toolTargetLabel(context, message, call),
+                    onReview:
+                        call.status == LocalChatToolStatus.completed ||
+                            onReviewTool == null
+                        ? null
+                        : () => onReviewTool!(call),
+                  ),
               if (user && message.content.isNotEmpty) ...[
                 const SizedBox(height: 5),
                 Align(
@@ -1676,6 +1869,22 @@ String _noteScopeLabel(BuildContext context, LocalChatNoteScope scope) =>
       LocalChatNoteScope.currentBlock => context.l10n.scopeCurrentBlock,
       LocalChatNoteScope.fullNote => context.l10n.scopeFullNote,
     };
+
+String _toolTargetLabel(
+  BuildContext context,
+  LocalChatMessage message,
+  LocalChatToolCall call,
+) {
+  if (call.name == LocalChatToolName.createNote) {
+    return call.title?.trim().isNotEmpty == true
+        ? call.title!.trim()
+        : context.l10n.untitled;
+  }
+  for (final source in message.noteContexts) {
+    if (source.noteId == call.noteId) return source.title;
+  }
+  return '${context.l10n.toolTargetNote} #${call.noteId}';
+}
 
 String _placementLabel(
   BuildContext context,

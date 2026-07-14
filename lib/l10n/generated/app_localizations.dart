@@ -2570,6 +2570,126 @@ abstract class AppLocalizations {
   /// **'下一条消息将引用'**
   String get pendingNoteSources;
 
+  /// No description provided for @assistantProposedAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'待确认的笔记操作'**
+  String get assistantProposedAction;
+
+  /// No description provided for @toolCreateNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'创建新笔记'**
+  String get toolCreateNote;
+
+  /// No description provided for @toolAppendNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'追加到笔记'**
+  String get toolAppendNote;
+
+  /// No description provided for @toolReplaceNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'替换笔记正文'**
+  String get toolReplaceNote;
+
+  /// No description provided for @reviewToolAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'预览并确认'**
+  String get reviewToolAction;
+
+  /// No description provided for @toolActionCompleted.
+  ///
+  /// In zh, this message translates to:
+  /// **'已执行'**
+  String get toolActionCompleted;
+
+  /// No description provided for @toolActionConfirmationNotice.
+  ///
+  /// In zh, this message translates to:
+  /// **'此操作会修改本地笔记，确认前不会写入。'**
+  String get toolActionConfirmationNotice;
+
+  /// No description provided for @toolTargetNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'目标笔记'**
+  String get toolTargetNote;
+
+  /// No description provided for @toolCurrentContent.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前内容'**
+  String get toolCurrentContent;
+
+  /// No description provided for @toolProposedContent.
+  ///
+  /// In zh, this message translates to:
+  /// **'拟写入内容'**
+  String get toolProposedContent;
+
+  /// No description provided for @confirmCreateNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认创建'**
+  String get confirmCreateNote;
+
+  /// No description provided for @confirmAppendNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认追加'**
+  String get confirmAppendNote;
+
+  /// No description provided for @confirmReplaceNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认替换'**
+  String get confirmReplaceNote;
+
+  /// No description provided for @toolActionSucceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'笔记操作已完成'**
+  String get toolActionSucceeded;
+
+  /// No description provided for @toolActionTargetMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'找不到目标笔记，可能已被删除'**
+  String get toolActionTargetMissing;
+
+  /// No description provided for @toolActionFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'笔记操作失败：{error}'**
+  String toolActionFailed(String error);
+
+  /// No description provided for @toolProposalFallback.
+  ///
+  /// In zh, this message translates to:
+  /// **'我准备了一个笔记操作，请预览确认后再执行。'**
+  String get toolProposalFallback;
+
+  /// No description provided for @toolSearchNoResults.
+  ///
+  /// In zh, this message translates to:
+  /// **'资料库中没有找到与“{query}”匹配的笔记。请直接说明未找到，不要重复搜索。'**
+  String toolSearchNoResults(String query);
+
+  /// No description provided for @toolSearchResultsReady.
+  ///
+  /// In zh, this message translates to:
+  /// **'FKNotes 已返回“{query}”的笔记搜索结果。请使用来源回答原问题；不要重复搜索。'**
+  String toolSearchResultsReady(String query);
+
+  /// No description provided for @toolSearchRetryBlocked.
+  ///
+  /// In zh, this message translates to:
+  /// **'模型未能使用检索结果完成回答，请换个问法重试。'**
+  String get toolSearchRetryBlocked;
+
   /// No description provided for @writeReplyToNote.
   ///
   /// In zh, this message translates to:

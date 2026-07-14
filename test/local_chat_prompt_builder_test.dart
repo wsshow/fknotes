@@ -45,6 +45,8 @@ void main() {
       contains('GitHub Flavored Markdown'),
     );
     expect(request.messages.first.content, contains('LaTeX'));
+    expect(request.messages.first.content, contains('<fknotes_tool>'));
+    expect(request.messages.first.content, contains('search_notes'));
     expect(request.messages.first.content, contains(r'行内公式用 $...$'));
     expect(request.messages.map((item) => item.role), [
       LocalLlmRole.system,
@@ -150,6 +152,10 @@ void main() {
 
     expect(request.messages.first.content, contains('on-device assistant'));
     expect(request.messages.first.content, contains('Use LaTeX for math'));
+    expect(
+      request.messages.first.content,
+      contains('controlled FKNotes tools'),
+    );
     expect(request.messages.first.content, isNot(contains('准确、清晰')));
   });
 

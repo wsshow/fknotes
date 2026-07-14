@@ -204,4 +204,49 @@ void main() {
       LocalChatNoteScope.currentBlock,
     );
   });
+
+  test('persists controlled tool proposals and completion state', () async {
+    var session = store.createSession().copyWith(
+      messages: [
+        store.createMessage(
+          role: LocalChatRole.assistant,
+          content: '请确认是否追加到笔记。',
+          toolCalls: const [
+            LocalChatToolCall(
+              id: 'tool-1',
+              name: LocalChatToolName.appendNote,
+              noteId: 42,
+              content: '追加内容',
+            ),
+          ],
+        ),
+      ],
+    );
+    await store.saveSession(session);
+
+    var restored = (await store.loadSessions()).single;
+    expect(restored.messages.single.toolCalls.single.noteId, 42);
+    expect(
+      restored.messages.single.toolCalls.single.status,
+      LocalChatToolStatus.proposed,
+    );
+
+    session = restored.copyWith(
+      messages: [
+        restored.messages.single.copyWith(
+          toolCalls: [
+            restored.messages.single.toolCalls.single.copyWith(
+              status: LocalChatToolStatus.completed,
+            ),
+          ],
+        ),
+      ],
+    );
+    await store.saveSession(session);
+    restored = (await store.loadSessions()).single;
+    expect(
+      restored.messages.single.toolCalls.single.status,
+      LocalChatToolStatus.completed,
+    );
+  });
 }
