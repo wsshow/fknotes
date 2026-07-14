@@ -71,7 +71,7 @@ void main() {
       find.byKey(const Key('local-chat-persona-switcher')),
       findsOneWidget,
     );
-    expect(find.byKey(const Key('local-chat-add-image')), findsOneWidget);
+    expect(find.byKey(const Key('local-chat-more-actions')), findsOneWidget);
     expect(find.byKey(const Key('local-chat-voice-input')), findsOneWidget);
     expect(tester.takeException(), isNull);
 

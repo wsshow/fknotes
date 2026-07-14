@@ -1331,6 +1331,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noteSources => '笔记来源';
 
   @override
+  String openSourceNote(String title) {
+    return '打开来源笔记：$title';
+  }
+
+  @override
+  String get sourceNoteUnavailable => '这篇来源笔记已不存在或位于回收站';
+
+  @override
   String get referenceNotes => '引用资料库笔记';
 
   @override

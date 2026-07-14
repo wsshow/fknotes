@@ -1464,6 +1464,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noteSources => 'Note sources';
 
   @override
+  String openSourceNote(String title) {
+    return 'Open source note: $title';
+  }
+
+  @override
+  String get sourceNoteUnavailable =>
+      'This source note no longer exists or is in the trash.';
+
+  @override
   String get referenceNotes => 'Reference library notes';
 
   @override

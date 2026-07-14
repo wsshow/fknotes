@@ -16,6 +16,7 @@ import '../models/note_entry.dart';
 import '../providers/note_provider.dart';
 import '../services/language_model_service.dart';
 import '../services/local_assistant_service.dart';
+import '../services/local_chat_citation_formatter.dart';
 import '../services/local_chat_prompt_builder.dart';
 import '../services/local_chat_note_context_builder.dart';
 import '../services/local_chat_store.dart';
@@ -56,6 +57,9 @@ String _localizedPersonaName(BuildContext context, LocalChatPersona persona) =>
 String _localizedSessionTitle(BuildContext context, String title) =>
     title == '新对话' ? context.l10n.newConversation : title;
 
+typedef LocalChatNoteOpener =
+    Future<void> Function(LocalChatNoteContext source);
+
 String _localizedChatDate(BuildContext context, DateTime value) {
   final today = DateTime.now();
   if (LocalChatTimeLabel.isSameDay(value, today)) return context.l10n.today;
@@ -92,12 +96,14 @@ class LocalChatPage extends StatefulWidget {
     NoteAssistantPlacement placement,
   )?
   onWriteBack;
+  final LocalChatNoteOpener? onOpenNote;
 
   const LocalChatPage({
     super.key,
     this.initialSessionId,
     this.initialNoteContext,
     this.onWriteBack,
+    this.onOpenNote,
   });
 
   @override
@@ -363,6 +369,7 @@ class _LocalChatPageState extends State<LocalChatPage>
                       message: message,
                       generating: _generating && message.id == _draftMessageId,
                       loadingLabel: _generationLoadingLabel(context),
+                      onOpenNote: widget.onOpenNote,
                       onReviewTool: (call) => _reviewToolAction(message, call),
                       onWriteBack: writeBackSource == null
                           ? null
@@ -663,6 +670,10 @@ class _LocalChatPageState extends State<LocalChatPage>
         } else if (visible.isEmpty && searchCalls.isNotEmpty) {
           visible = l10n.toolSearchRetryBlocked;
         }
+        visible = LocalChatCitationFormatter.normalize(
+          visible,
+          sourceCount: responseContexts.length,
+        );
         activeDraft = draft.copyWith(
           content: visible,
           noteContexts: responseContexts,
@@ -787,18 +798,18 @@ class _LocalChatPageState extends State<LocalChatPage>
     LocalChatMessage message,
     LocalChatNoteContext source,
   ) async {
+    final content = LocalChatCitationFormatter.normalize(
+      message.content,
+      sourceCount: message.noteContexts.length,
+    );
     final placement = await showModalBottomSheet<NoteAssistantPlacement>(
       context: context,
       isScrollControlled: true,
       builder: (context) =>
-          _NoteWriteBackSheet(source: source, content: message.content),
+          _NoteWriteBackSheet(source: source, content: content),
     );
     if (placement == null || !mounted) return;
-    final written = await widget.onWriteBack?.call(
-      source,
-      message.content,
-      placement,
-    );
+    final written = await widget.onWriteBack?.call(source, content, placement);
     if (!mounted) return;
     if (written == true) {
       AppFeedback.success(context, context.l10n.replyWrittenToNote);
@@ -1570,6 +1581,7 @@ class _ChatBubble extends StatelessWidget {
   final LocalChatMessage message;
   final bool generating;
   final String loadingLabel;
+  final LocalChatNoteOpener? onOpenNote;
   final VoidCallback? onWriteBack;
   final ValueChanged<LocalChatToolCall>? onReviewTool;
 
@@ -1577,6 +1589,7 @@ class _ChatBubble extends StatelessWidget {
     required this.message,
     required this.generating,
     required this.loadingLabel,
+    this.onOpenNote,
     this.onWriteBack,
     this.onReviewTool,
   });
@@ -1584,6 +1597,12 @@ class _ChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = message.role == LocalChatRole.user;
+    final displayContent = user
+        ? message.content
+        : LocalChatCitationFormatter.normalize(
+            message.content,
+            sourceCount: message.noteContexts.length,
+          );
     if (user && message.attachments.isNotEmpty) {
       return Semantics(
         container: true,
@@ -1596,6 +1615,7 @@ class _ChatBubble extends StatelessWidget {
     }
     return Semantics(
       container: true,
+      explicitChildNodes: true,
       liveRegion: generating,
       label: user
           ? context.l10n.yourMessage
@@ -1625,22 +1645,25 @@ class _ChatBubble extends StatelessWidget {
             children: [
               if (message.attachments.isNotEmpty) ...[
                 _ChatMessageAttachments(attachments: message.attachments),
-                if (message.content.isNotEmpty) const SizedBox(height: 9),
+                if (displayContent.isNotEmpty) const SizedBox(height: 9),
               ],
-              if (message.content.isEmpty && generating)
+              if (displayContent.isEmpty && generating)
                 LocalChatGenerationIndicator(label: loadingLabel)
               else if (user)
                 LocalChatUserMessageText(
-                  content: message.content,
+                  content: displayContent,
                   lineHeight: 1.55,
                 )
               else
-                FkMarkdownView(data: message.content, compact: true),
+                FkMarkdownView(data: displayContent, compact: true),
               if (!user &&
-                  message.content.isNotEmpty &&
+                  displayContent.isNotEmpty &&
                   message.noteContexts.isNotEmpty) ...[
                 const SizedBox(height: 9),
-                _ChatNoteSources(noteContexts: message.noteContexts),
+                LocalChatNoteSources(
+                  noteContexts: message.noteContexts,
+                  onOpenNote: onOpenNote,
+                ),
                 if (onWriteBack != null)
                   Align(
                     alignment: Alignment.centerRight,
@@ -1665,7 +1688,7 @@ class _ChatBubble extends StatelessWidget {
                         ? null
                         : () => onReviewTool!(call),
                   ),
-              if (user && message.content.isNotEmpty) ...[
+              if (user && displayContent.isNotEmpty) ...[
                 const SizedBox(height: 5),
                 Align(
                   alignment: Alignment.centerRight,
@@ -1678,7 +1701,7 @@ class _ChatBubble extends StatelessWidget {
                   ),
                 ),
               ],
-              if (!user && message.content.isNotEmpty) ...[
+              if (!user && displayContent.isNotEmpty) ...[
                 const SizedBox(height: 3),
                 Row(
                   mainAxisSize: MainAxisSize.min,
@@ -1705,7 +1728,7 @@ class _ChatBubble extends StatelessWidget {
                       tooltip: context.l10n.copyReply,
                       onPressed: () async {
                         await Clipboard.setData(
-                          ClipboardData(text: message.content),
+                          ClipboardData(text: displayContent),
                         );
                         if (context.mounted) {
                           AppFeedback.success(
@@ -1784,60 +1807,138 @@ class LocalChatGenerationIndicator extends StatelessWidget {
   );
 }
 
-class _ChatNoteSources extends StatelessWidget {
+class LocalChatNoteSources extends StatelessWidget {
   final List<LocalChatNoteContext> noteContexts;
+  final LocalChatNoteOpener? onOpenNote;
 
-  const _ChatNoteSources({required this.noteContexts});
+  const LocalChatNoteSources({
+    super.key,
+    required this.noteContexts,
+    this.onOpenNote,
+  });
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(10),
-    decoration: BoxDecoration(
-      color: AppColors.canvas,
-      borderRadius: BorderRadius.circular(11),
-      border: Border.all(color: AppColors.line),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          context.l10n.noteSources,
-          style: const TextStyle(
-            color: AppColors.muted,
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
+  Widget build(BuildContext context) {
+    final showNumbers = noteContexts.length > 1;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(7, 9, 7, 7),
+      decoration: BoxDecoration(
+        color: AppColors.canvas,
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              context.l10n.noteSources,
+              style: const TextStyle(
+                color: AppColors.muted,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(height: 3),
+          for (var index = 0; index < noteContexts.length; index++)
+            _LocalChatNoteSourceRow(
+              note: noteContexts[index],
+              number: showNumbers ? index + 1 : null,
+              onTap: onOpenNote == null
+                  ? null
+                  : () => onOpenNote!(noteContexts[index]),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LocalChatNoteSourceRow extends StatelessWidget {
+  final LocalChatNoteContext note;
+  final int? number;
+  final VoidCallback? onTap;
+
+  const _LocalChatNoteSourceRow({
+    required this.note,
+    required this.number,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    container: true,
+    button: onTap != null,
+    onTap: onTap,
+    label: onTap == null ? note.title : context.l10n.openSourceNote(note.title),
+    child: ExcludeSemantics(
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(9),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          key: Key('local-chat-note-source-${note.noteId}'),
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 42),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 6),
+              child: Row(
+                children: [
+                  if (number == null)
+                    const Icon(
+                      Icons.description_outlined,
+                      color: AppColors.moss,
+                      size: 19,
+                    )
+                  else
+                    Container(
+                      width: 22,
+                      height: 22,
+                      alignment: Alignment.center,
+                      decoration: const BoxDecoration(
+                        color: AppColors.softGreen,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        '$number',
+                        style: const TextStyle(
+                          color: AppColors.moss,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${note.title} · ${_noteScopeLabel(context, note.scope)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.ink,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  if (onTap != null) ...[
+                    const SizedBox(width: 4),
+                    const Icon(
+                      Icons.chevron_right_rounded,
+                      color: AppColors.muted,
+                      size: 19,
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
         ),
-        const SizedBox(height: 5),
-        for (var index = 0; index < noteContexts.length; index++)
-          Padding(
-            padding: EdgeInsets.only(
-              bottom: index == noteContexts.length - 1 ? 0 : 4,
-            ),
-            child: Row(
-              children: [
-                Text(
-                  '[N${index + 1}]',
-                  style: const TextStyle(
-                    color: AppColors.moss,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    '${noteContexts[index].title} · ${_noteScopeLabel(context, noteContexts[index].scope)}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
+      ),
     ),
   );
 }

@@ -2516,6 +2516,18 @@ abstract class AppLocalizations {
   /// **'笔记来源'**
   String get noteSources;
 
+  /// No description provided for @openSourceNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开来源笔记：{title}'**
+  String openSourceNote(String title);
+
+  /// No description provided for @sourceNoteUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'这篇来源笔记已不存在或位于回收站'**
+  String get sourceNoteUnavailable;
+
   /// No description provided for @referenceNotes.
   ///
   /// In zh, this message translates to:

@@ -42,6 +42,18 @@ class NoteEditorPage extends StatefulWidget {
   final List<String> initialImportJobIds;
   final List<String> initialVideoJobIds;
 
+  static Future<void> openById(BuildContext context, int noteId) async {
+    final entry = context.read<NoteProvider>().getEntryById(noteId);
+    if (entry == null || entry.isDeleted) {
+      AppFeedback.show(context, context.l10n.sourceNoteUnavailable);
+      return;
+    }
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(builder: (_) => NoteEditorPage(existingEntry: entry)),
+    );
+  }
+
   const NoteEditorPage({
     super.key,
     this.existingEntry,
@@ -705,6 +717,14 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       MaterialPageRoute(
         builder: (_) => LocalChatPage(
           initialNoteContext: noteContext,
+          onOpenNote: (source) async {
+            if (!mounted) return;
+            if (source.noteId == _entry?.id) {
+              Navigator.pop(context);
+              return;
+            }
+            await NoteEditorPage.openById(context, source.noteId);
+          },
           onWriteBack: (source, text, placement) async {
             if (!mounted || source.noteId != _entry?.id) return false;
             final inserted =
