@@ -16,9 +16,7 @@ enum ReadAloudStatus { idle, generating, playing, paused, failed }
 class NoteReadAloudService extends ChangeNotifier {
   NoteReadAloudService._() {
     _player.playerStateStream.listen((state) {
-      if (state.processingState == ProcessingState.completed) {
-        unawaited(stop());
-      } else if (state.playing && status != ReadAloudStatus.playing) {
+      if (state.playing && status != ReadAloudStatus.playing) {
         status = ReadAloudStatus.playing;
         notifyListeners();
       }
@@ -41,6 +39,8 @@ class NoteReadAloudService extends ChangeNotifier {
   Completer<String>? _generation;
   String? _temporaryWavePath;
   int _requestGeneration = 0;
+  Future<void> _transition = Future.value();
+  Future<void>? _workerCleanupFuture;
 
   ReadAloudStatus status = ReadAloudStatus.idle;
   String? errorMessage;
@@ -51,16 +51,21 @@ class NoteReadAloudService extends ChangeNotifier {
   Future<void> speak(String rawText) async {
     final text = rawText.trim();
     if (text.isEmpty) throw StateError('笔记中没有可朗读的文字');
-    await stop();
-    final requestGeneration = ++_requestGeneration;
-    status = ReadAloudStatus.generating;
-    errorMessage = null;
-    notifyListeners();
+    var requestGeneration = 0;
+    LocalInferenceLease? requestLease;
     try {
-      _inferenceLease = _inference.acquire(
-        type: LocalInferenceTaskType.readAloud,
-        ownerId: 'note-read-aloud',
-      );
+      await _serializeTransition(() async {
+        await _stopInternal();
+        requestGeneration = ++_requestGeneration;
+        status = ReadAloudStatus.generating;
+        errorMessage = null;
+        notifyListeners();
+        requestLease = _inference.acquire(
+          type: LocalInferenceTaskType.readAloud,
+          ownerId: 'note-read-aloud',
+        );
+        _inferenceLease = requestLease;
+      });
       final model = await _models.inspect(verifyIntegrity: true);
       _ensureCurrent(requestGeneration);
       if (!model.installed) {
@@ -87,23 +92,35 @@ class NoteReadAloudService extends ChangeNotifier {
       status = ReadAloudStatus.playing;
       notifyListeners();
       await _player.play();
+      _ensureCurrent(requestGeneration);
+      await _serializeTransition(() async {
+        if (requestGeneration == _requestGeneration) await _stopInternal();
+      });
     } catch (error) {
-      await _cleanupWorker();
-      await _deleteTemporaryWave();
-      _inferenceLease?.release();
-      _inferenceLease = null;
-      if (error is _ReadAloudCanceled) {
-        status = ReadAloudStatus.idle;
-        errorMessage = null;
-        notifyListeners();
+      if (requestGeneration != _requestGeneration) {
+        requestLease?.release();
         return;
       }
-      status = ReadAloudStatus.failed;
-      errorMessage = error.toString().replaceFirst(
-        RegExp(r'^(Bad state: |StateError: |Exception: )'),
-        '',
-      );
-      notifyListeners();
+      await _serializeTransition(() async {
+        if (requestGeneration != _requestGeneration) return;
+        await _cleanupWorker();
+        await _deleteTemporaryWave();
+        _releaseRequestLease(requestLease);
+        if (error is _ReadAloudCanceled) {
+          status = ReadAloudStatus.idle;
+          errorMessage = null;
+        } else {
+          status = ReadAloudStatus.failed;
+          errorMessage = error.toString().replaceFirst(
+            RegExp(r'^(Bad state: |StateError: |Exception: )'),
+            '',
+          );
+        }
+        notifyListeners();
+      });
+      if (error is _ReadAloudCanceled) {
+        return;
+      }
       rethrow;
     }
   }
@@ -122,7 +139,9 @@ class NoteReadAloudService extends ChangeNotifier {
     await _player.play();
   }
 
-  Future<void> stop() async {
+  Future<void> stop() => _serializeTransition(_stopInternal);
+
+  Future<void> _stopInternal() async {
     _requestGeneration++;
     await _player.stop();
     if (!(_generation?.isCompleted ?? true)) {
@@ -130,8 +149,9 @@ class NoteReadAloudService extends ChangeNotifier {
     }
     await _cleanupWorker();
     await _deleteTemporaryWave();
-    _inferenceLease?.release();
+    final lease = _inferenceLease;
     _inferenceLease = null;
+    lease?.release();
     status = ReadAloudStatus.idle;
     errorMessage = null;
     notifyListeners();
@@ -198,7 +218,20 @@ class NoteReadAloudService extends ChangeNotifier {
     }
   }
 
-  Future<void> _cleanupWorker() async {
+  Future<void> _cleanupWorker() {
+    final activeCleanup = _workerCleanupFuture;
+    if (activeCleanup != null) return activeCleanup;
+    late final Future<void> cleanup;
+    cleanup = _performWorkerCleanup().whenComplete(() {
+      if (identical(_workerCleanupFuture, cleanup)) {
+        _workerCleanupFuture = null;
+      }
+    });
+    _workerCleanupFuture = cleanup;
+    return cleanup;
+  }
+
+  Future<void> _performWorkerCleanup() async {
     _worker?.kill(priority: Isolate.immediate);
     _worker = null;
     await _messageSubscription?.cancel();
@@ -214,6 +247,17 @@ class NoteReadAloudService extends ChangeNotifier {
     _errors = null;
     _exits = null;
     _generation = null;
+  }
+
+  Future<void> _serializeTransition(Future<void> Function() operation) {
+    final result = _transition.then((_) => operation());
+    _transition = result.catchError((_) {});
+    return result;
+  }
+
+  void _releaseRequestLease(LocalInferenceLease? requestLease) {
+    if (identical(_inferenceLease, requestLease)) _inferenceLease = null;
+    requestLease?.release();
   }
 
   Future<void> _deleteTemporaryWave() async {

@@ -62,6 +62,7 @@ class LocalLlmCoordinator {
     }
     if (_snapshot.model?.id == model.id &&
         _snapshot.state == LocalLlmEngineState.ready &&
+        _engine.state == LocalLlmEngineState.ready &&
         _canReuseLoadedOptions(_loadedOptions, options)) {
       return;
     }
@@ -144,6 +145,7 @@ class LocalLlmCoordinator {
           throw const LocalLlmException('已有生成任务正在运行');
         }
         final done = Completer<void>();
+        Object? generationError;
         _generationDone = done;
         _emit(LocalLlmEngineState.generating, model: _snapshot.model);
         try {
@@ -172,13 +174,22 @@ class LocalLlmCoordinator {
             }
             if (!controller.isClosed) controller.add(event);
           }
+        } catch (error) {
+          generationError = error;
+          rethrow;
         } finally {
           if (!done.isCompleted) done.complete();
           if (identical(_generationDone, done)) _generationDone = null;
-          if (!_disposed &&
-              _snapshot.state != LocalLlmEngineState.unloading &&
-              _snapshot.state != LocalLlmEngineState.failed) {
-            _emit(LocalLlmEngineState.ready, model: _snapshot.model);
+          if (!_disposed && _snapshot.state != LocalLlmEngineState.unloading) {
+            if (_engine.state == LocalLlmEngineState.failed) {
+              _emit(
+                LocalLlmEngineState.failed,
+                model: _snapshot.model,
+                error: generationError,
+              );
+            } else if (_snapshot.state != LocalLlmEngineState.failed) {
+              _emit(LocalLlmEngineState.ready, model: _snapshot.model);
+            }
           }
         }
       } catch (error, stackTrace) {

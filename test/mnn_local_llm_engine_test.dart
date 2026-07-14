@@ -87,6 +87,29 @@ void main() {
     expect(engine.state, LocalLlmEngineState.ready);
   });
 
+  test('times out instead of holding the runtime forever', () async {
+    final engine = MnnLocalLlmEngine(
+      transport: _FakeMnnTransport(dropLifecycleEvents: true),
+      supportDirectoryProvider: () async => temporaryDirectory,
+      operationTimeout: const Duration(milliseconds: 20),
+    );
+
+    await expectLater(
+      engine.loadModel(
+        model(),
+        options: const LocalLlmLoadOptions(backend: LocalLlmBackend.cpu),
+      ),
+      throwsA(
+        isA<LocalLlmException>().having(
+          (error) => error.message,
+          'message',
+          contains('超时'),
+        ),
+      ),
+    );
+    expect(engine.state, LocalLlmEngineState.failed);
+  });
+
   test('cancel waits for native terminal event', () async {
     final transport = _FakeMnnTransport(blockGeneration: true);
     final engine = MnnLocalLlmEngine(
@@ -284,6 +307,7 @@ void main() {
 class _FakeMnnTransport implements MnnNativeTransport {
   final bool blockGeneration;
   final bool failAcceleratedLoad;
+  final bool dropLifecycleEvents;
   final _events = StreamController<MnnNativeEvent>.broadcast();
   final generationStarted = Completer<void>();
   final loadBackends = <LocalLlmBackend>[];
@@ -293,6 +317,7 @@ class _FakeMnnTransport implements MnnNativeTransport {
   _FakeMnnTransport({
     this.blockGeneration = false,
     this.failAcceleratedLoad = false,
+    this.dropLifecycleEvents = false,
   });
 
   @override
@@ -312,6 +337,7 @@ class _FakeMnnTransport implements MnnNativeTransport {
     required LocalLlmLoadOptions options,
   }) {
     loadBackends.add(options.backend);
+    if (dropLifecycleEvents) return true;
     scheduleMicrotask(
       () => _events.add(
         MnnNativeEvent(

@@ -26,6 +26,7 @@ class MnnLocalLlmEngine
   final MnnNativeTransport _transport;
   final Future<Directory> Function() _supportDirectoryProvider;
   final String Function(String relativePath) _attachmentPathResolver;
+  final Duration _operationTimeout;
   int _nextRequestId = 1;
   LocalLlmEngineState _state = LocalLlmEngineState.idle;
   LocalLlmModelDescriptor? _loadedModel;
@@ -37,11 +38,13 @@ class MnnLocalLlmEngine
     MnnNativeTransport? transport,
     Future<Directory> Function()? supportDirectoryProvider,
     String Function(String relativePath)? attachmentPathResolver,
+    Duration? operationTimeout,
   }) : _transport = transport ?? FfiMnnNativeTransport(),
        _supportDirectoryProvider =
            supportDirectoryProvider ?? getApplicationSupportDirectory,
        _attachmentPathResolver =
-           attachmentPathResolver ?? FileStorageService.instance.absolutePath;
+           attachmentPathResolver ?? FileStorageService.instance.absolutePath,
+       _operationTimeout = operationTimeout ?? const Duration(minutes: 2);
 
   @override
   String get id => 'mnn';
@@ -317,7 +320,10 @@ class MnnLocalLlmEngine
       throw const LocalLlmException('MNN 正在执行其他任务');
     }
     try {
-      return await completer.future;
+      return await completer.future.timeout(
+        _operationTimeout,
+        onTimeout: () => throw const LocalLlmException('MNN 操作超时，请重试'),
+      );
     } finally {
       await subscription.cancel();
     }

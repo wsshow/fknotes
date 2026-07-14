@@ -60,6 +60,37 @@ void main() {
     await coordinator.dispose();
   });
 
+  test('generation engine failure stays failed and forces a reload', () async {
+    final engine = _FakeEngine(failGeneration: true);
+    final coordinator = LocalLlmCoordinator(engine);
+    await coordinator.loadModel(modelA);
+
+    await expectLater(
+      coordinator
+          .generate(
+            LocalLlmGenerationRequest(
+              messages: const [
+                LocalLlmMessage(role: LocalLlmRole.user, content: '触发失败'),
+              ],
+            ),
+          )
+          .toList(),
+      throwsA(isA<LocalLlmException>()),
+    );
+
+    expect(engine.state, LocalLlmEngineState.failed);
+    expect(coordinator.snapshot.state, LocalLlmEngineState.failed);
+
+    await coordinator.loadModel(modelA);
+    expect(engine.operations, [
+      'load:model-a',
+      'generate:model-a',
+      'unload:model-a',
+      'load:model-a',
+    ]);
+    await coordinator.dispose();
+  });
+
   test('unload cancels and waits for active generation', () async {
     final engine = _FakeEngine(blockGeneration: true);
     final coordinator = LocalLlmCoordinator(engine);
@@ -140,6 +171,7 @@ void main() {
 
 class _FakeEngine implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
   final bool blockGeneration;
+  final bool failGeneration;
   final LocalLlmBackend? forcedActiveBackend;
   final operations = <String>[];
   final generationStarted = Completer<void>();
@@ -148,7 +180,11 @@ class _FakeEngine implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
   LocalLlmEngineState _state = LocalLlmEngineState.idle;
   LocalLlmBackend? _activeBackend;
 
-  _FakeEngine({this.blockGeneration = false, this.forcedActiveBackend});
+  _FakeEngine({
+    this.blockGeneration = false,
+    this.failGeneration = false,
+    this.forcedActiveBackend,
+  });
 
   @override
   String get id => 'fake';
@@ -184,6 +220,10 @@ class _FakeEngine implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
     operations.add('generate:${_model!.id}');
     _state = LocalLlmEngineState.generating;
     if (!generationStarted.isCompleted) generationStarted.complete();
+    if (failGeneration) {
+      _state = LocalLlmEngineState.failed;
+      throw const LocalLlmException('引擎进程已断开');
+    }
     yield const LocalLlmTextDelta('你');
     if (blockGeneration) await _releaseGeneration.future;
     yield const LocalLlmTextDelta('好');

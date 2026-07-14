@@ -87,6 +87,8 @@ class RealtimeDictationService extends ChangeNotifier {
   SendPort? _commandPort;
   Completer<void>? _readyCompleter;
   Completer<String>? _resultCompleter;
+  Future<void>? _cleanupFuture;
+  int _sessionGeneration = 0;
   Timer? _timer;
   int _debugSamples = 0;
   int _debugNonZeroSamples = 0;
@@ -246,6 +248,10 @@ class RealtimeDictationService extends ChangeNotifier {
 
   Future<void> start() async {
     if (isActive) return;
+    final pendingCleanup = _cleanupFuture;
+    if (pendingCleanup != null) await pendingCleanup;
+    if (isActive) return;
+    final sessionGeneration = ++_sessionGeneration;
     status = RealtimeDictationStatus.preparing;
     committedText = '';
     partialText = '';
@@ -350,7 +356,12 @@ class RealtimeDictationService extends ChangeNotifier {
       }
       if (!permission.isGranted) throw StateError('需要麦克风权限才能实时听写');
       _debugEvent('麦克风权限: granted');
-      await _startWorker(model, preferences, denoiserModelPath);
+      await _startWorker(
+        model,
+        preferences,
+        denoiserModelPath,
+        sessionGeneration,
+      );
       final recorder = AudioRecorder();
       _recorder = recorder;
       final supported = await recorder.isEncoderSupported(
@@ -380,7 +391,7 @@ class RealtimeDictationService extends ChangeNotifier {
       );
       _audioSubscription = audio.listen(
         _sendAudio,
-        onError: (Object error) => _fail(error),
+        onError: (Object error) => _fail(error, sessionGeneration),
       );
       status = RealtimeDictationStatus.listening;
       _debugEvent('录音流已启动，进入 listening');
@@ -497,6 +508,7 @@ class RealtimeDictationService extends ChangeNotifier {
     StreamingSpeechModelInfo model,
     RealtimeDictationPreferences preferences,
     String denoiserModelPath,
+    int sessionGeneration,
   ) async {
     _messages = ReceivePort();
     _errors = ReceivePort();
@@ -507,12 +519,17 @@ class RealtimeDictationService extends ChangeNotifier {
     // listener immediately so the zone never treats that delayed result as an
     // unhandled asynchronous error; stop() still observes the original future.
     unawaited(_resultCompleter!.future.catchError((_) => text));
-    _messageSubscription = _messages!.listen(_handleWorkerMessage);
-    _errorSubscription = _errors!.listen((dynamic error) => _fail(error));
+    _messageSubscription = _messages!.listen(
+      (dynamic message) => _handleWorkerMessage(message, sessionGeneration),
+    );
+    _errorSubscription = _errors!.listen(
+      (dynamic error) => _fail(error, sessionGeneration),
+    );
     _exitSubscription = _exits!.listen((_) {
+      if (sessionGeneration != _sessionGeneration) return;
       _debugEvent('识别工作线程退出');
       if (isActive && !(_resultCompleter?.isCompleted ?? true)) {
-        _fail(StateError('实时语音识别进程意外结束'));
+        _fail(StateError('实时语音识别进程意外结束'), sessionGeneration);
       }
     });
     _worker = await Isolate.spawn<Map<String, Object>>(
@@ -538,7 +555,8 @@ class RealtimeDictationService extends ChangeNotifier {
     await _readyCompleter!.future.timeout(const Duration(seconds: 20));
   }
 
-  void _handleWorkerMessage(dynamic message) {
+  void _handleWorkerMessage(dynamic message, int sessionGeneration) {
+    if (sessionGeneration != _sessionGeneration) return;
     if (message is! Map) return;
     switch (message['type']) {
       case 'ready':
@@ -588,7 +606,10 @@ class RealtimeDictationService extends ChangeNotifier {
         return;
       case 'error':
         _debugEvent('工作线程错误: ${message['message']}');
-        _fail(StateError(message['message'] as String? ?? '实时语音识别失败'));
+        _fail(
+          StateError(message['message'] as String? ?? '实时语音识别失败'),
+          sessionGeneration,
+        );
         return;
       case 'debug':
         final details = [
@@ -799,7 +820,8 @@ class RealtimeDictationService extends ChangeNotifier {
     });
   }
 
-  void _fail(Object error) {
+  void _fail(Object error, int sessionGeneration) {
+    if (sessionGeneration != _sessionGeneration) return;
     _debugEvent('会话失败: $error');
     if (!(_readyCompleter?.isCompleted ?? true)) {
       _readyCompleter!.completeError(error);
@@ -813,7 +835,19 @@ class RealtimeDictationService extends ChangeNotifier {
     unawaited(_cleanup(killWorker: true));
   }
 
-  Future<void> _cleanup({required bool killWorker}) async {
+  Future<void> _cleanup({required bool killWorker}) {
+    final activeCleanup = _cleanupFuture;
+    if (activeCleanup != null) return activeCleanup;
+    late final Future<void> cleanup;
+    cleanup = _performCleanup(killWorker: killWorker).whenComplete(() {
+      if (identical(_cleanupFuture, cleanup)) _cleanupFuture = null;
+    });
+    _cleanupFuture = cleanup;
+    return cleanup;
+  }
+
+  Future<void> _performCleanup({required bool killWorker}) async {
+    _sessionGeneration++;
     _timer?.cancel();
     _timer = null;
     await _audioSubscription?.cancel();
