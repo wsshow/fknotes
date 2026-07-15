@@ -1,15 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="640" height="192" viewBox="0 0 640 192">
   <rect width="640" height="192" fill="#FAF7F2"/>
   <g transform="translate(12 0) scale(1.92)">
-    <path d="M22 47 V27 Q22 20 29 20 H59 L78 39 V47"
-          fill="none" stroke="#B9573D" stroke-width="5.6"
-          stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M59 21 V32 Q59 39 66 39 H77"
-          fill="none" stroke="#B9573D" stroke-width="5.6"
-          stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M55 66 C66 76 78 73 82 61 C82 49 65 44 51 61 C39 77 22 79 18 64 C18 51 37 44 51 61"
-          fill="none" stroke="#B9573D" stroke-width="5.6"
-          stroke-linecap="round" stroke-linejoin="round"/>
+    <path
+      fill="#B9573D"
+      fill-rule="evenodd"
+      d="M33 20H69C75 20 79 24 79 30V70C79 76 75 80 69 80H33C27 80 23 76 23 70V30C23 24 27 20 33 20ZM35.5 20C39 31 39 69 35.5 80H39C42.5 69 42.5 31 39 20H35.5ZM50 41C46 41 46 47 50 47H69C73 47 73 41 69 41H50ZM50 54C46 54 46 60 50 60H62C66 60 66 54 62 54H50Z"/>
   </g>
   <text x="216" y="91" fill="#28231F" font-family="Songti SC, STSong, serif" font-size="62" font-weight="700">非空笔记</text>
   <text x="218" y="138" fill="#7B726B" font-family="PingFang SC, Noto Sans CJK SC, sans-serif" font-size="26" font-weight="500" letter-spacing="2">本地优先 · 私密可靠</text>
