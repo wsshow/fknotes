@@ -1619,34 +1619,30 @@ class _DataStat extends StatelessWidget {
         children: [
           SizedBox(
             height: 24,
-            child: Center(
-              child: Text(
-                value,
-                maxLines: 1,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: AppColors.ink,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  height: 1,
-                ),
+            child: Text(
+              value,
+              maxLines: 1,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppColors.ink,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                height: 1,
               ),
             ),
           ),
           const SizedBox(height: 3),
           SizedBox(
             height: 17,
-            child: Center(
-              child: Text(
-                label,
-                maxLines: 1,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: AppColors.muted,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  height: 1,
-                ),
+            child: Text(
+              label,
+              maxLines: 1,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppColors.muted,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                height: 1,
               ),
             ),
           ),
