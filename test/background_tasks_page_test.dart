@@ -97,5 +97,12 @@ void main() {
 
     expect(find.text('所有任务均已完成'), findsOneWidget);
     expect(find.text('当前没有正在运行或需要处理的任务'), findsOneWidget);
+    final divider = tester.getRect(
+      find.byKey(const Key('background-task-summary-divider')),
+    );
+    final failedIcon = tester.getRect(
+      find.byKey(const Key('background-task-failed-summary-icon')),
+    );
+    expect(failedIcon.left - divider.right, greaterThanOrEqualTo(14));
   });
 }

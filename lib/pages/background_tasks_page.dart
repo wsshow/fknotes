@@ -252,9 +252,18 @@ class _TaskSummaryCard extends StatelessWidget {
               background: AppColors.softGreen,
             ),
           ),
-          Container(width: 1, height: 42, color: AppColors.line),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Container(
+              key: const Key('background-task-summary-divider'),
+              width: 1,
+              height: 42,
+              color: AppColors.line,
+            ),
+          ),
           Expanded(
             child: _TaskSummaryStat(
+              iconKey: const Key('background-task-failed-summary-icon'),
               icon: Icons.error_outline_rounded,
               value: failedCount,
               label: context.l10n.tasksNeedingAttention,
@@ -271,6 +280,7 @@ class _TaskSummaryCard extends StatelessWidget {
 }
 
 class _TaskSummaryStat extends StatelessWidget {
+  final Key? iconKey;
   final IconData icon;
   final int value;
   final String label;
@@ -278,6 +288,7 @@ class _TaskSummaryStat extends StatelessWidget {
   final Color background;
 
   const _TaskSummaryStat({
+    this.iconKey,
     required this.icon,
     required this.value,
     required this.label,
@@ -290,6 +301,7 @@ class _TaskSummaryStat extends StatelessWidget {
     return Row(
       children: [
         Container(
+          key: iconKey,
           width: 40,
           height: 40,
           decoration: BoxDecoration(color: background, shape: BoxShape.circle),
