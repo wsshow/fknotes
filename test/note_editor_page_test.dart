@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:fknotes/app.dart';
 import 'package:fknotes/models/note_entry.dart';
 import 'package:fknotes/l10n/generated/app_localizations.dart';
 import 'package:fknotes/pages/background_tasks_page.dart';
@@ -310,6 +311,14 @@ void main() {
 
     expect(find.textContaining('已自动保存到本机 · 0 字'), findsOneWidget);
     expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+    final savedIcon = tester.widget<Icon>(find.byIcon(Icons.check_rounded));
+    expect(savedIcon.color, AppColors.moss);
+    expect(savedIcon.size, 17);
+    final statusSlot = tester.widget<SizedBox>(
+      find.byKey(const Key('note-autosave-status')),
+    );
+    expect(statusSlot.width, 18);
+    expect(statusSlot.height, 18);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });

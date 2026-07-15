@@ -1612,18 +1612,11 @@ class _AutosaveStatusIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final background = switch (state) {
-      _EditorAutosaveState.enabled => AppColors.softBlue,
-      _EditorAutosaveState.pending => AppColors.softAmber,
-      _EditorAutosaveState.saving => AppColors.softAmber,
-      _EditorAutosaveState.saved => const Color(0xFFE6F3EA),
-      _EditorAutosaveState.failed => AppColors.softCoral,
-    };
     final foreground = switch (state) {
       _EditorAutosaveState.enabled => AppColors.muted,
       _EditorAutosaveState.pending => AppColors.muted,
       _EditorAutosaveState.saving => AppColors.moss,
-      _EditorAutosaveState.saved => const Color(0xFF3F7D57),
+      _EditorAutosaveState.saved => AppColors.moss,
       _EditorAutosaveState.failed => AppColors.coral,
     };
     final icon = switch (state) {
@@ -1640,27 +1633,30 @@ class _AutosaveStatusIcon extends StatelessWidget {
       child: Tooltip(
         message: label,
         excludeFromSemantics: true,
-        child: AnimatedContainer(
+        child: SizedBox(
           key: const Key('note-autosave-status'),
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutCubic,
-          width: 20,
-          height: 20,
-          decoration: BoxDecoration(color: background, shape: BoxShape.circle),
-          alignment: Alignment.center,
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 140),
-            child: icon == null
-                ? SizedBox(
-                    key: ValueKey(state),
-                    width: 11,
-                    height: 11,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 1.6,
+          width: 18,
+          height: 18,
+          child: Center(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 140),
+              child: icon == null
+                  ? SizedBox(
+                      key: ValueKey(state),
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.6,
+                        color: foreground,
+                      ),
+                    )
+                  : Icon(
+                      icon,
+                      key: ValueKey(state),
+                      size: state == _EditorAutosaveState.saved ? 17 : 16,
                       color: foreground,
                     ),
-                  )
-                : Icon(icon, key: ValueKey(state), size: 14, color: foreground),
+            ),
           ),
         ),
       ),
