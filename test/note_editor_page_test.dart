@@ -255,14 +255,21 @@ void main() {
     expect(find.text('备份历史'), findsOneWidget);
   });
 
-  testWidgets('tapping below the body editor focuses the final text block', (
+  testWidgets('tapping the lower editing area continues at the document end', (
     tester,
   ) async {
     _usePhoneViewport(tester);
+    final entry = NoteEntry(
+      type: NoteType.text,
+      title: '点击空白处继续输入',
+      content: '第一段\n\n最后一段',
+      createdAt: DateTime(2026),
+      updatedAt: DateTime(2026),
+    );
     await tester.pumpWidget(
       ChangeNotifierProvider(
         create: (_) => NoteProvider(),
-        child: const MaterialApp(home: NoteEditorPage()),
+        child: MaterialApp(home: NoteEditorPage(existingEntry: entry)),
       ),
     );
 
@@ -270,17 +277,37 @@ void main() {
     final editor = find.byType(NoteBlockEditor);
     final surfaceRect = tester.getRect(surface);
     final editorRect = tester.getRect(editor);
-    final blankPoint = Offset(surfaceRect.center.dx, surfaceRect.bottom - 8);
-    expect(blankPoint.dy, greaterThan(editorRect.bottom));
-
-    await tester.tapAt(blankPoint);
-    await tester.pump();
-
-    final bodyField = find.descendant(
+    final bodyFields = find.descendant(
       of: editor,
       matching: find.byType(TextField),
     );
-    expect(tester.widget<TextField>(bodyField).focusNode?.hasFocus, isTrue);
+    expect(bodyFields, findsNWidgets(2));
+
+    Future<void> expectTapContinuesAtEnd(Offset point) async {
+      await tester.tap(find.byType(TextField).first);
+      await tester.pump();
+      await tester.tapAt(point);
+      await tester.pump();
+      await tester.pump();
+
+      final lastField = tester.widget<TextField>(bodyFields.last);
+      expect(lastField.focusNode?.hasFocus, isTrue);
+      expect(
+        lastField.controller?.selection,
+        TextSelection.collapsed(offset: lastField.controller!.text.length),
+      );
+    }
+
+    await expectTapContinuesAtEnd(
+      Offset(editorRect.center.dx, editorRect.bottom - 8),
+    );
+
+    final blankBelowEditor = Offset(
+      surfaceRect.center.dx,
+      surfaceRect.bottom - 8,
+    );
+    expect(blankBelowEditor.dy, greaterThan(editorRect.bottom));
+    await expectTapContinuesAtEnd(blankBelowEditor);
   });
 
   testWidgets('editor communicates autosave status from typing to saved', (

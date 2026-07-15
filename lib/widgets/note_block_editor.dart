@@ -2231,7 +2231,19 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
           item.type != NoteBlockType.divider &&
           item.type != NoteBlockType.attachment,
     );
-    if (editable.isNotEmpty) _refocus(editable.last);
+    if (editable.isEmpty) return;
+    final target = editable.last;
+    final end = target.controller.visibleTextValue.length;
+    target.controller.visibleSelectionValue = TextSelection.collapsed(
+      offset: end,
+    );
+    if (target.focusNode.hasFocus) {
+      // Android keeps the field focused after the user dismisses the keyboard.
+      // Requesting the same focus again is therefore not enough to reopen it.
+      unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.show'));
+      return;
+    }
+    _refocus(target, offset: end);
   }
 
   int _numberFor(int index) {
