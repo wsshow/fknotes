@@ -13,3 +13,10 @@
 -keep class * implements com.google.firebase.components.ComponentRegistrar {
     public <init>();
 }
+
+# LiteRT-LM's native bridge resolves Kotlin configuration accessors and
+# callbacks by their original JVM names. The 0.14.0 Android AAR does not ship
+# consumer ProGuard rules, so R8 would otherwise remove methods such as
+# SamplerConfig.getTopK() and crash nativeCreateConversation() in Release.
+-keep class com.google.ai.edge.litertlm.** { *; }
+-keep interface com.google.ai.edge.litertlm.** { *; }
