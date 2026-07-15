@@ -2238,10 +2238,10 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
       offset: end,
     );
     if (target.focusNode.hasFocus) {
-      // Android keeps the field focused after the user dismisses the keyboard.
-      // Requesting the same focus again is therefore not enough to reopen it.
-      unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.show'));
-      return;
+      // Android keeps the field focused after the user dismisses the keyboard,
+      // but the old input connection may no longer reopen reliably. Recreate
+      // the connection before requesting focus again.
+      target.focusNode.unfocus();
     }
     _refocus(target, offset: end);
   }

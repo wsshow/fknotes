@@ -283,15 +283,46 @@ void main() {
     );
     expect(bodyFields, findsNWidgets(2));
 
+    final firstBodyRect = tester.getRect(bodyFields.first);
+    await tester.tapAt(Offset(firstBodyRect.left + 4, firstBodyRect.center.dy));
+    await tester.pump();
+    final firstField = tester.widget<TextField>(bodyFields.first);
+    expect(firstField.focusNode?.hasFocus, isTrue);
+    expect(
+      firstField.controller!.selection.extentOffset,
+      lessThan(firstField.controller!.text.length),
+    );
+
     Future<void> expectTapContinuesAtEnd(Offset point) async {
-      await tester.tap(find.byType(TextField).first);
+      await tester.showKeyboard(bodyFields.last);
       await tester.pump();
+      expect(tester.testTextInput.isVisible, isTrue);
+      tester.testTextInput.hide();
+      expect(
+        tester.widget<TextField>(bodyFields.last).focusNode?.hasFocus,
+        isTrue,
+      );
+      expect(tester.testTextInput.isVisible, isFalse);
+      tester.testTextInput.log.clear();
+
       await tester.tapAt(point);
       await tester.pump();
       await tester.pump();
 
       final lastField = tester.widget<TextField>(bodyFields.last);
       expect(lastField.focusNode?.hasFocus, isTrue);
+      expect(tester.testTextInput.isVisible, isTrue);
+      final inputMethods = tester.testTextInput.log
+          .map((call) => call.method)
+          .toList();
+      expect(
+        inputMethods,
+        containsAllInOrder([
+          'TextInput.clearClient',
+          'TextInput.setClient',
+          'TextInput.show',
+        ]),
+      );
       expect(
         lastField.controller?.selection,
         TextSelection.collapsed(offset: lastField.controller!.text.length),
