@@ -235,7 +235,7 @@ class _TaskSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 17),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(18),
@@ -253,11 +253,11 @@ class _TaskSummaryCard extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Container(
               key: const Key('background-task-summary-divider'),
               width: 1,
-              height: 42,
+              height: 36,
               color: AppColors.line,
             ),
           ),
@@ -299,6 +299,7 @@ class _TaskSummaryStat extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Container(
           key: iconKey,
@@ -308,8 +309,10 @@ class _TaskSummaryStat extends StatelessWidget {
           child: Icon(icon, size: 20, color: color),
         ),
         const SizedBox(width: 11),
-        Expanded(
+        Flexible(
+          fit: FlexFit.loose,
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Text(
@@ -318,14 +321,20 @@ class _TaskSummaryStat extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
+                  height: 1.1,
                 ),
               ),
+              const SizedBox(height: 3),
               Text(
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.muted, fontSize: 12),
+                style: const TextStyle(
+                  color: AppColors.muted,
+                  fontSize: 12,
+                  height: 1.1,
+                ),
               ),
             ],
           ),
