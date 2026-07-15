@@ -85,8 +85,6 @@
   "unifiedStorage": "Storage",
   "cloudSync": "Cloud sync",
   "cloudSyncSubtitle": "Manually sync user data with S3 or WebDAV",
-  "privateAppStorage": "Private app storage",
-  "privateAppStorageSubtitle": "Notes, chats, files, and thumbnails stay on this device",
   "localModels": "Local models",
   "localModelsSubtitle": "Review active models and manage them by capability",
   "backupAndMigration": "Backup and migration",

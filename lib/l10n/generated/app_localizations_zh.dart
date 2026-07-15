@@ -258,12 +258,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cloudSyncSubtitle => '手动同步用户数据，支持 S3 和 WebDAV';
 
   @override
-  String get privateAppStorage => '应用私有存储';
-
-  @override
-  String get privateAppStorageSubtitle => '笔记、聊天、附件和缩略图均安全保存在本机';
-
-  @override
   String get localModels => '本地模型';
 
   @override

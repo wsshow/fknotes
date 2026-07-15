@@ -288,13 +288,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cloudSyncSubtitle => 'Manually sync user data with S3 or WebDAV';
 
   @override
-  String get privateAppStorage => 'Private app storage';
-
-  @override
-  String get privateAppStorageSubtitle =>
-      'Notes, chats, files, and thumbnails stay on this device';
-
-  @override
   String get localModels => 'Local models';
 
   @override

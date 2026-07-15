@@ -1393,13 +1393,6 @@ class _DataTabState extends State<_DataTab> {
               ),
               const Divider(height: 1),
               _SettingRow(
-                icon: Icons.folder_rounded,
-                title: l10n.privateAppStorage,
-                subtitle: l10n.privateAppStorageSubtitle,
-                showChevron: false,
-              ),
-              const Divider(height: 1),
-              _SettingRow(
                 icon: Icons.memory_rounded,
                 title: l10n.localModels,
                 subtitle: l10n.localModelsSubtitle,

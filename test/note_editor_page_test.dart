@@ -124,6 +124,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('本地数据'), findsOneWidget);
     expect(find.text('云同步'), findsOneWidget);
+    expect(find.text('应用私有存储'), findsNothing);
     expect(find.text('资料占用'), findsOneWidget);
 
     await tester.scrollUntilVisible(

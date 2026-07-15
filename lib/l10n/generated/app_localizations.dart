@@ -572,18 +572,6 @@ abstract class AppLocalizations {
   /// **'手动同步用户数据，支持 S3 和 WebDAV'**
   String get cloudSyncSubtitle;
 
-  /// No description provided for @privateAppStorage.
-  ///
-  /// In zh, this message translates to:
-  /// **'应用私有存储'**
-  String get privateAppStorage;
-
-  /// No description provided for @privateAppStorageSubtitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'笔记、聊天、附件和缩略图均安全保存在本机'**
-  String get privateAppStorageSubtitle;
-
   /// No description provided for @localModels.
   ///
   /// In zh, this message translates to:

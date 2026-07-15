@@ -85,8 +85,6 @@
   "unifiedStorage": "统一存储",
   "cloudSync": "云同步",
   "cloudSyncSubtitle": "手动同步用户数据，支持 S3 和 WebDAV",
-  "privateAppStorage": "应用私有存储",
-  "privateAppStorageSubtitle": "笔记、聊天、附件和缩略图均安全保存在本机",
   "localModels": "本地模型",
   "localModelsSubtitle": "查看正在使用的模型并按能力分类管理",
   "backupAndMigration": "备份与迁移",
