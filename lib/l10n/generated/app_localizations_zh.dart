@@ -2075,7 +2075,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String modelRuntimeSwitchingBackend(String backend) {
-    return '切换 $backend';
+    return '加载 $backend';
   }
 
   @override
@@ -2111,9 +2111,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String modelRuntimeBackendDetail(String backend) {
     return '当前运行后端：$backend';
   }
-
-  @override
-  String get modelRuntimeFallbackToCpu => 'GPU 加速不可用，已切换至 CPU';
 
   @override
   String dictationExecutionProvider(String provider) {
@@ -2172,12 +2169,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String assistantSwitchingBackend(String previousBackend, String backend) {
-    return '$previousBackend 不可用，正在切换到 $backend…';
+    return '$previousBackend 启动失败，正在加载 $backend 模型…';
   }
 
   @override
   String assistantRetryingBackend(String backend) {
-    return '已切换到 $backend，正在重试这条消息…';
+    return '$backend 模型已就绪，正在重新处理这条消息…';
   }
 
   @override

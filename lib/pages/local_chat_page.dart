@@ -149,7 +149,6 @@ class _LocalChatPageState extends State<LocalChatPage>
   String _dictationBaseText = '';
   late LocalLlmRuntimeSnapshot _runtimeSnapshot;
   StreamSubscription<LocalLlmRuntimeSnapshot>? _runtimeSubscription;
-  String? _reportedBackendFallbackKey;
 
   @override
   void initState() {
@@ -234,23 +233,7 @@ class _LocalChatPageState extends State<LocalChatPage>
 
   void _handleRuntimeSnapshot(LocalLlmRuntimeSnapshot snapshot) {
     if (_closed || !mounted) return;
-    if (snapshot.state == LocalLlmEngineState.idle) {
-      _reportedBackendFallbackKey = null;
-    }
-    final fallbackKey =
-        snapshot.usedBackendFallback &&
-            snapshot.activeBackend == LocalLlmBackend.cpu
-        ? '${snapshot.model?.id}:${snapshot.requestedBackend?.name}:${snapshot.activeBackend?.name}'
-        : null;
     setState(() => _runtimeSnapshot = snapshot);
-    if (fallbackKey == null || fallbackKey == _reportedBackendFallbackKey) {
-      return;
-    }
-    _reportedBackendFallbackKey = fallbackKey;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_closed || !mounted) return;
-      AppFeedback.show(context, context.l10n.modelRuntimeFallbackToCpu);
-    });
   }
 
   @override

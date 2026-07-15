@@ -68,8 +68,8 @@ void main() {
       ),
     );
 
-    expect(find.text('切换 CPU'), findsOneWidget);
-    expect(find.bySemanticsLabel('GPU 不可用，正在切换到 CPU…'), findsOneWidget);
+    expect(find.text('加载 CPU'), findsOneWidget);
+    expect(find.bySemanticsLabel('GPU 启动失败，正在加载 CPU 模型…'), findsOneWidget);
   });
 
   testWidgets('shows that the interrupted message is retried on CPU', (
@@ -91,7 +91,7 @@ void main() {
     );
 
     expect(find.text('CPU 重试中'), findsOneWidget);
-    expect(find.bySemanticsLabel('已切换到 CPU，正在重试这条消息…'), findsOneWidget);
+    expect(find.bySemanticsLabel('CPU 模型已就绪，正在重新处理这条消息…'), findsOneWidget);
   });
 
   testWidgets('explains that a standby model starts automatically', (

@@ -2246,7 +2246,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String modelRuntimeSwitchingBackend(String backend) {
-    return 'Switching to $backend';
+    return 'Loading $backend';
   }
 
   @override
@@ -2285,10 +2285,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String modelRuntimeBackendDetail(String backend) {
     return 'Current runtime backend: $backend';
   }
-
-  @override
-  String get modelRuntimeFallbackToCpu =>
-      'GPU acceleration is unavailable. Switched to CPU.';
 
   @override
   String dictationExecutionProvider(String provider) {
@@ -2351,12 +2347,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String assistantSwitchingBackend(String previousBackend, String backend) {
-    return '$previousBackend is unavailable. Switching to $backend…';
+    return '$previousBackend failed to start. Loading the $backend model…';
   }
 
   @override
   String assistantRetryingBackend(String backend) {
-    return 'Switched to $backend. Retrying this message…';
+    return 'The $backend model is ready. Processing this message again…';
   }
 
   @override

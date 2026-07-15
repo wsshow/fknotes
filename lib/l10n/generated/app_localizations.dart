@@ -3863,7 +3863,7 @@ abstract class AppLocalizations {
   /// No description provided for @modelRuntimeSwitchingBackend.
   ///
   /// In zh, this message translates to:
-  /// **'切换 {backend}'**
+  /// **'加载 {backend}'**
   String modelRuntimeSwitchingBackend(String backend);
 
   /// No description provided for @modelRuntimeRetryingBackend.
@@ -3925,12 +3925,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'当前运行后端：{backend}'**
   String modelRuntimeBackendDetail(String backend);
-
-  /// No description provided for @modelRuntimeFallbackToCpu.
-  ///
-  /// In zh, this message translates to:
-  /// **'GPU 加速不可用，已切换至 CPU'**
-  String get modelRuntimeFallbackToCpu;
 
   /// No description provided for @dictationExecutionProvider.
   ///
@@ -4037,13 +4031,13 @@ abstract class AppLocalizations {
   /// No description provided for @assistantSwitchingBackend.
   ///
   /// In zh, this message translates to:
-  /// **'{previousBackend} 不可用，正在切换到 {backend}…'**
+  /// **'{previousBackend} 启动失败，正在加载 {backend} 模型…'**
   String assistantSwitchingBackend(String previousBackend, String backend);
 
   /// No description provided for @assistantRetryingBackend.
   ///
   /// In zh, this message translates to:
-  /// **'已切换到 {backend}，正在重试这条消息…'**
+  /// **'{backend} 模型已就绪，正在重新处理这条消息…'**
   String assistantRetryingBackend(String backend);
 
   /// No description provided for @assistantThinking.
