@@ -1201,12 +1201,6 @@ class _NoteEditorPageState extends State<NoteEditorPage>
         .toList(growable: false);
     final hasAttachmentContent =
         _attachments.isNotEmpty || importJobs.isNotEmpty;
-    final type = _attachments.isNotEmpty
-        ? _attachments.first.type
-        : importJobs.isNotEmpty
-        ? importJobs.first.type
-        : NoteType.text;
-    final typeColor = NoteCard.colorForType(type);
     final autosaveState = _autosaveState;
     final autosaveLabel = _autosaveStatusLabel(context);
     return PopScope(
@@ -1218,22 +1212,19 @@ class _NoteEditorPageState extends State<NoteEditorPage>
         backgroundColor: AppColors.surface,
         appBar: AppBar(
           leading: IconButton(
+            key: const Key('note-editor-back'),
+            tooltip: context.l10n.back,
             onPressed: _close,
-            icon: const Icon(Icons.close_rounded),
+            icon: const Icon(Icons.arrow_back_rounded),
           ),
-          title: Row(
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _AutosaveStatusIcon(
-                state: autosaveState,
-                label: autosaveLabel,
-                accentColor: typeColor,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
                       _isEditing ? context.l10n.editNote : context.l10n.newNote,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -1242,21 +1233,26 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    ValueListenableBuilder<TextEditingValue>(
-                      valueListenable: _content,
-                      builder: (context, value, child) => Text(
-                        '$autosaveLabel · '
-                        '${context.l10n.characterCount(NoteBlockCodec.visibleCharacterCount(value.text))}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: AppColors.muted,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
+                  const SizedBox(width: 5),
+                  _AutosaveStatusIcon(
+                    state: autosaveState,
+                    label: autosaveLabel,
+                  ),
+                ],
+              ),
+              ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _content,
+                builder: (context, value, child) => Text(
+                  '$autosaveLabel · '
+                  '${context.l10n.characterCount(NoteBlockCodec.visibleCharacterCount(value.text))}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: AppColors.muted,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ],
@@ -1611,28 +1607,23 @@ class _NoteEditorPageState extends State<NoteEditorPage>
 class _AutosaveStatusIcon extends StatelessWidget {
   final _EditorAutosaveState state;
   final String label;
-  final Color accentColor;
 
-  const _AutosaveStatusIcon({
-    required this.state,
-    required this.label,
-    required this.accentColor,
-  });
+  const _AutosaveStatusIcon({required this.state, required this.label});
 
   @override
   Widget build(BuildContext context) {
     final background = switch (state) {
-      _EditorAutosaveState.enabled => accentColor.withValues(alpha: .1),
+      _EditorAutosaveState.enabled => AppColors.softBlue,
       _EditorAutosaveState.pending => AppColors.softAmber,
       _EditorAutosaveState.saving => AppColors.softAmber,
-      _EditorAutosaveState.saved => AppColors.softGreen,
+      _EditorAutosaveState.saved => const Color(0xFFE6F3EA),
       _EditorAutosaveState.failed => AppColors.softCoral,
     };
     final foreground = switch (state) {
-      _EditorAutosaveState.enabled => accentColor,
+      _EditorAutosaveState.enabled => AppColors.muted,
       _EditorAutosaveState.pending => AppColors.muted,
       _EditorAutosaveState.saving => AppColors.moss,
-      _EditorAutosaveState.saved => AppColors.moss,
+      _EditorAutosaveState.saved => const Color(0xFF3F7D57),
       _EditorAutosaveState.failed => AppColors.coral,
     };
     final icon = switch (state) {
@@ -1653,27 +1644,23 @@ class _AutosaveStatusIcon extends StatelessWidget {
           key: const Key('note-autosave-status'),
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOutCubic,
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            color: background,
-            shape: BoxShape.circle,
-            border: Border.all(color: foreground.withValues(alpha: .22)),
-          ),
+          width: 20,
+          height: 20,
+          decoration: BoxDecoration(color: background, shape: BoxShape.circle),
           alignment: Alignment.center,
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 140),
             child: icon == null
                 ? SizedBox(
                     key: ValueKey(state),
-                    width: 14,
-                    height: 14,
+                    width: 11,
+                    height: 11,
                     child: CircularProgressIndicator(
-                      strokeWidth: 1.8,
+                      strokeWidth: 1.6,
                       color: foreground,
                     ),
                   )
-                : Icon(icon, key: ValueKey(state), size: 17, color: foreground),
+                : Icon(icon, key: ValueKey(state), size: 14, color: foreground),
           ),
         ),
       ),

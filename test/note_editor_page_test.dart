@@ -273,6 +273,9 @@ void main() {
 
     expect(find.textContaining('自动保存已开启 · 0 字'), findsOneWidget);
     expect(find.byIcon(Icons.save_outlined), findsOneWidget);
+    expect(find.byKey(const Key('note-editor-back')), findsOneWidget);
+    expect(find.byIcon(Icons.arrow_back_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.close_rounded), findsNothing);
 
     await tester.enterText(find.byType(TextField).first, '自动保存测试');
     await tester.pump();
