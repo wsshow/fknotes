@@ -1,10 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:archive/archive_io.dart';
 import 'package:crypto/crypto.dart';
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart' hide XFile;
@@ -17,6 +18,7 @@ class BackupService {
   static final BackupService instance = BackupService._();
 
   static const _manifestName = 'fknotes-backup.json';
+  static const _historyIndexName = 'index.json';
   static const _backupFormatVersion = 1;
   static const _maxArchiveFiles = 100000;
   static const _maxExpandedBytes = 128 * 1024 * 1024 * 1024;
@@ -41,14 +43,104 @@ class BackupService {
   };
 
   final _storage = FileStorageService.instance;
+  static const _exportChannel = MethodChannel('fknotes/backup_export');
+
+  Directory get backupDirectory =>
+      Directory(p.join(_storage.baseDir, 'backups'));
+
+  File get _historyIndex =>
+      File(p.join(backupDirectory.path, _historyIndexName));
 
   Future<bool> exportBackup({Rect? sharePositionOrigin}) async {
-    final artifact = await createBackupArtifact();
-    final name = p.basename(artifact.file.path);
+    final record = await createManagedBackup();
+    return shareManagedBackup(record, sharePositionOrigin: sharePositionOrigin);
+  }
+
+  Future<BackupRecord> createManagedBackup({
+    String? label,
+    String? description,
+  }) async {
+    final directory = backupDirectory;
+    await directory.create(recursive: true);
+    final artifact = await createBackupArtifact(
+      outputDirectory: directory,
+      cleanTemporaryArtifacts: false,
+      label: label,
+      description: description,
+    );
+    final normalizedLabel = label?.trim();
+    final record = BackupRecord(
+      fileName: p.basename(artifact.file.path),
+      label: normalizedLabel == null || normalizedLabel.isEmpty
+          ? _defaultLabel(artifact.createdAt.toLocal())
+          : normalizedLabel,
+      description: description?.trim() ?? '',
+      contentDigest: artifact.contentDigest,
+      archiveSha256: artifact.archiveSha256,
+      sizeBytes: artifact.sizeBytes,
+      createdAt: artifact.createdAt,
+      formatVersion: _backupFormatVersion,
+    );
+    final records = await listManagedBackups();
+    await _writeHistory([record, ...records]);
+    return record;
+  }
+
+  Future<List<BackupRecord>> listManagedBackups() async {
+    await backupDirectory.create(recursive: true);
+    if (!await _historyIndex.exists()) return const [];
+    try {
+      final decoded = jsonDecode(await _historyIndex.readAsString());
+      if (decoded is! Map || decoded['records'] is! List) return const [];
+      final records = <BackupRecord>[];
+      for (final raw in decoded['records'] as List) {
+        if (raw is! Map) continue;
+        final record = BackupRecord.fromJson(Map<String, Object?>.from(raw));
+        if (!_isSafeBackupFileName(record.fileName)) continue;
+        if (await File(
+          p.join(backupDirectory.path, record.fileName),
+        ).exists()) {
+          records.add(record);
+        }
+      }
+      records.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return List.unmodifiable(records);
+    } on FormatException {
+      return const [];
+    } on FileSystemException {
+      return const [];
+    }
+  }
+
+  Future<void> deleteManagedBackup(BackupRecord record) async {
+    if (!_isSafeBackupFileName(record.fileName)) {
+      throw const FormatException('备份文件名不安全');
+    }
+    final file = managedBackupFile(record);
+    if (await file.exists()) await file.delete();
+    final records = await listManagedBackups();
+    await _writeHistory(
+      records.where((item) => item.fileName != record.fileName).toList(),
+    );
+  }
+
+  File managedBackupFile(BackupRecord record) {
+    if (!_isSafeBackupFileName(record.fileName)) {
+      throw const FormatException('备份文件名不安全');
+    }
+    return File(p.join(backupDirectory.path, record.fileName));
+  }
+
+  Future<bool> shareManagedBackup(
+    BackupRecord record, {
+    Rect? sharePositionOrigin,
+  }) async {
+    final file = managedBackupFile(record);
+    if (!await file.exists()) throw const FormatException('备份文件不存在');
     final result = await SharePlus.instance.share(
       ShareParams(
         files: [
-          XFile(artifact.file.path, mimeType: 'application/zip', name: name),
+          XFile(file.path, mimeType: 'application/zip', name: record.fileName),
         ],
         title: '保存非空笔记备份',
         subject: '非空笔记完整备份',
@@ -58,11 +150,43 @@ class BackupService {
     return result.status != ShareResultStatus.dismissed;
   }
 
+  Future<bool> saveManagedBackupCopy(BackupRecord record) async {
+    final source = managedBackupFile(record);
+    if (!await source.exists()) throw const FormatException('备份文件不存在');
+    if (!kIsWeb && Platform.isAndroid) {
+      return await _exportChannel.invokeMethod<bool>('saveFile', {
+            'sourcePath': source.path,
+            'suggestedName': record.fileName,
+            'mimeType': 'application/zip',
+          }) ??
+          false;
+    }
+    const type = XTypeGroup(
+      label: 'FKNotes Backup',
+      extensions: ['zip'],
+      mimeTypes: ['application/zip'],
+    );
+    final location = await getSaveLocation(
+      acceptedTypeGroups: const [type],
+      suggestedName: record.fileName,
+    );
+    if (location == null) return false;
+    await XFile(
+      source.path,
+      mimeType: 'application/zip',
+      name: record.fileName,
+    ).saveTo(location.path);
+    return true;
+  }
+
   /// Creates a verified snapshot containing user data only. Downloaded
   /// models, inference caches, app-lock state and cloud credentials are never
   /// included.
   Future<BackupArtifact> createBackupArtifact({
     Directory? outputDirectory,
+    bool cleanTemporaryArtifacts = true,
+    String? label,
+    String? description,
   }) async {
     final now = DateTime.now();
     final name =
@@ -77,7 +201,9 @@ class BackupService {
             p.join((await getTemporaryDirectory()).path, 'fknotes_exports'),
           );
       await exportDir.create(recursive: true);
-      await _cleanupOldArtifacts(exportDir, now);
+      if (cleanTemporaryArtifacts) {
+        await _cleanupOldArtifacts(exportDir, now);
+      }
       final output = File(p.join(exportDir.path, name));
       final root = Directory(_storage.baseDir);
       final files = <({File file, String relative})>[];
@@ -117,6 +243,9 @@ class BackupService {
             jsonEncode({
               'formatVersion': _backupFormatVersion,
               'createdAt': now.toUtc().toIso8601String(),
+              if (label?.trim().isNotEmpty == true) 'label': label!.trim(),
+              if (description?.trim().isNotEmpty == true)
+                'description': description!.trim(),
               'contentDigest': contentDigest,
               'files': manifestFiles,
             }),
@@ -147,11 +276,16 @@ class BackupService {
   }
 
   Future<bool> restoreBackup() async {
+    final selected = await chooseBackupFile();
+    if (selected == null) return false;
+    await restoreBackupFile(selected);
+    return true;
+  }
+
+  Future<File?> chooseBackupFile() async {
     const group = XTypeGroup(label: 'FK Notes Backup', extensions: ['zip']);
     final selected = await openFile(acceptedTypeGroups: [group]);
-    if (selected == null) return false;
-    await restoreBackupFile(File(selected.path));
-    return true;
+    return selected == null ? null : File(selected.path);
   }
 
   Future<void> restoreBackupFile(File backup) async {
@@ -371,7 +505,98 @@ class BackupService {
     }
   }
 
+  Future<void> _writeHistory(List<BackupRecord> records) async {
+    await backupDirectory.create(recursive: true);
+    final temporary = File('${_historyIndex.path}.tmp');
+    await temporary.writeAsString(
+      jsonEncode({
+        'formatVersion': 1,
+        'records': records.map((record) => record.toJson()).toList(),
+      }),
+      flush: true,
+    );
+    try {
+      await temporary.rename(_historyIndex.path);
+    } on FileSystemException {
+      if (await _historyIndex.exists()) await _historyIndex.delete();
+      await temporary.rename(_historyIndex.path);
+    }
+  }
+
+  bool _isSafeBackupFileName(String value) =>
+      value == p.basename(value) &&
+      value.endsWith('.fknotes.zip') &&
+      value.isNotEmpty;
+
+  String _defaultLabel(DateTime createdAt) =>
+      'FKNotes ${createdAt.year}-${_two(createdAt.month)}-${_two(createdAt.day)} '
+      '${_two(createdAt.hour)}:${_two(createdAt.minute)}';
+
   String _two(int value) => value.toString().padLeft(2, '0');
+}
+
+class BackupRecord {
+  final String fileName;
+  final String label;
+  final String description;
+  final String contentDigest;
+  final String archiveSha256;
+  final int sizeBytes;
+  final DateTime createdAt;
+  final int formatVersion;
+
+  const BackupRecord({
+    required this.fileName,
+    required this.label,
+    required this.description,
+    required this.contentDigest,
+    required this.archiveSha256,
+    required this.sizeBytes,
+    required this.createdAt,
+    required this.formatVersion,
+  });
+
+  factory BackupRecord.fromJson(Map<String, Object?> json) {
+    final fileName = json['fileName'];
+    final label = json['label'];
+    final description = json['description'];
+    final contentDigest = json['contentDigest'];
+    final archiveSha256 = json['archiveSha256'];
+    final sizeBytes = json['sizeBytes'];
+    final createdAt = DateTime.tryParse(json['createdAt']?.toString() ?? '');
+    final formatVersion = json['formatVersion'];
+    if (fileName is! String ||
+        label is! String ||
+        description is! String ||
+        contentDigest is! String ||
+        archiveSha256 is! String ||
+        sizeBytes is! int ||
+        createdAt == null ||
+        formatVersion is! int) {
+      throw const FormatException('备份历史记录损坏');
+    }
+    return BackupRecord(
+      fileName: fileName,
+      label: label,
+      description: description,
+      contentDigest: contentDigest,
+      archiveSha256: archiveSha256,
+      sizeBytes: sizeBytes,
+      createdAt: createdAt.toUtc(),
+      formatVersion: formatVersion,
+    );
+  }
+
+  Map<String, Object?> toJson() => {
+    'fileName': fileName,
+    'label': label,
+    'description': description,
+    'contentDigest': contentDigest,
+    'archiveSha256': archiveSha256,
+    'sizeBytes': sizeBytes,
+    'createdAt': createdAt.toUtc().toIso8601String(),
+    'formatVersion': formatVersion,
+  };
 }
 
 class BackupArtifact {

@@ -218,6 +218,12 @@ abstract class AppLocalizations {
   /// **'取消'**
   String get cancel;
 
+  /// No description provided for @close.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭'**
+  String get close;
+
   /// No description provided for @deletePermanently.
   ///
   /// In zh, this message translates to:
@@ -605,7 +611,7 @@ abstract class AppLocalizations {
   /// No description provided for @exportCompleteBackupSubtitle.
   ///
   /// In zh, this message translates to:
-  /// **'通过系统面板保存，包含所有笔记和附件'**
+  /// **'创建多版本备份，可分享或另存到指定位置'**
   String get exportCompleteBackupSubtitle;
 
   /// No description provided for @restoreFromBackup.
@@ -617,8 +623,188 @@ abstract class AppLocalizations {
   /// No description provided for @restoreFromBackupSubtitle.
   ///
   /// In zh, this message translates to:
-  /// **'恢复前会进行完整性检查'**
+  /// **'从备份历史或外部文件恢复，恢复前会完整校验'**
   String get restoreFromBackupSubtitle;
+
+  /// No description provided for @backupScopeDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'包含笔记、聊天与附件；不包含本地模型、缓存、应用锁和云同步账号。'**
+  String get backupScopeDescription;
+
+  /// No description provided for @createNewBackup.
+  ///
+  /// In zh, this message translates to:
+  /// **'创建新备份'**
+  String get createNewBackup;
+
+  /// No description provided for @backupName.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份名称'**
+  String get backupName;
+
+  /// No description provided for @backupNameHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'可选，例如：换机前'**
+  String get backupNameHint;
+
+  /// No description provided for @backupDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份说明'**
+  String get backupDescription;
+
+  /// No description provided for @backupDescriptionHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'可选，记录这个版本的重要信息'**
+  String get backupDescriptionHint;
+
+  /// No description provided for @createBackup.
+  ///
+  /// In zh, this message translates to:
+  /// **'创建备份'**
+  String get createBackup;
+
+  /// No description provided for @creatingBackup.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在校验并创建备份…'**
+  String get creatingBackup;
+
+  /// No description provided for @backupSavedDefault.
+  ///
+  /// In zh, this message translates to:
+  /// **'已保存到 FKNotes 默认备份位置'**
+  String get backupSavedDefault;
+
+  /// No description provided for @backupHistory.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份历史'**
+  String get backupHistory;
+
+  /// No description provided for @backupHistorySubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'默认位置保留多个版本，可随时分享、另存或恢复'**
+  String get backupHistorySubtitle;
+
+  /// No description provided for @noBackupHistory.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没有本地备份'**
+  String get noBackupHistory;
+
+  /// No description provided for @backupStoredLocally.
+  ///
+  /// In zh, this message translates to:
+  /// **'FKNotes 默认位置'**
+  String get backupStoredLocally;
+
+  /// No description provided for @saveBackupCopy.
+  ///
+  /// In zh, this message translates to:
+  /// **'另存到…'**
+  String get saveBackupCopy;
+
+  /// No description provided for @backupCopySaved.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份副本已保存'**
+  String get backupCopySaved;
+
+  /// No description provided for @backupDetails.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份详情'**
+  String get backupDetails;
+
+  /// No description provided for @backupDateAndSize.
+  ///
+  /// In zh, this message translates to:
+  /// **'{date} · {size}'**
+  String backupDateAndSize(String date, String size);
+
+  /// No description provided for @backupCreatedAt.
+  ///
+  /// In zh, this message translates to:
+  /// **'创建时间'**
+  String get backupCreatedAt;
+
+  /// No description provided for @backupFileName.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件名'**
+  String get backupFileName;
+
+  /// No description provided for @backupFormat.
+  ///
+  /// In zh, this message translates to:
+  /// **'格式版本'**
+  String get backupFormat;
+
+  /// No description provided for @backupVerificationCode.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件校验值（SHA-256）'**
+  String get backupVerificationCode;
+
+  /// No description provided for @backupContentFingerprint.
+  ///
+  /// In zh, this message translates to:
+  /// **'内容指纹'**
+  String get backupContentFingerprint;
+
+  /// No description provided for @deleteBackup.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除备份'**
+  String get deleteBackup;
+
+  /// No description provided for @deleteBackupQuestion.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除这个备份？'**
+  String get deleteBackupQuestion;
+
+  /// No description provided for @deleteBackupDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'只会删除默认位置中的这个备份版本，不影响当前笔记。'**
+  String get deleteBackupDescription;
+
+  /// No description provided for @backupDeleted.
+  ///
+  /// In zh, this message translates to:
+  /// **'备份已删除'**
+  String get backupDeleted;
+
+  /// No description provided for @restoreWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复会替换当前的笔记、聊天与附件。建议先创建一份最新备份。'**
+  String get restoreWarning;
+
+  /// No description provided for @chooseExternalBackup.
+  ///
+  /// In zh, this message translates to:
+  /// **'从其他位置选择备份'**
+  String get chooseExternalBackup;
+
+  /// No description provided for @restoreBackupAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复此备份'**
+  String get restoreBackupAction;
+
+  /// No description provided for @restoringBackup.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在校验并恢复备份…'**
+  String get restoringBackup;
 
   /// No description provided for @organizationAndSecurity.
   ///

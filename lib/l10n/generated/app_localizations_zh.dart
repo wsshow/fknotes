@@ -69,6 +69,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cancel => '取消';
 
   @override
+  String get close => '关闭';
+
+  @override
   String get deletePermanently => '永久删除';
 
   @override
@@ -273,13 +276,105 @@ class AppLocalizationsZh extends AppLocalizations {
   String get exportCompleteBackup => '导出完整备份';
 
   @override
-  String get exportCompleteBackupSubtitle => '通过系统面板保存，包含所有笔记和附件';
+  String get exportCompleteBackupSubtitle => '创建多版本备份，可分享或另存到指定位置';
 
   @override
   String get restoreFromBackup => '从备份恢复';
 
   @override
-  String get restoreFromBackupSubtitle => '恢复前会进行完整性检查';
+  String get restoreFromBackupSubtitle => '从备份历史或外部文件恢复，恢复前会完整校验';
+
+  @override
+  String get backupScopeDescription => '包含笔记、聊天与附件；不包含本地模型、缓存、应用锁和云同步账号。';
+
+  @override
+  String get createNewBackup => '创建新备份';
+
+  @override
+  String get backupName => '备份名称';
+
+  @override
+  String get backupNameHint => '可选，例如：换机前';
+
+  @override
+  String get backupDescription => '备份说明';
+
+  @override
+  String get backupDescriptionHint => '可选，记录这个版本的重要信息';
+
+  @override
+  String get createBackup => '创建备份';
+
+  @override
+  String get creatingBackup => '正在校验并创建备份…';
+
+  @override
+  String get backupSavedDefault => '已保存到 FKNotes 默认备份位置';
+
+  @override
+  String get backupHistory => '备份历史';
+
+  @override
+  String get backupHistorySubtitle => '默认位置保留多个版本，可随时分享、另存或恢复';
+
+  @override
+  String get noBackupHistory => '还没有本地备份';
+
+  @override
+  String get backupStoredLocally => 'FKNotes 默认位置';
+
+  @override
+  String get saveBackupCopy => '另存到…';
+
+  @override
+  String get backupCopySaved => '备份副本已保存';
+
+  @override
+  String get backupDetails => '备份详情';
+
+  @override
+  String backupDateAndSize(String date, String size) {
+    return '$date · $size';
+  }
+
+  @override
+  String get backupCreatedAt => '创建时间';
+
+  @override
+  String get backupFileName => '文件名';
+
+  @override
+  String get backupFormat => '格式版本';
+
+  @override
+  String get backupVerificationCode => '文件校验值（SHA-256）';
+
+  @override
+  String get backupContentFingerprint => '内容指纹';
+
+  @override
+  String get deleteBackup => '删除备份';
+
+  @override
+  String get deleteBackupQuestion => '删除这个备份？';
+
+  @override
+  String get deleteBackupDescription => '只会删除默认位置中的这个备份版本，不影响当前笔记。';
+
+  @override
+  String get backupDeleted => '备份已删除';
+
+  @override
+  String get restoreWarning => '恢复会替换当前的笔记、聊天与附件。建议先创建一份最新备份。';
+
+  @override
+  String get chooseExternalBackup => '从其他位置选择备份';
+
+  @override
+  String get restoreBackupAction => '恢复此备份';
+
+  @override
+  String get restoringBackup => '正在校验并恢复备份…';
 
   @override
   String get organizationAndSecurity => '整理与安全';

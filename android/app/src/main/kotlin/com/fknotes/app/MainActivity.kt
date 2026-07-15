@@ -45,7 +45,9 @@ open class MainActivity : FlutterFragmentActivity() {
         const val IMPORT_CHANNEL = "fknotes/attachment_import"
         const val AUDIO_DECODE_CHANNEL = "fknotes/audio_decode"
         const val APP_LOCALE_CHANNEL = "fknotes/app_locale"
+        const val BACKUP_EXPORT_CHANNEL = "fknotes/backup_export"
         const val PICK_REQUEST = 7301
+        const val BACKUP_SAVE_REQUEST = 7302
         const val COPY_BUFFER_SIZE = 256 * 1024
         const val PROGRESS_INTERVAL_MS = 80L
         const val THUMBNAIL_WIDTH = 300
@@ -60,9 +62,12 @@ open class MainActivity : FlutterFragmentActivity() {
     private lateinit var importChannel: MethodChannel
     private lateinit var audioDecodeChannel: MethodChannel
     private lateinit var appLocaleChannel: MethodChannel
+    private lateinit var backupExportChannel: MethodChannel
     private var liteRtLmBridge: LiteRtLmBridge? = null
     private var pendingResult: MethodChannel.Result? = null
     private var pendingRequest: ImportRequest? = null
+    private var pendingBackupResult: MethodChannel.Result? = null
+    private var pendingBackupSource: File? = null
     private val importTasks = ConcurrentHashMap<String, ImportTask>()
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -177,12 +182,33 @@ open class MainActivity : FlutterFragmentActivity() {
                 else -> result.notImplemented()
             }
         }
+        backupExportChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            BACKUP_EXPORT_CHANNEL,
+        )
+        backupExportChannel.setMethodCallHandler { call, result ->
+            if (call.method != "saveFile") {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+            val sourcePath = call.argument<String>("sourcePath")
+            val suggestedName = call.argument<String>("suggestedName")
+            val mimeType = call.argument<String>("mimeType") ?: "application/zip"
+            if (sourcePath.isNullOrBlank() || suggestedName.isNullOrBlank()) {
+                result.error("invalid_backup_export", "Missing backup file information", null)
+                return@setMethodCallHandler
+            }
+            launchBackupExporter(File(sourcePath), suggestedName, mimeType, result)
+        }
     }
 
     protected open fun liteRtLmServiceClass(): Class<out Service> =
         LiteRtLmService::class.java
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        if (::backupExportChannel.isInitialized) {
+            backupExportChannel.setMethodCallHandler(null)
+        }
         liteRtLmBridge?.dispose()
         liteRtLmBridge = null
         super.cleanUpFlutterEngine(flutterEngine)
@@ -331,7 +357,7 @@ open class MainActivity : FlutterFragmentActivity() {
     }
 
     private fun launchPicker(request: ImportRequest, result: MethodChannel.Result) {
-        if (pendingResult != null) {
+        if (pendingResult != null || pendingBackupResult != null) {
             result.error(
                 "attachment_import_busy",
                 getString(R.string.attachment_picker_busy),
@@ -359,9 +385,44 @@ open class MainActivity : FlutterFragmentActivity() {
         }
     }
 
+    private fun launchBackupExporter(
+        source: File,
+        suggestedName: String,
+        mimeType: String,
+        result: MethodChannel.Result,
+    ) {
+        if (!source.isFile) {
+            result.error("backup_file_missing", "The backup file no longer exists", null)
+            return
+        }
+        if (pendingBackupResult != null || pendingResult != null) {
+            result.error("backup_export_busy", "Another system file picker is active", null)
+            return
+        }
+        pendingBackupResult = result
+        pendingBackupSource = source
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = mimeType
+            putExtra(Intent.EXTRA_TITLE, suggestedName)
+            addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        }
+        try {
+            startActivityForResult(intent, BACKUP_SAVE_REQUEST)
+        } catch (error: Exception) {
+            pendingBackupResult = null
+            pendingBackupSource = null
+            result.error("backup_export_unavailable", error.message, null)
+        }
+    }
+
     @Deprecated("Deprecated in Android")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == BACKUP_SAVE_REQUEST) {
+            completeBackupExport(resultCode, data)
+            return
+        }
         if (requestCode != PICK_REQUEST) return
 
         val result = pendingResult ?: return
@@ -385,6 +446,39 @@ open class MainActivity : FlutterFragmentActivity() {
             return
         }
         preparationExecutor.execute { prepareUriImports(request, uris, result) }
+    }
+
+    private fun completeBackupExport(resultCode: Int, data: Intent?) {
+        val result = pendingBackupResult ?: return
+        val source = pendingBackupSource
+        pendingBackupResult = null
+        pendingBackupSource = null
+        if (resultCode != Activity.RESULT_OK || data?.data == null) {
+            result.success(false)
+            return
+        }
+        if (source == null || !source.isFile) {
+            result.error("backup_file_missing", "The backup file no longer exists", null)
+            return
+        }
+        val destination = requireNotNull(data.data)
+        preparationExecutor.execute {
+            try {
+                FileInputStream(source).use { input ->
+                    val output = contentResolver.openOutputStream(destination, "w")
+                        ?: throw IOException("Unable to open the selected destination")
+                    output.use {
+                        input.copyTo(it, COPY_BUFFER_SIZE)
+                        it.flush()
+                    }
+                }
+                mainHandler.post { result.success(true) }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    result.error("backup_export_failed", error.message, null)
+                }
+            }
+        }
     }
 
     private fun prepareUriImports(

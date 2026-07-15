@@ -89,4 +89,54 @@ void main() {
       );
     },
   );
+
+  test('managed backups preserve multiple versions and metadata', () async {
+    final first = await BackupService.instance.createManagedBackup(
+      label: '换机前',
+      description: '包含最新项目资料',
+    );
+    final second = await BackupService.instance.createManagedBackup();
+
+    final records = await BackupService.instance.listManagedBackups();
+    expect(records, hasLength(2));
+    expect(records.first.fileName, second.fileName);
+    expect(records.last.label, '换机前');
+    expect(records.last.description, '包含最新项目资料');
+    expect(records.last.archiveSha256, hasLength(64));
+    expect(records.last.contentDigest, hasLength(64));
+    expect(records.last.sizeBytes, greaterThan(0));
+    expect(
+      await BackupService.instance.managedBackupFile(first).exists(),
+      isTrue,
+    );
+
+    final input = InputFileStream(
+      BackupService.instance.managedBackupFile(first).path,
+    );
+    final archive = ZipDecoder().decodeStream(input, verify: true);
+    await input.close();
+    final manifest =
+        jsonDecode(
+              utf8.decode(
+                archive
+                    .firstWhere((entry) => entry.name == 'fknotes-backup.json')
+                    .readBytes()!,
+              ),
+            )
+            as Map<String, dynamic>;
+    expect(manifest['label'], '换机前');
+    expect(manifest['description'], '包含最新项目资料');
+
+    await BackupService.instance.deleteManagedBackup(first);
+    expect(
+      (await BackupService.instance.listManagedBackups()).map(
+        (record) => record.fileName,
+      ),
+      [second.fileName],
+    );
+    expect(
+      await BackupService.instance.managedBackupFile(first).exists(),
+      isFalse,
+    );
+  });
 }

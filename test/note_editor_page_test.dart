@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:fknotes/models/note_entry.dart';
 import 'package:fknotes/l10n/generated/app_localizations.dart';
 import 'package:fknotes/pages/home_page.dart';
+import 'package:fknotes/pages/backup_export_page.dart';
+import 'package:fknotes/pages/backup_restore_page.dart';
 import 'package:fknotes/pages/local_chat_page.dart';
 import 'package:fknotes/pages/media_detail_page.dart';
 import 'package:fknotes/pages/note_editor_page.dart';
@@ -196,6 +198,38 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('归档'), findsOneWidget);
     expect(find.text('回收站'), findsOneWidget);
+  });
+
+  testWidgets('backup and restore use dedicated pages', (tester) async {
+    _usePhoneViewport(tester);
+    await _pumpHomePage(tester);
+
+    await tester.tap(find.text('数据'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('导出完整备份'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('导出完整备份'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.byType(BackupExportPage), findsOneWidget);
+    expect(find.byKey(const Key('backup-label-field')), findsOneWidget);
+    expect(find.byKey(const Key('backup-description-field')), findsOneWidget);
+    expect(find.byKey(const Key('create-managed-backup')), findsOneWidget);
+
+    tester.state<NavigatorState>(find.byType(Navigator)).pop();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.text('从备份恢复'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.byType(BackupRestorePage), findsOneWidget);
+    expect(find.byKey(const Key('choose-external-backup')), findsOneWidget);
+    expect(find.text('备份历史'), findsOneWidget);
   });
 
   testWidgets('tapping below the body editor focuses the final text block', (

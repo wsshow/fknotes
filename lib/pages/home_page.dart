@@ -14,7 +14,6 @@ import '../providers/app_locale_controller.dart';
 import '../providers/note_provider.dart';
 import '../services/app_build_metadata.dart';
 import '../services/app_lock_preferences_service.dart';
-import '../services/backup_service.dart';
 import '../services/background_task_center.dart';
 import '../services/file_storage_service.dart';
 import '../widgets/app_feedback.dart';
@@ -28,6 +27,8 @@ import 'local_chat_page.dart';
 import 'note_editor_page.dart';
 import 'model_management_page.dart';
 import 'app_lock_settings_page.dart';
+import 'backup_export_page.dart';
+import 'backup_restore_page.dart';
 import 'cloud_sync_page.dart';
 import 'language_settings_page.dart';
 import 'record_audio_page.dart';
@@ -1182,7 +1183,6 @@ class _DataTab extends StatefulWidget {
 
 class _DataTabState extends State<_DataTab> {
   int? _actualSize;
-  bool _backupBusy = false;
   AppBuildMetadata? _appBuildMetadata;
 
   @override
@@ -1429,14 +1429,14 @@ class _DataTabState extends State<_DataTab> {
                 icon: Icons.ios_share_rounded,
                 title: l10n.exportCompleteBackup,
                 subtitle: l10n.exportCompleteBackupSubtitle,
-                onTap: _backupBusy ? null : _exportBackup,
+                onTap: _openBackupExport,
               ),
               const Divider(height: 1),
               _SettingRow(
                 icon: Icons.settings_backup_restore_rounded,
                 title: l10n.restoreFromBackup,
                 subtitle: l10n.restoreFromBackupSubtitle,
-                onTap: _backupBusy ? null : _restoreBackup,
+                onTap: _openBackupRestore,
               ),
             ],
           ),
@@ -1512,29 +1512,12 @@ class _DataTabState extends State<_DataTab> {
     );
   }
 
-  Future<void> _exportBackup() async {
-    setState(() => _backupBusy = true);
-    try {
-      final size = MediaQuery.sizeOf(context);
-      final exported = await BackupService.instance.exportBackup(
-        sharePositionOrigin: Rect.fromLTWH(
-          size.width / 2,
-          size.height / 2,
-          1,
-          1,
-        ),
-      );
-      await widget.provider.loadEntries();
-      if (exported && mounted) {
-        AppFeedback.success(context, context.l10n.backupExported);
-      }
-    } catch (error) {
-      if (mounted) {
-        AppFeedback.error(context, context.l10n.exportFailed('$error'));
-      }
-    } finally {
-      if (mounted) setState(() => _backupBusy = false);
-    }
+  Future<void> _openBackupExport() async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(builder: (_) => const BackupExportPage()),
+    );
+    await _refreshSize();
   }
 
   Future<void> _openCloudSync() async {
@@ -1546,41 +1529,17 @@ class _DataTabState extends State<_DataTab> {
     await _refreshSize();
   }
 
-  Future<void> _restoreBackup() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(context.l10n.restoreCompleteBackupQuestion),
-        content: Text(context.l10n.restoreCompleteBackupDescription),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(context.l10n.cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(context.l10n.chooseBackup),
-          ),
-        ],
-      ),
+  Future<void> _openBackupRestore() async {
+    final restored = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => const BackupRestorePage()),
     );
-    if (confirmed != true) return;
-    setState(() => _backupBusy = true);
-    try {
-      final restored = await BackupService.instance.restoreBackup();
-      if (restored) {
-        await widget.provider.loadEntries();
-        await _refreshSize();
-        if (mounted) {
-          AppFeedback.success(context, context.l10n.backupRestored);
-        }
-      }
-    } catch (error) {
+    if (restored == true) {
+      await widget.provider.loadEntries();
+      await _refreshSize();
       if (mounted) {
-        AppFeedback.error(context, context.l10n.restoreFailed('$error'));
+        AppFeedback.success(context, context.l10n.backupRestored);
       }
-    } finally {
-      if (mounted) setState(() => _backupBusy = false);
     }
   }
 

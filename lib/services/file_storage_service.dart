@@ -33,6 +33,7 @@ class FileStorageService {
       p.join(_baseDir, 'documents'),
       p.join(_baseDir, 'thumbnails'),
       p.join(_baseDir, 'exports'),
+      p.join(_baseDir, 'backups'),
       p.join(_baseDir, 'assistant'),
       p.join(_baseDir, 'models', 'asr'),
       p.join(_baseDir, 'transcription_temp'),

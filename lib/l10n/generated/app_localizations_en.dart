@@ -72,6 +72,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cancel => 'Cancel';
 
   @override
+  String get close => 'Close';
+
+  @override
   String get deletePermanently => 'Delete permanently';
 
   @override
@@ -306,14 +309,112 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get exportCompleteBackupSubtitle =>
-      'Save all notes and files through the system share sheet';
+      'Keep multiple versions to share or save in a chosen location';
 
   @override
   String get restoreFromBackup => 'Restore from backup';
 
   @override
   String get restoreFromBackupSubtitle =>
-      'The backup is verified before restoration';
+      'Restore from backup history or an external file after verification';
+
+  @override
+  String get backupScopeDescription =>
+      'Includes notes, chats, and attachments. Local models, caches, app lock, and cloud accounts are excluded.';
+
+  @override
+  String get createNewBackup => 'Create a new backup';
+
+  @override
+  String get backupName => 'Backup name';
+
+  @override
+  String get backupNameHint => 'Optional, for example: Before migration';
+
+  @override
+  String get backupDescription => 'Backup description';
+
+  @override
+  String get backupDescriptionHint =>
+      'Optional notes about what matters in this version';
+
+  @override
+  String get createBackup => 'Create backup';
+
+  @override
+  String get creatingBackup => 'Verifying and creating backup…';
+
+  @override
+  String get backupSavedDefault =>
+      'Saved to the default FKNotes backup location';
+
+  @override
+  String get backupHistory => 'Backup history';
+
+  @override
+  String get backupHistorySubtitle =>
+      'Keep multiple versions in the default location to share, save elsewhere, or restore';
+
+  @override
+  String get noBackupHistory => 'No local backups yet';
+
+  @override
+  String get backupStoredLocally => 'Default FKNotes location';
+
+  @override
+  String get saveBackupCopy => 'Save a copy…';
+
+  @override
+  String get backupCopySaved => 'Backup copy saved';
+
+  @override
+  String get backupDetails => 'Backup details';
+
+  @override
+  String backupDateAndSize(String date, String size) {
+    return '$date · $size';
+  }
+
+  @override
+  String get backupCreatedAt => 'Created';
+
+  @override
+  String get backupFileName => 'File name';
+
+  @override
+  String get backupFormat => 'Format version';
+
+  @override
+  String get backupVerificationCode => 'File checksum (SHA-256)';
+
+  @override
+  String get backupContentFingerprint => 'Content fingerprint';
+
+  @override
+  String get deleteBackup => 'Delete backup';
+
+  @override
+  String get deleteBackupQuestion => 'Delete this backup?';
+
+  @override
+  String get deleteBackupDescription =>
+      'Only this version in the default backup location will be removed. Current notes are not affected.';
+
+  @override
+  String get backupDeleted => 'Backup deleted';
+
+  @override
+  String get restoreWarning =>
+      'Restoring replaces current notes, chats, and attachments. Create a fresh backup first if needed.';
+
+  @override
+  String get chooseExternalBackup => 'Choose a backup from elsewhere';
+
+  @override
+  String get restoreBackupAction => 'Restore this backup';
+
+  @override
+  String get restoringBackup => 'Verifying and restoring backup…';
 
   @override
   String get organizationAndSecurity => 'Organization and security';
