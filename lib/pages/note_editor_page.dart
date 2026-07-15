@@ -80,6 +80,8 @@ class _NoteEditorPageState extends State<NoteEditorPage>
   late List<String> _tags;
   late bool _favorite;
   late bool _pinned;
+  late NoteCoverMode _coverMode;
+  String? _coverAttachmentPath;
   late List<NoteAttachment> _attachments;
   final List<NoteAttachment> _removedAttachments = [];
   final _storage = FileStorageService.instance;
@@ -128,6 +130,8 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     _tags = [...?entry?.tags];
     _favorite = entry?.isFavorite ?? false;
     _pinned = entry?.isPinned ?? false;
+    _coverMode = entry?.coverMode ?? NoteCoverMode.automatic;
+    _coverAttachmentPath = entry?.coverAttachmentPath;
     _attachments = [...?entry?.allAttachments];
     _title.addListener(_onTitleChanged);
     _content.addListener(_onContentChanged);
@@ -393,6 +397,8 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       _tags = [...draft.tags];
       _favorite = draft.isFavorite;
       _pinned = draft.isPinned;
+      _coverMode = draft.coverMode;
+      _coverAttachmentPath = draft.coverAttachmentPath;
       _attachments = [...draft.attachments];
       _removedAttachments
         ..clear()
@@ -413,6 +419,8 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     tags: [..._tags],
     isFavorite: _favorite,
     isPinned: _pinned,
+    coverMode: _coverMode,
+    coverAttachmentPath: _coverAttachmentPath,
     attachments: _orderedAttachments,
     removedAttachments: [..._removedAttachments],
   );
@@ -886,6 +894,9 @@ class _NoteEditorPageState extends State<NoteEditorPage>
           tags: _tags,
           isFavorite: _favorite,
           isPinned: _pinned,
+          coverMode: _coverMode,
+          coverAttachmentPath: _coverAttachmentPath,
+          clearCoverAttachmentPath: _coverAttachmentPath == null,
           updatedAt: now,
           attachments: _orderedAttachments,
         );
@@ -900,6 +911,8 @@ class _NoteEditorPageState extends State<NoteEditorPage>
           tags: _tags,
           isFavorite: _favorite,
           isPinned: _pinned,
+          coverMode: _coverMode,
+          coverAttachmentPath: _coverAttachmentPath,
           createdAt: now,
           updatedAt: now,
           attachments: _orderedAttachments,
@@ -1128,7 +1141,13 @@ class _NoteEditorPageState extends State<NoteEditorPage>
 
   void _removeAttachment(int index) {
     setState(() {
-      _removedAttachments.add(_attachments.removeAt(index));
+      final removed = _attachments.removeAt(index);
+      _removedAttachments.add(removed);
+      if (_coverMode == NoteCoverMode.attachment &&
+          _coverAttachmentPath == removed.filePath) {
+        _coverMode = NoteCoverMode.automatic;
+        _coverAttachmentPath = null;
+      }
       _changed = true;
     });
     _scheduleAutosave();
@@ -1151,6 +1170,48 @@ class _NoteEditorPageState extends State<NoteEditorPage>
           normalized.isEmpty || normalized == attachment.fileName
           ? attachment.copyWith(clearDisplayName: true)
           : attachment.copyWith(displayName: normalized);
+      _changed = true;
+    });
+    _scheduleAutosave();
+    _queueRecoveryDraft();
+  }
+
+  void _setAttachmentAsCover(int index) {
+    if (index < 0 || index >= _attachments.length) return;
+    final attachmentPath = _attachments[index].filePath;
+    if (_coverMode == NoteCoverMode.attachment &&
+        _coverAttachmentPath == attachmentPath) {
+      return;
+    }
+    setState(() {
+      _coverMode = NoteCoverMode.attachment;
+      _coverAttachmentPath = attachmentPath;
+      _changed = true;
+    });
+    _scheduleAutosave();
+    _queueRecoveryDraft();
+  }
+
+  Future<void> _showCoverSettings() async {
+    final selection = await showModalBottomSheet<_CoverSelection>(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (_) => _CoverSettingsSheet(
+        currentMode: _coverMode,
+        currentAttachmentPath: _coverAttachmentPath,
+        attachments: _attachments,
+      ),
+    );
+    if (selection == null || !mounted) return;
+    if (selection.mode == _coverMode &&
+        selection.attachmentPath == _coverAttachmentPath) {
+      return;
+    }
+    setState(() {
+      _coverMode = selection.mode;
+      _coverAttachmentPath = selection.attachmentPath;
       _changed = true;
     });
     _scheduleAutosave();
@@ -1303,6 +1364,10 @@ class _NoteEditorPageState extends State<NoteEditorPage>
               icon: const Icon(Icons.more_vert_rounded),
               onSelected: (value) {
                 HapticFeedback.selectionClick();
+                if (value == 'cover') {
+                  unawaited(_showCoverSettings());
+                  return;
+                }
                 setState(() {
                   if (value == 'favorite') _favorite = !_favorite;
                   if (value == 'pin') _pinned = !_pinned;
@@ -1312,6 +1377,11 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                 _queueRecoveryDraft();
               },
               actions: [
+                AppMenuAction(
+                  value: 'cover',
+                  icon: Icons.photo_size_select_actual_outlined,
+                  label: context.l10n.coverSettings,
+                ),
                 AppMenuAction(
                   value: 'favorite',
                   icon: _favorite
@@ -1458,6 +1528,13 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                                 ) ...[
                                   _AttachmentEditorTile(
                                     attachment: _attachments[index],
+                                    isCover:
+                                        _coverMode ==
+                                            NoteCoverMode.attachment &&
+                                        _coverAttachmentPath ==
+                                            _attachments[index].filePath,
+                                    onSetCover: () =>
+                                        _setAttachmentAsCover(index),
                                     onRename: () => _renameAttachment(index),
                                     onOpen: () =>
                                         _openAttachment(_attachments[index]),
@@ -3006,6 +3083,8 @@ class _AttachmentImportTile extends StatelessWidget {
 
 class _AttachmentEditorTile extends StatelessWidget {
   final NoteAttachment attachment;
+  final bool isCover;
+  final VoidCallback onSetCover;
   final VoidCallback onRename;
   final VoidCallback onOpen;
   final VoidCallback onReference;
@@ -3017,6 +3096,8 @@ class _AttachmentEditorTile extends StatelessWidget {
 
   const _AttachmentEditorTile({
     required this.attachment,
+    required this.isCover,
+    required this.onSetCover,
     required this.onRename,
     required this.onOpen,
     required this.onReference,
@@ -3074,7 +3155,7 @@ class _AttachmentEditorTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 5),
                     Text(
-                      '${_noteTypeLabel(context, attachment.type)} · ${_formatSize(attachment.fileSize)}${attachment.ocrText?.trim().isNotEmpty == true ? ' · OCR' : ''}',
+                      '${_noteTypeLabel(context, attachment.type)} · ${_formatSize(attachment.fileSize)}${isCover ? ' · ${context.l10n.noteCover}' : ''}${attachment.ocrText?.trim().isNotEmpty == true ? ' · OCR' : ''}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -3091,6 +3172,8 @@ class _AttachmentEditorTile extends StatelessWidget {
                 icon: const Icon(Icons.more_vert_rounded),
                 onSelected: (value) {
                   switch (value) {
+                    case 'cover':
+                      onSetCover();
                     case 'rename':
                       onRename();
                     case 'up':
@@ -3104,6 +3187,14 @@ class _AttachmentEditorTile extends StatelessWidget {
                   }
                 },
                 actions: [
+                  AppMenuAction(
+                    value: 'cover',
+                    icon: Icons.photo_size_select_actual_outlined,
+                    label: isCover
+                        ? context.l10n.currentCover
+                        : context.l10n.setAsCover,
+                    selected: isCover,
+                  ),
                   AppMenuAction(
                     value: 'rename',
                     icon: Icons.edit_outlined,
@@ -3242,6 +3333,212 @@ class _AttachmentTitleSheetState extends State<_AttachmentTitleSheet> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CoverSelection {
+  final NoteCoverMode mode;
+  final String? attachmentPath;
+
+  const _CoverSelection(this.mode, [this.attachmentPath]);
+}
+
+class _CoverSettingsSheet extends StatelessWidget {
+  final NoteCoverMode currentMode;
+  final String? currentAttachmentPath;
+  final List<NoteAttachment> attachments;
+
+  const _CoverSettingsSheet({
+    required this.currentMode,
+    required this.currentAttachmentPath,
+    required this.attachments,
+  });
+
+  bool _selected(NoteCoverMode mode, [String? path]) =>
+      currentMode == mode &&
+      (mode != NoteCoverMode.attachment || currentAttachmentPath == path);
+
+  void _choose(
+    BuildContext context,
+    NoteCoverMode mode, [
+    String? attachmentPath,
+  ]) => Navigator.pop(context, _CoverSelection(mode, attachmentPath));
+
+  @override
+  Widget build(BuildContext context) {
+    final primaryType = attachments.firstOrNull?.type ?? NoteType.text;
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * .76,
+      ),
+      child: ListView(
+        shrinkWrap: true,
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        children: [
+          Text(
+            context.l10n.coverSettings,
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            context.l10n.coverSettingsDescription,
+            style: const TextStyle(color: AppColors.muted, height: 1.4),
+          ),
+          const SizedBox(height: 14),
+          _CoverOptionTile(
+            key: const Key('cover-mode-automatic'),
+            icon: Icons.auto_awesome_outlined,
+            title: context.l10n.coverAutomatic,
+            subtitle: context.l10n.coverAutomaticDescription,
+            selected: _selected(NoteCoverMode.automatic),
+            onTap: () => _choose(context, NoteCoverMode.automatic),
+          ),
+          _CoverOptionTile(
+            key: const Key('cover-mode-type'),
+            icon: NoteCard.iconForType(primaryType),
+            title: context.l10n.coverType,
+            subtitle: context.l10n.coverTypeDescription,
+            selected: _selected(NoteCoverMode.type),
+            onTap: () => _choose(context, NoteCoverMode.type),
+          ),
+          _CoverOptionTile(
+            key: const Key('cover-mode-hidden'),
+            icon: Icons.hide_image_outlined,
+            title: context.l10n.hideCover,
+            subtitle: context.l10n.hideCoverDescription,
+            selected: _selected(NoteCoverMode.hidden),
+            onTap: () => _choose(context, NoteCoverMode.hidden),
+          ),
+          if (attachments.isNotEmpty) ...[
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 10),
+              child: Divider(),
+            ),
+            Text(
+              context.l10n.chooseAttachmentCover,
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            for (final attachment in attachments)
+              _AttachmentCoverOption(
+                key: ValueKey('cover-option-${attachment.filePath}'),
+                attachment: attachment,
+                selected: _selected(
+                  NoteCoverMode.attachment,
+                  attachment.filePath,
+                ),
+                onTap: () => _choose(
+                  context,
+                  NoteCoverMode.attachment,
+                  attachment.filePath,
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _CoverOptionTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _CoverOptionTile({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    contentPadding: EdgeInsets.zero,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    leading: Container(
+      width: 44,
+      height: 52,
+      decoration: BoxDecoration(
+        color: selected ? AppColors.softAmber : AppColors.canvas,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Icon(icon, color: selected ? AppColors.moss : AppColors.muted),
+    ),
+    title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+    subtitle: Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
+    trailing: selected
+        ? const Icon(Icons.check_rounded, color: AppColors.moss)
+        : null,
+    onTap: onTap,
+  );
+}
+
+class _AttachmentCoverOption extends StatelessWidget {
+  final NoteAttachment attachment;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _AttachmentCoverOption({
+    super.key,
+    required this.attachment,
+    required this.selected,
+    required this.onTap,
+  });
+
+  File? get _thumbnail {
+    final path = attachment.thumbnailPath;
+    if (path == null || path.isEmpty) return null;
+    try {
+      final file = File(FileStorageService.instance.absolutePath(path));
+      return file.existsSync() ? file : null;
+    } on FormatException {
+      return null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = NoteCard.colorForType(attachment.type);
+    final thumbnail = _thumbnail;
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      leading: Container(
+        width: 44,
+        height: 52,
+        padding: thumbnail == null ? EdgeInsets.zero : const EdgeInsets.all(2),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: .08),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.line),
+        ),
+        child: thumbnail == null
+            ? Icon(NoteCard.iconForType(attachment.type), color: color)
+            : Image.file(thumbnail, fit: BoxFit.contain),
+      ),
+      title: Text(
+        attachment.displayTitle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontWeight: FontWeight.w600),
+      ),
+      subtitle: Text(_noteTypeLabel(context, attachment.type)),
+      trailing: selected
+          ? const Icon(Icons.check_rounded, color: AppColors.moss)
+          : null,
+      onTap: onTap,
     );
   }
 }

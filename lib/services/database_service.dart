@@ -23,13 +23,13 @@ class DatabaseService {
       AppDiagnostics.info(
         AppLogCategory.database,
         'database_open_started',
-        data: {'schemaVersion': 11},
+        data: {'schemaVersion': 12},
       );
     }
     try {
       final database = await openDatabase(
         path,
-        version: 11,
+        version: 12,
         onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
@@ -84,6 +84,8 @@ class DatabaseService {
         is_archived INTEGER NOT NULL DEFAULT 0,
         is_deleted INTEGER NOT NULL DEFAULT 0,
         deleted_at TEXT,
+        cover_mode TEXT NOT NULL DEFAULT 'automatic',
+        cover_attachment_path TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )
@@ -117,6 +119,21 @@ class DatabaseService {
       if (!columns.contains('display_name')) {
         await db.execute(
           'ALTER TABLE attachments ADD COLUMN display_name TEXT',
+        );
+      }
+    }
+    if (oldVersion < 12) {
+      final columns = (await db.rawQuery(
+        'PRAGMA table_info(entries)',
+      )).map((column) => column['name'] as String).toSet();
+      if (!columns.contains('cover_mode')) {
+        await db.execute(
+          "ALTER TABLE entries ADD COLUMN cover_mode TEXT NOT NULL DEFAULT 'automatic'",
+        );
+      }
+      if (!columns.contains('cover_attachment_path')) {
+        await db.execute(
+          'ALTER TABLE entries ADD COLUMN cover_attachment_path TEXT',
         );
       }
     }

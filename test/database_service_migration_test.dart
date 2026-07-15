@@ -59,9 +59,15 @@ void main() {
       final db = await DatabaseService.instance.database;
       final columns = await db.rawQuery('PRAGMA table_info(entries)');
       expect(columns.map((column) => column['name']), contains('rich_content'));
+      expect(
+        columns.map((column) => column['name']),
+        containsAll(['cover_mode', 'cover_attachment_path']),
+      );
       final rows = await db.query('entries');
       expect(rows.single['content'], '旧笔记正文');
       expect(rows.single['rich_content'], isNull);
+      expect(rows.single['cover_mode'], 'automatic');
+      expect(rows.single['cover_attachment_path'], isNull);
       final attachmentColumns = await db.rawQuery(
         'PRAGMA table_info(attachments)',
       );

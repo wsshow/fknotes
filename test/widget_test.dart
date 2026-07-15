@@ -34,6 +34,8 @@ void main() {
       tags: const ['work', 'offline'],
       isFavorite: true,
       isPinned: true,
+      coverMode: NoteCoverMode.attachment,
+      coverAttachmentPath: 'documents/research.pdf',
       createdAt: now,
       updatedAt: now,
     );
@@ -44,6 +46,8 @@ void main() {
     expect(restored.isFavorite, isTrue);
     expect(restored.isPinned, isTrue);
     expect(restored.isDeleted, isFalse);
+    expect(restored.coverMode, NoteCoverMode.attachment);
+    expect(restored.coverAttachmentPath, 'documents/research.pdf');
   });
 
   test('A note can contain ordered attachments of multiple types', () {

@@ -5293,6 +5293,78 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'用本地应用打开'**
   String get openWithLocalApp;
+
+  /// No description provided for @coverSettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'封面设置'**
+  String get coverSettings;
+
+  /// No description provided for @noteCover.
+  ///
+  /// In zh, this message translates to:
+  /// **'封面'**
+  String get noteCover;
+
+  /// No description provided for @coverSettingsDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择笔记在主页和资料库中的展示方式。'**
+  String get coverSettingsDescription;
+
+  /// No description provided for @coverAutomatic.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动选择'**
+  String get coverAutomatic;
+
+  /// No description provided for @coverAutomaticDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'优先使用笔记中的图片或视频，否则显示类型封面'**
+  String get coverAutomaticDescription;
+
+  /// No description provided for @coverType.
+  ///
+  /// In zh, this message translates to:
+  /// **'类型封面'**
+  String get coverType;
+
+  /// No description provided for @coverTypeDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用统一的笔记、图片、语音、视频或文件图标'**
+  String get coverTypeDescription;
+
+  /// No description provided for @hideCover.
+  ///
+  /// In zh, this message translates to:
+  /// **'不显示封面'**
+  String get hideCover;
+
+  /// No description provided for @hideCoverDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'只显示标题、摘要和更新时间'**
+  String get hideCoverDescription;
+
+  /// No description provided for @chooseAttachmentCover.
+  ///
+  /// In zh, this message translates to:
+  /// **'从笔记附件中选择'**
+  String get chooseAttachmentCover;
+
+  /// No description provided for @setAsCover.
+  ///
+  /// In zh, this message translates to:
+  /// **'设为封面'**
+  String get setAsCover;
+
+  /// No description provided for @currentCover.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前封面'**
+  String get currentCover;
 }
 
 class _AppLocalizationsDelegate

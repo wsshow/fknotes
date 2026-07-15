@@ -43,6 +43,8 @@ void main() {
       tags: const ['工作', '离线'],
       isFavorite: true,
       isPinned: true,
+      coverMode: NoteCoverMode.attachment,
+      coverAttachmentPath: attachment.filePath,
       attachments: [attachment],
       removedAttachments: const [],
     );
@@ -55,6 +57,8 @@ void main() {
     expect(restored.content, '# 恢复正文');
     expect(restored.tags, ['工作', '离线']);
     expect(restored.isFavorite, isTrue);
+    expect(restored.coverMode, NoteCoverMode.attachment);
+    expect(restored.coverAttachmentPath, attachment.filePath);
     expect(restored.attachments.single.filePath, 'documents/plan.md');
     expect(
       File('${root.path}/recovery/editor-drafts/note-42.json.tmp').existsSync(),
@@ -82,6 +86,23 @@ void main() {
     await Future.wait([save, clear]);
 
     expect(await service.load(null), isNull);
+  });
+
+  test('legacy recovery drafts default to automatic cover selection', () {
+    final draft = EditorRecoveryDraft.fromJson({
+      'formatVersion': 1,
+      'savedAt': DateTime.utc(2026, 7, 12).toIso8601String(),
+      'title': '旧草稿',
+      'content': '',
+      'tags': const <String>[],
+      'isFavorite': false,
+      'isPinned': false,
+      'attachments': const <Object?>[],
+      'removedAttachments': const <Object?>[],
+    });
+
+    expect(draft.coverMode, NoteCoverMode.automatic);
+    expect(draft.coverAttachmentPath, isNull);
   });
 
   test(

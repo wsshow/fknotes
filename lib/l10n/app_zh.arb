@@ -974,5 +974,17 @@
   "description": "说明",
   "originalFileMissing": "原文件不存在",
   "missingFileDescription": "可以保留笔记信息或将它移到回收站",
-  "openWithLocalApp": "用本地应用打开"
+  "openWithLocalApp": "用本地应用打开",
+  "coverSettings": "封面设置",
+  "noteCover": "封面",
+  "coverSettingsDescription": "选择笔记在主页和资料库中的展示方式。",
+  "coverAutomatic": "自动选择",
+  "coverAutomaticDescription": "优先使用笔记中的图片或视频，否则显示类型封面",
+  "coverType": "类型封面",
+  "coverTypeDescription": "使用统一的笔记、图片、语音、视频或文件图标",
+  "hideCover": "不显示封面",
+  "hideCoverDescription": "只显示标题、摘要和更新时间",
+  "chooseAttachmentCover": "从笔记附件中选择",
+  "setAsCover": "设为封面",
+  "currentCover": "当前封面"
 }

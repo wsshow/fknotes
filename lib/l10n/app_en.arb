@@ -974,5 +974,17 @@
   "description": "Description",
   "originalFileMissing": "Original file missing",
   "missingFileDescription": "Keep the note information or move it to Trash.",
-  "openWithLocalApp": "Open with local app"
+  "openWithLocalApp": "Open with local app",
+  "coverSettings": "Cover settings",
+  "noteCover": "Cover",
+  "coverSettingsDescription": "Choose how this note appears on Home and in the Library.",
+  "coverAutomatic": "Automatic",
+  "coverAutomaticDescription": "Prefer an image or video from the note, otherwise use a type cover",
+  "coverType": "Type cover",
+  "coverTypeDescription": "Use a consistent note, image, audio, video, or file icon",
+  "hideCover": "Hide cover",
+  "hideCoverDescription": "Show only the title, preview, and modified time",
+  "chooseAttachmentCover": "Choose from note attachments",
+  "setAsCover": "Set as cover",
+  "currentCover": "Current cover"
 }

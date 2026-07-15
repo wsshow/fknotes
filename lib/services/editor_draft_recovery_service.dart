@@ -8,7 +8,7 @@ import '../models/note_entry.dart';
 import 'file_storage_service.dart';
 
 class EditorRecoveryDraft {
-  static const formatVersion = 1;
+  static const formatVersion = 2;
 
   final int? noteId;
   final DateTime? baseUpdatedAt;
@@ -19,6 +19,8 @@ class EditorRecoveryDraft {
   final List<String> tags;
   final bool isFavorite;
   final bool isPinned;
+  final NoteCoverMode coverMode;
+  final String? coverAttachmentPath;
   final List<NoteAttachment> attachments;
   final List<NoteAttachment> removedAttachments;
 
@@ -32,6 +34,8 @@ class EditorRecoveryDraft {
     required this.tags,
     required this.isFavorite,
     required this.isPinned,
+    this.coverMode = NoteCoverMode.automatic,
+    this.coverAttachmentPath,
     required this.attachments,
     required this.removedAttachments,
   });
@@ -42,7 +46,9 @@ class EditorRecoveryDraft {
       attachments.isEmpty &&
       tags.isEmpty &&
       !isFavorite &&
-      !isPinned;
+      !isPinned &&
+      coverMode == NoteCoverMode.automatic &&
+      coverAttachmentPath == null;
 
   bool matchesEntry(NoteEntry entry) =>
       title == entry.title &&
@@ -51,6 +57,8 @@ class EditorRecoveryDraft {
       _listEquals(tags, entry.tags) &&
       isFavorite == entry.isFavorite &&
       isPinned == entry.isPinned &&
+      coverMode == entry.coverMode &&
+      coverAttachmentPath == entry.coverAttachmentPath &&
       _attachmentMapsEqual(attachments, entry.allAttachments);
 
   Map<String, Object?> toJson() => {
@@ -64,6 +72,8 @@ class EditorRecoveryDraft {
     'tags': tags,
     'isFavorite': isFavorite,
     'isPinned': isPinned,
+    'coverMode': coverMode.dbValue,
+    'coverAttachmentPath': coverAttachmentPath,
     'attachments': attachments.map((item) => item.toMap()).toList(),
     'removedAttachments': removedAttachments
         .map((item) => item.toMap())
@@ -71,7 +81,8 @@ class EditorRecoveryDraft {
   };
 
   factory EditorRecoveryDraft.fromJson(Map<String, Object?> json) {
-    if (json['formatVersion'] != formatVersion) {
+    final version = json['formatVersion'];
+    if (version is! int || version < 1 || version > formatVersion) {
       throw const FormatException('不支持的编辑器恢复草稿版本');
     }
     final savedAt = DateTime.tryParse(json['savedAt'] as String? ?? '');
@@ -86,6 +97,12 @@ class EditorRecoveryDraft {
       tags: _stringList(json['tags']),
       isFavorite: json['isFavorite'] == true,
       isPinned: json['isPinned'] == true,
+      coverMode: version >= 2
+          ? NoteCoverMode.fromDb(json['coverMode'] as String?)
+          : NoteCoverMode.automatic,
+      coverAttachmentPath: version >= 2
+          ? json['coverAttachmentPath'] as String?
+          : null,
       attachments: _attachmentList(json['attachments']),
       removedAttachments: _attachmentList(json['removedAttachments']),
     );

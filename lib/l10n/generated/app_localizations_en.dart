@@ -3068,4 +3068,44 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get openWithLocalApp => 'Open with local app';
+
+  @override
+  String get coverSettings => 'Cover settings';
+
+  @override
+  String get noteCover => 'Cover';
+
+  @override
+  String get coverSettingsDescription =>
+      'Choose how this note appears on Home and in the Library.';
+
+  @override
+  String get coverAutomatic => 'Automatic';
+
+  @override
+  String get coverAutomaticDescription =>
+      'Prefer an image or video from the note, otherwise use a type cover';
+
+  @override
+  String get coverType => 'Type cover';
+
+  @override
+  String get coverTypeDescription =>
+      'Use a consistent note, image, audio, video, or file icon';
+
+  @override
+  String get hideCover => 'Hide cover';
+
+  @override
+  String get hideCoverDescription =>
+      'Show only the title, preview, and modified time';
+
+  @override
+  String get chooseAttachmentCover => 'Choose from note attachments';
+
+  @override
+  String get setAsCover => 'Set as cover';
+
+  @override
+  String get currentCover => 'Current cover';
 }

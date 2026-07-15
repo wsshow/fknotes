@@ -80,15 +80,15 @@ class NoteCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final coverMedia = _coverMedia();
+    final cover = _coverPresentation();
     final preview = entry.previewText.trim();
-    final accent = colorForType(entry.primaryType);
+    final accent = colorForType(cover?.type ?? entry.primaryType);
 
     if (compact) {
       return _RecentNoteRow(
         entry: entry,
-        thumbnail: coverMedia?.file,
-        thumbnailType: coverMedia?.attachment.type,
+        thumbnail: cover?.file,
+        coverType: cover?.type,
         accent: accent,
         onTap: onTap,
         friendlyTime: _friendlyTime(context, entry.updatedAt),
@@ -105,13 +105,15 @@ class NoteCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _EditorialPreviewTile(
-                  entry: entry,
-                  thumbnail: coverMedia?.file,
-                  thumbnailType: coverMedia?.attachment.type,
-                  accent: accent,
-                ),
-                const SizedBox(width: 12),
+                if (cover != null) ...[
+                  _EditorialPreviewTile(
+                    entry: entry,
+                    thumbnail: cover.file,
+                    coverType: cover.type,
+                    accent: accent,
+                  ),
+                  const SizedBox(width: 12),
+                ],
                 Expanded(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -253,20 +255,54 @@ class NoteCard extends StatelessWidget {
       onArchive != null ||
       onRestore != null;
 
-  ({File file, NoteAttachment attachment})? _coverMedia() {
+  ({File? file, NoteType type})? _coverPresentation() {
+    switch (entry.coverMode) {
+      case NoteCoverMode.hidden:
+        return null;
+      case NoteCoverMode.type:
+        return (file: null, type: entry.primaryType);
+      case NoteCoverMode.attachment:
+        final selected = entry.allAttachments
+            .where(
+              (attachment) => attachment.filePath == entry.coverAttachmentPath,
+            )
+            .firstOrNull;
+        if (selected != null) {
+          return (file: _thumbnailFor(selected), type: selected.type);
+        }
+        return _automaticCover();
+      case NoteCoverMode.automatic:
+        return _automaticCover();
+    }
+  }
+
+  ({File? file, NoteType type}) _automaticCover() {
     for (final attachment in entry.allAttachments) {
       if (attachment.type != NoteType.image &&
           attachment.type != NoteType.video) {
         continue;
       }
-      final thumbnailPath = attachment.thumbnailPath;
-      if (thumbnailPath == null || thumbnailPath.isEmpty) continue;
+      final file = _thumbnailFor(attachment);
+      if (file != null) return (file: file, type: attachment.type);
+    }
+    return (file: null, type: entry.primaryType);
+  }
+
+  File? _thumbnailFor(NoteAttachment attachment) {
+    if (attachment.type != NoteType.image &&
+        attachment.type != NoteType.video) {
+      return null;
+    }
+    final thumbnailPath = attachment.thumbnailPath;
+    if (thumbnailPath == null || thumbnailPath.isEmpty) return null;
+    try {
       final file = File(
         FileStorageService.instance.absolutePath(thumbnailPath),
       );
-      if (file.existsSync()) return (file: file, attachment: attachment);
+      return file.existsSync() ? file : null;
+    } on FormatException {
+      return null;
     }
-    return null;
   }
 
   String _friendlyTime(BuildContext context, DateTime date) {
@@ -286,7 +322,7 @@ class NoteCard extends StatelessWidget {
 class _RecentNoteRow extends StatelessWidget {
   final NoteEntry entry;
   final File? thumbnail;
-  final NoteType? thumbnailType;
+  final NoteType? coverType;
   final Color accent;
   final VoidCallback onTap;
   final String friendlyTime;
@@ -294,7 +330,7 @@ class _RecentNoteRow extends StatelessWidget {
   const _RecentNoteRow({
     required this.entry,
     required this.thumbnail,
-    required this.thumbnailType,
+    required this.coverType,
     required this.accent,
     required this.onTap,
     required this.friendlyTime,
@@ -316,13 +352,15 @@ class _RecentNoteRow extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _EditorialPreviewTile(
-                entry: entry,
-                thumbnail: thumbnail,
-                thumbnailType: thumbnailType,
-                accent: accent,
-              ),
-              const SizedBox(width: 16),
+              if (coverType != null) ...[
+                _EditorialPreviewTile(
+                  entry: entry,
+                  thumbnail: thumbnail,
+                  coverType: coverType!,
+                  accent: accent,
+                ),
+                const SizedBox(width: 16),
+              ],
               Expanded(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -413,13 +451,13 @@ class _EditorialPreviewTile extends StatelessWidget {
 
   final NoteEntry entry;
   final File? thumbnail;
-  final NoteType? thumbnailType;
+  final NoteType coverType;
   final Color accent;
 
   const _EditorialPreviewTile({
     required this.entry,
     required this.thumbnail,
-    required this.thumbnailType,
+    required this.coverType,
     required this.accent,
   });
 
@@ -444,13 +482,11 @@ class _EditorialPreviewTile extends StatelessWidget {
               child: Image.file(
                 thumbnail!,
                 fit: BoxFit.contain,
-                errorBuilder: (_, _, _) => _CoverTypePlaceholder(
-                  type: thumbnailType ?? entry.primaryType,
-                  accent: accent,
-                ),
+                errorBuilder: (_, _, _) =>
+                    _CoverTypePlaceholder(type: coverType, accent: accent),
               ),
             ),
-            if (thumbnailType == NoteType.video)
+            if (coverType == NoteType.video)
               const Center(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
@@ -467,7 +503,7 @@ class _EditorialPreviewTile extends StatelessWidget {
                   ),
                 ),
               ),
-            if (thumbnailType == NoteType.image && imageCount > 1)
+            if (coverType == NoteType.image && imageCount > 1)
               Positioned(
                 right: 6,
                 bottom: 6,
@@ -496,7 +532,7 @@ class _EditorialPreviewTile extends StatelessWidget {
       );
     }
 
-    if (entry.primaryType == NoteType.text) {
+    if (coverType == NoteType.text) {
       return Container(
         width: _width,
         height: _height,
@@ -541,7 +577,7 @@ class _EditorialPreviewTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.line),
       ),
-      child: _CoverTypePlaceholder(type: entry.primaryType, accent: accent),
+      child: _CoverTypePlaceholder(type: coverType, accent: accent),
     );
   }
 }

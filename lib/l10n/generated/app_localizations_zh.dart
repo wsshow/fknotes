@@ -2845,4 +2845,40 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get openWithLocalApp => '用本地应用打开';
+
+  @override
+  String get coverSettings => '封面设置';
+
+  @override
+  String get noteCover => '封面';
+
+  @override
+  String get coverSettingsDescription => '选择笔记在主页和资料库中的展示方式。';
+
+  @override
+  String get coverAutomatic => '自动选择';
+
+  @override
+  String get coverAutomaticDescription => '优先使用笔记中的图片或视频，否则显示类型封面';
+
+  @override
+  String get coverType => '类型封面';
+
+  @override
+  String get coverTypeDescription => '使用统一的笔记、图片、语音、视频或文件图标';
+
+  @override
+  String get hideCover => '不显示封面';
+
+  @override
+  String get hideCoverDescription => '只显示标题、摘要和更新时间';
+
+  @override
+  String get chooseAttachmentCover => '从笔记附件中选择';
+
+  @override
+  String get setAsCover => '设为封面';
+
+  @override
+  String get currentCover => '当前封面';
 }

@@ -27,6 +27,20 @@ enum NoteScope { active, favorites, archived, trash }
 
 enum NoteSort { updated, created, title, size }
 
+enum NoteCoverMode {
+  automatic,
+  attachment,
+  type,
+  hidden;
+
+  String get dbValue => name;
+
+  static NoteCoverMode fromDb(String? value) => NoteCoverMode.values.firstWhere(
+    (mode) => mode.dbValue == value,
+    orElse: () => NoteCoverMode.automatic,
+  );
+}
+
 class NoteAttachment {
   final int? id;
   final int? noteId;
@@ -170,6 +184,8 @@ class NoteEntry {
   final DateTime? deletedAt;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final NoteCoverMode coverMode;
+  final String? coverAttachmentPath;
   final List<NoteAttachment> attachments;
   final bool attachmentsLoaded;
 
@@ -194,6 +210,8 @@ class NoteEntry {
     this.deletedAt,
     required this.createdAt,
     required this.updatedAt,
+    this.coverMode = NoteCoverMode.automatic,
+    this.coverAttachmentPath,
     this.attachments = const [],
     this.attachmentsLoaded = false,
   });
@@ -221,6 +239,9 @@ class NoteEntry {
     bool clearDeletedAt = false,
     DateTime? createdAt,
     DateTime? updatedAt,
+    NoteCoverMode? coverMode,
+    String? coverAttachmentPath,
+    bool clearCoverAttachmentPath = false,
     List<NoteAttachment>? attachments,
     bool? attachmentsLoaded,
   }) {
@@ -245,6 +266,10 @@ class NoteEntry {
       deletedAt: clearDeletedAt ? null : deletedAt ?? this.deletedAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      coverMode: coverMode ?? this.coverMode,
+      coverAttachmentPath: clearCoverAttachmentPath
+          ? null
+          : coverAttachmentPath ?? this.coverAttachmentPath,
       attachments: attachments ?? this.attachments,
       attachmentsLoaded: attachments != null
           ? true
@@ -342,6 +367,8 @@ class NoteEntry {
       'is_archived': isArchived ? 1 : 0,
       'is_deleted': isDeleted ? 1 : 0,
       'deleted_at': deletedAt?.toIso8601String(),
+      'cover_mode': coverMode.dbValue,
+      'cover_attachment_path': coverAttachmentPath,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };
@@ -377,6 +404,8 @@ class NoteEntry {
       deletedAt: map['deleted_at'] == null
           ? null
           : DateTime.tryParse(map['deleted_at'] as String),
+      coverMode: NoteCoverMode.fromDb(map['cover_mode'] as String?),
+      coverAttachmentPath: map['cover_attachment_path'] as String?,
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: DateTime.parse(map['updated_at'] as String),
     );
