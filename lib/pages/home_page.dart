@@ -1272,26 +1272,31 @@ class _DataTabState extends State<_DataTab> {
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: Wrap(
-                        alignment: WrapAlignment.spaceBetween,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: 12,
-                        runSpacing: 4,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          Text(
-                            l10n.localFirst,
-                            style: const TextStyle(
-                              color: AppColors.ink,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
+                          Expanded(
+                            child: Text(
+                              l10n.localFirst,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppColors.ink,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                height: 1.2,
+                              ),
                             ),
                           ),
+                          const SizedBox(width: 12),
                           Text(
                             l10n.offlineSecure,
+                            maxLines: 1,
                             style: const TextStyle(
                               color: AppColors.moss,
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
+                              height: 1.2,
                             ),
                           ),
                         ],
@@ -1299,12 +1304,15 @@ class _DataTabState extends State<_DataTab> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 8),
+                const Divider(height: 1, thickness: 1, color: AppColors.line),
+                const SizedBox(height: 9),
                 Row(
                   children: [
                     _DataStat(
                       '${widget.provider.allEntries.length}',
                       l10n.totalItems,
+                      alignment: Alignment.centerLeft,
                     ),
                     _DataStat(
                       '${widget.provider.attachmentCount}',
@@ -1315,6 +1323,7 @@ class _DataTabState extends State<_DataTab> {
                         _actualSize ?? widget.provider.totalFileSize,
                       ),
                       l10n.userDataUsage,
+                      alignment: Alignment.centerRight,
                     ),
                   ],
                 ),
@@ -1598,31 +1607,51 @@ String _buildMetadataSubtitle(
 class _DataStat extends StatelessWidget {
   final String value;
   final String label;
-  const _DataStat(this.value, this.label);
+  final AlignmentGeometry alignment;
+  const _DataStat(this.value, this.label, {this.alignment = Alignment.center});
   @override
   Widget build(BuildContext context) => Expanded(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Text(
-          value,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: AppColors.ink,
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
+    child: Align(
+      alignment: alignment,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            height: 24,
+            child: Center(
+              child: Text(
+                value,
+                maxLines: 1,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppColors.ink,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  height: 1,
+                ),
+              ),
+            ),
           ),
-        ),
-        Text(
-          label,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: AppColors.muted,
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
+          const SizedBox(height: 3),
+          SizedBox(
+            height: 17,
+            child: Center(
+              child: Text(
+                label,
+                maxLines: 1,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppColors.muted,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  height: 1,
+                ),
+              ),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     ),
   );
 }
