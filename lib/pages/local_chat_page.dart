@@ -237,7 +237,16 @@ class _LocalChatPageState extends State<LocalChatPage>
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => PopScope<Object?>(
+    key: const Key('local-chat-pop-scope'),
+    canPop: false,
+    onPopInvokedWithResult: (didPop, _) {
+      if (!didPop) Navigator.pop(context);
+    },
+    child: _buildPage(context),
+  );
+
+  Widget _buildPage(BuildContext context) => Scaffold(
     appBar: AppBar(
       titleSpacing: 4,
       title: Column(

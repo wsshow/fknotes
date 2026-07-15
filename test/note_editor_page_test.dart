@@ -76,9 +76,17 @@ void main() {
     );
     expect(find.byKey(const Key('local-chat-more-actions')), findsOneWidget);
     expect(find.byKey(const Key('local-chat-voice-input')), findsOneWidget);
+    final popScope = tester.widget<PopScope<Object?>>(
+      find.byKey(const Key('local-chat-pop-scope')),
+    );
+    expect(popScope.canPop, isFalse);
     expect(tester.takeException(), isNull);
 
-    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(LocalChatPage), findsNothing);
+    expect(find.byType(HomePage), findsOneWidget);
   });
 
   testWidgets('background tasks are available from data instead of home', (
