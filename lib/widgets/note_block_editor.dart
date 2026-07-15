@@ -2223,6 +2223,9 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
         );
       }
     });
+    // Some refocus requests originate from tapping otherwise inert whitespace.
+    // That gesture does not necessarily schedule a frame by itself.
+    WidgetsBinding.instance.scheduleFrame();
   }
 
   void focusAtEnd() {
@@ -2237,12 +2240,16 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     target.controller.visibleSelectionValue = TextSelection.collapsed(
       offset: end,
     );
-    if (target.focusNode.hasFocus) {
-      // Android keeps the field focused after the user dismisses the keyboard,
-      // but the old input connection may no longer reopen reliably. Recreate
-      // the connection before requesting focus again.
-      target.focusNode.unfocus();
+    if (!target.focusNode.hasFocus) {
+      // The block is already mounted, so the first whitespace tap can focus it
+      // immediately without waiting for an unrelated frame.
+      target.focusNode.requestFocus();
+      return;
     }
+    // Android keeps the field focused after the user dismisses the keyboard,
+    // but the old input connection may no longer reopen reliably. Recreate
+    // the connection before requesting focus again.
+    target.focusNode.unfocus();
     _refocus(target, offset: end);
   }
 

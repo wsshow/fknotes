@@ -283,6 +283,19 @@ void main() {
     );
     expect(bodyFields, findsNWidgets(2));
 
+    final firstBlankTap = Offset(editorRect.center.dx, editorRect.bottom - 8);
+    await tester.tapAt(firstBlankTap);
+    await tester.idle();
+    final initiallyFocusedLastField = tester.widget<TextField>(bodyFields.last);
+    expect(initiallyFocusedLastField.focusNode?.hasFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isTrue);
+    expect(
+      initiallyFocusedLastField.controller?.selection,
+      TextSelection.collapsed(
+        offset: initiallyFocusedLastField.controller!.text.length,
+      ),
+    );
+
     final firstBodyRect = tester.getRect(bodyFields.first);
     await tester.tapAt(Offset(firstBodyRect.left + 4, firstBodyRect.center.dy));
     await tester.pump();
