@@ -19,10 +19,10 @@ import '../services/file_storage_service.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/app_popup_menu.dart';
-import '../widgets/background_task_center_sheet.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/note_card.dart';
 import '../widgets/navigation_icons.dart';
+import 'background_tasks_page.dart';
 import 'local_chat_page.dart';
 import 'note_editor_page.dart';
 import 'model_management_page.dart';
@@ -1321,6 +1321,13 @@ class _DataTabState extends State<_DataTab> {
               ],
             ),
           ),
+          const SizedBox(height: 22),
+          Text(
+            l10n.tasksAndActivity,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
           const SizedBox(height: 12),
           AnimatedBuilder(
             animation: BackgroundTaskCenter.instance,
@@ -1343,9 +1350,12 @@ class _DataTabState extends State<_DataTab> {
                             center.failedCount,
                           )
                         : l10n.noBackgroundTasks,
-                    onTap: () => showBackgroundTaskCenter(
+                    onTap: () => Navigator.push<void>(
                       context,
-                      provider: widget.provider,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            BackgroundTasksPage(provider: widget.provider),
+                      ),
                     ),
                   ),
                 ],

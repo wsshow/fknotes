@@ -1046,6 +1046,43 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backgroundTasks => '后台任务';
 
   @override
+  String get tasksAndActivity => '任务与活动';
+
+  @override
+  String get backgroundTasksPageDescription => '集中查看正在执行的操作，以及需要你处理的问题。';
+
+  @override
+  String get runningTasks => '进行中';
+
+  @override
+  String get tasksNeedingAttention => '需要处理';
+
+  @override
+  String get clearFailedTasks => '清除记录';
+
+  @override
+  String get clearFailedTasksQuestion => '清除失败任务记录？';
+
+  @override
+  String get clearFailedTasksDescription =>
+      '将移除全部失败记录及其临时文件，不会中断正在执行的任务，也不会影响已经保存的内容。';
+
+  @override
+  String get stopTask => '停止';
+
+  @override
+  String get modelTask => '模型与下载';
+
+  @override
+  String get attachmentTask => '附件导入';
+
+  @override
+  String get transcriptionTask => '音频处理';
+
+  @override
+  String get localInferenceTask => '本地推理';
+
+  @override
   String backgroundTaskCount(int count) {
     return '后台任务 · $count 项';
   }

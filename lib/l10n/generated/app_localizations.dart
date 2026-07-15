@@ -1982,6 +1982,78 @@ abstract class AppLocalizations {
   /// **'后台任务'**
   String get backgroundTasks;
 
+  /// No description provided for @tasksAndActivity.
+  ///
+  /// In zh, this message translates to:
+  /// **'任务与活动'**
+  String get tasksAndActivity;
+
+  /// No description provided for @backgroundTasksPageDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'集中查看正在执行的操作，以及需要你处理的问题。'**
+  String get backgroundTasksPageDescription;
+
+  /// No description provided for @runningTasks.
+  ///
+  /// In zh, this message translates to:
+  /// **'进行中'**
+  String get runningTasks;
+
+  /// No description provided for @tasksNeedingAttention.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要处理'**
+  String get tasksNeedingAttention;
+
+  /// No description provided for @clearFailedTasks.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除记录'**
+  String get clearFailedTasks;
+
+  /// No description provided for @clearFailedTasksQuestion.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除失败任务记录？'**
+  String get clearFailedTasksQuestion;
+
+  /// No description provided for @clearFailedTasksDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'将移除全部失败记录及其临时文件，不会中断正在执行的任务，也不会影响已经保存的内容。'**
+  String get clearFailedTasksDescription;
+
+  /// No description provided for @stopTask.
+  ///
+  /// In zh, this message translates to:
+  /// **'停止'**
+  String get stopTask;
+
+  /// No description provided for @modelTask.
+  ///
+  /// In zh, this message translates to:
+  /// **'模型与下载'**
+  String get modelTask;
+
+  /// No description provided for @attachmentTask.
+  ///
+  /// In zh, this message translates to:
+  /// **'附件导入'**
+  String get attachmentTask;
+
+  /// No description provided for @transcriptionTask.
+  ///
+  /// In zh, this message translates to:
+  /// **'音频处理'**
+  String get transcriptionTask;
+
+  /// No description provided for @localInferenceTask.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地推理'**
+  String get localInferenceTask;
+
   /// No description provided for @backgroundTaskCount.
   ///
   /// In zh, this message translates to:

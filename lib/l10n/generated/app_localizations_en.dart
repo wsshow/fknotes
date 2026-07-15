@@ -1155,6 +1155,44 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backgroundTasks => 'Background tasks';
 
   @override
+  String get tasksAndActivity => 'Tasks & activity';
+
+  @override
+  String get backgroundTasksPageDescription =>
+      'Review operations in progress and issues that need your attention.';
+
+  @override
+  String get runningTasks => 'In progress';
+
+  @override
+  String get tasksNeedingAttention => 'Needs attention';
+
+  @override
+  String get clearFailedTasks => 'Clear records';
+
+  @override
+  String get clearFailedTasksQuestion => 'Clear failed task records?';
+
+  @override
+  String get clearFailedTasksDescription =>
+      'This removes failed records and their temporary files. It will not interrupt running tasks or affect saved content.';
+
+  @override
+  String get stopTask => 'Stop';
+
+  @override
+  String get modelTask => 'Models & downloads';
+
+  @override
+  String get attachmentTask => 'Attachment import';
+
+  @override
+  String get transcriptionTask => 'Audio processing';
+
+  @override
+  String get localInferenceTask => 'Local inference';
+
+  @override
   String backgroundTaskCount(int count) {
     return 'Background tasks · $count';
   }

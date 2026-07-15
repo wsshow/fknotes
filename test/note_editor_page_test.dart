@@ -2,9 +2,10 @@ import 'dart:io';
 
 import 'package:fknotes/models/note_entry.dart';
 import 'package:fknotes/l10n/generated/app_localizations.dart';
-import 'package:fknotes/pages/home_page.dart';
+import 'package:fknotes/pages/background_tasks_page.dart';
 import 'package:fknotes/pages/backup_export_page.dart';
 import 'package:fknotes/pages/backup_restore_page.dart';
+import 'package:fknotes/pages/home_page.dart';
 import 'package:fknotes/pages/local_chat_page.dart';
 import 'package:fknotes/pages/media_detail_page.dart';
 import 'package:fknotes/pages/note_editor_page.dart';
@@ -98,10 +99,13 @@ void main() {
         .byKey(const Key('open-background-tasks'))
         .hitTestable();
     expect(taskEntry, findsOneWidget);
+    expect(find.text('任务与活动'), findsOneWidget);
     expect(find.text('当前没有正在运行或需要处理的任务'), findsOneWidget);
     await tester.tap(taskEntry);
     await tester.pumpAndSettle();
+    expect(find.byType(BackgroundTasksPage), findsOneWidget);
     expect(find.text('后台任务'), findsWidgets);
+    expect(find.text('所有任务均已完成'), findsOneWidget);
 
     tester.state<NavigatorState>(find.byType(Navigator)).pop();
     await tester.pumpAndSettle();
@@ -212,7 +216,9 @@ void main() {
       300,
       scrollable: find.byType(Scrollable).first,
     );
-    await tester.tap(find.text('导出完整备份'));
+    await tester.drag(find.byType(ListView).first, const Offset(0, -140));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('导出完整备份').hitTestable());
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
@@ -224,7 +230,14 @@ void main() {
     tester.state<NavigatorState>(find.byType(Navigator)).pop();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
-    await tester.tap(find.text('从备份恢复'));
+    await tester.scrollUntilVisible(
+      find.text('从备份恢复'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.drag(find.byType(ListView).first, const Offset(0, -100));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('从备份恢复').hitTestable());
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
