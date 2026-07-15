@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app.dart';
 
-/// The FKNotes mark: one paper edge flowing into an infinite record.
+/// The FKNotes mark: a warm, bound notebook with two content lines.
 class BrandMark extends StatelessWidget {
   final double size;
   final bool showSurface;
@@ -43,78 +43,51 @@ class _BrandMarkPainter extends CustomPainter {
       );
     }
 
-    final page = Path()
-      ..moveTo(22 * unit, 47 * unit)
-      ..lineTo(22 * unit, 27 * unit)
-      ..cubicTo(
-        22 * unit,
-        22.3 * unit,
-        24.3 * unit,
-        20 * unit,
-        29 * unit,
-        20 * unit,
-      )
-      ..lineTo(59 * unit, 20 * unit)
-      ..lineTo(78 * unit, 39 * unit)
-      ..lineTo(78 * unit, 47 * unit);
-
-    final stroke = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 4.2 * unit
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-    canvas.drawPath(page, stroke);
-
-    final fold = Path()
-      ..moveTo(59 * unit, 21 * unit)
-      ..lineTo(59 * unit, 32 * unit)
-      ..cubicTo(
-        59 * unit,
-        36.7 * unit,
-        61.3 * unit,
-        39 * unit,
-        66 * unit,
-        39 * unit,
-      )
-      ..lineTo(77 * unit, 39 * unit);
-    canvas.drawPath(fold, stroke);
-
-    final loop = Path()
-      ..moveTo(55 * unit, 66 * unit)
-      ..cubicTo(
-        66 * unit,
-        76 * unit,
-        78 * unit,
-        73 * unit,
-        82 * unit,
-        61 * unit,
-      )
-      ..cubicTo(
-        82 * unit,
-        49 * unit,
-        65 * unit,
-        44 * unit,
-        51 * unit,
-        61 * unit,
-      )
-      ..cubicTo(
-        39 * unit,
-        77 * unit,
-        22 * unit,
-        79 * unit,
-        18 * unit,
-        64 * unit,
-      )
-      ..cubicTo(
-        18 * unit,
-        51 * unit,
-        37 * unit,
-        44 * unit,
-        51 * unit,
-        61 * unit,
+    final notebook = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(23 * unit, 20 * unit, 56 * unit, 60 * unit),
+          Radius.circular(10 * unit),
+        ),
       );
-    canvas.drawPath(loop, stroke);
+
+    final cutouts = Path()
+      ..moveTo(35.5 * unit, 20 * unit)
+      ..cubicTo(
+        39 * unit,
+        31 * unit,
+        39 * unit,
+        69 * unit,
+        35.5 * unit,
+        80 * unit,
+      )
+      ..lineTo(39 * unit, 80 * unit)
+      ..cubicTo(
+        42.5 * unit,
+        69 * unit,
+        42.5 * unit,
+        31 * unit,
+        39 * unit,
+        20 * unit,
+      )
+      ..close()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(47 * unit, 41 * unit, 25 * unit, 6 * unit),
+          Radius.circular(3 * unit),
+        ),
+      )
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(47 * unit, 54 * unit, 19 * unit, 6 * unit),
+          Radius.circular(3 * unit),
+        ),
+      );
+
+    canvas.drawPath(
+      Path.combine(PathOperation.difference, notebook, cutouts),
+      Paint()..color = color,
+    );
   }
 
   @override
