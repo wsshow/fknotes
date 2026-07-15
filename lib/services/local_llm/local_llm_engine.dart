@@ -27,3 +27,10 @@ abstract interface class LocalLlmEngine {
 abstract interface class LocalLlmRuntimeBackendProvider {
   LocalLlmBackend? get activeBackend;
 }
+
+/// Optional runtime capability for engines that report backend startup and
+/// fallback progress while a model is loading or a request is being retried.
+abstract interface class LocalLlmRuntimeProgressProvider {
+  LocalLlmRuntimeProgress? get runtimeProgress;
+  Stream<LocalLlmRuntimeProgress> get runtimeProgresses;
+}

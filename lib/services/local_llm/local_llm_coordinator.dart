@@ -20,9 +20,17 @@ class LocalLlmCoordinator {
   Future<void> _lifecycle = Future.value();
   Completer<void>? _generationDone;
   LocalLlmLoadOptions? _loadedOptions;
+  StreamSubscription<LocalLlmRuntimeProgress>? _runtimeProgressSubscription;
   bool _disposed = false;
 
-  LocalLlmCoordinator(this._engine);
+  LocalLlmCoordinator(this._engine) {
+    if (_engine is LocalLlmRuntimeProgressProvider) {
+      final provider = _engine as LocalLlmRuntimeProgressProvider;
+      _runtimeProgressSubscription = provider.runtimeProgresses.listen(
+        _handleRuntimeProgress,
+      );
+    }
+  }
 
   LocalLlmRuntimeSnapshot get snapshot => _snapshot;
   Stream<LocalLlmRuntimeSnapshot> get snapshots => _snapshots.stream;
@@ -73,6 +81,10 @@ class LocalLlmCoordinator {
       LocalLlmEngineState.loading,
       model: model,
       requestedBackend: options.backend,
+      progress: LocalLlmRuntimeProgress(
+        kind: LocalLlmRuntimeProgressKind.starting,
+        backend: options.backend,
+      ),
     );
     try {
       await _engine.loadModel(model, options: options);
@@ -298,6 +310,8 @@ class LocalLlmCoordinator {
     if (_disposed) return;
     await unload();
     _disposed = true;
+    await _runtimeProgressSubscription?.cancel();
+    _runtimeProgressSubscription = null;
     await _snapshots.close();
   }
 
@@ -311,6 +325,7 @@ class LocalLlmCoordinator {
     LocalLlmEngineState state, {
     LocalLlmModelDescriptor? model,
     LocalLlmBackend? requestedBackend,
+    LocalLlmRuntimeProgress? progress,
     Object? error,
   }) {
     final backendProvider = _engine is LocalLlmRuntimeBackendProvider
@@ -321,6 +336,7 @@ class LocalLlmCoordinator {
       model: model,
       requestedBackend: requestedBackend ?? _loadedOptions?.backend,
       activeBackend: backendProvider?.activeBackend,
+      progress: progress,
       error: error,
     );
     if (kDebugMode) {
@@ -332,11 +348,27 @@ class LocalLlmCoordinator {
           'modelId': model?.id,
           'requestedBackend': _snapshot.requestedBackend?.name,
           'activeBackend': _snapshot.activeBackend?.name,
+          'progress': progress?.kind.name,
+          'progressBackend': progress?.backend.name,
         },
         traceId: model?.id,
       );
     }
     if (!_snapshots.isClosed) _snapshots.add(_snapshot);
+  }
+
+  void _handleRuntimeProgress(LocalLlmRuntimeProgress progress) {
+    if (_disposed || _snapshot.model == null) return;
+    if (_snapshot.state != LocalLlmEngineState.loading &&
+        _snapshot.state != LocalLlmEngineState.generating) {
+      return;
+    }
+    _emit(
+      _snapshot.state,
+      model: _snapshot.model,
+      requestedBackend: _snapshot.requestedBackend,
+      progress: progress,
+    );
   }
 
   void _ensureNotDisposed() {

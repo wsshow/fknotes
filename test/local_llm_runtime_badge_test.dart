@@ -26,6 +26,74 @@ void main() {
     expect(find.bySemanticsLabel('正在启动本地模型，首次启动可能需要一点时间。'), findsOneWidget);
   });
 
+  testWidgets('names the backend while it starts', (tester) async {
+    await _pumpBadge(
+      tester,
+      const LocalLlmRuntimeSnapshot(
+        state: LocalLlmEngineState.loading,
+        model: model,
+        requestedBackend: LocalLlmBackend.openCl,
+        progress: LocalLlmRuntimeProgress(
+          kind: LocalLlmRuntimeProgressKind.starting,
+          backend: LocalLlmBackend.openCl,
+        ),
+      ),
+    );
+
+    expect(find.text('GPU 启动中'), findsOneWidget);
+    expect(find.bySemanticsLabel('正在启动 OpenCL · GPU…'), findsOneWidget);
+  });
+
+  testWidgets('explains a GPU to CPU fallback while it is happening', (
+    tester,
+  ) async {
+    const liteRtModel = LocalLlmModelDescriptor(
+      engine: LocalLlmEngineKind.liteRtLm,
+      id: 'model-a',
+      name: 'Model A',
+      configPath: '/model',
+      nativeContextTokens: 4096,
+    );
+    await _pumpBadge(
+      tester,
+      const LocalLlmRuntimeSnapshot(
+        state: LocalLlmEngineState.loading,
+        model: liteRtModel,
+        requestedBackend: LocalLlmBackend.openCl,
+        progress: LocalLlmRuntimeProgress(
+          kind: LocalLlmRuntimeProgressKind.switching,
+          backend: LocalLlmBackend.cpu,
+          previousBackend: LocalLlmBackend.openCl,
+        ),
+      ),
+    );
+
+    expect(find.text('切换 CPU'), findsOneWidget);
+    expect(find.bySemanticsLabel('GPU 不可用，正在切换到 CPU…'), findsOneWidget);
+  });
+
+  testWidgets('shows that the interrupted message is retried on CPU', (
+    tester,
+  ) async {
+    await _pumpBadge(
+      tester,
+      const LocalLlmRuntimeSnapshot(
+        state: LocalLlmEngineState.generating,
+        model: model,
+        requestedBackend: LocalLlmBackend.openCl,
+        activeBackend: LocalLlmBackend.cpu,
+        progress: LocalLlmRuntimeProgress(
+          kind: LocalLlmRuntimeProgressKind.retrying,
+          backend: LocalLlmBackend.cpu,
+          previousBackend: LocalLlmBackend.openCl,
+        ),
+      ),
+    );
+
+    expect(find.text('CPU 重试中'), findsOneWidget);
+    expect(find.bySemanticsLabel('已切换到 CPU，正在重试这条消息…'), findsOneWidget);
+  });
+
   testWidgets('explains that a standby model starts automatically', (
     tester,
   ) async {

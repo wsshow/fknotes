@@ -22,15 +22,21 @@ class MnnMultimodalLimits {
 }
 
 class MnnLocalLlmEngine
-    implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
+    implements
+        LocalLlmEngine,
+        LocalLlmRuntimeBackendProvider,
+        LocalLlmRuntimeProgressProvider {
   final MnnNativeTransport _transport;
   final Future<Directory> Function() _supportDirectoryProvider;
   final String Function(String relativePath) _attachmentPathResolver;
   final Duration _operationTimeout;
+  final _runtimeProgresses =
+      StreamController<LocalLlmRuntimeProgress>.broadcast();
   int _nextRequestId = 1;
   LocalLlmEngineState _state = LocalLlmEngineState.idle;
   LocalLlmModelDescriptor? _loadedModel;
   LocalLlmBackend? _activeBackend;
+  LocalLlmRuntimeProgress? _runtimeProgress;
   int? _activeGenerationRequestId;
   Completer<void>? _activeGenerationDone;
 
@@ -54,6 +60,13 @@ class MnnLocalLlmEngine
 
   @override
   LocalLlmBackend? get activeBackend => _activeBackend;
+
+  @override
+  LocalLlmRuntimeProgress? get runtimeProgress => _runtimeProgress;
+
+  @override
+  Stream<LocalLlmRuntimeProgress> get runtimeProgresses =>
+      _runtimeProgresses.stream;
 
   @override
   LocalLlmEngineState get state => _state;
@@ -111,6 +124,12 @@ class MnnLocalLlmEngine
 
     _state = LocalLlmEngineState.loading;
     _activeBackend = null;
+    _reportRuntimeProgress(
+      LocalLlmRuntimeProgress(
+        kind: LocalLlmRuntimeProgressKind.starting,
+        backend: options.backend,
+      ),
+    );
     try {
       final candidates = _backendCandidates(options.backend);
       Object? lastError;
@@ -128,6 +147,13 @@ class MnnLocalLlmEngine
           lastError = error;
           lastStackTrace = stackTrace;
           if (index + 1 >= candidates.length) break;
+          _reportRuntimeProgress(
+            LocalLlmRuntimeProgress(
+              kind: LocalLlmRuntimeProgressKind.switching,
+              backend: candidates[index + 1],
+              previousBackend: backend,
+            ),
+          );
           if (kDebugMode) {
             AppDiagnostics.warning(
               AppLogCategory.inference,
@@ -151,9 +177,11 @@ class MnnLocalLlmEngine
       }
       _loadedModel = model;
       _state = LocalLlmEngineState.ready;
+      _clearRuntimeProgress();
     } catch (_) {
       _activeBackend = null;
       _state = LocalLlmEngineState.failed;
+      _clearRuntimeProgress();
       rethrow;
     }
   }
@@ -214,6 +242,13 @@ class MnnLocalLlmEngine
     enableImageInput: options.enableImageInput,
     enableAudioInput: options.enableAudioInput,
   );
+
+  void _reportRuntimeProgress(LocalLlmRuntimeProgress progress) {
+    _runtimeProgress = progress;
+    if (!_runtimeProgresses.isClosed) _runtimeProgresses.add(progress);
+  }
+
+  void _clearRuntimeProgress() => _runtimeProgress = null;
 
   @override
   Stream<LocalLlmGenerationEvent> generate(LocalLlmGenerationRequest request) {

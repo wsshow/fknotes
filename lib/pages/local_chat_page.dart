@@ -483,18 +483,22 @@ class _LocalChatPageState extends State<LocalChatPage>
     return persona.name;
   }
 
-  String _generationLoadingLabel(BuildContext context) =>
-      switch (_generationPhase) {
-        _LocalChatGenerationPhase.preparingModel =>
-          context.l10n.assistantPreparingModel,
-        _LocalChatGenerationPhase.thinking => context.l10n.assistantThinking,
-        _LocalChatGenerationPhase.usingNoteTools =>
-          context.l10n.assistantUsingNoteTools,
-        _LocalChatGenerationPhase.searchingNotes =>
-          context.l10n.assistantSearchingNotes(_generationSearchQuery ?? ''),
-        _LocalChatGenerationPhase.composingWithNotes =>
-          context.l10n.assistantComposingWithNotes,
-      };
+  String _generationLoadingLabel(BuildContext context) {
+    if (_generating && _runtimeSnapshot.progress != null) {
+      return localLlmRuntimeProgressText(context, _runtimeSnapshot);
+    }
+    return switch (_generationPhase) {
+      _LocalChatGenerationPhase.preparingModel =>
+        context.l10n.assistantPreparingModel,
+      _LocalChatGenerationPhase.thinking => context.l10n.assistantThinking,
+      _LocalChatGenerationPhase.usingNoteTools =>
+        context.l10n.assistantUsingNoteTools,
+      _LocalChatGenerationPhase.searchingNotes =>
+        context.l10n.assistantSearchingNotes(_generationSearchQuery ?? ''),
+      _LocalChatGenerationPhase.composingWithNotes =>
+        context.l10n.assistantComposingWithNotes,
+    };
+  }
 
   void _setGenerationPhase(
     _LocalChatGenerationPhase phase, {

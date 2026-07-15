@@ -35,6 +35,8 @@ internal class LiteRtLmBridge(
     private val gson = Gson()
     private val pending = ArrayDeque<PendingCommand>()
     private var service: Messenger? = null
+    private var connection: ServiceConnection? = null
+    private var connectionGeneration = 0L
     private var binding = false
     private var bound = false
     private var eventSink: EventChannel.EventSink? = null
@@ -53,27 +55,6 @@ internal class LiteRtLmBridge(
             }
         },
     )
-
-    private val connection = object : ServiceConnection {
-        override fun onServiceConnected(name: ComponentName, binder: IBinder) {
-            binding = false
-            bound = true
-            service = Messenger(binder)
-            flushPending()
-        }
-
-        override fun onServiceDisconnected(name: ComponentName) {
-            handleWorkerDeath("LiteRT-LM 推理进程连接已断开")
-        }
-
-        override fun onBindingDied(name: ComponentName) {
-            handleWorkerDeath("LiteRT-LM 推理进程意外终止")
-        }
-
-        override fun onNullBinding(name: ComponentName) {
-            handleWorkerDeath("LiteRT-LM 推理服务无法启动")
-        }
-    }
 
     init {
         methodChannel.setMethodCallHandler(this)
@@ -116,10 +97,12 @@ internal class LiteRtLmBridge(
         eventChannel.setStreamHandler(null)
         pending.forEach { it.result.success(false) }
         pending.clear()
-        if (bound) {
-            context.unbindService(connection)
-            bound = false
-        }
+        val activeConnection = connection
+        connection = null
+        connectionGeneration += 1
+        binding = false
+        if (bound && activeConnection != null) safeUnbind(activeConnection)
+        bound = false
         service = null
     }
 
@@ -132,12 +115,21 @@ internal class LiteRtLmBridge(
         pending.add(PendingCommand(message, result))
         if (binding) return
         binding = true
+        val generation = ++connectionGeneration
+        val candidate = createConnection(generation)
+        connection = candidate
         val started = context.bindService(
             Intent(context, serviceClass),
-            connection,
+            candidate,
             Context.BIND_AUTO_CREATE,
         )
-        if (!started) handleWorkerDeath("LiteRT-LM 推理服务无法启动")
+        if (!started) {
+            handleWorkerDeath(
+                "LiteRT-LM 推理服务无法启动",
+                generation,
+                candidate,
+            )
+        }
     }
 
     private fun flushPending() {
@@ -151,24 +143,81 @@ internal class LiteRtLmBridge(
             command.result.success(true)
         } catch (_: RemoteException) {
             command.result.success(false)
-            handleWorkerDeath("LiteRT-LM 推理进程意外终止")
+            handleCurrentWorkerDeath("LiteRT-LM 推理进程意外终止")
         }
     }
 
-    private fun handleWorkerDeath(reason: String) {
-        binding = false
-        service = null
-        if (bound) {
-            try {
-                context.unbindService(connection)
-            } catch (_: IllegalArgumentException) {
-                // The framework may already have removed a dead connection.
+    private fun createConnection(generation: Long): ServiceConnection =
+        object : ServiceConnection {
+            override fun onServiceConnected(name: ComponentName, binder: IBinder) {
+                if (!isCurrentConnection(generation, this)) {
+                    safeUnbind(this)
+                    return
+                }
+                binding = false
+                bound = true
+                service = Messenger(binder)
+                flushPending()
+            }
+
+            override fun onServiceDisconnected(name: ComponentName) {
+                handleWorkerDeath(
+                    "LiteRT-LM 推理进程连接已断开",
+                    generation,
+                    this,
+                )
+            }
+
+            override fun onBindingDied(name: ComponentName) {
+                handleWorkerDeath(
+                    "LiteRT-LM 推理进程意外终止",
+                    generation,
+                    this,
+                )
+            }
+
+            override fun onNullBinding(name: ComponentName) {
+                handleWorkerDeath(
+                    "LiteRT-LM 推理服务无法启动",
+                    generation,
+                    this,
+                )
             }
         }
+
+    private fun handleCurrentWorkerDeath(reason: String) {
+        val activeConnection = connection ?: return
+        handleWorkerDeath(reason, connectionGeneration, activeConnection)
+    }
+
+    private fun handleWorkerDeath(
+        reason: String,
+        generation: Long,
+        failedConnection: ServiceConnection,
+    ) {
+        if (!isCurrentConnection(generation, failedConnection)) return
+        connection = null
+        connectionGeneration += 1
+        binding = false
+        service = null
+        if (bound) safeUnbind(failedConnection)
         bound = false
         pending.forEach { it.result.success(false) }
         pending.clear()
         emit(-1, "serviceDied", reason)
+    }
+
+    private fun isCurrentConnection(
+        generation: Long,
+        candidate: ServiceConnection,
+    ): Boolean = generation == connectionGeneration && connection === candidate
+
+    private fun safeUnbind(candidate: ServiceConnection) {
+        try {
+            context.unbindService(candidate)
+        } catch (_: IllegalArgumentException) {
+            // Android may already have removed a dead or stale connection.
+        }
     }
 
     private fun emit(requestId: Int, type: String, data: String) {

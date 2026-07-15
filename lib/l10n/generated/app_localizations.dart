@@ -3854,6 +3854,24 @@ abstract class AppLocalizations {
   /// **'正在启动本地模型，首次启动可能需要一点时间。'**
   String get modelRuntimeStartingDetail;
 
+  /// No description provided for @modelRuntimeStartingBackend.
+  ///
+  /// In zh, this message translates to:
+  /// **'{backend} 启动中'**
+  String modelRuntimeStartingBackend(String backend);
+
+  /// No description provided for @modelRuntimeSwitchingBackend.
+  ///
+  /// In zh, this message translates to:
+  /// **'切换 {backend}'**
+  String modelRuntimeSwitchingBackend(String backend);
+
+  /// No description provided for @modelRuntimeRetryingBackend.
+  ///
+  /// In zh, this message translates to:
+  /// **'{backend} 重试中'**
+  String modelRuntimeRetryingBackend(String backend);
+
   /// No description provided for @modelRuntimeReleasing.
   ///
   /// In zh, this message translates to:
@@ -4009,6 +4027,24 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'正在准备本地模型…'**
   String get assistantPreparingModel;
+
+  /// No description provided for @assistantStartingBackend.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在启动 {backend}…'**
+  String assistantStartingBackend(String backend);
+
+  /// No description provided for @assistantSwitchingBackend.
+  ///
+  /// In zh, this message translates to:
+  /// **'{previousBackend} 不可用，正在切换到 {backend}…'**
+  String assistantSwitchingBackend(String previousBackend, String backend);
+
+  /// No description provided for @assistantRetryingBackend.
+  ///
+  /// In zh, this message translates to:
+  /// **'已切换到 {backend}，正在重试这条消息…'**
+  String assistantRetryingBackend(String backend);
 
   /// No description provided for @assistantThinking.
   ///

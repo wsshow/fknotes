@@ -75,6 +75,10 @@ void main() {
         transport: transport,
         supportDirectoryProvider: () async => temporaryDirectory,
       );
+      final progresses = <LocalLlmRuntimeProgress>[];
+      final progressSubscription = engine.runtimeProgresses.listen(
+        progresses.add,
+      );
 
       await engine.loadModel(
         model(),
@@ -88,6 +92,16 @@ void main() {
       ]);
       expect(engine.activeBackend, LocalLlmBackend.cpu);
       expect(engine.state, LocalLlmEngineState.ready);
+      expect(
+        progresses
+            .where(
+              (progress) =>
+                  progress.kind == LocalLlmRuntimeProgressKind.switching,
+            )
+            .map((progress) => progress.backend),
+        [LocalLlmBackend.vulkan, LocalLlmBackend.cpu],
+      );
+      await progressSubscription.cancel();
     },
   );
 

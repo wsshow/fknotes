@@ -2069,6 +2069,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get modelRuntimeStartingDetail => '正在启动本地模型，首次启动可能需要一点时间。';
 
   @override
+  String modelRuntimeStartingBackend(String backend) {
+    return '$backend 启动中';
+  }
+
+  @override
+  String modelRuntimeSwitchingBackend(String backend) {
+    return '切换 $backend';
+  }
+
+  @override
+  String modelRuntimeRetryingBackend(String backend) {
+    return '$backend 重试中';
+  }
+
+  @override
   String get modelRuntimeReleasing => '释放中';
 
   @override
@@ -2149,6 +2164,21 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get assistantPreparingModel => '正在准备本地模型…';
+
+  @override
+  String assistantStartingBackend(String backend) {
+    return '正在启动 $backend…';
+  }
+
+  @override
+  String assistantSwitchingBackend(String previousBackend, String backend) {
+    return '$previousBackend 不可用，正在切换到 $backend…';
+  }
+
+  @override
+  String assistantRetryingBackend(String backend) {
+    return '已切换到 $backend，正在重试这条消息…';
+  }
 
   @override
   String get assistantThinking => '正在思考…';

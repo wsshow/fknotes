@@ -2240,6 +2240,21 @@ class AppLocalizationsEn extends AppLocalizations {
       'Starting the local model. The first launch may take a moment.';
 
   @override
+  String modelRuntimeStartingBackend(String backend) {
+    return 'Starting $backend';
+  }
+
+  @override
+  String modelRuntimeSwitchingBackend(String backend) {
+    return 'Switching to $backend';
+  }
+
+  @override
+  String modelRuntimeRetryingBackend(String backend) {
+    return 'Retrying on $backend';
+  }
+
+  @override
   String get modelRuntimeReleasing => 'Releasing';
 
   @override
@@ -2328,6 +2343,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get assistantPreparingModel => 'Preparing the local model…';
+
+  @override
+  String assistantStartingBackend(String backend) {
+    return 'Starting $backend…';
+  }
+
+  @override
+  String assistantSwitchingBackend(String previousBackend, String backend) {
+    return '$previousBackend is unavailable. Switching to $backend…';
+  }
+
+  @override
+  String assistantRetryingBackend(String backend) {
+    return 'Switched to $backend. Retrying this message…';
+  }
 
   @override
   String get assistantThinking => 'Thinking…';

@@ -11,14 +11,21 @@ import '../file_storage_service.dart';
 import 'litert_lm_transport.dart';
 import 'local_llm_engine.dart';
 
-class LiteRtLmEngine implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
+class LiteRtLmEngine
+    implements
+        LocalLlmEngine,
+        LocalLlmRuntimeBackendProvider,
+        LocalLlmRuntimeProgressProvider {
   final LiteRtLmTransport _transport;
   final String Function(String relativePath) _attachmentPathResolver;
+  final _runtimeProgresses =
+      StreamController<LocalLlmRuntimeProgress>.broadcast();
   int _nextRequestId = 1;
   LocalLlmEngineState _state = LocalLlmEngineState.idle;
   LocalLlmModelDescriptor? _loadedModel;
   LocalLlmBackend? _activeBackend;
   LocalLlmLoadOptions? _activeLoadOptions;
+  LocalLlmRuntimeProgress? _runtimeProgress;
   int? _activeRequestId;
   Completer<void>? _activeDone;
   bool _timedOut = false;
@@ -41,6 +48,13 @@ class LiteRtLmEngine implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
 
   @override
   LocalLlmBackend? get activeBackend => _activeBackend;
+
+  @override
+  LocalLlmRuntimeProgress? get runtimeProgress => _runtimeProgress;
+
+  @override
+  Stream<LocalLlmRuntimeProgress> get runtimeProgresses =>
+      _runtimeProgresses.stream;
 
   @override
   Future<LocalLlmEngineAvailability> probe() async =>
@@ -86,6 +100,12 @@ class LiteRtLmEngine implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
     _state = LocalLlmEngineState.loading;
     _activeBackend = null;
     _activeLoadOptions = null;
+    _reportRuntimeProgress(
+      LocalLlmRuntimeProgress(
+        kind: LocalLlmRuntimeProgressKind.starting,
+        backend: options.backend,
+      ),
+    );
     try {
       try {
         _activeBackend = await _load(model, options);
@@ -104,31 +124,42 @@ class LiteRtLmEngine implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
             traceId: model.id,
           );
         }
+        _reportRuntimeProgress(
+          LocalLlmRuntimeProgress(
+            kind: LocalLlmRuntimeProgressKind.switching,
+            backend: LocalLlmBackend.cpu,
+            previousBackend: options.backend,
+          ),
+        );
         if (error is _LiteRtLmWorkerDiedException) {
           // Let Android fully reap the failed GPU worker before binding a clean
           // CPU-only process. The worker boundary keeps the Flutter UI safe.
           await Future<void>.delayed(const Duration(milliseconds: 350));
         }
-        _activeBackend = await _load(
-          model,
-          LocalLlmLoadOptions(
-            backend: LocalLlmBackend.cpu,
-            threads: options.threads,
-            contextTokens: options.contextTokens,
-            enableThinking: options.enableThinking,
-            enablePromptCache: options.enablePromptCache,
-            enableImageInput: options.enableImageInput,
-            enableAudioInput: options.enableAudioInput,
-          ),
-        );
+        try {
+          _activeBackend = await _load(
+            model,
+            _optionsForBackend(options, LocalLlmBackend.cpu),
+          );
+        } catch (cpuError, stackTrace) {
+          Error.throwWithStackTrace(
+            LocalLlmException(
+              'GPU 不可用，切换 CPU 后仍无法启动：${_errorMessage(cpuError)}',
+              cause: cpuError,
+            ),
+            stackTrace,
+          );
+        }
       }
       _activeLoadOptions = _optionsForBackend(options, _activeBackend!);
       _loadedModel = model;
       _state = LocalLlmEngineState.ready;
+      _clearRuntimeProgress();
     } catch (_) {
       _activeBackend = null;
       _activeLoadOptions = null;
       _state = LocalLlmEngineState.failed;
+      _clearRuntimeProgress();
       rethrow;
     }
   }
@@ -169,6 +200,7 @@ class LiteRtLmEngine implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
       _state = LocalLlmEngineState.failed;
       _activeBackend = null;
       _activeLoadOptions = null;
+      _clearRuntimeProgress();
       timeout?.cancel();
       timeout = null;
       final activeSubscription = subscription;
@@ -210,7 +242,10 @@ class LiteRtLmEngine implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
           closeController: closeStream,
           restoreReady: restoreReady,
         );
-        if (closeStream) streamFinished = true;
+        if (closeStream) {
+          streamFinished = true;
+          _clearRuntimeProgress();
+        }
       }
 
       Future<void> handleFailure({
@@ -241,6 +276,13 @@ class LiteRtLmEngine implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
           previousOptions,
           LocalLlmBackend.cpu,
         );
+        _reportRuntimeProgress(
+          LocalLlmRuntimeProgress(
+            kind: LocalLlmRuntimeProgressKind.switching,
+            backend: LocalLlmBackend.cpu,
+            previousBackend: previousOptions.backend,
+          ),
+        );
         if (kDebugMode) {
           AppDiagnostics.warning(
             AppLogCategory.inference,
@@ -256,6 +298,13 @@ class LiteRtLmEngine implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
           _activeBackend = await _load(model, cpuOptions);
           _activeLoadOptions = cpuOptions;
           _state = LocalLlmEngineState.ready;
+          _reportRuntimeProgress(
+            LocalLlmRuntimeProgress(
+              kind: LocalLlmRuntimeProgressKind.retrying,
+              backend: LocalLlmBackend.cpu,
+              previousBackend: previousOptions.backend,
+            ),
+          );
           if (kDebugMode) {
             AppDiagnostics.info(
               AppLogCategory.inference,
@@ -266,7 +315,13 @@ class LiteRtLmEngine implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
           }
           await runAttempt(prepared);
         } catch (error, stackTrace) {
-          await closeWithError(error, stackTrace);
+          await closeWithError(
+            LocalLlmException(
+              'GPU 推理进程断开，切换 CPU 后仍无法启动：${_errorMessage(error)}',
+              cause: error,
+            ),
+            stackTrace,
+          );
         }
       }
 
@@ -388,10 +443,12 @@ class LiteRtLmEngine implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
       _activeBackend = null;
       _activeLoadOptions = null;
       _state = LocalLlmEngineState.idle;
+      _clearRuntimeProgress();
     } catch (_) {
       _activeBackend = null;
       _activeLoadOptions = null;
       _state = LocalLlmEngineState.failed;
+      _clearRuntimeProgress();
       rethrow;
     }
   }
@@ -485,6 +542,18 @@ class LiteRtLmEngine implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
     enableImageInput: options.enableImageInput,
     enableAudioInput: options.enableAudioInput,
   );
+
+  void _reportRuntimeProgress(LocalLlmRuntimeProgress progress) {
+    _runtimeProgress = progress;
+    if (!_runtimeProgresses.isClosed) _runtimeProgresses.add(progress);
+  }
+
+  void _clearRuntimeProgress() => _runtimeProgress = null;
+
+  String _errorMessage(Object error) => switch (error) {
+    LocalLlmException() => error.message,
+    _ => error.toString(),
+  };
 
   LocalLlmGenerationCompleted _completed(String payload) {
     try {

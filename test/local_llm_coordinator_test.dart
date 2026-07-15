@@ -167,18 +167,64 @@ void main() {
     expect(coordinator.snapshot.usedBackendFallback, isTrue);
     await coordinator.dispose();
   });
+
+  test('forwards backend fallback progress during generation', () async {
+    final engine = _FakeEngine(blockGeneration: true);
+    final coordinator = LocalLlmCoordinator(engine);
+    await coordinator.loadModel(
+      modelA,
+      options: const LocalLlmLoadOptions(backend: LocalLlmBackend.openCl),
+    );
+    final generation = coordinator
+        .generate(
+          LocalLlmGenerationRequest(
+            messages: const [
+              LocalLlmMessage(role: LocalLlmRole.user, content: '继续'),
+            ],
+          ),
+        )
+        .toList();
+    await engine.generationStarted.future;
+
+    engine.reportProgress(
+      const LocalLlmRuntimeProgress(
+        kind: LocalLlmRuntimeProgressKind.switching,
+        backend: LocalLlmBackend.cpu,
+        previousBackend: LocalLlmBackend.openCl,
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(coordinator.snapshot.state, LocalLlmEngineState.generating);
+    expect(
+      coordinator.snapshot.progress?.kind,
+      LocalLlmRuntimeProgressKind.switching,
+    );
+    expect(coordinator.snapshot.progress?.backend, LocalLlmBackend.cpu);
+
+    await coordinator.cancel();
+    await generation;
+    await coordinator.dispose();
+  });
 }
 
-class _FakeEngine implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
+class _FakeEngine
+    implements
+        LocalLlmEngine,
+        LocalLlmRuntimeBackendProvider,
+        LocalLlmRuntimeProgressProvider {
   final bool blockGeneration;
   final bool failGeneration;
   final LocalLlmBackend? forcedActiveBackend;
   final operations = <String>[];
   final generationStarted = Completer<void>();
   final _releaseGeneration = Completer<void>();
+  final _runtimeProgresses =
+      StreamController<LocalLlmRuntimeProgress>.broadcast();
   LocalLlmModelDescriptor? _model;
   LocalLlmEngineState _state = LocalLlmEngineState.idle;
   LocalLlmBackend? _activeBackend;
+  LocalLlmRuntimeProgress? _runtimeProgress;
 
   _FakeEngine({
     this.blockGeneration = false,
@@ -197,6 +243,18 @@ class _FakeEngine implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
 
   @override
   LocalLlmBackend? get activeBackend => _activeBackend;
+
+  @override
+  LocalLlmRuntimeProgress? get runtimeProgress => _runtimeProgress;
+
+  @override
+  Stream<LocalLlmRuntimeProgress> get runtimeProgresses =>
+      _runtimeProgresses.stream;
+
+  void reportProgress(LocalLlmRuntimeProgress progress) {
+    _runtimeProgress = progress;
+    _runtimeProgresses.add(progress);
+  }
 
   @override
   Future<LocalLlmEngineAvailability> probe() async =>

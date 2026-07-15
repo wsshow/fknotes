@@ -1,10 +1,19 @@
+import 'dart:async';
+
 import '../../models/local_llm.dart';
 import 'local_llm_engine.dart';
 
 class RoutingLocalLlmEngine
-    implements LocalLlmEngine, LocalLlmRuntimeBackendProvider {
+    implements
+        LocalLlmEngine,
+        LocalLlmRuntimeBackendProvider,
+        LocalLlmRuntimeProgressProvider {
   final Map<LocalLlmEngineKind, LocalLlmEngine> _engines;
+  final _runtimeProgresses =
+      StreamController<LocalLlmRuntimeProgress>.broadcast();
   LocalLlmEngine? _active;
+  LocalLlmRuntimeProgress? _runtimeProgress;
+  StreamSubscription<LocalLlmRuntimeProgress>? _runtimeProgressSubscription;
 
   RoutingLocalLlmEngine({
     required LocalLlmEngine mnn,
@@ -29,6 +38,13 @@ class RoutingLocalLlmEngine
     if (active is! LocalLlmRuntimeBackendProvider) return null;
     return (active as LocalLlmRuntimeBackendProvider).activeBackend;
   }
+
+  @override
+  LocalLlmRuntimeProgress? get runtimeProgress => _runtimeProgress;
+
+  @override
+  Stream<LocalLlmRuntimeProgress> get runtimeProgresses =>
+      _runtimeProgresses.stream;
 
   @override
   Future<LocalLlmEngineAvailability> probe() async {
@@ -63,10 +79,12 @@ class RoutingLocalLlmEngine
     if (target == null) throw const LocalLlmException('缺少模型所需的推理引擎');
     if (_active != null && !identical(_active, target)) await _active!.unload();
     _active = target;
+    _listenToProgress(target);
     try {
       await target.loadModel(model, options: options);
     } catch (_) {
       _active = null;
+      _clearProgressListener();
       rethrow;
     }
   }
@@ -91,6 +109,28 @@ class RoutingLocalLlmEngine
       await active.unload();
     } finally {
       _active = null;
+      _clearProgressListener();
     }
+  }
+
+  void _listenToProgress(LocalLlmEngine target) {
+    _clearProgressListener();
+    if (target is! LocalLlmRuntimeProgressProvider) return;
+    final provider = target as LocalLlmRuntimeProgressProvider;
+    _runtimeProgress = provider.runtimeProgress;
+    _runtimeProgressSubscription = provider.runtimeProgresses.listen((
+      progress,
+    ) {
+      if (!identical(_active, target)) return;
+      _runtimeProgress = progress;
+      if (!_runtimeProgresses.isClosed) _runtimeProgresses.add(progress);
+    });
+  }
+
+  void _clearProgressListener() {
+    final subscription = _runtimeProgressSubscription;
+    if (subscription != null) unawaited(subscription.cancel());
+    _runtimeProgressSubscription = null;
+    _runtimeProgress = null;
   }
 }

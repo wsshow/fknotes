@@ -19,6 +19,20 @@ enum LocalLlmEngineState {
 
 enum LocalLlmFinishReason { completed, maxTokens, canceled, timeout }
 
+enum LocalLlmRuntimeProgressKind { starting, switching, retrying }
+
+class LocalLlmRuntimeProgress {
+  final LocalLlmRuntimeProgressKind kind;
+  final LocalLlmBackend backend;
+  final LocalLlmBackend? previousBackend;
+
+  const LocalLlmRuntimeProgress({
+    required this.kind,
+    required this.backend,
+    this.previousBackend,
+  });
+}
+
 class LocalLlmMessage {
   final LocalLlmRole role;
   final String content;
@@ -222,6 +236,7 @@ class LocalLlmRuntimeSnapshot {
   final LocalLlmModelDescriptor? model;
   final LocalLlmBackend? requestedBackend;
   final LocalLlmBackend? activeBackend;
+  final LocalLlmRuntimeProgress? progress;
   final Object? error;
 
   const LocalLlmRuntimeSnapshot({
@@ -229,6 +244,7 @@ class LocalLlmRuntimeSnapshot {
     this.model,
     this.requestedBackend,
     this.activeBackend,
+    this.progress,
     this.error,
   });
 

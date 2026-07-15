@@ -11,6 +11,9 @@ void main() {
     final service = File(
       'android/app/src/main/kotlin/com/fknotes/app/LiteRtLmService.kt',
     ).readAsStringSync();
+    final bridge = File(
+      'android/app/src/main/kotlin/com/fknotes/app/LiteRtLmBridge.kt',
+    ).readAsStringSync();
 
     expect(
       gradle,
@@ -54,6 +57,15 @@ void main() {
     expect(
       service.indexOf('onInferenceDiagnostic(stage = 11'),
       lessThan(service.indexOf('onInferenceDiagnostic(stage = 12')),
+    );
+    expect(bridge, contains('private var connectionGeneration = 0L'));
+    expect(bridge, contains('createConnection(generation)'));
+    expect(bridge, contains('isCurrentConnection(generation, this)'));
+    expect(
+      bridge,
+      contains(
+        'if (!isCurrentConnection(generation, failedConnection)) return',
+      ),
     );
   });
 }

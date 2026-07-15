@@ -74,6 +74,10 @@ void main() {
     () async {
       final transport = _FakeTransport(crashGpuOnGenerate: true);
       final engine = LiteRtLmEngine(transport: transport);
+      final progresses = <LocalLlmRuntimeProgress>[];
+      final progressSubscription = engine.runtimeProgresses.listen(
+        progresses.add,
+      );
       await engine.loadModel(
         _descriptor(modelFile.path),
         options: const LocalLlmLoadOptions(backend: LocalLlmBackend.openCl),
@@ -96,6 +100,23 @@ void main() {
       expect(events.whereType<LocalLlmTextDelta>().single.text, '你好！');
       expect(engine.activeBackend, LocalLlmBackend.cpu);
       expect(engine.state, LocalLlmEngineState.ready);
+      expect(
+        progresses.where(
+          (progress) =>
+              progress.kind == LocalLlmRuntimeProgressKind.switching &&
+              progress.backend == LocalLlmBackend.cpu,
+        ),
+        isNotEmpty,
+      );
+      expect(
+        progresses.where(
+          (progress) =>
+              progress.kind == LocalLlmRuntimeProgressKind.retrying &&
+              progress.backend == LocalLlmBackend.cpu,
+        ),
+        isNotEmpty,
+      );
+      await progressSubscription.cancel();
     },
   );
 
@@ -142,6 +163,10 @@ void main() {
   test('falls back to CPU when the GPU backend cannot initialize', () async {
     final transport = _FakeTransport(failGpuLoad: true);
     final engine = LiteRtLmEngine(transport: transport);
+    final progresses = <LocalLlmRuntimeProgress>[];
+    final progressSubscription = engine.runtimeProgresses.listen(
+      progresses.add,
+    );
 
     await engine.loadModel(
       _descriptor(modelFile.path),
@@ -154,6 +179,14 @@ void main() {
     ]);
     expect(engine.state, LocalLlmEngineState.ready);
     expect(engine.activeBackend, LocalLlmBackend.cpu);
+    expect(
+      progresses.map((progress) => progress.kind),
+      containsAllInOrder([
+        LocalLlmRuntimeProgressKind.starting,
+        LocalLlmRuntimeProgressKind.switching,
+      ]),
+    );
+    await progressSubscription.cancel();
   });
 
   test('enables multimodal pipelines only when explicitly requested', () async {
@@ -186,7 +219,7 @@ void main() {
             isA<LocalLlmException>().having(
               (error) => error.message,
               'message',
-              contains('当前设备'),
+              contains('切换 CPU 后仍无法启动'),
             ),
           ),
         );

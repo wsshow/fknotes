@@ -4,6 +4,39 @@ import '../app.dart';
 import '../l10n/l10n.dart';
 import '../models/local_llm.dart';
 
+String localLlmBackendLabel(
+  LocalLlmBackend backend, {
+  LocalLlmEngineKind? engine,
+}) => switch (backend) {
+  LocalLlmBackend.cpu => 'CPU',
+  LocalLlmBackend.openCl when engine == LocalLlmEngineKind.liteRtLm => 'GPU',
+  LocalLlmBackend.openCl => 'OpenCL · GPU',
+  LocalLlmBackend.vulkan => 'Vulkan · GPU',
+  LocalLlmBackend.metal => 'Metal · GPU',
+};
+
+String localLlmRuntimeProgressText(
+  BuildContext context,
+  LocalLlmRuntimeSnapshot snapshot,
+) {
+  final progress = snapshot.progress;
+  if (progress == null) return context.l10n.assistantPreparingModel;
+  final engine = snapshot.model?.engine;
+  final backend = localLlmBackendLabel(progress.backend, engine: engine);
+  final previousBackend = localLlmBackendLabel(
+    progress.previousBackend ?? snapshot.requestedBackend ?? progress.backend,
+    engine: engine,
+  );
+  return switch (progress.kind) {
+    LocalLlmRuntimeProgressKind.starting =>
+      context.l10n.assistantStartingBackend(backend),
+    LocalLlmRuntimeProgressKind.switching =>
+      context.l10n.assistantSwitchingBackend(previousBackend, backend),
+    LocalLlmRuntimeProgressKind.retrying =>
+      context.l10n.assistantRetryingBackend(backend),
+  };
+}
+
 class LocalLlmRuntimeBadge extends StatelessWidget {
   final LocalLlmRuntimeSnapshot snapshot;
   final String modelId;
@@ -61,6 +94,27 @@ class LocalLlmRuntimeBadge extends StatelessWidget {
         detail: context.l10n.modelRuntimeUnavailableDetail,
       );
     }
+    final progress = snapshot.progress;
+    if (matchesModel &&
+        progress != null &&
+        (snapshot.state == LocalLlmEngineState.loading ||
+            snapshot.state == LocalLlmEngineState.generating)) {
+      final compactBackend = progress.backend == LocalLlmBackend.cpu
+          ? context.l10n.modelRuntimeCpu
+          : context.l10n.modelRuntimeGpu;
+      final label = switch (progress.kind) {
+        LocalLlmRuntimeProgressKind.starting =>
+          context.l10n.modelRuntimeStartingBackend(compactBackend),
+        LocalLlmRuntimeProgressKind.switching =>
+          context.l10n.modelRuntimeSwitchingBackend(compactBackend),
+        LocalLlmRuntimeProgressKind.retrying =>
+          context.l10n.modelRuntimeRetryingBackend(compactBackend),
+      };
+      return _LocalLlmRuntimeStatus.neutral(
+        label: label,
+        detail: localLlmRuntimeProgressText(context, snapshot),
+      );
+    }
     if (matchesModel && snapshot.state == LocalLlmEngineState.loading) {
       return _LocalLlmRuntimeStatus.neutral(
         label: context.l10n.modelRuntimeStarting,
@@ -82,15 +136,10 @@ class LocalLlmRuntimeBadge extends StatelessWidget {
     final backend = snapshot.activeBackend;
     if (matchesModel && backend != null) {
       final gpu = backend != LocalLlmBackend.cpu;
-      final backendName = switch (backend) {
-        LocalLlmBackend.cpu => 'CPU',
-        LocalLlmBackend.openCl
-            when snapshot.model?.engine == LocalLlmEngineKind.liteRtLm =>
-          'GPU',
-        LocalLlmBackend.openCl => 'OpenCL · GPU',
-        LocalLlmBackend.vulkan => 'Vulkan · GPU',
-        LocalLlmBackend.metal => 'Metal · GPU',
-      };
+      final backendName = localLlmBackendLabel(
+        backend,
+        engine: snapshot.model?.engine,
+      );
       return _LocalLlmRuntimeStatus(
         label: gpu
             ? context.l10n.modelRuntimeGpu
