@@ -184,6 +184,35 @@ void main() {
     expect(tester.widget<TextField>(bodyField).focusNode?.hasFocus, isTrue);
   });
 
+  testWidgets('editor communicates autosave status from typing to saved', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    await tester.pumpWidget(
+      ChangeNotifierProvider<NoteProvider>(
+        create: (_) => _InMemoryNoteProvider(),
+        child: const MaterialApp(home: NoteEditorPage()),
+      ),
+    );
+
+    expect(find.textContaining('自动保存已开启 · 0 字'), findsOneWidget);
+    expect(find.byIcon(Icons.save_outlined), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField).first, '自动保存测试');
+    await tester.pump();
+
+    expect(find.textContaining('即将自动保存 · 0 字'), findsOneWidget);
+    expect(find.byIcon(Icons.schedule_rounded), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('已自动保存到本机 · 0 字'), findsOneWidget);
+    expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('single-line toolbar exposes formatting and history actions', (
     tester,
   ) async {
@@ -195,7 +224,8 @@ void main() {
       ),
     );
 
-    expect(find.textContaining('已保存在本机 · 0 字'), findsOneWidget);
+    expect(find.textContaining('自动保存已开启 · 0 字'), findsOneWidget);
+    expect(find.byKey(const Key('note-autosave-status')), findsOneWidget);
     expect(find.byTooltip('撤销'), findsOneWidget);
     expect(find.byTooltip('重做'), findsOneWidget);
     expect(find.byTooltip('本地助手'), findsOneWidget);
@@ -282,7 +312,7 @@ void main() {
 
     expect(find.text('New note'), findsOneWidget);
     expect(
-      find.textContaining('Saved on device · 0 characters'),
+      find.textContaining('Autosave is on · 0 characters'),
       findsOneWidget,
     );
     expect(find.byTooltip('Live voice input'), findsOneWidget);
@@ -803,6 +833,16 @@ Future<void> _pumpHomePage(
       ),
     ),
   );
+}
+
+class _InMemoryNoteProvider extends NoteProvider {
+  int _nextId = 1;
+
+  @override
+  Future<int> addEntry(NoteEntry entry) async => _nextId++;
+
+  @override
+  Future<void> updateEntry(NoteEntry entry) async {}
 }
 
 class _DisabledAppLockPreferencesStore implements AppLockPreferencesStore {

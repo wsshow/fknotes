@@ -1636,6 +1636,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get newNote => '新笔记';
 
   @override
+  String get autosaveEnabled => '自动保存已开启';
+
+  @override
+  String get autosavePending => '即将自动保存';
+
+  @override
+  String get autosaving => '正在自动保存…';
+
+  @override
+  String get autosavedLocally => '已自动保存到本机';
+
+  @override
+  String get autosaveFailedShort => '自动保存失败';
+
+  @override
   String get savingEllipsis => '正在保存…';
 
   @override

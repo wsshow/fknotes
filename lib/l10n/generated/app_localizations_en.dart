@@ -1787,6 +1787,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get newNote => 'New note';
 
   @override
+  String get autosaveEnabled => 'Autosave is on';
+
+  @override
+  String get autosavePending => 'Autosaving shortly';
+
+  @override
+  String get autosaving => 'Autosaving…';
+
+  @override
+  String get autosavedLocally => 'Autosaved on this device';
+
+  @override
+  String get autosaveFailedShort => 'Autosave failed';
+
+  @override
   String get savingEllipsis => 'Saving…';
 
   @override

@@ -38,6 +38,8 @@ import 'local_chat_page.dart';
 import 'model_management_page.dart';
 import 'record_audio_page.dart';
 
+enum _EditorAutosaveState { enabled, pending, saving, saved, failed }
+
 class NoteEditorPage extends StatefulWidget {
   final NoteEntry? existingEntry;
   final List<String> initialImportJobIds;
@@ -91,6 +93,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
   Timer? _recoverySave;
   bool _changed = false;
   bool _saving = false;
+  bool _autosaveFailed = false;
   bool _saveAgain = false;
   bool _disposing = false;
   bool _importing = false;
@@ -179,12 +182,17 @@ class _NoteEditorPageState extends State<NoteEditorPage>
   void _markChanged() {
     if (_disposing) {
       _changed = true;
+      _autosaveFailed = false;
       return;
     }
-    if (!_changed && mounted) {
-      setState(() => _changed = true);
+    if ((!_changed || _autosaveFailed) && mounted) {
+      setState(() {
+        _changed = true;
+        _autosaveFailed = false;
+      });
     } else {
       _changed = true;
+      _autosaveFailed = false;
     }
     _scheduleAutosave();
     _queueRecoveryDraft();
@@ -847,11 +855,24 @@ class _NoteEditorPageState extends State<NoteEditorPage>
         title.isEmpty &&
         content.trim().isEmpty &&
         _attachments.isEmpty) {
-      _changed = false;
+      if (mounted) {
+        setState(() {
+          _changed = false;
+          _autosaveFailed = false;
+        });
+      } else {
+        _changed = false;
+        _autosaveFailed = false;
+      }
       await _clearRecoveryDrafts();
       return true;
     }
-    if (mounted) setState(() => _saving = true);
+    if (mounted) {
+      setState(() {
+        _saving = true;
+        _autosaveFailed = false;
+      });
+    }
     final provider = _provider ?? context.read<NoteProvider>();
     final now = DateTime.now();
     var success = false;
@@ -893,9 +914,11 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       }
       _removedAttachments.clear();
       await _clearRecoveryDrafts();
+      _autosaveFailed = false;
       success = true;
     } catch (error) {
       _changed = true;
+      _autosaveFailed = true;
       if (showError && mounted) {
         AppFeedback.error(
           context,
@@ -911,6 +934,22 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     }
     return success;
   }
+
+  _EditorAutosaveState get _autosaveState {
+    if (_saving) return _EditorAutosaveState.saving;
+    if (_autosaveFailed) return _EditorAutosaveState.failed;
+    if (_changed) return _EditorAutosaveState.pending;
+    if (_entry == null) return _EditorAutosaveState.enabled;
+    return _EditorAutosaveState.saved;
+  }
+
+  String _autosaveStatusLabel(BuildContext context) => switch (_autosaveState) {
+    _EditorAutosaveState.enabled => context.l10n.autosaveEnabled,
+    _EditorAutosaveState.pending => context.l10n.autosavePending,
+    _EditorAutosaveState.saving => context.l10n.autosaving,
+    _EditorAutosaveState.saved => context.l10n.autosavedLocally,
+    _EditorAutosaveState.failed => context.l10n.autosaveFailedShort,
+  };
 
   Future<void> _clearRecoveryDrafts() async {
     final persistedId = _entry?.id;
@@ -1168,6 +1207,8 @@ class _NoteEditorPageState extends State<NoteEditorPage>
         ? importJobs.first.type
         : NoteType.text;
     final typeColor = NoteCard.colorForType(type);
+    final autosaveState = _autosaveState;
+    final autosaveLabel = _autosaveStatusLabel(context);
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -1182,13 +1223,10 @@ class _NoteEditorPageState extends State<NoteEditorPage>
           ),
           title: Row(
             children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: typeColor,
-                  shape: BoxShape.circle,
-                ),
+              _AutosaveStatusIcon(
+                state: autosaveState,
+                label: autosaveLabel,
+                accentColor: typeColor,
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -1207,11 +1245,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                     ValueListenableBuilder<TextEditingValue>(
                       valueListenable: _content,
                       builder: (context, value, child) => Text(
-                        '${_saving
-                            ? context.l10n.savingEllipsis
-                            : _changed
-                            ? context.l10n.localDraft
-                            : context.l10n.savedLocally} · '
+                        '$autosaveLabel · '
                         '${context.l10n.characterCount(NoteBlockCodec.visibleCharacterCount(value.text))}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -1568,6 +1602,79 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AutosaveStatusIcon extends StatelessWidget {
+  final _EditorAutosaveState state;
+  final String label;
+  final Color accentColor;
+
+  const _AutosaveStatusIcon({
+    required this.state,
+    required this.label,
+    required this.accentColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final background = switch (state) {
+      _EditorAutosaveState.enabled => accentColor.withValues(alpha: .1),
+      _EditorAutosaveState.pending => AppColors.softAmber,
+      _EditorAutosaveState.saving => AppColors.softAmber,
+      _EditorAutosaveState.saved => AppColors.softGreen,
+      _EditorAutosaveState.failed => AppColors.softCoral,
+    };
+    final foreground = switch (state) {
+      _EditorAutosaveState.enabled => accentColor,
+      _EditorAutosaveState.pending => AppColors.muted,
+      _EditorAutosaveState.saving => AppColors.moss,
+      _EditorAutosaveState.saved => AppColors.moss,
+      _EditorAutosaveState.failed => AppColors.coral,
+    };
+    final icon = switch (state) {
+      _EditorAutosaveState.enabled => Icons.save_outlined,
+      _EditorAutosaveState.pending => Icons.schedule_rounded,
+      _EditorAutosaveState.saving => null,
+      _EditorAutosaveState.saved => Icons.check_rounded,
+      _EditorAutosaveState.failed => Icons.error_outline_rounded,
+    };
+
+    return Semantics(
+      container: true,
+      label: label,
+      child: Tooltip(
+        message: label,
+        excludeFromSemantics: true,
+        child: AnimatedContainer(
+          key: const Key('note-autosave-status'),
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: background,
+            shape: BoxShape.circle,
+            border: Border.all(color: foreground.withValues(alpha: .22)),
+          ),
+          alignment: Alignment.center,
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 140),
+            child: icon == null
+                ? SizedBox(
+                    key: ValueKey(state),
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.8,
+                      color: foreground,
+                    ),
+                  )
+                : Icon(icon, key: ValueKey(state), size: 17, color: foreground),
+          ),
         ),
       ),
     );

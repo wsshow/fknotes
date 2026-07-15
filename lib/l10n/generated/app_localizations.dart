@@ -3080,6 +3080,36 @@ abstract class AppLocalizations {
   /// **'新笔记'**
   String get newNote;
 
+  /// No description provided for @autosaveEnabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动保存已开启'**
+  String get autosaveEnabled;
+
+  /// No description provided for @autosavePending.
+  ///
+  /// In zh, this message translates to:
+  /// **'即将自动保存'**
+  String get autosavePending;
+
+  /// No description provided for @autosaving.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在自动保存…'**
+  String get autosaving;
+
+  /// No description provided for @autosavedLocally.
+  ///
+  /// In zh, this message translates to:
+  /// **'已自动保存到本机'**
+  String get autosavedLocally;
+
+  /// No description provided for @autosaveFailedShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动保存失败'**
+  String get autosaveFailedShort;
+
   /// No description provided for @savingEllipsis.
   ///
   /// In zh, this message translates to:
