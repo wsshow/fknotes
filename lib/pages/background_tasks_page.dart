@@ -310,10 +310,11 @@ class _TaskSummaryStat extends StatelessWidget {
         const SizedBox(width: 11),
         Expanded(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Text(
                 '$value',
+                textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
@@ -323,6 +324,7 @@ class _TaskSummaryStat extends StatelessWidget {
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
                 style: const TextStyle(color: AppColors.muted, fontSize: 12),
               ),
             ],
