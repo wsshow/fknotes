@@ -25,6 +25,15 @@ val environmentSigningAvailable =
     ).all { !it.isNullOrBlank() }
 val releaseSigningAvailable =
     keystorePropertiesFile.exists() || environmentSigningAvailable
+val debugReleaseSigningRequested =
+    System.getenv("FKNOTES_SIGN_DEBUG_WITH_RELEASE") == "1"
+
+if (debugReleaseSigningRequested && !releaseSigningAvailable) {
+    error(
+        "FKNOTES_SIGN_DEBUG_WITH_RELEASE=1 requires android/key.properties " +
+            "or the ANDROID_KEYSTORE_* environment variables",
+    )
+}
 
 val mnnRuntimeDirectory = layout.buildDirectory.dir("mnn-runtime").get().asFile
 val prepareMnnRuntime by tasks.registering(Exec::class) {
@@ -85,6 +94,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            if (debugReleaseSigningRequested) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
         release {
             signingConfig = signingConfigs.findByName("release")
             proguardFiles(
