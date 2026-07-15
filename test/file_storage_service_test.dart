@@ -58,11 +58,10 @@ void main() {
     img.fill(image, color: img.ColorRgba8(220, 80, 40, 128));
     await source.writeAsBytes(img.encodePng(image));
 
-    final relativePath = await FileStorageService.instance
-        .importAssistantImage(source);
-    final output = File(
-      FileStorageService.instance.absolutePath(relativePath),
+    final relativePath = await FileStorageService.instance.importAssistantImage(
+      source,
     );
+    final output = File(FileStorageService.instance.absolutePath(relativePath));
     final decoded = img.decodeJpg(await output.readAsBytes());
 
     expect(relativePath, startsWith('assistant/'));
@@ -70,6 +69,28 @@ void main() {
     expect(decoded, isNotNull);
     expect(decoded!.width, 2048);
     expect(decoded.height, lessThanOrEqualTo(100));
+  });
+
+  test('generates a full-image thumbnail on a fixed portrait canvas', () async {
+    final source = File(p.join(root.path, 'images', 'wide.png'));
+    final image = img.Image(width: 800, height: 100);
+    img.fill(image, color: img.ColorRgb8(210, 70, 45));
+    await source.writeAsBytes(img.encodePng(image));
+
+    final relativePath = await FileStorageService.instance
+        .generateThumbnailInBackground('images/wide.png');
+    final output = File(FileStorageService.instance.absolutePath(relativePath));
+    final decoded = img.decodeJpg(await output.readAsBytes());
+
+    expect(relativePath, endsWith('_thumb_v2.jpg'));
+    expect(decoded, isNotNull);
+    expect(decoded!.width, 300);
+    expect(decoded.height, 360);
+    final corner = decoded.getPixel(0, 0);
+    final center = decoded.getPixel(decoded.width ~/ 2, decoded.height ~/ 2);
+    expect(corner.r, greaterThan(240));
+    expect(corner.g, greaterThan(235));
+    expect(center.r, greaterThan(center.g * 2));
   });
 
   test('rejects oversized assistant image files before decoding', () async {

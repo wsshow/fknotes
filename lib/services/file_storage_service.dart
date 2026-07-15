@@ -161,7 +161,7 @@ class FileStorageService {
   Future<String> generateThumbnailInBackground(String imagePath) async {
     final sourcePath = absolutePath(imagePath);
     if (!await File(sourcePath).exists()) return '';
-    final thumbFilename = '${_uuid.v4()}_thumb.jpg';
+    final thumbFilename = '${_uuid.v4()}_thumb_v2.jpg';
     final relativePath = 'thumbnails/$thumbFilename';
     final outputPath = absolutePath(relativePath);
     final generated = await Isolate.run(
@@ -345,10 +345,35 @@ bool _generateThumbnailFile(String sourcePath, String outputPath) {
   try {
     final decoded = img.decodeImage(File(sourcePath).readAsBytesSync());
     if (decoded == null) return false;
-    final thumbnail = decoded.width >= decoded.height
-        ? img.copyResize(decoded, width: 300)
-        : img.copyResize(decoded, height: 300);
-    File(outputPath).writeAsBytesSync(img.encodeJpg(thumbnail, quality: 86));
+    final oriented = img.bakeOrientation(decoded);
+    const width = 300;
+    const height = 360;
+    const padding = 18;
+    final scale = [
+      (width - padding * 2) / oriented.width,
+      (height - padding * 2) / oriented.height,
+      1.0,
+    ].reduce((current, candidate) => current < candidate ? current : candidate);
+    final preview = img.copyResize(
+      oriented,
+      width: (oriented.width * scale)
+          .round()
+          .clamp(1, width - padding * 2)
+          .toInt(),
+      height: (oriented.height * scale)
+          .round()
+          .clamp(1, height - padding * 2)
+          .toInt(),
+    );
+    final canvas = img.Image(width: width, height: height);
+    img.fill(canvas, color: img.ColorRgb8(250, 247, 242));
+    img.compositeImage(
+      canvas,
+      preview,
+      dstX: (width - preview.width) ~/ 2,
+      dstY: (height - preview.height) ~/ 2,
+    );
+    File(outputPath).writeAsBytesSync(img.encodeJpg(canvas, quality: 86));
     return true;
   } catch (_) {
     return false;

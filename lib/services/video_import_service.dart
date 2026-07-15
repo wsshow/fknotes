@@ -685,8 +685,15 @@ class AttachmentImportService extends ChangeNotifier {
     }
     String? thumbnailPath = job.thumbnailPath;
     if (thumbnailPath == null && job.type == NoteType.image) {
-      final candidate = 'thumbnails/${job.id}_thumb.jpg';
-      if (await _storage.fileExists(candidate)) thumbnailPath = candidate;
+      for (final candidate in [
+        'thumbnails/${job.id}_thumb_v2.jpg',
+        'thumbnails/${job.id}_thumb.jpg',
+      ]) {
+        if (await _storage.fileExists(candidate)) {
+          thumbnailPath = candidate;
+          break;
+        }
+      }
     }
     final fileExists = filePath != null && await _storage.fileExists(filePath);
     if (job.noteId == null) {

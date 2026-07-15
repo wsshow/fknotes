@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -26,6 +27,8 @@ class NoteProvider extends ChangeNotifier {
   NoteScope _scope = NoteScope.active;
   NoteSort _sort = NoteSort.updated;
   bool _isLoading = false;
+  bool _isRepairingThumbnails = false;
+  bool _disposed = false;
 
   NoteProvider() {
     _attachmentImports.addListener(_onAttachmentImportsChanged);
@@ -138,10 +141,82 @@ class NoteProvider extends ChangeNotifier {
         referencedPaths: referencedPaths,
         protectedPaths: _attachmentImports.protectedFilePaths,
       );
+      _scheduleThumbnailRepair();
     } finally {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  void _scheduleThumbnailRepair() {
+    if (_isRepairingThumbnails) return;
+    _isRepairingThumbnails = true;
+    unawaited(_runThumbnailRepair());
+  }
+
+  Future<void> _runThumbnailRepair() async {
+    try {
+      await _repairImageThumbnails();
+    } catch (error, stackTrace) {
+      // Thumbnail repair is best-effort. The original attachment stays usable.
+      debugPrint('Thumbnail repair skipped: $error\n$stackTrace');
+    } finally {
+      _isRepairingThumbnails = false;
+    }
+  }
+
+  Future<void> _repairImageThumbnails() async {
+    var changed = false;
+    for (final entry in List<NoteEntry>.from(_entries)) {
+      if (_disposed || entry.id == null) return;
+      final obsoleteThumbnails = <String>[];
+      var entryChanged = false;
+      final attachments = <NoteAttachment>[];
+      for (final attachment in entry.allAttachments) {
+        if (attachment.type != NoteType.image ||
+            !_thumbnailNeedsUpgrade(attachment)) {
+          attachments.add(attachment);
+          continue;
+        }
+        final source = File(_storage.absolutePath(attachment.filePath));
+        if (!await source.exists()) {
+          attachments.add(attachment);
+          continue;
+        }
+        final generated = await _storage.generateThumbnailInBackground(
+          attachment.filePath,
+        );
+        if (generated.isEmpty) {
+          attachments.add(attachment);
+          continue;
+        }
+        if (attachment.thumbnailPath?.isNotEmpty == true) {
+          obsoleteThumbnails.add(attachment.thumbnailPath!);
+        }
+        attachments.add(attachment.copyWith(thumbnailPath: generated));
+        entryChanged = true;
+      }
+      if (!entryChanged) continue;
+      final repaired = entry.copyWith(
+        attachments: attachments,
+        updatedAt: entry.updatedAt,
+      );
+      await _notes.updateEntry(repaired);
+      _replaceEntry(repaired);
+      changed = true;
+      for (final path in obsoleteThumbnails) {
+        await _storage.deleteFile(path);
+      }
+    }
+    if (changed && !_disposed) notifyListeners();
+  }
+
+  bool _thumbnailNeedsUpgrade(NoteAttachment attachment) {
+    final thumbnailPath = attachment.thumbnailPath;
+    if (thumbnailPath == null || thumbnailPath.isEmpty) return true;
+    final thumbnail = File(_storage.absolutePath(thumbnailPath));
+    return !thumbnail.existsSync() ||
+        !p.basenameWithoutExtension(thumbnailPath).endsWith('_thumb_v2');
   }
 
   void setTypeFilter(NoteType? type) {
@@ -442,6 +517,7 @@ class NoteProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _attachmentImports.removeListener(_onAttachmentImportsChanged);
     _transcriptions.removeListener(_onTranscriptionsChanged);
     super.dispose();

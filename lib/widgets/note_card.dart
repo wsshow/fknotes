@@ -80,14 +80,15 @@ class NoteCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final thumbnail = _thumbnailFile();
+    final coverMedia = _coverMedia();
     final preview = entry.previewText.trim();
     final accent = colorForType(entry.primaryType);
 
     if (compact) {
       return _RecentNoteRow(
         entry: entry,
-        thumbnail: thumbnail,
+        thumbnail: coverMedia?.file,
+        thumbnailType: coverMedia?.attachment.type,
         accent: accent,
         onTap: onTap,
         friendlyTime: _friendlyTime(context, entry.updatedAt),
@@ -106,7 +107,8 @@ class NoteCard extends StatelessWidget {
               children: [
                 _EditorialPreviewTile(
                   entry: entry,
-                  thumbnail: thumbnail,
+                  thumbnail: coverMedia?.file,
+                  thumbnailType: coverMedia?.attachment.type,
                   accent: accent,
                 ),
                 const SizedBox(width: 12),
@@ -251,11 +253,20 @@ class NoteCard extends StatelessWidget {
       onArchive != null ||
       onRestore != null;
 
-  File? _thumbnailFile() {
-    final thumbnailPath = entry.primaryAttachment?.thumbnailPath;
-    if (thumbnailPath == null) return null;
-    final file = File(FileStorageService.instance.absolutePath(thumbnailPath));
-    return file.existsSync() ? file : null;
+  ({File file, NoteAttachment attachment})? _coverMedia() {
+    for (final attachment in entry.allAttachments) {
+      if (attachment.type != NoteType.image &&
+          attachment.type != NoteType.video) {
+        continue;
+      }
+      final thumbnailPath = attachment.thumbnailPath;
+      if (thumbnailPath == null || thumbnailPath.isEmpty) continue;
+      final file = File(
+        FileStorageService.instance.absolutePath(thumbnailPath),
+      );
+      if (file.existsSync()) return (file: file, attachment: attachment);
+    }
+    return null;
   }
 
   String _friendlyTime(BuildContext context, DateTime date) {
@@ -275,6 +286,7 @@ class NoteCard extends StatelessWidget {
 class _RecentNoteRow extends StatelessWidget {
   final NoteEntry entry;
   final File? thumbnail;
+  final NoteType? thumbnailType;
   final Color accent;
   final VoidCallback onTap;
   final String friendlyTime;
@@ -282,6 +294,7 @@ class _RecentNoteRow extends StatelessWidget {
   const _RecentNoteRow({
     required this.entry,
     required this.thumbnail,
+    required this.thumbnailType,
     required this.accent,
     required this.onTap,
     required this.friendlyTime,
@@ -306,6 +319,7 @@ class _RecentNoteRow extends StatelessWidget {
               _EditorialPreviewTile(
                 entry: entry,
                 thumbnail: thumbnail,
+                thumbnailType: thumbnailType,
                 accent: accent,
               ),
               const SizedBox(width: 16),
@@ -394,13 +408,18 @@ class _RecentNoteRow extends StatelessWidget {
 }
 
 class _EditorialPreviewTile extends StatelessWidget {
+  static const double _width = 76;
+  static const double _height = 92;
+
   final NoteEntry entry;
   final File? thumbnail;
+  final NoteType? thumbnailType;
   final Color accent;
 
   const _EditorialPreviewTile({
     required this.entry,
     required this.thumbnail,
+    required this.thumbnailType,
     required this.accent,
   });
 
@@ -408,12 +427,47 @@ class _EditorialPreviewTile extends StatelessWidget {
   Widget build(BuildContext context) {
     if (thumbnail != null) {
       final imageCount = entry.attachmentCountFor(NoteType.image);
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(10),
+      return Container(
+        width: _width,
+        height: _height,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: AppColors.canvas,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.line),
+        ),
         child: Stack(
+          fit: StackFit.expand,
           children: [
-            Image.file(thumbnail!, width: 76, height: 88, fit: BoxFit.cover),
-            if (imageCount > 1)
+            Padding(
+              padding: const EdgeInsets.all(3),
+              child: Image.file(
+                thumbnail!,
+                fit: BoxFit.contain,
+                errorBuilder: (_, _, _) => _CoverTypePlaceholder(
+                  type: thumbnailType ?? entry.primaryType,
+                  accent: accent,
+                ),
+              ),
+            ),
+            if (thumbnailType == NoteType.video)
+              const Center(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Color(0xB328231F),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Padding(
+                    padding: EdgeInsets.all(7),
+                    child: Icon(
+                      Icons.play_arrow_rounded,
+                      color: Colors.white,
+                      size: 19,
+                    ),
+                  ),
+                ),
+              ),
+            if (thumbnailType == NoteType.image && imageCount > 1)
               Positioned(
                 right: 6,
                 bottom: 6,
@@ -444,11 +498,12 @@ class _EditorialPreviewTile extends StatelessWidget {
 
     if (entry.primaryType == NoteType.text) {
       return Container(
-        width: 76,
-        height: 92,
+        width: _width,
+        height: _height,
         decoration: BoxDecoration(
           color: AppColors.softAmber,
           borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.line),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -479,19 +534,43 @@ class _EditorialPreviewTile extends StatelessWidget {
     }
 
     return Container(
-      width: 76,
-      height: 76,
+      width: _width,
+      height: _height,
       decoration: BoxDecoration(
         color: accent.withValues(alpha: .1),
         borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.line),
       ),
-      child: Icon(
-        NoteCard.iconForType(entry.primaryType),
-        color: accent,
-        size: 28,
-      ),
+      child: _CoverTypePlaceholder(type: entry.primaryType, accent: accent),
     );
   }
+}
+
+class _CoverTypePlaceholder extends StatelessWidget {
+  final NoteType type;
+  final Color accent;
+
+  const _CoverTypePlaceholder({required this.type, required this.accent});
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      Icon(NoteCard.iconForType(type), color: accent, size: 26),
+      const SizedBox(height: 7),
+      Text(
+        _localizedNoteType(context, type),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: accent,
+          fontSize: 10,
+          height: 1,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    ],
+  );
 }
 
 class _TypePill extends StatelessWidget {

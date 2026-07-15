@@ -8,7 +8,6 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Matrix
-import android.graphics.Rect
 import android.media.AudioFormat
 import android.media.MediaCodec
 import android.media.MediaExtractor
@@ -51,6 +50,8 @@ open class MainActivity : FlutterFragmentActivity() {
         const val COPY_BUFFER_SIZE = 256 * 1024
         const val PROGRESS_INTERVAL_MS = 80L
         const val THUMBNAIL_WIDTH = 300
+        const val THUMBNAIL_HEIGHT = 360
+        const val THUMBNAIL_PADDING = 18
         const val THUMBNAIL_DECODE_BOUND = 900
         const val IMPORT_MINIMUM_HEADROOM = 32L * 1024 * 1024
         const val UNKNOWN_SIZE_MINIMUM_SPACE = 64L * 1024 * 1024
@@ -716,21 +717,29 @@ open class MainActivity : FlutterFragmentActivity() {
         )
         val scale = minOf(
             1.0,
-            THUMBNAIL_WIDTH.toDouble() / maxOf(oriented.width, oriented.height),
+            (THUMBNAIL_WIDTH - THUMBNAIL_PADDING * 2).toDouble() / oriented.width,
+            (THUMBNAIL_HEIGHT - THUMBNAIL_PADDING * 2).toDouble() / oriented.height,
         )
         val targetWidth = maxOf(1, (oriented.width * scale).roundToInt())
         val targetHeight = maxOf(1, (oriented.height * scale).roundToInt())
-        val thumbnail = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
+        val preview = Bitmap.createScaledBitmap(oriented, targetWidth, targetHeight, true)
+        val thumbnail = Bitmap.createBitmap(
+            THUMBNAIL_WIDTH,
+            THUMBNAIL_HEIGHT,
+            Bitmap.Config.ARGB_8888,
+        )
         Canvas(thumbnail).apply {
-            drawColor(Color.WHITE)
-            drawBitmap(oriented, null, Rect(0, 0, targetWidth, targetHeight), null)
+            drawColor(Color.rgb(250, 247, 242))
+            val left = (THUMBNAIL_WIDTH - targetWidth) / 2
+            val top = (THUMBNAIL_HEIGHT - targetHeight) / 2
+            drawBitmap(preview, left.toFloat(), top.toFloat(), null)
         }
         val directory = File(filesDir, "thumbnails").apply {
             if (!exists() && !mkdirs()) {
                 error(getString(R.string.thumbnail_directory_failed))
             }
         }
-        val output = File(directory, "${jobId}_thumb.jpg")
+        val output = File(directory, "${jobId}_thumb_v2.jpg")
         FileOutputStream(output).use { stream ->
             if (!thumbnail.compress(Bitmap.CompressFormat.JPEG, 86, stream)) {
                 error(getString(R.string.thumbnail_generation_failed))
@@ -738,6 +747,7 @@ open class MainActivity : FlutterFragmentActivity() {
         }
         if (oriented !== decoded) oriented.recycle()
         decoded.recycle()
+        if (preview !== oriented) preview.recycle()
         thumbnail.recycle()
         output
     } catch (_: Exception) {

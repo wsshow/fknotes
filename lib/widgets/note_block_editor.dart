@@ -2620,25 +2620,23 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(10),
-                  child: thumbnail?.existsSync() == true
-                      ? Image.file(
-                          thumbnail!,
-                          width: 46,
-                          height: 46,
-                          fit: BoxFit.cover,
-                        )
-                      : Container(
-                          width: 46,
-                          height: 46,
-                          color: color.withValues(alpha: .1),
-                          child: Icon(
+                  child: Container(
+                    width: 46,
+                    height: 46,
+                    color: color.withValues(alpha: .08),
+                    padding: thumbnail?.existsSync() == true
+                        ? const EdgeInsets.all(2)
+                        : EdgeInsets.zero,
+                    child: thumbnail?.existsSync() == true
+                        ? Image.file(thumbnail!, fit: BoxFit.contain)
+                        : Icon(
                             resolved == null
                                 ? Icons.link_off_rounded
                                 : NoteCard.iconForType(resolved.type),
                             size: 22,
                             color: color,
                           ),
-                        ),
+                  ),
                 ),
                 const SizedBox(width: 11),
                 Expanded(

@@ -3046,22 +3046,20 @@ class _AttachmentEditorTile extends StatelessWidget {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(10),
-                child: thumbnail?.existsSync() == true
-                    ? Image.file(
-                        thumbnail!,
-                        width: 54,
-                        height: 54,
-                        fit: BoxFit.cover,
-                      )
-                    : Container(
-                        width: 54,
-                        height: 54,
-                        color: color.withValues(alpha: .1),
-                        child: Icon(
+                child: Container(
+                  width: 54,
+                  height: 54,
+                  color: color.withValues(alpha: .08),
+                  padding: thumbnail?.existsSync() == true
+                      ? const EdgeInsets.all(2)
+                      : EdgeInsets.zero,
+                  child: thumbnail?.existsSync() == true
+                      ? Image.file(thumbnail!, fit: BoxFit.contain)
+                      : Icon(
                           NoteCard.iconForType(attachment.type),
                           color: color,
                         ),
-                      ),
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
