@@ -10,6 +10,7 @@ import 'providers/app_lock_controller.dart';
 import 'providers/app_locale_controller.dart';
 import 'providers/note_provider.dart';
 import 'widgets/app_lock_gate.dart';
+import 'widgets/app_feedback_navigator_observer.dart';
 import 'debug/debug_navigation.dart';
 
 class AppColors {
@@ -98,9 +99,10 @@ class FkNotesApp extends StatelessWidget {
           supportedLocales: AppLocalizations.supportedLocales,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           debugShowCheckedModeBanner: false,
-          navigatorObservers: kDebugMode
-              ? createDebugNavigatorObservers()
-              : const [],
+          navigatorObservers: [
+            AppFeedbackNavigatorObserver(),
+            if (kDebugMode) ...createDebugNavigatorObservers(),
+          ],
           theme: ThemeData(
             useMaterial3: true,
             colorScheme: scheme,

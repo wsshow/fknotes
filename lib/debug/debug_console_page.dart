@@ -8,6 +8,7 @@ import '../app.dart';
 import '../services/background_task_center.dart';
 import '../services/local_inference_coordinator.dart';
 import '../services/local_model_manager.dart';
+import '../widgets/app_feedback.dart';
 import 'app_diagnostics.dart';
 
 class DebugConsolePage extends StatefulWidget {
@@ -384,11 +385,7 @@ class _DebugConsolePageState extends State<DebugConsolePage> {
     );
   }
 
-  void _message(String text) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(text)));
-  }
+  void _message(String text) => AppFeedback.show(context, text);
 }
 
 class _SummaryCard extends StatelessWidget {

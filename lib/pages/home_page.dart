@@ -42,6 +42,12 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _tab = 0;
 
+  void _selectTab(int index) {
+    AppFeedback.dismiss(context);
+    if (_tab == index) return;
+    setState(() => _tab = index);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<NoteProvider>(
@@ -54,7 +60,7 @@ class _HomePageState extends State<HomePage> {
               provider: provider,
               onSearch: _openSearch,
               onOpenAssistant: _openAssistant,
-              onOpenLibrary: () => setState(() => _tab = 1),
+              onOpenLibrary: () => _selectTab(1),
               onCreateText: _createTextNote,
               onPickImage: _pickImage,
               onRecordAudio: _openRecorder,
@@ -66,10 +72,7 @@ class _HomePageState extends State<HomePage> {
               onSearch: _openSearch,
               noteBuilder: _buildCard,
             ),
-            _DataTab(
-              provider: provider,
-              onOpenLibrary: () => setState(() => _tab = 1),
-            ),
+            _DataTab(provider: provider, onOpenLibrary: () => _selectTab(1)),
           ],
         ),
         floatingActionButton: _tab == 2
@@ -96,9 +99,7 @@ class _HomePageState extends State<HomePage> {
             child: NavigationBar(
               selectedIndex: _tab,
               onDestinationSelected: (index) {
-                setState(() {
-                  _tab = index;
-                });
+                _selectTab(index);
                 if (index == 0 && provider.scope != NoteScope.active) {
                   provider.setScope(NoteScope.active);
                 }

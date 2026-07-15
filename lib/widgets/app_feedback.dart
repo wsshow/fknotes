@@ -39,6 +39,8 @@ class AppFeedback {
           behavior: SnackBarBehavior.floating,
           elevation: 0,
           dismissDirection: DismissDirection.horizontal,
+          showCloseIcon: true,
+          closeIconColor: colors.foreground,
           margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
           duration:
@@ -76,6 +78,14 @@ class AppFeedback {
                 ),
         ),
       );
+  }
+
+  static void dismiss(BuildContext context) {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
+    messenger
+      ..clearSnackBars()
+      ..removeCurrentSnackBar();
   }
 
   static void success(BuildContext context, String message) =>
