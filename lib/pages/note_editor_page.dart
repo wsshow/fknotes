@@ -1135,6 +1135,28 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     _queueRecoveryDraft();
   }
 
+  Future<void> _renameAttachment(int index) async {
+    final attachment = _attachments[index];
+    final title = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (_) => _AttachmentTitleSheet(attachment: attachment),
+    );
+    if (title == null || !mounted || index >= _attachments.length) return;
+    final normalized = title.trim();
+    setState(() {
+      _attachments[index] =
+          normalized.isEmpty || normalized == attachment.fileName
+          ? attachment.copyWith(clearDisplayName: true)
+          : attachment.copyWith(displayName: normalized);
+      _changed = true;
+    });
+    _scheduleAutosave();
+    _queueRecoveryDraft();
+  }
+
   Future<void> _openAttachment(NoteAttachment attachment) async {
     _autosave?.cancel();
     if (_changed && !await _persist()) return;
@@ -1436,6 +1458,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                                 ) ...[
                                   _AttachmentEditorTile(
                                     attachment: _attachments[index],
+                                    onRename: () => _renameAttachment(index),
                                     onOpen: () =>
                                         _openAttachment(_attachments[index]),
                                     onReference: () => _blockEditorKey
@@ -2983,6 +3006,7 @@ class _AttachmentImportTile extends StatelessWidget {
 
 class _AttachmentEditorTile extends StatelessWidget {
   final NoteAttachment attachment;
+  final VoidCallback onRename;
   final VoidCallback onOpen;
   final VoidCallback onReference;
   final bool canMoveUp;
@@ -2993,6 +3017,7 @@ class _AttachmentEditorTile extends StatelessWidget {
 
   const _AttachmentEditorTile({
     required this.attachment,
+    required this.onRename,
     required this.onOpen,
     required this.onReference,
     required this.canMoveUp,
@@ -3044,7 +3069,7 @@ class _AttachmentEditorTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      attachment.fileName,
+                      attachment.displayTitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontWeight: FontWeight.w600),
@@ -3063,10 +3088,13 @@ class _AttachmentEditorTile extends StatelessWidget {
                 ),
               ),
               AppAnchoredMenuButton<String>(
+                key: ValueKey('attachment-menu-${attachment.filePath}'),
                 tooltip: context.l10n.adjustAttachment,
                 icon: const Icon(Icons.more_vert_rounded),
                 onSelected: (value) {
                   switch (value) {
+                    case 'rename':
+                      onRename();
                     case 'up':
                       onMoveUp();
                     case 'down':
@@ -3078,6 +3106,11 @@ class _AttachmentEditorTile extends StatelessWidget {
                   }
                 },
                 actions: [
+                  AppMenuAction(
+                    value: 'rename',
+                    icon: Icons.edit_outlined,
+                    label: context.l10n.renameAttachment,
+                  ),
                   AppMenuAction(
                     value: 'up',
                     enabled: canMoveUp,
@@ -3115,6 +3148,104 @@ class _AttachmentEditorTile extends StatelessWidget {
       : bytes < 1048576
       ? '${(bytes / 1024).toStringAsFixed(1)} KB'
       : '${(bytes / 1048576).toStringAsFixed(1)} MB';
+}
+
+class _AttachmentTitleSheet extends StatefulWidget {
+  final NoteAttachment attachment;
+
+  const _AttachmentTitleSheet({required this.attachment});
+
+  @override
+  State<_AttachmentTitleSheet> createState() => _AttachmentTitleSheetState();
+}
+
+class _AttachmentTitleSheetState extends State<_AttachmentTitleSheet> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.attachment.displayTitle);
+    _controller.addListener(_handleChanged);
+  }
+
+  void _handleChanged() => setState(() {});
+
+  @override
+  void dispose() {
+    _controller
+      ..removeListener(_handleChanged)
+      ..dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canSave = _controller.text.trim().isNotEmpty;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        0,
+        20,
+        20 + MediaQuery.viewInsetsOf(context).bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            context.l10n.editAttachmentTitle,
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            context.l10n.attachmentTitleDescription,
+            style: const TextStyle(color: AppColors.muted, height: 1.4),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            key: const Key('attachment-title-field'),
+            controller: _controller,
+            autofocus: true,
+            maxLength: 100,
+            textInputAction: TextInputAction.done,
+            decoration: InputDecoration(
+              labelText: context.l10n.attachmentTitle,
+              hintText: context.l10n.attachmentTitleHint,
+            ),
+            onSubmitted: canSave
+                ? (_) => Navigator.pop(context, _controller.text.trim())
+                : null,
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              if (widget.attachment.displayName?.trim().isNotEmpty == true)
+                TextButton(
+                  onPressed: () => Navigator.pop(context, ''),
+                  child: Text(context.l10n.restoreOriginalFileName),
+                ),
+              const Spacer(),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(context.l10n.cancel),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                key: const Key('save-attachment-title'),
+                onPressed: canSave
+                    ? () => Navigator.pop(context, _controller.text.trim())
+                    : null,
+                child: Text(context.l10n.save),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 String _noteTypeLabel(BuildContext context, NoteType type) => switch (type) {

@@ -33,6 +33,7 @@ class NoteAttachment {
   final NoteType type;
   final String filePath;
   final String fileName;
+  final String? displayName;
   final int fileSize;
   final String mimeType;
   final String? thumbnailPath;
@@ -50,6 +51,7 @@ class NoteAttachment {
     required this.type,
     required this.filePath,
     required this.fileName,
+    this.displayName,
     required this.fileSize,
     required this.mimeType,
     this.thumbnailPath,
@@ -68,6 +70,8 @@ class NoteAttachment {
     NoteType? type,
     String? filePath,
     String? fileName,
+    String? displayName,
+    bool clearDisplayName = false,
     int? fileSize,
     String? mimeType,
     String? thumbnailPath,
@@ -84,6 +88,7 @@ class NoteAttachment {
     type: type ?? this.type,
     filePath: filePath ?? this.filePath,
     fileName: fileName ?? this.fileName,
+    displayName: clearDisplayName ? null : displayName ?? this.displayName,
     fileSize: fileSize ?? this.fileSize,
     mimeType: mimeType ?? this.mimeType,
     thumbnailPath: thumbnailPath ?? this.thumbnailPath,
@@ -102,6 +107,7 @@ class NoteAttachment {
     'type': type.dbValue,
     'file_path': filePath,
     'file_name': fileName,
+    'display_name': displayName,
     'file_size': fileSize,
     'mime_type': mimeType,
     'thumbnail_path': thumbnailPath,
@@ -120,6 +126,7 @@ class NoteAttachment {
     type: NoteType.fromDb(map['type'] as String? ?? 'document'),
     filePath: map['file_path'] as String? ?? '',
     fileName: map['file_name'] as String? ?? '',
+    displayName: map['display_name'] as String?,
     fileSize: map['file_size'] as int? ?? 0,
     mimeType: map['mime_type'] as String? ?? 'application/octet-stream',
     thumbnailPath: map['thumbnail_path'] as String?,
@@ -135,6 +142,11 @@ class NoteAttachment {
         DateTime.tryParse(map['created_at'] as String? ?? '') ??
         DateTime.fromMillisecondsSinceEpoch(0),
   );
+
+  String get displayTitle {
+    final custom = displayName?.trim() ?? '';
+    return custom.isEmpty ? fileName : custom;
+  }
 }
 
 class NoteEntry {
@@ -383,7 +395,7 @@ class NoteEntry {
     if (source.isEmpty) return '';
     final attachmentsByPath = {
       for (final attachment in allAttachments)
-        attachment.filePath: attachment.fileName,
+        attachment.filePath: attachment.displayTitle,
     };
     return source.replaceAllMapped(
       RegExp(r'^\[\[附件:(.+)\]\]$', multiLine: true),

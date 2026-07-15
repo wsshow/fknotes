@@ -167,11 +167,14 @@ class NoteCard extends StatelessWidget {
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
-                      ] else if (entry.primaryAttachment?.fileName.isNotEmpty ==
+                      ] else if (entry
+                              .primaryAttachment
+                              ?.displayTitle
+                              .isNotEmpty ==
                           true) ...[
                         const SizedBox(height: 8),
                         Text(
-                          entry.primaryAttachment!.fileName,
+                          entry.primaryAttachment!.displayTitle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.bodyMedium?.copyWith(
@@ -289,7 +292,7 @@ class _RecentNoteRow extends StatelessWidget {
     final theme = Theme.of(context);
     final preview = entry.previewText.trim().isNotEmpty
         ? entry.previewText.trim().replaceAll('\n', ' ')
-        : (entry.primaryAttachment?.fileName ?? '');
+        : (entry.primaryAttachment?.displayTitle ?? '');
 
     return Material(
       color: Colors.transparent,

@@ -575,7 +575,7 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
                 ),
               ),
               Text(
-                attachment?.fileName ??
+                attachment?.displayTitle ??
                     _localizedNoteType(context, entry.primaryType),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -908,6 +908,8 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
         _InfoCard(
           title: l10n.fileInformation,
           children: [
+            if (attachment?.displayName?.trim().isNotEmpty == true)
+              _InfoRow(l10n.attachmentTitle, attachment!.displayTitle),
             if (attachment != null)
               _InfoRow(l10n.fileName, attachment!.fileName),
             if (attachment != null)
@@ -1002,7 +1004,7 @@ class _PreviewTab extends StatelessWidget {
         duration: audioDuration,
       ),
       NoteType.document => _DocumentPreview(
-        fileName: attachment?.fileName,
+        fileName: attachment?.displayTitle,
         file: file!,
       ),
       NoteType.text => const SizedBox.shrink(),

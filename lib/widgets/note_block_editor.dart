@@ -2646,7 +2646,8 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        resolved?.fileName ?? context.l10n.attachmentRemoved,
+                        resolved?.displayTitle ??
+                            context.l10n.attachmentRemoved,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(

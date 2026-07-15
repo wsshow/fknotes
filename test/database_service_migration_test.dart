@@ -67,7 +67,12 @@ void main() {
       );
       expect(
         attachmentColumns.map((column) => column['name']),
-        containsAll(['transcript', 'transcription_model', 'transcribed_at']),
+        containsAll([
+          'transcript',
+          'transcription_model',
+          'transcribed_at',
+          'display_name',
+        ]),
       );
       final chatTables = await db.rawQuery(
         "SELECT name FROM sqlite_master WHERE type = 'table'",

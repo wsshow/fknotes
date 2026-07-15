@@ -3008,6 +3008,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noteInformation => 'Note information';
 
   @override
+  String get renameAttachment => 'Rename';
+
+  @override
+  String get editAttachmentTitle => 'Edit attachment title';
+
+  @override
+  String get attachmentTitle => 'Attachment title';
+
+  @override
+  String get attachmentTitleHint => 'Enter the title shown in this note';
+
+  @override
+  String get attachmentTitleDescription =>
+      'This only changes the title shown in the note. The original file name and file contents stay unchanged.';
+
+  @override
+  String get restoreOriginalFileName => 'Restore original file name';
+
+  @override
   String get type => 'Type';
 
   @override

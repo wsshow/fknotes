@@ -57,12 +57,30 @@ void main() {
         for (final item in original!.allAttachments) item.filePath: item.id,
       };
 
-      await notes.updateEntry(original.copyWith(title: '只修改标题'));
+      await notes.updateEntry(
+        original.copyWith(
+          title: '只修改标题',
+          attachments: [
+            original.allAttachments.first.copyWith(displayName: '设计稿封面'),
+            original.allAttachments.last,
+          ],
+        ),
+      );
       final afterMetadataUpdate = await notes.getEntry(id);
       expect({
         for (final item in afterMetadataUpdate!.allAttachments)
           item.filePath: item.id,
       }, originalIds);
+      expect(afterMetadataUpdate.allAttachments.first.displayTitle, '设计稿封面');
+      expect(afterMetadataUpdate.allAttachments.first.fileName, 'images/a.jpg');
+      expect(
+        (await notes.searchLike('设计稿封面')).map((entry) => entry.id),
+        contains(id),
+      );
+      expect(
+        (await notes.searchLike('images/a.jpg')).map((entry) => entry.id),
+        contains(id),
+      );
 
       final appended = await notes.insertAttachment(
         id,

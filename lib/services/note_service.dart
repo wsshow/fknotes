@@ -226,11 +226,11 @@ class NoteService {
       WHERE e.is_deleted = 0 AND (
         e.title LIKE ? OR e.content LIKE ? OR e.ocr_text LIKE ? OR
         e.file_name LIKE ? OR e.tags LIKE ? OR a.ocr_text LIKE ? OR
-        a.transcript LIKE ? OR a.file_name LIKE ?
+        a.transcript LIKE ? OR a.file_name LIKE ? OR a.display_name LIKE ?
       )
       ORDER BY e.is_pinned DESC, e.updated_at DESC
       ''',
-      [like, like, like, like, like, like, like, like],
+      [like, like, like, like, like, like, like, like, like],
     );
     final entries = await _hydrate(db, maps);
     if (kDebugMode) {

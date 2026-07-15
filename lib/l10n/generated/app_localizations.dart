@@ -5174,6 +5174,42 @@ abstract class AppLocalizations {
   /// **'笔记信息'**
   String get noteInformation;
 
+  /// No description provided for @renameAttachment.
+  ///
+  /// In zh, this message translates to:
+  /// **'修改标题'**
+  String get renameAttachment;
+
+  /// No description provided for @editAttachmentTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'修改附件标题'**
+  String get editAttachmentTitle;
+
+  /// No description provided for @attachmentTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'附件标题'**
+  String get attachmentTitle;
+
+  /// No description provided for @attachmentTitleHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入在笔记中显示的标题'**
+  String get attachmentTitleHint;
+
+  /// No description provided for @attachmentTitleDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'只修改笔记中的显示标题，原文件名和文件内容不会改变。'**
+  String get attachmentTitleDescription;
+
+  /// No description provided for @restoreOriginalFileName.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复原文件名'**
+  String get restoreOriginalFileName;
+
   /// No description provided for @type.
   ///
   /// In zh, this message translates to:

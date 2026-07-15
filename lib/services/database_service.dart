@@ -23,13 +23,13 @@ class DatabaseService {
       AppDiagnostics.info(
         AppLogCategory.database,
         'database_open_started',
-        data: {'schemaVersion': 10},
+        data: {'schemaVersion': 11},
       );
     }
     try {
       final database = await openDatabase(
         path,
-        version: 10,
+        version: 11,
         onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
@@ -108,6 +108,17 @@ class DatabaseService {
         'database_migration_started',
         data: {'fromVersion': oldVersion, 'toVersion': newVersion},
       );
+    }
+    if (oldVersion < 11) {
+      await _createAttachmentsTable(db);
+      final columns = (await db.rawQuery(
+        'PRAGMA table_info(attachments)',
+      )).map((column) => column['name'] as String).toSet();
+      if (!columns.contains('display_name')) {
+        await db.execute(
+          'ALTER TABLE attachments ADD COLUMN display_name TEXT',
+        );
+      }
     }
     if (oldVersion < 2) {
       await _createAttachmentsTable(db);
@@ -194,6 +205,9 @@ class DatabaseService {
         );
       }
     }
+    if (oldVersion < 11) {
+      await _createSearchIndex(db);
+    }
     if (kDebugMode) {
       AppDiagnostics.info(
         AppLogCategory.database,
@@ -210,6 +224,7 @@ class DatabaseService {
       type TEXT NOT NULL,
       file_path TEXT NOT NULL,
       file_name TEXT NOT NULL DEFAULT '',
+      display_name TEXT,
       file_size INTEGER NOT NULL DEFAULT 0,
       mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
       thumbnail_path TEXT,
@@ -384,18 +399,20 @@ class DatabaseService {
     await db.execute('''
       CREATE TRIGGER attachments_search_ai AFTER INSERT ON attachments BEGIN
         INSERT INTO search_fts(kind, source_id, parent_id, title, body, metadata)
-        VALUES('attachment', NEW.id, NEW.note_id, NEW.file_name,
+        VALUES('attachment', NEW.id, NEW.note_id,
+          COALESCE(NULLIF(NEW.display_name, ''), NEW.file_name),
           COALESCE(NEW.ocr_text, '') || ' ' || COALESCE(NEW.transcript, ''),
-          NEW.type || ' ' || NEW.mime_type);
+          NEW.type || ' ' || NEW.mime_type || ' ' || NEW.file_name);
       END
     ''');
     await db.execute('''
       CREATE TRIGGER attachments_search_au AFTER UPDATE ON attachments BEGIN
         DELETE FROM search_fts WHERE kind = 'attachment' AND source_id = OLD.id;
         INSERT INTO search_fts(kind, source_id, parent_id, title, body, metadata)
-        VALUES('attachment', NEW.id, NEW.note_id, NEW.file_name,
+        VALUES('attachment', NEW.id, NEW.note_id,
+          COALESCE(NULLIF(NEW.display_name, ''), NEW.file_name),
           COALESCE(NEW.ocr_text, '') || ' ' || COALESCE(NEW.transcript, ''),
-          NEW.type || ' ' || NEW.mime_type);
+          NEW.type || ' ' || NEW.mime_type || ' ' || NEW.file_name);
       END
     ''');
     await db.execute('''
@@ -449,9 +466,10 @@ class DatabaseService {
     ''');
     await db.execute('''
       INSERT INTO search_fts(kind, source_id, parent_id, title, body, metadata)
-      SELECT 'attachment', id, note_id, file_name,
+      SELECT 'attachment', id, note_id,
+        COALESCE(NULLIF(display_name, ''), file_name),
         COALESCE(ocr_text, '') || ' ' || COALESCE(transcript, ''),
-        type || ' ' || mime_type
+        type || ' ' || mime_type || ' ' || file_name
       FROM attachments
     ''');
     await db.execute('''

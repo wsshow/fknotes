@@ -2787,6 +2787,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noteInformation => '笔记信息';
 
   @override
+  String get renameAttachment => '修改标题';
+
+  @override
+  String get editAttachmentTitle => '修改附件标题';
+
+  @override
+  String get attachmentTitle => '附件标题';
+
+  @override
+  String get attachmentTitleHint => '输入在笔记中显示的标题';
+
+  @override
+  String get attachmentTitleDescription => '只修改笔记中的显示标题，原文件名和文件内容不会改变。';
+
+  @override
+  String get restoreOriginalFileName => '恢复原文件名';
+
+  @override
   String get type => '类型';
 
   @override

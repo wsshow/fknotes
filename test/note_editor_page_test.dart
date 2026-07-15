@@ -967,6 +967,54 @@ void main() {
     },
   );
 
+  testWidgets('attachment title can be edited without changing file name', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final now = DateTime(2026, 7, 15);
+    final attachment = NoteAttachment(
+      type: NoteType.image,
+      filePath: 'images/original.png',
+      fileName: 'original.png',
+      fileSize: 1024,
+      mimeType: 'image/png',
+      createdAt: now,
+    );
+    final entry = NoteEntry(
+      id: 44,
+      type: NoteType.image,
+      title: '设计记录',
+      createdAt: now,
+      updatedAt: now,
+      attachments: [attachment],
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<NoteProvider>(
+        create: (_) => _InMemoryNoteProvider(),
+        child: MaterialApp(home: NoteEditorPage(existingEntry: entry)),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(
+      find.byKey(const ValueKey('attachment-menu-images/original.png')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('修改标题'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('attachment-title-field')),
+      '设计稿封面',
+    );
+    await tester.tap(find.byKey(const Key('save-attachment-title')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('设计稿封面'), findsOneWidget);
+    expect(attachment.fileName, 'original.png');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('quote formatting keeps the keyboard, focus and caret', (
     tester,
   ) async {
