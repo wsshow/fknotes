@@ -119,7 +119,7 @@ flutter run
 | `make check` | 依次格式化、分析并测试 |
 | `make run DEVICE=<id>` | 在指定设备上运行 |
 | `make debug` | 生成带应用名和版本号的 Android 通用 Debug APK |
-| `make debug-overlay DEVICE=<id>` | 用 Release 签名构建 arm64 Debug 并覆盖真机安装，保留本地数据和模型 |
+| `make debug-overlay BUILD_NAME=<版本> BUILD_NUMBER=<构建号>` | 用 Release 签名生成可覆盖真机正式包的 arm64 Debug APK |
 | `make apk-debug-split` | 按 ABI 生成带应用名和版本号的 Debug APK |
 | `make package` | 生成 Android 通用 Release APK |
 | `make apk-split` | 按 ABI 生成带应用名和版本号的 Android APK |
@@ -163,14 +163,24 @@ dist/fknotes-<版本号>+<构建号>-<ABI>-debug.apk
 需要保留真机中的笔记、设置和已下载模型，同时使用 Debug 诊断能力时，执行：
 
 ```bash
-make debug-overlay DEVICE=<设备 ID>
+make debug-overlay BUILD_NAME=1.0.3 BUILD_NUMBER=31
 ```
 
-该命令会自动读取真机上 `com.fknotes.app` 的版本名和真实内部 `versionCode`，构建完全一致的 arm64 Debug APK，仅在本次构建中使用本机 Release 证书签名，然后通过 `adb install -r -t` 覆盖安装。普通 `make debug` 仍使用 Android Debug 证书。
+该命令只负责编译，不会连接或修改真机。它与 `make apk-split BUILD_NAME=1.0.3 BUILD_NUMBER=31` 使用相同的版本参数和 ABI 分包规则，但会生成包含 Debug 诊断能力的 arm64 APK，并仅在本次构建中使用本机 Release 证书签名。普通 `make debug` 仍使用 Android Debug 证书。
 
-按 ABI 生成的 Release APK 会在基础构建号上加入 ABI 偏移，例如文件名中的 `+31` 在 arm64 真机里可能显示为内部 `versionCode=2031`；命令会直接复用这个真实值，避免覆盖时发生版本降级或重复叠加偏移。
+产物位于：
 
-使用前必须配置 `android/key.properties` 和原 Release 证书；证书不一致时 Android 会拒绝覆盖。诊断 APK 使用正式证书但包含调试能力，只能用于本机排查，不应对外分发。完成诊断后，可用相同证书和不低于当前构建号的 Release APK 再次覆盖安装，应用数据不会被清除。
+```text
+dist/fknotes-<版本号>+<构建号>-arm64-v8a-diagnostic-debug.apk
+```
+
+确认版本与真机正式包一致后，手动覆盖安装：
+
+```bash
+adb install -r -t dist/fknotes-1.0.3+31-arm64-v8a-diagnostic-debug.apk
+```
+
+使用前必须配置 `android/key.properties` 和原 Release 证书；证书或包名不一致、构建号低于已安装版本时，Android 会拒绝覆盖。诊断 APK 使用正式证书但包含调试能力，只能用于本机排查，不应对外分发。完成诊断后，可用相同证书和不低于当前构建号的 Release APK 再次覆盖安装，应用数据不会被清除。
 
 ## Android 正式包
 

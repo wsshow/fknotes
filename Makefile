@@ -2,7 +2,7 @@
 # Usage examples:
 #   make package
 #   make debug
-#   make debug-overlay DEVICE=<device-id>
+#   make debug-overlay BUILD_NAME=1.0.3 BUILD_NUMBER=31
 #   make run DEVICE=emulator-5554
 #   make apk BUILD_NAME=1.2.0 BUILD_NUMBER=12
 
@@ -10,9 +10,7 @@ SHELL := /bin/sh
 
 FLUTTER ?= flutter
 DART ?= dart
-ADB ?= adb
 DEVICE ?=
-ANDROID_APPLICATION_ID ?= com.fknotes.app
 BUILD_NAME ?=
 BUILD_NUMBER ?=
 BUILD_TIME ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -27,7 +25,6 @@ ARTIFACT_VERSION := $(ARTIFACT_BUILD_NAME)$(if $(ARTIFACT_BUILD_NUMBER),+$(ARTIF
 BUILD_ARGS := $(if $(BUILD_NAME),--build-name=$(BUILD_NAME)) $(if $(BUILD_NUMBER),--build-number=$(BUILD_NUMBER))
 BUILD_METADATA_ARGS := --dart-define=FKNOTES_BUILD_TIME=$(BUILD_TIME)
 DEVICE_ARG := $(if $(DEVICE),-d $(DEVICE))
-ADB_DEVICE_ARG := $(if $(DEVICE),-s $(DEVICE))
 
 .DEFAULT_GOAL := help
 .PHONY: help doctor get upgrade outdated format analyze test check \
@@ -81,22 +78,16 @@ run-macos: get ## 在 macOS 上调试运行
 
 debug: apk-debug ## 打包默认 Android Debug APK
 
-debug-overlay: get ## 以 Release 签名构建 arm64 Debug 并覆盖真机安装，保留应用数据
-	@set -eu; \
-	package_info="$$($(ADB) $(ADB_DEVICE_ARG) shell dumpsys package $(ANDROID_APPLICATION_ID))"; \
-	version_name="$$(printf '%s\n' "$$package_info" | sed -n 's/^[[:space:]]*versionName=//p' | head -n 1 | tr -d '\r')"; \
-	version_code="$$(printf '%s\n' "$$package_info" | sed -n 's/^[[:space:]]*versionCode=\([0-9][0-9]*\).*/\1/p' | head -n 1)"; \
-	if [ -z "$$version_name" ] || [ "$$version_name" = "null" ] || [ -z "$$version_code" ]; then \
-		printf '未找到已安装的 %s 正式包版本；请检查 DEVICE 或先安装 Release APK。\n' '$(ANDROID_APPLICATION_ID)' >&2; \
-		exit 1; \
-	fi; \
-	output="$(DIST_DIR)/fknotes-$${version_name}+$${version_code}-arm64-v8a-diagnostic-debug.apk"; \
-	printf '将构建与已安装版本一致的诊断 Debug：%s+%s\n' "$$version_name" "$$version_code"; \
-	FKNOTES_SIGN_DEBUG_WITH_RELEASE=1 $(FLUTTER) build apk --debug --target-platform android-arm64 --build-name="$$version_name" --build-number="$$version_code" $(BUILD_METADATA_ARGS); \
-	mkdir -p "$(DIST_DIR)"; \
-	cp build/app/outputs/flutter-apk/app-debug.apk "$$output"; \
-	$(ADB) $(ADB_DEVICE_ARG) install -r -t "$$output"; \
-	printf '已覆盖安装并保留应用数据：%s\n' "$$output"
+debug-overlay: ## 以 Release 签名构建可覆盖真机正式包的 arm64 Debug APK
+	@test -n "$(BUILD_NAME)" || (echo "缺少 BUILD_NAME，例如：make debug-overlay BUILD_NAME=1.0.3 BUILD_NUMBER=31" >&2; exit 1)
+	@test -n "$(BUILD_NUMBER)" || (echo "缺少 BUILD_NUMBER，例如：make debug-overlay BUILD_NAME=1.0.3 BUILD_NUMBER=31" >&2; exit 1)
+	$(FLUTTER) pub get
+	FKNOTES_SIGN_DEBUG_WITH_RELEASE=1 $(FLUTTER) build apk --debug --split-per-abi --target-platform android-arm64 $(BUILD_ARGS) $(BUILD_METADATA_ARGS)
+	@mkdir -p $(DIST_DIR)
+	@rm -f $(DIST_DIR)/fknotes-*-arm64-v8a-diagnostic-debug.apk
+	@cp build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk $(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-arm64-v8a-diagnostic-debug.apk
+	@echo "已生成：$(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-arm64-v8a-diagnostic-debug.apk"
+	@echo "覆盖安装：adb install -r -t $(DIST_DIR)/fknotes-$(ARTIFACT_VERSION)-arm64-v8a-diagnostic-debug.apk"
 
 package: apk ## 打包默认 Android 发布 APK
 
