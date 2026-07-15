@@ -53,6 +53,12 @@ class NoteProvider extends ChangeNotifier {
   List<NoteEntry> get activeEntries => _entries
       .where((entry) => !entry.isDeleted && !entry.isArchived)
       .toList(growable: false);
+  List<NoteEntry> get recentlyUpdatedEntries {
+    final result = activeEntries;
+    result.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return result;
+  }
+
   List<NoteEntry> get entries {
     Iterable<NoteEntry> result = switch (_scope) {
       NoteScope.active => _entries.where((e) => !e.isDeleted && !e.isArchived),

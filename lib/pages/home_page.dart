@@ -431,7 +431,7 @@ class _OverviewTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final entries = provider.activeEntries;
+    final entries = provider.recentlyUpdatedEntries;
     return SafeArea(
       bottom: false,
       child: RefreshIndicator(

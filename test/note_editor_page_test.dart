@@ -90,6 +90,61 @@ void main() {
     expect(find.byType(HomePage), findsOneWidget);
   });
 
+  testWidgets('home recent updates ignore pinning and follow modified time', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final base = DateTime(2026, 7, 15, 10);
+    final pinnedOld = NoteEntry(
+      id: 1,
+      type: NoteType.text,
+      title: '较早置顶',
+      isPinned: true,
+      createdAt: base,
+      updatedAt: base,
+    );
+    final middle = NoteEntry(
+      id: 2,
+      type: NoteType.text,
+      title: '中间更新',
+      createdAt: base,
+      updatedAt: base.add(const Duration(hours: 1)),
+    );
+    final newest = NoteEntry(
+      id: 3,
+      type: NoteType.text,
+      title: '最新更新',
+      createdAt: base,
+      updatedAt: base.add(const Duration(hours: 2)),
+    );
+    final provider = _RecentNotesProvider([pinnedOld, middle, newest]);
+    await _pumpHomePage(tester, noteProvider: provider);
+
+    double topOf(String title) => tester.getTopLeft(find.text(title)).dy;
+    expect(topOf('最新更新'), lessThan(topOf('中间更新')));
+    expect(topOf('中间更新'), lessThan(topOf('较早置顶')));
+
+    final fresh = NoteEntry(
+      id: 4,
+      type: NoteType.text,
+      title: '刚刚新建',
+      createdAt: base.add(const Duration(hours: 3)),
+      updatedAt: base.add(const Duration(hours: 3)),
+    );
+    provider.replaceEntries([...provider.activeEntries, fresh]);
+    await tester.pump();
+    expect(topOf('刚刚新建'), lessThan(topOf('最新更新')));
+
+    provider.replaceEntries([
+      pinnedOld.copyWith(updatedAt: base.add(const Duration(hours: 4))),
+      middle,
+      newest,
+      fresh,
+    ]);
+    await tester.pump();
+    expect(topOf('较早置顶'), lessThan(topOf('刚刚新建')));
+  });
+
   testWidgets('background tasks are available from data instead of home', (
     tester,
   ) async {
@@ -976,6 +1031,7 @@ Future<void> _pumpHomePage(
   WidgetTester tester, {
   TextScaler textScaler = TextScaler.noScaling,
   AppLanguage language = AppLanguage.simplifiedChinese,
+  NoteProvider? noteProvider,
 }) async {
   final appLock = AppLockController(
     preferencesStore: _DisabledAppLockPreferencesStore(),
@@ -995,12 +1051,14 @@ Future<void> _pumpHomePage(
   );
   await tester.runAsync(localeController.initialize);
   addTearDown(localeController.dispose);
+  final notes = noteProvider ?? NoteProvider();
+  addTearDown(notes.dispose);
   await tester.pumpWidget(
     MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: appLock),
         ChangeNotifierProvider.value(value: localeController),
-        ChangeNotifierProvider(create: (_) => NoteProvider()),
+        ChangeNotifierProvider.value(value: notes),
       ],
       child: MaterialApp(
         locale: localeController.locale,
@@ -1024,6 +1082,20 @@ class _InMemoryNoteProvider extends NoteProvider {
 
   @override
   Future<void> updateEntry(NoteEntry entry) async {}
+}
+
+class _RecentNotesProvider extends NoteProvider {
+  _RecentNotesProvider(this._entries);
+
+  List<NoteEntry> _entries;
+
+  @override
+  List<NoteEntry> get activeEntries => List.of(_entries);
+
+  void replaceEntries(List<NoteEntry> entries) {
+    _entries = List.of(entries);
+    notifyListeners();
+  }
 }
 
 class _DisabledAppLockPreferencesStore implements AppLockPreferencesStore {
