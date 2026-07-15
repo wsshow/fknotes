@@ -29,6 +29,7 @@ import 'note_editor_page.dart';
 import 'model_management_page.dart';
 import 'app_lock_settings_page.dart';
 import 'cloud_sync_page.dart';
+import 'language_settings_page.dart';
 import 'record_audio_page.dart';
 import 'search_page.dart';
 
@@ -72,7 +73,7 @@ class _HomePageState extends State<HomePage> {
               onSearch: _openSearch,
               noteBuilder: _buildCard,
             ),
-            _DataTab(provider: provider, onOpenLibrary: () => _selectTab(1)),
+            _DataTab(provider: provider),
           ],
         ),
         floatingActionButton: _tab == 2
@@ -1174,8 +1175,7 @@ class _TypeChip extends StatelessWidget {
 
 class _DataTab extends StatefulWidget {
   final NoteProvider provider;
-  final VoidCallback onOpenLibrary;
-  const _DataTab({required this.provider, required this.onOpenLibrary});
+  const _DataTab({required this.provider});
   @override
   State<_DataTab> createState() => _DataTabState();
 }
@@ -1366,7 +1366,12 @@ class _DataTabState extends State<_DataTab> {
                 icon: Icons.language_rounded,
                 title: l10n.language,
                 subtitle: _appLanguageTitle(l10n, localeController.language),
-                onTap: () => _chooseLanguage(localeController),
+                onTap: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const LanguageSettingsPage(),
+                  ),
+                ),
               ),
             ],
           ),
@@ -1460,26 +1465,6 @@ class _DataTabState extends State<_DataTab> {
                   ),
                 ),
               ),
-              const Divider(height: 1),
-              _SettingRow(
-                icon: Icons.archive_outlined,
-                title: l10n.archive,
-                subtitle: l10n.contentCount(widget.provider.archiveCount),
-                onTap: () {
-                  widget.provider.setScope(NoteScope.archived);
-                  widget.onOpenLibrary();
-                },
-              ),
-              const Divider(height: 1),
-              _SettingRow(
-                icon: Icons.delete_outline_rounded,
-                title: l10n.trash,
-                subtitle: l10n.contentCount(widget.provider.trashCount),
-                onTap: () {
-                  widget.provider.setScope(NoteScope.trash);
-                  widget.onOpenLibrary();
-                },
-              ),
             ],
           ),
           const SizedBox(height: 22),
@@ -1525,51 +1510,6 @@ class _DataTabState extends State<_DataTab> {
         ],
       ),
     );
-  }
-
-  Future<void> _chooseLanguage(AppLocaleController controller) async {
-    final selected = await showModalBottomSheet<AppLanguage>(
-      context: context,
-      showDragHandle: true,
-      useSafeArea: true,
-      builder: (sheetContext) {
-        final l10n = sheetContext.l10n;
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                l10n.chooseLanguage,
-                style: Theme.of(
-                  sheetContext,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 8),
-              for (final language in AppLanguage.values)
-                ListTile(
-                  key: Key('app-language-${language.name}'),
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(_appLanguageIcon(language)),
-                  title: Text(_appLanguageTitle(l10n, language)),
-                  subtitle: Text(_appLanguageDescription(l10n, language)),
-                  trailing: controller.language == language
-                      ? const Icon(Icons.check_circle_rounded)
-                      : null,
-                  onTap: () => Navigator.pop(sheetContext, language),
-                ),
-            ],
-          ),
-        );
-      },
-    );
-    if (selected == null || !mounted) return;
-    try {
-      await controller.setLanguage(selected);
-    } catch (_) {
-      if (mounted) AppFeedback.error(context, context.l10n.languageSaveFailed);
-    }
   }
 
   Future<void> _exportBackup() async {
@@ -1660,20 +1600,6 @@ String _appLanguageTitle(AppLocalizations l10n, AppLanguage language) =>
       AppLanguage.simplifiedChinese => l10n.languageSimplifiedChinese,
       AppLanguage.english => l10n.languageEnglish,
     };
-
-String _appLanguageDescription(AppLocalizations l10n, AppLanguage language) =>
-    switch (language) {
-      AppLanguage.system => l10n.languageSystemDescription,
-      AppLanguage.simplifiedChinese =>
-        l10n.languageSimplifiedChineseDescription,
-      AppLanguage.english => l10n.languageEnglishDescription,
-    };
-
-IconData _appLanguageIcon(AppLanguage language) => switch (language) {
-  AppLanguage.system => Icons.settings_suggest_outlined,
-  AppLanguage.simplifiedChinese => Icons.translate_rounded,
-  AppLanguage.english => Icons.language_rounded,
-};
 
 String _noteTypeLabel(AppLocalizations l10n, NoteType type) => switch (type) {
   NoteType.text => l10n.note,

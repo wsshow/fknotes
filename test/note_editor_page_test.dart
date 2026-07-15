@@ -156,6 +156,48 @@ void main() {
     expect(find.text('Cloud sync'), findsOneWidget);
   });
 
+  testWidgets('language setting opens a dedicated page', (tester) async {
+    _usePhoneViewport(tester);
+    await _pumpHomePage(tester);
+
+    await tester.tap(find.text('数据'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('语言'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('选择语言'), findsOneWidget);
+    expect(find.byKey(const Key('app-language-system')), findsOneWidget);
+    expect(
+      find.byKey(const Key('app-language-simplifiedChinese')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('app-language-english')), findsOneWidget);
+  });
+
+  testWidgets('archive and trash stay in the library instead of data', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    await _pumpHomePage(tester);
+
+    await tester.tap(find.text('数据'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('应用锁'),
+      350,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    expect(find.text('应用锁'), findsOneWidget);
+    expect(find.text('归档'), findsNothing);
+    expect(find.text('回收站'), findsNothing);
+
+    await tester.tap(find.text('资料库'));
+    await tester.pumpAndSettle();
+    expect(find.text('归档'), findsOneWidget);
+    expect(find.text('回收站'), findsOneWidget);
+  });
+
   testWidgets('tapping below the body editor focuses the final text block', (
     tester,
   ) async {
