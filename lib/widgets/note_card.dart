@@ -89,7 +89,6 @@ class NoteCard extends StatelessWidget {
         entry: entry,
         thumbnail: cover?.file,
         coverType: cover?.type,
-        accent: accent,
         onTap: onTap,
         friendlyTime: _friendlyTime(context, entry.updatedAt),
       );
@@ -110,7 +109,6 @@ class NoteCard extends StatelessWidget {
                     entry: entry,
                     thumbnail: cover.file,
                     coverType: cover.type,
-                    accent: accent,
                   ),
                   const SizedBox(width: 12),
                 ],
@@ -323,7 +321,6 @@ class _RecentNoteRow extends StatelessWidget {
   final NoteEntry entry;
   final File? thumbnail;
   final NoteType? coverType;
-  final Color accent;
   final VoidCallback onTap;
   final String friendlyTime;
 
@@ -331,7 +328,6 @@ class _RecentNoteRow extends StatelessWidget {
     required this.entry,
     required this.thumbnail,
     required this.coverType,
-    required this.accent,
     required this.onTap,
     required this.friendlyTime,
   });
@@ -357,7 +353,6 @@ class _RecentNoteRow extends StatelessWidget {
                   entry: entry,
                   thumbnail: thumbnail,
                   coverType: coverType!,
-                  accent: accent,
                 ),
                 const SizedBox(width: 16),
               ],
@@ -452,13 +447,11 @@ class _EditorialPreviewTile extends StatelessWidget {
   final NoteEntry entry;
   final File? thumbnail;
   final NoteType coverType;
-  final Color accent;
 
   const _EditorialPreviewTile({
     required this.entry,
     required this.thumbnail,
     required this.coverType,
-    required this.accent,
   });
 
   @override
@@ -482,8 +475,10 @@ class _EditorialPreviewTile extends StatelessWidget {
               child: Image.file(
                 thumbnail!,
                 fit: BoxFit.contain,
-                errorBuilder: (_, _, _) =>
-                    _CoverTypePlaceholder(type: coverType, accent: accent),
+                errorBuilder: (_, _, _) => ColoredBox(
+                  color: AppColors.softAmber,
+                  child: _CoverTypePlaceholder(type: coverType),
+                ),
               ),
             ),
             if (coverType == NoteType.video)
@@ -532,81 +527,46 @@ class _EditorialPreviewTile extends StatelessWidget {
       );
     }
 
-    if (coverType == NoteType.text) {
-      return Container(
-        width: _width,
-        height: _height,
-        decoration: BoxDecoration(
-          color: AppColors.softAmber,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.line),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              context.l10n.quickNoteTile,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: AppColors.ink,
-                fontFamily: 'serif',
-                fontSize: 15,
-                height: 1.25,
-              ),
-            ),
-            const SizedBox(height: 5),
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.fromBorderSide(
-                  BorderSide(color: AppColors.moss, width: 1.5),
-                ),
-              ),
-              child: SizedBox.square(dimension: 7),
-            ),
-          ],
-        ),
-      );
-    }
-
     return Container(
       width: _width,
       height: _height,
       decoration: BoxDecoration(
-        color: accent.withValues(alpha: .1),
+        color: AppColors.softAmber,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.line),
       ),
-      child: _CoverTypePlaceholder(type: coverType, accent: accent),
+      child: _CoverTypePlaceholder(type: coverType),
     );
   }
 }
 
 class _CoverTypePlaceholder extends StatelessWidget {
   final NoteType type;
-  final Color accent;
 
-  const _CoverTypePlaceholder({required this.type, required this.accent});
+  const _CoverTypePlaceholder({required this.type});
 
   @override
-  Widget build(BuildContext context) => Column(
-    mainAxisAlignment: MainAxisAlignment.center,
-    children: [
-      Icon(NoteCard.iconForType(type), color: accent, size: 26),
-      const SizedBox(height: 7),
-      Text(
-        _localizedNoteType(context, type),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          color: accent,
-          fontSize: 10,
-          height: 1,
-          fontWeight: FontWeight.w700,
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(NoteCard.iconForType(type), color: AppColors.moss, size: 27),
+        const SizedBox(height: 7),
+        Text(
+          _localizedNoteType(context, type),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: AppColors.moss,
+            fontSize: 11,
+            height: 1,
+            fontWeight: FontWeight.w700,
+          ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }
 
 class _TypePill extends StatelessWidget {
