@@ -34,4 +34,9 @@ void main() {
     expect(entry.attachmentSummary, '文字 · 4 字');
     expect(entry.readableContent, '# 标题\n\n**重点**');
   });
+
+  test('plain-text projection keeps special characters readable', () {
+    expect(MarkdownText.toPlainText('他说："探索" & 2 < 3'), '他说："探索" & 2 < 3');
+    expect(MarkdownText.toPlainText('&quot;旧内容&quot;'), '"旧内容"');
+  });
 }

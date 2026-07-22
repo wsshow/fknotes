@@ -70,6 +70,16 @@ print('ok');
     expect(NoteBlockCodec.structurallyMatches(blocks, encoded), isTrue);
   });
 
+  test('block codec keeps special characters as editable text', () {
+    const source = '他说："探索" & 2 < 3、5 > 4';
+
+    final blocks = NoteBlockCodec.decode(source);
+
+    expect(blocks.single.text, source);
+    expect(NoteBlockCodec.encode(blocks), source);
+    expect(NoteBlockCodec.decode('他说：&quot;探索&quot;').single.text, '他说："探索"');
+  });
+
   test('Markdown table data preserves cells, escaping and alignment', () {
     final table = MarkdownTableData.tryParse(
       '| 名称 | 说明 |\n| :--- | ---: |\n| FKNotes | 本地 \\| 私密 |',
@@ -1070,6 +1080,45 @@ print('ok');
     await tester.pump();
 
     expect(controller.text, '粘贴内容');
+  });
+
+  testWidgets('platform multiline paste creates semantic Markdown blocks', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    String? richContent;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            controller: controller,
+            hintText: '开始记录',
+            onRichContentChanged: (value) => richContent = value,
+          ),
+        ),
+      ),
+    );
+
+    final field = find.byType(TextField).first;
+    await tester.showKeyboard(field);
+    const pasted = '# 计划\n\n- [x] 完成基础\n\n他说："探索"';
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: pasted,
+        selection: TextSelection.collapsed(offset: pasted.length),
+      ),
+    );
+    await tester.pump();
+
+    final blocks = NoteRichDocumentCodec.tryDecode(richContent)!;
+    expect(blocks.map((block) => block.type), [
+      NoteBlockType.heading,
+      NoteBlockType.todo,
+      NoteBlockType.paragraph,
+    ]);
+    expect(blocks.last.text, '他说："探索"');
+    expect(controller.text, pasted);
+    expect(find.byType(TextField), findsNWidgets(3));
   });
 
   testWidgets('multi-block Markdown paste creates semantic blocks atomically', (

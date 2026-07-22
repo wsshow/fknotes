@@ -10,6 +10,7 @@ abstract final class MarkdownText {
     try {
       final nodes = md.Document(
         extensionSet: md.ExtensionSet.gitHubFlavored,
+        encodeHtml: false,
       ).parse(source);
       final lines = <String>[];
       for (final node in nodes) {

@@ -368,6 +368,7 @@ class NoteBlockCodec {
       try {
         final nodes = md.Document(
           extensionSet: md.ExtensionSet.gitHubFlavored,
+          encodeHtml: false,
         ).parse(markdownSource);
         for (final node in nodes) {
           _appendNode(blocks, node);
@@ -1470,7 +1471,11 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     return _pasteMarkdown(block, source);
   }
 
-  bool _pasteMarkdown(_EditableBlock block, String source) {
+  bool _pasteMarkdown(
+    _EditableBlock block,
+    String source, {
+    TextSelection? replacedSelection,
+  }) {
     final index = _blocks.indexOf(block);
     if (index < 0) return false;
     final parsed = NoteBlockCodec.decode(source).map((item) {
@@ -1481,8 +1486,11 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
       );
     }).toList();
     if (parsed.isEmpty) return false;
-    final selection = block.controller.visibleSelectionValue.isValid
-        ? block.controller.visibleSelectionValue
+    final currentSelection = block.controller.visibleSelectionValue;
+    final selection = replacedSelection?.isValid == true
+        ? replacedSelection!
+        : currentSelection.isValid
+        ? currentSelection
         : TextSelection.collapsed(
             offset: block.controller.visibleTextValue.length,
           );
@@ -2390,6 +2398,11 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
                     inputFormatters: [
                       _BlockInputFormatter(
                         onNewline: (selection) => _splitBlock(block, selection),
+                        onMultilinePaste: (source, selection) => _pasteMarkdown(
+                          block,
+                          source,
+                          replacedSelection: selection,
+                        ),
                         onBackspaceAtStart: () => _backspaceAtStart(block),
                         allowNewlines: code || rawMarkdown,
                       ),
@@ -2530,6 +2543,11 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
                 inputFormatters: [
                   _BlockInputFormatter(
                     onNewline: (selection) => _splitBlock(block, selection),
+                    onMultilinePaste: (source, selection) => _pasteMarkdown(
+                      block,
+                      source,
+                      replacedSelection: selection,
+                    ),
                     onBackspaceAtStart: () => _backspaceAtStart(block),
                     allowNewlines: true,
                   ),
@@ -3533,11 +3551,14 @@ class _EditableBlock {
 
 class _BlockInputFormatter extends TextInputFormatter {
   final ValueChanged<TextSelection> onNewline;
+  final void Function(String source, TextSelection replacedSelection)
+  onMultilinePaste;
   final VoidCallback onBackspaceAtStart;
   final bool allowNewlines;
 
   const _BlockInputFormatter({
     required this.onNewline,
+    required this.onMultilinePaste,
     required this.onBackspaceAtStart,
     this.allowNewlines = false,
   });
@@ -3562,17 +3583,45 @@ class _BlockInputFormatter extends TextInputFormatter {
     final oldText = _BlockTextEditingController.visibleText(oldValue.text);
     final newText = _BlockTextEditingController.visibleText(normalized.text);
     if (allowNewlines) return normalized;
-    final insertedNewline =
-        newText.length >= oldText.length &&
-        newText.contains('\n') &&
-        !oldText.contains('\n');
-    if (insertedNewline) {
-      final selection = oldValue.selection.isValid
-          ? _BlockTextEditingController.visibleSelection(oldValue.selection)
-          : TextSelection.collapsed(offset: oldText.length);
+    final replacement = _replacementBetween(oldText, newText);
+    final inserted = replacement.inserted
+        .replaceAll('\r\n', '\n')
+        .replaceAll('\r', '\n');
+    if (!inserted.contains('\n')) return normalized;
+    final selection = TextSelection(
+      baseOffset: replacement.start,
+      extentOffset: replacement.oldEnd,
+    );
+    if (inserted == '\n') {
       scheduleMicrotask(() => onNewline(selection));
-      return oldValue;
+    } else {
+      scheduleMicrotask(() => onMultilinePaste(inserted, selection));
     }
-    return normalized;
+    return oldValue;
+  }
+
+  static ({int start, int oldEnd, String inserted}) _replacementBetween(
+    String oldText,
+    String newText,
+  ) {
+    var start = 0;
+    while (start < oldText.length &&
+        start < newText.length &&
+        oldText.codeUnitAt(start) == newText.codeUnitAt(start)) {
+      start++;
+    }
+    var oldEnd = oldText.length;
+    var newEnd = newText.length;
+    while (oldEnd > start &&
+        newEnd > start &&
+        oldText.codeUnitAt(oldEnd - 1) == newText.codeUnitAt(newEnd - 1)) {
+      oldEnd--;
+      newEnd--;
+    }
+    return (
+      start: start,
+      oldEnd: oldEnd,
+      inserted: newText.substring(start, newEnd),
+    );
   }
 }
