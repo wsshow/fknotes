@@ -1232,6 +1232,157 @@ print('ok');
     expect(copiedText, '第一段\n\n第二段\n\n第三段');
   });
 
+  testWidgets('headings and quotes share one document-wide selection', (
+    tester,
+  ) async {
+    const blocks = [
+      NoteBlockData(NoteBlockType.heading, '标题', headingLevel: 1),
+      NoteBlockData(NoteBlockType.paragraph, '正文'),
+      NoteBlockData(NoteBlockType.quote, '引用', quoteDepth: 1),
+    ];
+    String? copiedText;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copiedText = (call.arguments as Map)['text'] as String?;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    final controller = TextEditingController(
+      text: NoteBlockCodec.encode(blocks),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            controller: controller,
+            initialRichContent: NoteRichDocumentCodec.encode(blocks),
+            hintText: '开始记录',
+          ),
+        ),
+      ),
+    );
+
+    final field = find.byKey(const ValueKey('unified-note-editor'));
+    expect(field, findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+
+    await tester.longPressAt(tester.getTopLeft(field) + const Offset(24, 18));
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.text('全选'));
+    await tester.pump();
+    await tester.tap(find.text('复制'));
+    await tester.pump();
+
+    expect(copiedText, '标题\n\n正文\n\n引用');
+    expect(controller.text, '# 标题\n\n正文\n\n> 引用');
+  });
+
+  testWidgets('heading and quote styles render inside the unified editable', (
+    tester,
+  ) async {
+    const blocks = [
+      NoteBlockData(NoteBlockType.heading, '标题', headingLevel: 1),
+      NoteBlockData(NoteBlockType.paragraph, '正文'),
+      NoteBlockData(NoteBlockType.quote, '引用', quoteDepth: 1),
+    ];
+    final controller = TextEditingController(
+      text: NoteBlockCodec.encode(blocks),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            controller: controller,
+            initialRichContent: NoteRichDocumentCodec.encode(blocks),
+            hintText: '开始记录',
+          ),
+        ),
+      ),
+    );
+
+    final field = find.byKey(const ValueKey('unified-note-editor'));
+    final widget = tester.widget<TextField>(field);
+    final span = widget.controller!.buildTextSpan(
+      context: tester.element(field),
+      style: widget.style,
+      withComposing: false,
+    );
+    final runs = span.children!.whereType<TextSpan>();
+    final heading = runs.firstWhere((run) => run.text?.contains('标题') ?? false);
+    final quote = runs.firstWhere((run) => run.text?.contains('引用') ?? false);
+
+    expect(heading.style?.fontSize, 28);
+    expect(heading.style?.fontWeight, FontWeight.w800);
+    expect(quote.style?.fontStyle, FontStyle.italic);
+    expect(quote.style?.backgroundColor, isNotNull);
+  });
+
+  testWidgets('block style changes preserve the unified field and caret', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '保留光标');
+    final editorKey = GlobalKey<NoteBlockEditorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            key: editorKey,
+            controller: controller,
+            hintText: '开始记录',
+          ),
+        ),
+      ),
+    );
+
+    final field = find.byKey(const ValueKey('unified-note-editor'));
+    await tester.tap(field);
+    final initialWidget = tester.widget<TextField>(field);
+    final fieldController = initialWidget.controller!;
+    final focusNode = initialWidget.focusNode!;
+    fieldController.selection = TextSelection.collapsed(
+      offset: editorBlockBoundary.length + 2,
+    );
+
+    editorKey.currentState!.setHeadingLevel(2);
+    await tester.pump();
+    var currentWidget = tester.widget<TextField>(field);
+    expect(currentWidget.controller, same(fieldController));
+    expect(currentWidget.focusNode, same(focusNode));
+    expect(focusNode.hasFocus, isTrue);
+    expect(
+      fieldController.selection.extentOffset,
+      editorBlockBoundary.length + 2,
+    );
+    expect(controller.text, '## 保留光标');
+
+    editorKey.currentState!.toggleBlock(NoteBlockType.quote);
+    await tester.pump();
+    currentWidget = tester.widget<TextField>(field);
+    expect(currentWidget.controller, same(fieldController));
+    expect(currentWidget.focusNode, same(focusNode));
+    expect(focusNode.hasFocus, isTrue);
+    expect(
+      fieldController.selection.extentOffset,
+      editorBlockBoundary.length + 2,
+    );
+    expect(controller.text, '> 保留光标');
+
+    editorKey.currentState!.undo();
+    await tester.pump();
+    expect(controller.text, '## 保留光标');
+    expect(find.byKey(const ValueKey('unified-note-editor')), findsOneWidget);
+    expect(focusNode.hasFocus, isTrue);
+  });
+
   testWidgets('long-press selection extends across paragraph boundaries', (
     tester,
   ) async {
