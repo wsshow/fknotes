@@ -504,6 +504,96 @@ print('ok');
     expect(controller.text, '一段连续输入');
   });
 
+  testWidgets('undo keeps exactly one caret across rebuilt blocks', (
+    tester,
+  ) async {
+    EditableText.debugDeterministicCursor = true;
+    addTearDown(() => EditableText.debugDeterministicCursor = false);
+    const original = '第一段\n\n第二段\n\n第三段';
+    final controller = TextEditingController(text: original);
+    final editorKey = GlobalKey<NoteBlockEditorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            key: editorKey,
+            controller: controller,
+            hintText: '开始记录',
+          ),
+        ),
+      ),
+    );
+
+    final editor = find.byType(NoteBlockEditor);
+    final fields = find.descendant(
+      of: editor,
+      matching: find.byType(TextField),
+    );
+    final lastField = fields.last;
+    await tester.tap(lastField);
+    await tester.enterText(lastField, '第三段（已修改）');
+    await tester.pump();
+    final statesBeforeUndo = tester
+        .stateList<EditableTextState>(
+          find.descendant(of: editor, matching: find.byType(EditableText)),
+        )
+        .toList();
+
+    editorKey.currentState!.undo();
+    await tester.pump();
+    await tester.pump();
+
+    expect(controller.text, original);
+    final fieldsAfterUndo = tester
+        .widgetList<TextField>(
+          find.descendant(of: editor, matching: find.byType(TextField)),
+        )
+        .toList();
+    expect(
+      fieldsAfterUndo.where((field) => field.focusNode?.hasFocus ?? false),
+      hasLength(1),
+    );
+    expect(fieldsAfterUndo.first.focusNode?.hasFocus, isTrue);
+    final statesAfterUndo = tester
+        .stateList<EditableTextState>(
+          find.descendant(of: editor, matching: find.byType(EditableText)),
+        )
+        .toList();
+    expect(
+      statesAfterUndo.where((state) => state.cursorCurrentlyVisible),
+      hasLength(1),
+    );
+    expect(
+      statesAfterUndo.any(
+        (state) =>
+            statesBeforeUndo.any((oldState) => identical(oldState, state)),
+      ),
+      isFalse,
+    );
+
+    editorKey.currentState!.redo();
+    await tester.pump();
+    await tester.pump();
+    final fieldsAfterRedo = tester
+        .widgetList<TextField>(
+          find.descendant(of: editor, matching: find.byType(TextField)),
+        )
+        .toList();
+    expect(
+      fieldsAfterRedo.where((field) => field.focusNode?.hasFocus ?? false),
+      hasLength(1),
+    );
+    expect(fieldsAfterRedo.last.focusNode?.hasFocus, isTrue);
+    expect(
+      tester
+          .stateList<EditableTextState>(
+            find.descendant(of: editor, matching: find.byType(EditableText)),
+          )
+          .where((state) => state.cursorCurrentlyVisible),
+      hasLength(1),
+    );
+  });
+
   testWidgets('reviewed assistant output appends safely and is undoable', (
     tester,
   ) async {

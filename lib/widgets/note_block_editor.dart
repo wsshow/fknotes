@@ -1009,6 +1009,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
   int _dictationStart = 0;
   int _dictationLength = 0;
   int _activeIndex = 0;
+  int _focusRequestGeneration = 0;
   bool _syncing = false;
 
   @override
@@ -1371,6 +1372,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
       final generated = _safeAssistantBlocks(text);
       if (generated.isEmpty) return false;
       _beginDiscreteChange();
+      _releaseBlockFocus();
       _syncing = true;
       for (final block in _blocks) {
         block.dispose();
@@ -1571,6 +1573,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
           ),
         ),
     ];
+    _releaseBlockFocus();
     _syncing = true;
     final removed = _blocks.removeAt(index)..dispose();
     assert(removed == block);
@@ -1697,6 +1700,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
   void _restoreSnapshot(_EditorSnapshot snapshot) {
     final decoded = NoteRichDocumentCodec.tryDecode(snapshot.richDocument);
     if (decoded == null || decoded.isEmpty) return;
+    _releaseBlockFocus();
     _restoringHistory = true;
     _syncing = true;
     for (final block in _blocks) {
@@ -2168,6 +2172,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
       mergedStyles,
     );
     _syncing = false;
+    _releaseBlockFocus();
     setState(() {
       _blocks.removeAt(index).dispose();
       _activeIndex = index - 1;
@@ -2218,8 +2223,13 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     int? offset,
     TextSelection? selection,
   }) {
+    final requestGeneration = ++_focusRequestGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_blocks.contains(block)) return;
+      if (!mounted ||
+          requestGeneration != _focusRequestGeneration ||
+          !_blocks.contains(block)) {
+        return;
+      }
       block.focusNode.requestFocus();
       if (selection?.isValid == true) {
         block.controller.visibleSelectionValue = selection!;
@@ -2234,6 +2244,15 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     // Some refocus requests originate from tapping otherwise inert whitespace.
     // That gesture does not necessarily schedule a frame by itself.
     WidgetsBinding.instance.scheduleFrame();
+  }
+
+  void _releaseBlockFocus() {
+    _focusRequestGeneration++;
+    final primaryFocus = FocusManager.instance.primaryFocus;
+    if (primaryFocus != null &&
+        _blocks.any((block) => identical(block.focusNode, primaryFocus))) {
+      primaryFocus.unfocus();
+    }
   }
 
   void focusAtEnd() {
@@ -2297,7 +2316,10 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             for (var index = 0; index < _blocks.length; index++)
-              _buildBlock(index),
+              KeyedSubtree(
+                key: ObjectKey(_blocks[index]),
+                child: _buildBlock(index),
+              ),
           ],
         ),
       ),
