@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:fknotes/app.dart';
 import 'package:fknotes/services/note_assistant_prompt_builder.dart';
 import 'package:fknotes/services/file_storage_service.dart';
 import 'package:fknotes/widgets/editor_context_menu.dart';
@@ -495,7 +494,7 @@ print('ok');
     expect(block.styles.single.attributes.fontSize, 24);
   });
 
-  testWidgets('adjacent quote blocks share a continuous border', (
+  testWidgets('quote blocks keep one editing surface and nested markers', (
     tester,
   ) async {
     const blocks = [
@@ -519,22 +518,11 @@ print('ok');
       ),
     );
 
-    final quoteContainers = tester
-        .widgetList<Container>(find.byType(Container))
-        .where((container) {
-          final decoration = container.decoration;
-          final border = decoration is BoxDecoration ? decoration.border : null;
-          return border is Border &&
-              border.left.width == 2 &&
-              border.left.color == AppColors.coral;
-        })
-        .toList();
-    expect(quoteContainers, hasLength(3));
-    final [first, second, indented] = quoteContainers;
-
-    expect(first.margin, const EdgeInsets.only(top: 1));
-    expect(second.margin, const EdgeInsets.only(bottom: 1));
-    expect(indented.margin, const EdgeInsets.only(left: 18, top: 1, bottom: 1));
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.byKey(const ValueKey('unified-quote-marker-0-0')), findsOne);
+    expect(find.byKey(const ValueKey('unified-quote-marker-1-0')), findsOne);
+    expect(find.byKey(const ValueKey('unified-quote-marker-2-0')), findsOne);
+    expect(find.byKey(const ValueKey('unified-quote-marker-2-1')), findsOne);
   });
 
   testWidgets('undo and redo restore typed text', (tester) async {
