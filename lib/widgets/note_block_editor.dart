@@ -1147,6 +1147,8 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
   late final _BlockTextEditingController _unifiedParagraphController;
   late final List<_UnifiedTextBlockMetadata> _unifiedBlockMetadata;
   final FocusNode _unifiedParagraphFocusNode = FocusNode();
+  String? _unifiedRangeCacheText;
+  List<TextRange> _unifiedRangeCache = const [];
 
   static const _paragraphSeparator = '\n\n';
 
@@ -1171,10 +1173,11 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
         .map(_UnifiedTextBlockMetadata.fromBlock)
         .toList();
     final unified = _flattenParagraphs(blocks);
-    _unifiedParagraphController = _BlockTextEditingController(
-      text: unified.text,
-      styles: unified.styles,
-    )..styleResolver = _unifiedTextStyleAt;
+    _unifiedParagraphController =
+        _BlockTextEditingController(text: unified.text, styles: unified.styles)
+          ..styleResolver = _unifiedTextStyleAt
+          ..leadingSpanResolver = _unifiedLeadingSpan
+          ..replacementSpanResolver = _unifiedReplacementSpanAt;
     if (_usesUnifiedParagraphEditor) {
       _unifiedParagraphController.addListener(_handleUnifiedParagraphChange);
       _unifiedParagraphFocusNode.addListener(_handleUnifiedParagraphFocus);
@@ -1198,9 +1201,15 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
         (block) =>
             (block.type == NoteBlockType.paragraph ||
                 block.type == NoteBlockType.heading ||
-                block.type == NoteBlockType.quote) &&
-            block.indent == 0 &&
-            block.quoteDepth <= 1,
+                block.type == NoteBlockType.quote ||
+                block.type == NoteBlockType.bullet ||
+                block.type == NoteBlockType.ordered ||
+                block.type == NoteBlockType.todo) &&
+            block.indent >= 0 &&
+            block.indent <= 3 &&
+            (block.type == NoteBlockType.quote
+                ? block.quoteDepth >= 1 && block.quoteDepth <= 1
+                : block.quoteDepth == 0),
       );
 
   ({String text, List<NoteTextStyleRange> styles}) _flattenParagraphs(
@@ -1231,7 +1240,9 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
   }
 
   List<TextRange> get _unifiedParagraphRanges {
-    final text = _unifiedParagraphController.visibleTextValue;
+    final rawText = _unifiedParagraphController.text;
+    if (identical(rawText, _unifiedRangeCacheText)) return _unifiedRangeCache;
+    final text = _BlockTextEditingController.visibleText(rawText);
     final ranges = <TextRange>[];
     var start = 0;
     while (start <= text.length) {
@@ -1243,6 +1254,8 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
       ranges.add(TextRange(start: start, end: separator));
       start = separator + _paragraphSeparator.length;
     }
+    _unifiedRangeCacheText = rawText;
+    _unifiedRangeCache = ranges;
     return ranges;
   }
 
@@ -1281,16 +1294,136 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
         fontStyle: FontStyle.italic,
         backgroundColor: AppColors.softCoral.withValues(alpha: .28),
       ),
+      NoteBlockType.todo when metadata.checked => base.copyWith(
+        color: AppColors.muted,
+        decoration: TextDecoration.lineThrough,
+        decorationColor: AppColors.muted,
+      ),
       _ => base,
     };
   }
 
+  InlineSpan _unifiedLeadingSpan(TextStyle base) =>
+      _unifiedBlockLeadingSpan(0, base);
+
+  InlineSpan? _unifiedReplacementSpanAt(int offset, TextStyle base) {
+    final ranges = _unifiedParagraphRanges;
+    final index = _unifiedParagraphIndexForOffset(offset);
+    if (index > 0 && offset == ranges[index].start - 1) {
+      return _unifiedBlockLeadingSpan(index, base);
+    }
+    return null;
+  }
+
+  InlineSpan _unifiedBlockLeadingSpan(int index, TextStyle base) {
+    if (index < 0 || index >= _unifiedBlockMetadata.length) {
+      return const WidgetSpan(child: SizedBox.shrink());
+    }
+    final metadata = _unifiedBlockMetadata[index];
+    final indent = metadata.indent * 18.0;
+    final marker = switch (metadata.type) {
+      NoteBlockType.bullet => const Icon(
+        Icons.circle,
+        size: 6,
+        color: AppColors.ink,
+      ),
+      NoteBlockType.ordered => Text(
+        '${_unifiedOrderedNumber(index)}.',
+        style: base.copyWith(
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+          color: AppColors.muted,
+        ),
+      ),
+      NoteBlockType.todo => GestureDetector(
+        key: ValueKey('unified-todo-$index'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _toggleUnifiedTodo(index),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Icon(
+            metadata.checked
+                ? Icons.check_box_rounded
+                : Icons.check_box_outline_blank_rounded,
+            size: 21,
+            color: metadata.checked ? AppColors.coral : AppColors.muted,
+          ),
+        ),
+      ),
+      NoteBlockType.quote => Container(
+        width: 2,
+        height: 22,
+        decoration: BoxDecoration(
+          color: AppColors.coral,
+          borderRadius: BorderRadius.circular(2),
+        ),
+      ),
+      _ => const SizedBox.shrink(),
+    };
+    final markerWidth = switch (metadata.type) {
+      NoteBlockType.bullet => 28.0,
+      NoteBlockType.ordered => 34.0,
+      NoteBlockType.todo => 34.0,
+      NoteBlockType.quote => 14.0,
+      _ => 0.0,
+    };
+    return WidgetSpan(
+      alignment: PlaceholderAlignment.middle,
+      child: SizedBox(
+        width: indent + markerWidth,
+        height: 27,
+        child: Padding(
+          padding: EdgeInsets.only(left: indent),
+          child: Align(alignment: Alignment.center, child: marker),
+        ),
+      ),
+    );
+  }
+
+  int _unifiedOrderedNumber(int index) {
+    final metadata = _unifiedBlockMetadata[index];
+    var number = 1;
+    for (var current = index - 1; current >= 0; current--) {
+      final previous = _unifiedBlockMetadata[current];
+      if (previous.type != NoteBlockType.ordered ||
+          previous.indent != metadata.indent) {
+        break;
+      }
+      number++;
+    }
+    return number;
+  }
+
+  void _toggleUnifiedTodo(int index) {
+    if (!_usesUnifiedParagraphEditor ||
+        index < 0 ||
+        index >= _unifiedBlockMetadata.length ||
+        _unifiedBlockMetadata[index].type != NoteBlockType.todo) {
+      return;
+    }
+    _beginDiscreteChange();
+    HapticFeedback.selectionClick();
+    _activeIndex = index;
+    _unifiedBlockMetadata[index].checked =
+        !_unifiedBlockMetadata[index].checked;
+    _unifiedParagraphController.notifyStyleChanged();
+    _refreshActiveFormat();
+    _endDiscreteChange();
+  }
+
   int _unifiedParagraphIndexForOffset(int offset) {
     final ranges = _unifiedParagraphRanges;
-    for (var index = 0; index < ranges.length; index++) {
-      if (offset <= ranges[index].end) return index;
+    var lower = 0;
+    var upper = ranges.length - 1;
+    while (lower < upper) {
+      final middle = lower + ((upper - lower) >> 1);
+      if (offset <= ranges[middle].end) {
+        upper = middle;
+      } else {
+        lower = middle + 1;
+      }
     }
-    return ranges.length - 1;
+    return lower;
   }
 
   void _handleUnifiedParagraphChange() {
@@ -1353,6 +1486,39 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     _activeIndex = _unifiedParagraphIndexForOffset(offset);
     final metadata = _unifiedBlockMetadata[_activeIndex]
       ..type = NoteBlockType.paragraph
+      ..checked = false
+      ..headingLevel = 0
+      ..quoteDepth = 0;
+    activeType.value = metadata.type;
+    _unifiedParagraphController.notifyStyleChanged();
+    _refreshActiveFormat();
+    _refocusUnifiedParagraph(
+      selection: TextSelection.collapsed(offset: offset),
+    );
+    _endDiscreteChange();
+  }
+
+  bool _canExitEmptyUnifiedBlockAt(int offset) {
+    if (!_usesUnifiedParagraphEditor || _unifiedBlockMetadata.isEmpty) {
+      return false;
+    }
+    final index = _unifiedParagraphIndexForOffset(offset);
+    final range = _unifiedParagraphRanges[index];
+    return _unifiedBlockMetadata[index].type != NoteBlockType.paragraph &&
+        _unifiedParagraphController.visibleTextValue
+            .substring(range.start, range.end)
+            .trim()
+            .isEmpty;
+  }
+
+  void _exitEmptyUnifiedBlockAt(int offset) {
+    if (!_canExitEmptyUnifiedBlockAt(offset)) return;
+    _beginDiscreteChange();
+    HapticFeedback.selectionClick();
+    _activeIndex = _unifiedParagraphIndexForOffset(offset);
+    final metadata = _unifiedBlockMetadata[_activeIndex]
+      ..type = NoteBlockType.paragraph
+      ..checked = false
       ..headingLevel = 0
       ..quoteDepth = 0;
     activeType.value = metadata.type;
@@ -1970,12 +2136,11 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
   }) {
     if (source.isEmpty) return false;
     final parsed = _safeAssistantBlocks(source);
-    if (!_supportsUnifiedParagraphs(parsed)) {
+    if (!_supportsUnifiedTextBlocks(parsed)) {
       _activateLegacyEditor(refocus: false);
       final block = _activeEditableBlock;
       return block != null && _pasteMarkdown(block, source);
     }
-    final inserted = _flattenParagraphs(parsed);
     final controller = _unifiedParagraphController;
     final original = controller.visibleTextValue;
     final selection = replacedSelection?.isValid == true
@@ -1985,6 +2150,29 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
         : TextSelection.collapsed(offset: original.length);
     final start = selection.start.clamp(0, original.length);
     final end = selection.end.clamp(start, original.length);
+    final inserted = _flattenParagraphs(parsed);
+    if (!_supportsUnifiedParagraphs(parsed)) {
+      if (start != 0 || end != original.length) {
+        _activateLegacyEditor(refocus: false);
+        final block = _activeEditableBlock;
+        return block != null && _pasteMarkdown(block, source);
+      }
+      _beginDiscreteChange();
+      _syncing = true;
+      _unifiedBlockMetadata
+        ..clear()
+        ..addAll(parsed.map(_UnifiedTextBlockMetadata.fromBlock));
+      controller.replaceVisibleText(inserted.text, inserted.styles);
+      _activeIndex = parsed.length - 1;
+      _syncing = false;
+      controller.visibleSelectionValue = TextSelection.collapsed(
+        offset: inserted.text.length,
+      );
+      _syncDocument();
+      _refocusUnifiedParagraph(selection: controller.visibleSelectionValue);
+      _endDiscreteChange();
+      return true;
+    }
     final inherited = controller.attributesForSelection(selection);
     final delta = inserted.text.length - (end - start);
     final insertedStyles =
@@ -2399,6 +2587,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
         underline: attributes.underline,
         fontSize: _unifiedParagraphController.uniformFontSize(selection),
         link: attributes.link,
+        indent: metadata.indent,
         headingLevel: metadata.headingLevel,
       );
       return;
@@ -2603,7 +2792,21 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
   }
 
   void changeIndent(int delta) {
-    if (_usesUnifiedParagraphEditor) _activateLegacyEditor();
+    if (_usesUnifiedParagraphEditor) {
+      final metadata = _unifiedBlockMetadata[_activeIndex];
+      final next = (metadata.indent + delta).clamp(0, 3);
+      if (next == metadata.indent) return;
+      _beginDiscreteChange();
+      HapticFeedback.selectionClick();
+      metadata.indent = next;
+      _unifiedParagraphController.notifyStyleChanged();
+      _refreshActiveFormat();
+      _refocusUnifiedParagraph(
+        selection: _unifiedParagraphController.visibleSelectionValue,
+      );
+      _endDiscreteChange();
+      return;
+    }
     final block = _activeEditableBlock;
     if (block == null) return;
     final next = (block.indent + delta).clamp(0, 3);
@@ -2618,12 +2821,18 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
   }
 
   void toggleBlock(NoteBlockType type) {
-    if (_usesUnifiedParagraphEditor &&
-        (type == NoteBlockType.paragraph || type == NoteBlockType.quote)) {
+    final supportedUnifiedType =
+        type == NoteBlockType.paragraph ||
+        type == NoteBlockType.quote ||
+        type == NoteBlockType.bullet ||
+        type == NoteBlockType.ordered ||
+        type == NoteBlockType.todo;
+    if (_usesUnifiedParagraphEditor && supportedUnifiedType) {
       _beginDiscreteChange();
       HapticFeedback.selectionClick();
       final metadata = _unifiedBlockMetadata[_activeIndex];
       metadata.type = metadata.type == type ? NoteBlockType.paragraph : type;
+      metadata.checked = false;
       metadata.headingLevel = 0;
       metadata.quoteDepth = metadata.type == NoteBlockType.quote ? 1 : 0;
       activeType.value = metadata.type;
@@ -2663,6 +2872,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
       metadata.type = level == null
           ? NoteBlockType.paragraph
           : NoteBlockType.heading;
+      metadata.checked = false;
       metadata.headingLevel = level?.clamp(1, 6) ?? 0;
       metadata.quoteDepth = 0;
       activeType.value = metadata.type;
@@ -3126,6 +3336,8 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
               _ParagraphSeparatorFormatter(
                 shouldRemoveBlockFormatting: _canRemoveUnifiedBlockFormattingAt,
                 onRemoveBlockFormatting: _removeUnifiedBlockFormattingAt,
+                shouldExitEmptyBlock: _canExitEmptyUnifiedBlockAt,
+                onExitEmptyBlock: _exitEmptyUnifiedBlockAt,
                 onMultilinePaste: (source, selection) =>
                     _pasteMarkdownIntoUnifiedParagraphs(
                       source,
@@ -4047,6 +4259,8 @@ class _BlockTextEditingController extends TextEditingController {
   List<NoteTextAttributes> _attributes;
   NoteTextAttributes typingAttributes = NoteTextAttributes.defaults;
   TextStyle Function(int offset, TextStyle base)? styleResolver;
+  InlineSpan Function(TextStyle base)? leadingSpanResolver;
+  InlineSpan? Function(int offset, TextStyle base)? replacementSpanResolver;
   int? _typingAttributesOffset;
 
   _BlockTextEditingController({
@@ -4333,7 +4547,9 @@ class _BlockTextEditingController extends TextEditingController {
     required bool withComposing,
   }) {
     final base = style ?? const TextStyle();
-    final children = <InlineSpan>[TextSpan(text: boundary, style: base)];
+    final children = <InlineSpan>[
+      leadingSpanResolver?.call(base) ?? TextSpan(text: boundary, style: base),
+    ];
     final text = visibleTextValue;
     if (text.isEmpty) return TextSpan(style: base, children: children);
     bool isComposing(int rawOffset) =>
@@ -4343,6 +4559,12 @@ class _BlockTextEditingController extends TextEditingController {
         rawOffset < value.composing.end;
     var start = 0;
     while (start < text.length) {
+      final replacement = replacementSpanResolver?.call(start, base);
+      if (replacement != null) {
+        children.add(replacement);
+        start++;
+        continue;
+      }
       final runBase = styleResolver?.call(start, base) ?? base;
       final attributes = start < _attributes.length
           ? _attributes[start]
@@ -4353,6 +4575,7 @@ class _BlockTextEditingController extends TextEditingController {
           attributes.underline && !_underlineGap.hasMatch(text[start]);
       var end = start + 1;
       while (end < text.length) {
+        if (replacementSpanResolver?.call(end, base) != null) break;
         final nextBase = styleResolver?.call(end, base) ?? base;
         final next = end < _attributes.length
             ? _attributes[end]
@@ -4403,11 +4626,15 @@ class _BlockTextEditingController extends TextEditingController {
 
 class _UnifiedTextBlockMetadata {
   NoteBlockType type;
+  bool checked;
+  int indent;
   int headingLevel;
   int quoteDepth;
 
   _UnifiedTextBlockMetadata({
     required this.type,
+    this.checked = false,
+    this.indent = 0,
     this.headingLevel = 0,
     this.quoteDepth = 0,
   });
@@ -4415,6 +4642,8 @@ class _UnifiedTextBlockMetadata {
   factory _UnifiedTextBlockMetadata.fromBlock(NoteBlockData block) =>
       _UnifiedTextBlockMetadata(
         type: block.type,
+        checked: block.checked,
+        indent: block.indent,
         headingLevel: block.headingLevel,
         quoteDepth: block.quoteDepth,
       );
@@ -4422,9 +4651,21 @@ class _UnifiedTextBlockMetadata {
   _UnifiedTextBlockMetadata metadataForSplit() => switch (type) {
     NoteBlockType.quote => _UnifiedTextBlockMetadata(
       type: NoteBlockType.quote,
-      quoteDepth: quoteDepth.clamp(1, 1),
+      indent: indent,
+      quoteDepth: 1,
     ),
-    _ => _UnifiedTextBlockMetadata(type: NoteBlockType.paragraph),
+    NoteBlockType.bullet || NoteBlockType.ordered => _UnifiedTextBlockMetadata(
+      type: type,
+      indent: indent,
+    ),
+    NoteBlockType.todo => _UnifiedTextBlockMetadata(
+      type: NoteBlockType.todo,
+      indent: indent,
+    ),
+    _ => _UnifiedTextBlockMetadata(
+      type: NoteBlockType.paragraph,
+      indent: indent,
+    ),
   };
 
   NoteBlockData toBlock(
@@ -4433,8 +4674,10 @@ class _UnifiedTextBlockMetadata {
   }) => NoteBlockData(
     type,
     text,
+    checked: type == NoteBlockType.todo && checked,
+    indent: indent.clamp(0, 3),
     headingLevel: type == NoteBlockType.heading ? headingLevel.clamp(1, 6) : 0,
-    quoteDepth: type == NoteBlockType.quote ? quoteDepth.clamp(1, 1) : 0,
+    quoteDepth: type == NoteBlockType.quote ? 1 : 0,
     styles: styles,
   );
 }
@@ -4471,12 +4714,16 @@ class _EditableBlock {
 class _ParagraphSeparatorFormatter extends TextInputFormatter {
   final bool Function(int offset) shouldRemoveBlockFormatting;
   final ValueChanged<int> onRemoveBlockFormatting;
+  final bool Function(int offset) shouldExitEmptyBlock;
+  final ValueChanged<int> onExitEmptyBlock;
   final void Function(String source, TextSelection replacedSelection)
   onMultilinePaste;
 
   const _ParagraphSeparatorFormatter({
     required this.shouldRemoveBlockFormatting,
     required this.onRemoveBlockFormatting,
+    required this.shouldExitEmptyBlock,
+    required this.onExitEmptyBlock,
     required this.onMultilinePaste,
   });
 
@@ -4512,6 +4759,13 @@ class _ParagraphSeparatorFormatter extends TextInputFormatter {
     final inserted = replacement.inserted
         .replaceAll('\r\n', '\n')
         .replaceAll('\r', '\n');
+    if (inserted == '\n' &&
+        oldSelection.isValid &&
+        oldSelection.isCollapsed &&
+        shouldExitEmptyBlock(oldSelection.extentOffset)) {
+      scheduleMicrotask(() => onExitEmptyBlock(oldSelection.extentOffset));
+      return oldValue;
+    }
     final deletedBackwardAtBlockStart =
         inserted.isEmpty &&
         oldSelection.isValid &&

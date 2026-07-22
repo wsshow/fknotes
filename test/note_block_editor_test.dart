@@ -426,7 +426,10 @@ print('ok');
       style: widget.style,
       withComposing: false,
     );
-    final visibleSpans = span.children!.whereType<TextSpan>().skip(1).toList();
+    final visibleSpans = span.children!
+        .whereType<TextSpan>()
+        .where((child) => child.text?.isNotEmpty ?? false)
+        .toList();
 
     expect(visibleSpans.map((child) => child.text), ['甲', ' ', '乙']);
     expect(visibleSpans[0].style?.decoration, TextDecoration.underline);
@@ -989,7 +992,7 @@ print('ok');
     await tester.pump();
 
     expect(controller.text, '- 第一项\n- ');
-    expect(find.byType(TextField), findsNWidgets(2));
+    expect(find.byType(TextField), findsOneWidget);
   });
 
   testWidgets('enter on an empty list item exits the list', (tester) async {
@@ -1009,6 +1012,197 @@ print('ok');
     await tester.pump();
 
     expect(controller.text, '');
+  });
+
+  testWidgets('lists, numbering and todos render in one native editable', (
+    tester,
+  ) async {
+    const blocks = [
+      NoteBlockData(NoteBlockType.bullet, '缩进项目', indent: 1),
+      NoteBlockData(NoteBlockType.ordered, '第一项'),
+      NoteBlockData(NoteBlockType.ordered, '第二项'),
+      NoteBlockData(NoteBlockType.todo, '已完成', checked: true),
+    ];
+    final controller = TextEditingController(
+      text: NoteBlockCodec.encode(blocks),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            controller: controller,
+            initialRichContent: NoteRichDocumentCodec.encode(blocks),
+            hintText: '开始记录',
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('unified-note-editor')), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.byIcon(Icons.circle), findsOneWidget);
+    expect(find.text('1.'), findsOneWidget);
+    expect(find.text('2.'), findsOneWidget);
+    expect(find.byIcon(Icons.check_box_rounded), findsOneWidget);
+
+    final field = find.byKey(const ValueKey('unified-note-editor'));
+    final widget = tester.widget<TextField>(field);
+    final span = widget.controller!.buildTextSpan(
+      context: tester.element(field),
+      style: widget.style,
+      withComposing: false,
+    );
+    final todoRun = span.children!.whereType<TextSpan>().firstWhere(
+      (run) => run.text?.contains('已完成') ?? false,
+    );
+    expect(todoRun.style?.decoration, TextDecoration.lineThrough);
+  });
+
+  testWidgets('list markers stay visual and never leak into copied text', (
+    tester,
+  ) async {
+    const blocks = [
+      NoteBlockData(NoteBlockType.bullet, '项目一'),
+      NoteBlockData(NoteBlockType.ordered, '项目二'),
+      NoteBlockData(NoteBlockType.todo, '项目三'),
+    ];
+    String? copiedText;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copiedText = (call.arguments as Map)['text'] as String?;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    final controller = TextEditingController(
+      text: NoteBlockCodec.encode(blocks),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            controller: controller,
+            initialRichContent: NoteRichDocumentCodec.encode(blocks),
+            hintText: '开始记录',
+          ),
+        ),
+      ),
+    );
+
+    final field = find.byKey(const ValueKey('unified-note-editor'));
+    await tester.longPressAt(tester.getTopLeft(field) + const Offset(48, 18));
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.text('全选'));
+    await tester.pump();
+    await tester.tap(find.text('复制'));
+    await tester.pump();
+
+    expect(copiedText, '项目一\n\n项目二\n\n项目三');
+    expect(copiedText, isNot(contains(editorBlockBoundary)));
+    expect(copiedText, isNot(contains('•')));
+    expect(copiedText, isNot(contains('1.')));
+  });
+
+  testWidgets('todo changes are interactive and undoable without refocusing', (
+    tester,
+  ) async {
+    const blocks = [NoteBlockData(NoteBlockType.todo, '待完成')];
+    final controller = TextEditingController(
+      text: NoteBlockCodec.encode(blocks),
+    );
+    final editorKey = GlobalKey<NoteBlockEditorState>();
+    String? richContent;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            key: editorKey,
+            controller: controller,
+            initialRichContent: NoteRichDocumentCodec.encode(blocks),
+            hintText: '开始记录',
+            onRichContentChanged: (value) => richContent = value,
+          ),
+        ),
+      ),
+    );
+
+    final field = find.byKey(const ValueKey('unified-note-editor'));
+    final fieldWidget = tester.widget<TextField>(field);
+    await tester.tap(field);
+    expect(fieldWidget.focusNode!.hasFocus, isTrue);
+
+    await tester.tap(find.byKey(const ValueKey('unified-todo-0')));
+    await tester.pump();
+    expect(controller.text, '- [x] 待完成');
+    expect(
+      NoteRichDocumentCodec.tryDecode(richContent)!.single.checked,
+      isTrue,
+    );
+    expect(find.byIcon(Icons.check_box_rounded), findsOneWidget);
+    expect(fieldWidget.focusNode!.hasFocus, isTrue);
+    expect(
+      tester.widget<TextField>(field).controller,
+      same(fieldWidget.controller),
+    );
+
+    editorKey.currentState!.undo();
+    await tester.pump();
+    expect(controller.text, '- [ ] 待完成');
+    expect(find.byIcon(Icons.check_box_outline_blank_rounded), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+  });
+
+  testWidgets('list and indent actions retain the input connection and caret', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '项目');
+    final editorKey = GlobalKey<NoteBlockEditorState>();
+    String? richContent;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            key: editorKey,
+            controller: controller,
+            hintText: '开始记录',
+            onRichContentChanged: (value) => richContent = value,
+          ),
+        ),
+      ),
+    );
+
+    final field = find.byKey(const ValueKey('unified-note-editor'));
+    await tester.tap(field);
+    final fieldWidget = tester.widget<TextField>(field);
+    final fieldController = fieldWidget.controller!;
+    final focusNode = fieldWidget.focusNode!;
+    fieldController.selection = TextSelection.collapsed(
+      offset: editorBlockBoundary.length + 1,
+    );
+
+    editorKey.currentState!.changeIndent(1);
+    editorKey.currentState!.toggleBlock(NoteBlockType.bullet);
+    await tester.pump();
+
+    final block = NoteRichDocumentCodec.tryDecode(richContent)!.single;
+    expect(block.type, NoteBlockType.bullet);
+    expect(block.indent, 1);
+    expect(controller.text, '  - 项目');
+    expect(tester.widget<TextField>(field).controller, same(fieldController));
+    expect(tester.widget<TextField>(field).focusNode, same(focusNode));
+    expect(
+      fieldController.selection.extentOffset,
+      editorBlockBoundary.length + 1,
+    );
+    expect(focusNode.hasFocus, isTrue);
   });
 
   for (final block in {
@@ -1488,7 +1682,8 @@ print('ok');
     ]);
     expect(blocks.last.text, '他说："探索"');
     expect(controller.text, pasted);
-    expect(find.byType(TextField), findsNWidgets(3));
+    expect(find.byKey(const ValueKey('unified-note-editor')), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
   });
 
   testWidgets('multi-block Markdown paste creates semantic blocks atomically', (
