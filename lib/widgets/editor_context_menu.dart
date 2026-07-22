@@ -24,6 +24,8 @@ Widget buildAppEditableTextContextMenu(
   BuildContext context,
   EditableTextState editableTextState, {
   Future<void> Function()? onPaste,
+  Future<void> Function()? onCopy,
+  Future<void> Function()? onCut,
 }) {
   final items = editableTextState.contextMenuButtonItems
       .where((item) => _supportedAppContextMenuActions.contains(item.type))
@@ -32,6 +34,16 @@ Widget buildAppEditableTextContextMenu(
     anchors: editableTextState.contextMenuAnchors,
     items: items,
     beforeAction: (type) {
+      final customAction = switch (type) {
+        ContextMenuButtonType.copy => onCopy,
+        ContextMenuButtonType.cut => onCut,
+        _ => null,
+      };
+      if (customAction != null) {
+        ContextMenuController.removeAny();
+        customAction();
+        return true;
+      }
       _excludeBlockBoundary(editableTextState);
       if (type != ContextMenuButtonType.paste || onPaste == null) return false;
       ContextMenuController.removeAny();

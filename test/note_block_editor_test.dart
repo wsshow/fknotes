@@ -1,5 +1,9 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:fknotes/app.dart';
 import 'package:fknotes/services/note_assistant_prompt_builder.dart';
+import 'package:fknotes/services/file_storage_service.dart';
 import 'package:fknotes/widgets/editor_context_menu.dart';
 import 'package:fknotes/widgets/note_block_editor.dart';
 import 'package:fknotes/models/note_entry.dart';
@@ -8,6 +12,23 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  late Directory editorStorageDirectory;
+
+  setUpAll(() async {
+    editorStorageDirectory = await Directory.systemTemp.createTemp(
+      'fknotes-block-editor-test-',
+    );
+    await FileStorageService.instance.init(
+      baseDir: editorStorageDirectory.path,
+    );
+  });
+
+  tearDownAll(() async {
+    if (await editorStorageDirectory.exists()) {
+      await editorStorageDirectory.delete(recursive: true);
+    }
+  });
+
   test('block codec preserves readable text and renumbers ordered lists', () {
     final blocks = NoteBlockCodec.decode(
       '想法\n\n---\n\n1. 第一项\n8. 第二项\n- [x] 已完成\n\n> 一段引用',
@@ -912,6 +933,62 @@ print('ok');
     expect(find.text('附件已移除'), findsOneWidget);
   });
 
+  testWidgets('keyboard image content becomes an inline image node', (
+    tester,
+  ) async {
+    final imageFile = File(
+      FileStorageService.instance.absolutePath('images/pasted.png'),
+    );
+    final fileSize = await tester.runAsync(() async {
+      await imageFile.writeAsBytes(
+        base64Decode(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL7WQAAAABJRU5ErkJggg==',
+        ),
+      );
+      return imageFile.length();
+    });
+    final attachment = NoteAttachment(
+      type: NoteType.image,
+      filePath: 'images/pasted.png',
+      fileName: 'pasted.png',
+      fileSize: fileSize ?? 0,
+      mimeType: 'image/png',
+      createdAt: DateTime(2026, 7, 22),
+    );
+    final controller = TextEditingController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            controller: controller,
+            hintText: '开始记录',
+            attachments: [attachment],
+            onInsertImageContent: (_) async => attachment,
+          ),
+        ),
+      ),
+    );
+
+    final field = find.byKey(const ValueKey('unified-note-editor'));
+    final configuration = tester
+        .widget<TextField>(field)
+        .contentInsertionConfiguration!;
+    expect(configuration.allowedMimeTypes, contains('image/png'));
+    configuration.onContentInserted(
+      const KeyboardInsertedContent(
+        mimeType: 'image/png',
+        uri: 'content://clipboard/pasted.png',
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('unified-image-1')), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+    expect(controller.text, contains('[[附件:images/pasted.png]]'));
+    expect(find.text('pasted.png'), findsNothing);
+  });
+
   testWidgets('table block offers structured row and cell editing', (
     tester,
   ) async {
@@ -959,6 +1036,110 @@ print('ok');
     expect(controller.text, isNot(endsWith('|  |  |  |')));
   });
 
+  testWidgets('code blocks edit in one modal transaction and remain atomic', (
+    tester,
+  ) async {
+    final controller = TextEditingController(
+      text: '```dart\nprint("before");\n```',
+    );
+    final editorKey = GlobalKey<NoteBlockEditorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            key: editorKey,
+            controller: controller,
+            hintText: '开始记录',
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('unified-code-0')), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.text('print("before");'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('unified-code-edit-0')));
+    await tester.pumpAndSettle();
+    final codeEditor = find.byKey(const ValueKey('code-block-editor'));
+    expect(codeEditor, findsOneWidget);
+    final codeEditable = find.descendant(
+      of: codeEditor,
+      matching: find.byType(EditableText),
+    );
+    expect(
+      tester.widget<EditableText>(codeEditable).focusNode.hasFocus,
+      isTrue,
+    );
+    await tester.enterText(codeEditor, 'print("after");');
+    await tester.tap(find.byKey(const ValueKey('code-block-save')));
+    await tester.pumpAndSettle();
+
+    expect(controller.text, '```dart\nprint("after");\n```');
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.text('print("after");'), findsOneWidget);
+
+    editorKey.currentState!.undo();
+    await tester.pump();
+    expect(controller.text, '```dart\nprint("before");\n```');
+  });
+
+  testWidgets('selection crosses atomic nodes and copies meaningful content', (
+    tester,
+  ) async {
+    const blocks = [
+      NoteBlockData(NoteBlockType.paragraph, '上方'),
+      NoteBlockData(NoteBlockType.code, 'print("ok");', codeLanguage: 'dart'),
+      NoteBlockData(NoteBlockType.divider, ''),
+      NoteBlockData(NoteBlockType.paragraph, '下方'),
+    ];
+    String? copiedText;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copiedText = (call.arguments as Map)['text'] as String?;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    final controller = TextEditingController(
+      text: NoteBlockCodec.encode(blocks),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            controller: controller,
+            initialRichContent: NoteRichDocumentCodec.encode(blocks),
+            hintText: '开始记录',
+          ),
+        ),
+      ),
+    );
+
+    final field = find.byKey(const ValueKey('unified-note-editor'));
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.byKey(const ValueKey('unified-code-1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('unified-divider-2')), findsOneWidget);
+
+    await tester.longPressAt(tester.getTopLeft(field) + const Offset(24, 18));
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.text('全选'));
+    await tester.pump();
+    await tester.tap(find.text('复制'));
+    await tester.pump();
+
+    expect(copiedText, '上方\n\nprint("ok");\n\n────────\n\n下方');
+    expect(copiedText, isNot(contains('```')));
+  });
+
   testWidgets('standard divider syntax renders as a real divider', (
     tester,
   ) async {
@@ -973,6 +1154,33 @@ print('ok');
 
     expect(find.byType(Divider), findsOneWidget);
     expect(find.text('---'), findsNothing);
+  });
+
+  testWidgets('text formatting actions never overwrite an atomic node', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '---');
+    final editorKey = GlobalKey<NoteBlockEditorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            key: editorKey,
+            controller: controller,
+            hintText: '开始记录',
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('unified-divider-0')));
+    editorKey.currentState!.setHeadingLevel(2);
+    editorKey.currentState!.toggleBold();
+    editorKey.currentState!.changeIndent(1);
+    await tester.pump();
+
+    expect(controller.text, '---');
+    expect(find.byKey(const ValueKey('unified-divider-0')), findsOneWidget);
   });
 
   testWidgets('pressing enter continues a bullet list', (tester) async {

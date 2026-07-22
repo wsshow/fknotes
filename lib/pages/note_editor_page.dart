@@ -1053,6 +1053,59 @@ class _NoteEditorPageState extends State<NoteEditorPage>
 
   Future<void> _pickImages() => _pickAttachment(NoteType.image);
 
+  Future<NoteAttachment?> _insertPastedImage(
+    KeyboardInsertedContent content,
+  ) async {
+    final bytes = content.data;
+    if (bytes == null || bytes.isEmpty) {
+      if (mounted) {
+        AppFeedback.error(
+          context,
+          context.l10n.attachmentImportTypeFailed(context.l10n.image),
+        );
+      }
+      return null;
+    }
+    final extension = switch (content.mimeType.toLowerCase()) {
+      'image/jpeg' => '.jpg',
+      'image/gif' => '.gif',
+      'image/webp' => '.webp',
+      _ => '.png',
+    };
+    String? imagePath;
+    try {
+      imagePath = await _storage.writeBytes(
+        bytes,
+        'images',
+        extension: extension,
+      );
+      final thumbnailPath = await _storage.generateThumbnailInBackground(
+        imagePath,
+      );
+      final attachment = NoteAttachment(
+        type: NoteType.image,
+        filePath: imagePath,
+        fileName: 'pasted_${DateTime.now().millisecondsSinceEpoch}$extension',
+        fileSize: bytes.length,
+        mimeType: content.mimeType,
+        thumbnailPath: thumbnailPath.isEmpty ? null : thumbnailPath,
+        sortOrder: _attachments.length,
+        createdAt: DateTime.now(),
+      );
+      _addAttachments([attachment]);
+      return attachment;
+    } catch (error) {
+      if (imagePath != null) await _storage.deleteFile(imagePath);
+      if (mounted) {
+        AppFeedback.error(
+          context,
+          context.l10n.attachmentImportTypeFailed(context.l10n.image),
+        );
+      }
+      return null;
+    }
+  }
+
   Future<void> _takePhoto() => _pickAttachment(NoteType.image, camera: true);
 
   Future<void> _pickVideo() => _pickAttachment(NoteType.video);
@@ -1777,6 +1830,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                                 onRichContentChanged: _onRichContentChanged,
                                 attachments: _attachments,
                                 onOpenAttachment: _openAttachment,
+                                onInsertImageContent: _insertPastedImage,
                                 minLines: hasAttachmentContent ? 10 : 16,
                                 hintText: hasAttachmentContent
                                     ? context.l10n.noteDescriptionHint

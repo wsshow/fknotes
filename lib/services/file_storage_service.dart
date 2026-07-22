@@ -101,6 +101,25 @@ class FileStorageService {
     return relativePath;
   }
 
+  /// Writes trusted in-memory content into managed storage.
+  Future<String> writeBytes(
+    Uint8List bytes,
+    String subDir, {
+    required String extension,
+  }) async {
+    if (bytes.isEmpty) throw const FormatException('文件内容为空');
+    final safeExtension = extension.startsWith('.')
+        ? extension.toLowerCase()
+        : '.${extension.toLowerCase()}';
+    if (!RegExp(r'^\.[a-z0-9]{1,8}$').hasMatch(safeExtension)) {
+      throw const FormatException('文件扩展名无效');
+    }
+    final relativePath = '$subDir/${_uuid.v4()}$safeExtension';
+    final destination = File(absolutePath(relativePath));
+    await destination.writeAsBytes(bytes, flush: true);
+    return relativePath;
+  }
+
   /// Move an app-owned temporary file into managed storage. This is normally
   /// an atomic rename and falls back to copy-and-delete across file systems.
   Future<String> moveTemporaryFile(File sourceFile, String subDir) async {
