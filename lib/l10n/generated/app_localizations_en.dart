@@ -3121,4 +3121,193 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get currentCover => 'Current cover';
+
+  @override
+  String get shareNoteAsImage => 'Share as images';
+
+  @override
+  String get noteHasNoShareableContent =>
+      'This note has no content to share yet';
+
+  @override
+  String get createShareImage => 'Create share images';
+
+  @override
+  String get shareImageStyle => 'Style';
+
+  @override
+  String get shareImageCanvas => 'Canvas';
+
+  @override
+  String get shareImageRatio => 'Image ratio';
+
+  @override
+  String get shareImageContent => 'Content';
+
+  @override
+  String get shareImageLayout => 'Layout';
+
+  @override
+  String get shareTemplateLetter => 'A Letter from FKNotes';
+
+  @override
+  String get shareTemplatePlain => 'Plain Paper';
+
+  @override
+  String get shareTemplateNight => 'Night Reading';
+
+  @override
+  String get shareTemplateEditorial => 'Editorial';
+
+  @override
+  String get shareTemplateNewspaper => 'Morning Press';
+
+  @override
+  String get shareTemplateManuscript => 'Grid Manuscript';
+
+  @override
+  String get shareTemplateBotanical => 'Botanical';
+
+  @override
+  String get shareTemplateBlueprint => 'Blueprint';
+
+  @override
+  String get shareTemplateAmber => 'Amber';
+
+  @override
+  String get shareTemplateFilm => 'Film Strip';
+
+  @override
+  String get shareTemplatePostcard => 'Postcard';
+
+  @override
+  String get shareTemplateGallery => 'Gallery Label';
+
+  @override
+  String get shareTemplateNeon => 'Neon';
+
+  @override
+  String get shareTemplateTide => 'Tides';
+
+  @override
+  String get shareTemplateVermilion => 'Vermilion';
+
+  @override
+  String get shareRatioSquare => '1:1 · Square card';
+
+  @override
+  String get shareRatioFourFive => '4:5 · Social portrait';
+
+  @override
+  String get shareRatioThreeFour => '3:4 · Note card';
+
+  @override
+  String get shareRatioNineSixteen => '9:16 · Full screen';
+
+  @override
+  String get shareRatioSixteenNine => '16:9 · Landscape';
+
+  @override
+  String get shareRatioA4 => 'A4 · Document';
+
+  @override
+  String get shareRatioLong => 'Long image · One adaptive canvas';
+
+  @override
+  String get shareLongImageHint =>
+      'The canvas grows with the content and exports as one image';
+
+  @override
+  String get shareRatioCustom => 'Custom size';
+
+  @override
+  String get portraitOrientation => 'Portrait';
+
+  @override
+  String get landscapeOrientation => 'Landscape';
+
+  @override
+  String get shareImageWidth => 'Width';
+
+  @override
+  String get shareImageHeight => 'Height';
+
+  @override
+  String get shareImageQuality => 'Quality';
+
+  @override
+  String get shareQualityStandard => 'Standard · 1080 px short edge';
+
+  @override
+  String get shareQualityHigh => 'High · 1440 px short edge';
+
+  @override
+  String get shareQualityUltra => 'Ultra · 2160 px short edge';
+
+  @override
+  String get includeNoteTitle => 'Show title';
+
+  @override
+  String get includeNoteDate => 'Show date';
+
+  @override
+  String get includeNoteTags => 'Show tags';
+
+  @override
+  String get includeNoteImages => 'Show images';
+
+  @override
+  String get includeNoteAttachments => 'Show attachments';
+
+  @override
+  String get noteShareSource => 'Created with FKNotes · 非空笔记';
+
+  @override
+  String get noteShareSourceAlwaysIncluded =>
+      'The source is kept on every shared image';
+
+  @override
+  String get shareDensityComfortable => 'Comfortable';
+
+  @override
+  String get shareDensityStandard => 'Standard';
+
+  @override
+  String get shareDensityCompact => 'Compact';
+
+  @override
+  String get noteShareUntitled => 'A note';
+
+  @override
+  String get generateAndShare => 'Generate and share';
+
+  @override
+  String get previousPage => 'Previous page';
+
+  @override
+  String get nextPage => 'Next page';
+
+  @override
+  String shareImagePageIndicator(int current, int total) {
+    return 'Page $current of $total';
+  }
+
+  @override
+  String shareImageOutputSummary(int count, int width, int height) {
+    return 'Creates $count PNG images at $width × $height';
+  }
+
+  @override
+  String generatingShareImageProgress(int current, int total) {
+    return 'Generating image $current of $total';
+  }
+
+  @override
+  String shareNoteImageTitle(String title) {
+    return 'Share note: $title';
+  }
+
+  @override
+  String get shareImageGenerationFailed =>
+      'Couldn\'t create the share images. Try another canvas or quality setting.';
 }

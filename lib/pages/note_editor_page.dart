@@ -13,6 +13,7 @@ import '../l10n/l10n.dart';
 import '../l10n/local_model_l10n.dart';
 import '../models/local_chat.dart';
 import '../models/note_entry.dart';
+import '../models/note_share.dart';
 import '../providers/note_provider.dart';
 import '../services/file_storage_service.dart';
 import '../services/editor_draft_recovery_service.dart';
@@ -36,6 +37,7 @@ import '../widgets/realtime_dictation_provider_badge.dart';
 import 'media_detail_page.dart';
 import 'local_chat_page.dart';
 import 'model_management_page.dart';
+import 'note_share_composer_page.dart';
 import 'record_audio_page.dart';
 
 enum _EditorAutosaveState { enabled, pending, saving, saved, failed }
@@ -1219,6 +1221,27 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     _queueRecoveryDraft();
   }
 
+  Future<void> _openShareComposer() async {
+    final now = DateTime.now();
+    final draft = NoteShareDraft(
+      title: _title.text,
+      content: _content.text,
+      tags: List.unmodifiable(_tags),
+      attachments: List.unmodifiable(_attachments),
+      createdAt: _entry?.createdAt ?? now,
+      updatedAt: now,
+    );
+    if (!draft.hasContent) {
+      AppFeedback.show(context, context.l10n.noteHasNoShareableContent);
+      return;
+    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(builder: (_) => NoteShareComposerPage(draft: draft)),
+    );
+  }
+
   Future<void> _openAttachment(NoteAttachment attachment) async {
     _autosave?.cancel();
     if (_changed && !await _persist()) return;
@@ -1524,6 +1547,10 @@ class _NoteEditorPageState extends State<NoteEditorPage>
               icon: const Icon(Icons.more_vert_rounded),
               onSelected: (value) {
                 HapticFeedback.selectionClick();
+                if (value == 'share') {
+                  unawaited(_openShareComposer());
+                  return;
+                }
                 if (value == 'cover') {
                   unawaited(_showCoverSettings());
                   return;
@@ -1541,6 +1568,11 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                 _queueRecoveryDraft();
               },
               actions: [
+                AppMenuAction(
+                  value: 'share',
+                  icon: Icons.ios_share_rounded,
+                  label: context.l10n.shareNoteAsImage,
+                ),
                 AppMenuAction(
                   value: 'cover',
                   icon: Icons.photo_size_select_actual_outlined,

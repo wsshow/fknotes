@@ -2893,4 +2893,189 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get currentCover => '当前封面';
+
+  @override
+  String get shareNoteAsImage => '分享为图片';
+
+  @override
+  String get noteHasNoShareableContent => '笔记还没有可分享的内容';
+
+  @override
+  String get createShareImage => '制作分享图';
+
+  @override
+  String get shareImageStyle => '样式';
+
+  @override
+  String get shareImageCanvas => '画幅';
+
+  @override
+  String get shareImageRatio => '图片比例';
+
+  @override
+  String get shareImageContent => '内容';
+
+  @override
+  String get shareImageLayout => '排版';
+
+  @override
+  String get shareTemplateLetter => '一封非空来信';
+
+  @override
+  String get shareTemplatePlain => '素笺';
+
+  @override
+  String get shareTemplateNight => '夜读';
+
+  @override
+  String get shareTemplateEditorial => '编辑部';
+
+  @override
+  String get shareTemplateNewspaper => '晨刊';
+
+  @override
+  String get shareTemplateManuscript => '方格稿';
+
+  @override
+  String get shareTemplateBotanical => '草木';
+
+  @override
+  String get shareTemplateBlueprint => '蓝图';
+
+  @override
+  String get shareTemplateAmber => '琥珀';
+
+  @override
+  String get shareTemplateFilm => '胶片';
+
+  @override
+  String get shareTemplatePostcard => '远方明信片';
+
+  @override
+  String get shareTemplateGallery => '美术馆';
+
+  @override
+  String get shareTemplateNeon => '霓虹';
+
+  @override
+  String get shareTemplateTide => '潮汐';
+
+  @override
+  String get shareTemplateVermilion => '朱印';
+
+  @override
+  String get shareRatioSquare => '1:1 · 方形卡片';
+
+  @override
+  String get shareRatioFourFive => '4:5 · 社交竖图';
+
+  @override
+  String get shareRatioThreeFour => '3:4 · 笔记卡片';
+
+  @override
+  String get shareRatioNineSixteen => '9:16 · 手机全屏';
+
+  @override
+  String get shareRatioSixteenNine => '16:9 · 横向展示';
+
+  @override
+  String get shareRatioA4 => 'A4 · 文档比例';
+
+  @override
+  String get shareRatioLong => '长图 · 单张自适应';
+
+  @override
+  String get shareLongImageHint => '画布高度随内容延展，全部内容合成一张图片';
+
+  @override
+  String get shareRatioCustom => '自定义尺寸';
+
+  @override
+  String get portraitOrientation => '竖向';
+
+  @override
+  String get landscapeOrientation => '横向';
+
+  @override
+  String get shareImageWidth => '宽度';
+
+  @override
+  String get shareImageHeight => '高度';
+
+  @override
+  String get shareImageQuality => '清晰度';
+
+  @override
+  String get shareQualityStandard => '标准 · 短边 1080 px';
+
+  @override
+  String get shareQualityHigh => '高清 · 短边 1440 px';
+
+  @override
+  String get shareQualityUltra => '超清 · 短边 2160 px';
+
+  @override
+  String get includeNoteTitle => '显示标题';
+
+  @override
+  String get includeNoteDate => '显示日期';
+
+  @override
+  String get includeNoteTags => '显示标签';
+
+  @override
+  String get includeNoteImages => '显示图片';
+
+  @override
+  String get includeNoteAttachments => '显示附件';
+
+  @override
+  String get noteShareSource => '来自「非空笔记」';
+
+  @override
+  String get noteShareSourceAlwaysIncluded => '每张分享图均会保留来源标识';
+
+  @override
+  String get shareDensityComfortable => '舒展';
+
+  @override
+  String get shareDensityStandard => '标准';
+
+  @override
+  String get shareDensityCompact => '紧凑';
+
+  @override
+  String get noteShareUntitled => '一则笔记';
+
+  @override
+  String get generateAndShare => '生成并分享';
+
+  @override
+  String get previousPage => '上一页';
+
+  @override
+  String get nextPage => '下一页';
+
+  @override
+  String shareImagePageIndicator(int current, int total) {
+    return '第 $current 页 · 共 $total 页';
+  }
+
+  @override
+  String shareImageOutputSummary(int count, int width, int height) {
+    return '将生成 $count 张 $width × $height PNG';
+  }
+
+  @override
+  String generatingShareImageProgress(int current, int total) {
+    return '正在生成第 $current/$total 张图片';
+  }
+
+  @override
+  String shareNoteImageTitle(String title) {
+    return '分享笔记：$title';
+  }
+
+  @override
+  String get shareImageGenerationFailed => '无法生成分享图片，请调整画幅或清晰度后重试';
 }

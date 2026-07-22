@@ -5389,6 +5389,360 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'当前封面'**
   String get currentCover;
+
+  /// No description provided for @shareNoteAsImage.
+  ///
+  /// In zh, this message translates to:
+  /// **'分享为图片'**
+  String get shareNoteAsImage;
+
+  /// No description provided for @noteHasNoShareableContent.
+  ///
+  /// In zh, this message translates to:
+  /// **'笔记还没有可分享的内容'**
+  String get noteHasNoShareableContent;
+
+  /// No description provided for @createShareImage.
+  ///
+  /// In zh, this message translates to:
+  /// **'制作分享图'**
+  String get createShareImage;
+
+  /// No description provided for @shareImageStyle.
+  ///
+  /// In zh, this message translates to:
+  /// **'样式'**
+  String get shareImageStyle;
+
+  /// No description provided for @shareImageCanvas.
+  ///
+  /// In zh, this message translates to:
+  /// **'画幅'**
+  String get shareImageCanvas;
+
+  /// No description provided for @shareImageRatio.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片比例'**
+  String get shareImageRatio;
+
+  /// No description provided for @shareImageContent.
+  ///
+  /// In zh, this message translates to:
+  /// **'内容'**
+  String get shareImageContent;
+
+  /// No description provided for @shareImageLayout.
+  ///
+  /// In zh, this message translates to:
+  /// **'排版'**
+  String get shareImageLayout;
+
+  /// No description provided for @shareTemplateLetter.
+  ///
+  /// In zh, this message translates to:
+  /// **'一封非空来信'**
+  String get shareTemplateLetter;
+
+  /// No description provided for @shareTemplatePlain.
+  ///
+  /// In zh, this message translates to:
+  /// **'素笺'**
+  String get shareTemplatePlain;
+
+  /// No description provided for @shareTemplateNight.
+  ///
+  /// In zh, this message translates to:
+  /// **'夜读'**
+  String get shareTemplateNight;
+
+  /// No description provided for @shareTemplateEditorial.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑部'**
+  String get shareTemplateEditorial;
+
+  /// No description provided for @shareTemplateNewspaper.
+  ///
+  /// In zh, this message translates to:
+  /// **'晨刊'**
+  String get shareTemplateNewspaper;
+
+  /// No description provided for @shareTemplateManuscript.
+  ///
+  /// In zh, this message translates to:
+  /// **'方格稿'**
+  String get shareTemplateManuscript;
+
+  /// No description provided for @shareTemplateBotanical.
+  ///
+  /// In zh, this message translates to:
+  /// **'草木'**
+  String get shareTemplateBotanical;
+
+  /// No description provided for @shareTemplateBlueprint.
+  ///
+  /// In zh, this message translates to:
+  /// **'蓝图'**
+  String get shareTemplateBlueprint;
+
+  /// No description provided for @shareTemplateAmber.
+  ///
+  /// In zh, this message translates to:
+  /// **'琥珀'**
+  String get shareTemplateAmber;
+
+  /// No description provided for @shareTemplateFilm.
+  ///
+  /// In zh, this message translates to:
+  /// **'胶片'**
+  String get shareTemplateFilm;
+
+  /// No description provided for @shareTemplatePostcard.
+  ///
+  /// In zh, this message translates to:
+  /// **'远方明信片'**
+  String get shareTemplatePostcard;
+
+  /// No description provided for @shareTemplateGallery.
+  ///
+  /// In zh, this message translates to:
+  /// **'美术馆'**
+  String get shareTemplateGallery;
+
+  /// No description provided for @shareTemplateNeon.
+  ///
+  /// In zh, this message translates to:
+  /// **'霓虹'**
+  String get shareTemplateNeon;
+
+  /// No description provided for @shareTemplateTide.
+  ///
+  /// In zh, this message translates to:
+  /// **'潮汐'**
+  String get shareTemplateTide;
+
+  /// No description provided for @shareTemplateVermilion.
+  ///
+  /// In zh, this message translates to:
+  /// **'朱印'**
+  String get shareTemplateVermilion;
+
+  /// No description provided for @shareRatioSquare.
+  ///
+  /// In zh, this message translates to:
+  /// **'1:1 · 方形卡片'**
+  String get shareRatioSquare;
+
+  /// No description provided for @shareRatioFourFive.
+  ///
+  /// In zh, this message translates to:
+  /// **'4:5 · 社交竖图'**
+  String get shareRatioFourFive;
+
+  /// No description provided for @shareRatioThreeFour.
+  ///
+  /// In zh, this message translates to:
+  /// **'3:4 · 笔记卡片'**
+  String get shareRatioThreeFour;
+
+  /// No description provided for @shareRatioNineSixteen.
+  ///
+  /// In zh, this message translates to:
+  /// **'9:16 · 手机全屏'**
+  String get shareRatioNineSixteen;
+
+  /// No description provided for @shareRatioSixteenNine.
+  ///
+  /// In zh, this message translates to:
+  /// **'16:9 · 横向展示'**
+  String get shareRatioSixteenNine;
+
+  /// No description provided for @shareRatioA4.
+  ///
+  /// In zh, this message translates to:
+  /// **'A4 · 文档比例'**
+  String get shareRatioA4;
+
+  /// No description provided for @shareRatioLong.
+  ///
+  /// In zh, this message translates to:
+  /// **'长图 · 单张自适应'**
+  String get shareRatioLong;
+
+  /// No description provided for @shareLongImageHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'画布高度随内容延展，全部内容合成一张图片'**
+  String get shareLongImageHint;
+
+  /// No description provided for @shareRatioCustom.
+  ///
+  /// In zh, this message translates to:
+  /// **'自定义尺寸'**
+  String get shareRatioCustom;
+
+  /// No description provided for @portraitOrientation.
+  ///
+  /// In zh, this message translates to:
+  /// **'竖向'**
+  String get portraitOrientation;
+
+  /// No description provided for @landscapeOrientation.
+  ///
+  /// In zh, this message translates to:
+  /// **'横向'**
+  String get landscapeOrientation;
+
+  /// No description provided for @shareImageWidth.
+  ///
+  /// In zh, this message translates to:
+  /// **'宽度'**
+  String get shareImageWidth;
+
+  /// No description provided for @shareImageHeight.
+  ///
+  /// In zh, this message translates to:
+  /// **'高度'**
+  String get shareImageHeight;
+
+  /// No description provided for @shareImageQuality.
+  ///
+  /// In zh, this message translates to:
+  /// **'清晰度'**
+  String get shareImageQuality;
+
+  /// No description provided for @shareQualityStandard.
+  ///
+  /// In zh, this message translates to:
+  /// **'标准 · 短边 1080 px'**
+  String get shareQualityStandard;
+
+  /// No description provided for @shareQualityHigh.
+  ///
+  /// In zh, this message translates to:
+  /// **'高清 · 短边 1440 px'**
+  String get shareQualityHigh;
+
+  /// No description provided for @shareQualityUltra.
+  ///
+  /// In zh, this message translates to:
+  /// **'超清 · 短边 2160 px'**
+  String get shareQualityUltra;
+
+  /// No description provided for @includeNoteTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示标题'**
+  String get includeNoteTitle;
+
+  /// No description provided for @includeNoteDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示日期'**
+  String get includeNoteDate;
+
+  /// No description provided for @includeNoteTags.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示标签'**
+  String get includeNoteTags;
+
+  /// No description provided for @includeNoteImages.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示图片'**
+  String get includeNoteImages;
+
+  /// No description provided for @includeNoteAttachments.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示附件'**
+  String get includeNoteAttachments;
+
+  /// No description provided for @noteShareSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'来自「非空笔记」'**
+  String get noteShareSource;
+
+  /// No description provided for @noteShareSourceAlwaysIncluded.
+  ///
+  /// In zh, this message translates to:
+  /// **'每张分享图均会保留来源标识'**
+  String get noteShareSourceAlwaysIncluded;
+
+  /// No description provided for @shareDensityComfortable.
+  ///
+  /// In zh, this message translates to:
+  /// **'舒展'**
+  String get shareDensityComfortable;
+
+  /// No description provided for @shareDensityStandard.
+  ///
+  /// In zh, this message translates to:
+  /// **'标准'**
+  String get shareDensityStandard;
+
+  /// No description provided for @shareDensityCompact.
+  ///
+  /// In zh, this message translates to:
+  /// **'紧凑'**
+  String get shareDensityCompact;
+
+  /// No description provided for @noteShareUntitled.
+  ///
+  /// In zh, this message translates to:
+  /// **'一则笔记'**
+  String get noteShareUntitled;
+
+  /// No description provided for @generateAndShare.
+  ///
+  /// In zh, this message translates to:
+  /// **'生成并分享'**
+  String get generateAndShare;
+
+  /// No description provided for @previousPage.
+  ///
+  /// In zh, this message translates to:
+  /// **'上一页'**
+  String get previousPage;
+
+  /// No description provided for @nextPage.
+  ///
+  /// In zh, this message translates to:
+  /// **'下一页'**
+  String get nextPage;
+
+  /// No description provided for @shareImagePageIndicator.
+  ///
+  /// In zh, this message translates to:
+  /// **'第 {current} 页 · 共 {total} 页'**
+  String shareImagePageIndicator(int current, int total);
+
+  /// No description provided for @shareImageOutputSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'将生成 {count} 张 {width} × {height} PNG'**
+  String shareImageOutputSummary(int count, int width, int height);
+
+  /// No description provided for @generatingShareImageProgress.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在生成第 {current}/{total} 张图片'**
+  String generatingShareImageProgress(int current, int total);
+
+  /// No description provided for @shareNoteImageTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'分享笔记：{title}'**
+  String shareNoteImageTitle(String title);
+
+  /// No description provided for @shareImageGenerationFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法生成分享图片，请调整画幅或清晰度后重试'**
+  String get shareImageGenerationFailed;
 }
 
 class _AppLocalizationsDelegate

@@ -10,6 +10,7 @@ import 'package:fknotes/pages/home_page.dart';
 import 'package:fknotes/pages/local_chat_page.dart';
 import 'package:fknotes/pages/media_detail_page.dart';
 import 'package:fknotes/pages/note_editor_page.dart';
+import 'package:fknotes/pages/note_share_composer_page.dart';
 import 'package:fknotes/pages/record_audio_page.dart';
 import 'package:fknotes/pages/transcript_editor_page.dart';
 import 'package:fknotes/providers/app_lock_controller.dart';
@@ -576,6 +577,33 @@ void main() {
     await tester.tap(find.text('撤销'));
     await tester.pump();
     expect(provider.restored?.id, entry.id);
+  });
+
+  testWidgets('editor shares the current unsaved note snapshot as images', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final provider = _DeletionTrackingProvider();
+    await _pumpEditorRoute(
+      tester,
+      provider: provider,
+      page: const NoteEditorPage(),
+    );
+
+    await tester.enterText(find.byType(TextField).first, '刚刚写下的标题');
+    await tester.pump();
+    await tester.tap(find.byTooltip('更多笔记操作'));
+    await tester.pumpAndSettle();
+    expect(find.text('分享为图片'), findsOneWidget);
+
+    await tester.tap(find.text('分享为图片'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(NoteShareComposerPage), findsOneWidget);
+    final composer = tester.widget<NoteShareComposerPage>(
+      find.byType(NoteShareComposerPage),
+    );
+    expect(composer.draft.title, '刚刚写下的标题');
   });
 
   testWidgets('unsaved note asks before discarding meaningful content', (
