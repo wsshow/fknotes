@@ -1189,35 +1189,15 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     _currentSnapshot = _createSnapshot(_lastRichDocument);
   }
 
-  bool _supportsUnifiedParagraphs(List<NoteBlockData> blocks) =>
-      blocks.isNotEmpty &&
-      blocks.every(
-        (block) =>
-            block.type == NoteBlockType.paragraph &&
-            block.indent == 0 &&
-            block.quoteDepth == 0,
-      );
-
   bool _supportsUnifiedTextBlocks(List<NoteBlockData> blocks) =>
       blocks.isNotEmpty &&
       blocks.every(
         (block) =>
-            (block.type == NoteBlockType.paragraph ||
-                block.type == NoteBlockType.heading ||
-                block.type == NoteBlockType.quote ||
-                block.type == NoteBlockType.bullet ||
-                block.type == NoteBlockType.ordered ||
-                block.type == NoteBlockType.todo ||
-                block.type == NoteBlockType.code ||
-                block.type == NoteBlockType.divider ||
-                block.type == NoteBlockType.attachment ||
-                (block.type == NoteBlockType.rawMarkdown &&
-                    MarkdownTableData.tryParse(block.text) != null)) &&
             block.indent >= 0 &&
             block.indent <= 3 &&
             (block.type == NoteBlockType.quote
-                ? block.quoteDepth >= 1 && block.quoteDepth <= 1
-                : block.quoteDepth == 0),
+                ? block.quoteDepth >= 1 && block.quoteDepth <= 3
+                : block.quoteDepth >= 0 && block.quoteDepth <= 3),
       );
 
   ({String text, List<NoteTextStyleRange> styles}) _flattenParagraphs(
@@ -1342,12 +1322,30 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
         alignment: PlaceholderAlignment.top,
         child: SizedBox(
           width: (screenWidth - 48).clamp(180, 680).toDouble(),
-          child: _buildUnifiedEmbed(index, metadata),
+          child: Container(
+            margin: EdgeInsets.only(
+              left: metadata.quoteDepth > 0
+                  ? (metadata.quoteDepth - 1) * 10
+                  : 0,
+            ),
+            padding: EdgeInsets.only(left: metadata.quoteDepth > 0 ? 10 : 0),
+            decoration: BoxDecoration(
+              border: Border(
+                left: BorderSide(
+                  color: metadata.quoteDepth > 0
+                      ? AppColors.coral
+                      : Colors.transparent,
+                  width: 2,
+                ),
+              ),
+            ),
+            child: _buildUnifiedEmbed(index, metadata),
+          ),
         ),
       );
     }
     final indent = metadata.indent * 18.0;
-    final marker = switch (metadata.type) {
+    final blockMarker = switch (metadata.type) {
       NoteBlockType.bullet => const Icon(
         Icons.circle,
         size: 6,
@@ -1376,31 +1374,44 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
           ),
         ),
       ),
-      NoteBlockType.quote => Container(
-        width: 2,
-        height: 22,
-        decoration: BoxDecoration(
-          color: AppColors.coral,
-          borderRadius: BorderRadius.circular(2),
-        ),
-      ),
+      NoteBlockType.quote => const SizedBox.shrink(),
       _ => const SizedBox.shrink(),
     };
-    final markerWidth = switch (metadata.type) {
+    final blockMarkerWidth = switch (metadata.type) {
       NoteBlockType.bullet => 28.0,
       NoteBlockType.ordered => 34.0,
       NoteBlockType.todo => 34.0,
-      NoteBlockType.quote => 14.0,
       _ => 0.0,
     };
+    final quoteWidth = metadata.quoteDepth * 10.0;
     return WidgetSpan(
       alignment: PlaceholderAlignment.middle,
       child: SizedBox(
-        width: indent + markerWidth,
+        width: indent + quoteWidth + blockMarkerWidth,
         height: 27,
         child: Padding(
           padding: EdgeInsets.only(left: indent),
-          child: Align(alignment: Alignment.center, child: marker),
+          child: Row(
+            children: [
+              for (var depth = 0; depth < metadata.quoteDepth; depth++)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Container(
+                    width: 2,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      color: AppColors.coral,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+              if (blockMarkerWidth > 0)
+                SizedBox(
+                  width: blockMarkerWidth,
+                  child: Align(alignment: Alignment.center, child: blockMarker),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -1423,7 +1434,10 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
   Widget _buildUnifiedEmbed(int index, _UnifiedTextBlockMetadata metadata) =>
       switch (metadata.type) {
         NoteBlockType.code => _buildUnifiedCodeBlock(index, metadata),
-        NoteBlockType.rawMarkdown => _buildUnifiedTableBlock(index, metadata),
+        NoteBlockType.rawMarkdown => _buildUnifiedRawMarkdownBlock(
+          index,
+          metadata,
+        ),
         NoteBlockType.divider => Semantics(
           label: context.l10n.divider,
           child: InkWell(
@@ -1507,11 +1521,24 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     ),
   );
 
-  Widget _buildUnifiedTableBlock(
+  Widget _buildUnifiedRawMarkdownBlock(
     int index,
     _UnifiedTextBlockMetadata metadata,
   ) {
-    final table = MarkdownTableData.tryParse(metadata.payload)!;
+    final table = MarkdownTableData.tryParse(metadata.payload);
+    if (table == null) {
+      return Container(
+        key: ValueKey('unified-markdown-$index'),
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+        decoration: BoxDecoration(
+          color: AppColors.softBlue.withValues(alpha: .52),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.line),
+        ),
+        child: FkMarkdownView(data: metadata.payload, compact: true),
+      );
+    }
     return Container(
       key: ValueKey('unified-table-$index'),
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -2308,69 +2335,115 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     if (selected.isEmpty) return;
     await Clipboard.setData(ClipboardData(text: selected));
     if (!mounted) return;
+    _deleteUnifiedRange(
+      TextSelection(baseOffset: selection.start, extentOffset: selection.end),
+      includesLeadingBoundary: selection.includesLeadingBoundary,
+    );
+  }
+
+  bool _hasUnifiedStructuralSelection(TextSelection selection) {
+    if (!selection.isValid || selection.isCollapsed) return false;
+    return _unifiedParagraphIndexForOffset(selection.start) !=
+        _unifiedParagraphIndexForOffset(selection.end);
+  }
+
+  void _deleteUnifiedRange(
+    TextSelection selection, {
+    bool includesLeadingBoundary = false,
+  }) {
     final document = _unifiedParagraphDocument;
+    if (includesLeadingBoundary &&
+        selection.isCollapsed &&
+        _isUnifiedEmbedType(document.first.type)) {
+      _removeUnifiedEmbed(0);
+      return;
+    }
     final ranges = _unifiedParagraphRanges;
-    final next = <NoteBlockData>[];
-    var firstAffected = -1;
-    for (var index = 0; index < document.length; index++) {
-      final block = document[index];
-      final markerSelected = _unifiedSelectionIncludesBlockMarker(
-        index,
-        selection,
-      );
+    final textLength = _unifiedParagraphController.visibleTextValue.length;
+    final start = selection.start.clamp(0, textLength);
+    final end = selection.end.clamp(start, textLength);
+    final startIndex = _unifiedParagraphIndexForOffset(start);
+    final endIndex = _unifiedParagraphIndexForOffset(end);
+    if (startIndex == endIndex) {
+      final block = document[startIndex];
       if (_isUnifiedEmbedType(block.type)) {
-        if (markerSelected) {
-          firstAffected = firstAffected < 0 ? next.length : firstAffected;
-        } else {
-          next.add(block);
-        }
-        continue;
+        _removeUnifiedEmbed(startIndex);
+        return;
       }
-      final localStart =
-          selection.start.clamp(ranges[index].start, ranges[index].end) -
-          ranges[index].start;
-      final localEnd =
-          selection.end.clamp(ranges[index].start, ranges[index].end) -
-          ranges[index].start;
-      if (localStart >= localEnd) {
-        next.add(block);
-        continue;
-      }
-      firstAffected = firstAffected < 0 ? next.length : firstAffected;
-      if (markerSelected && localStart == 0 && localEnd == block.text.length) {
-        continue;
-      }
-      final styles = [
-        ..._unifiedParagraphController.styleRangesFor(
-          ranges[index].start,
-          ranges[index].start + localStart,
-          shift: -ranges[index].start,
+      final range = ranges[startIndex];
+      _replaceUnifiedBlockRangeWithBlocks(
+        startIndex,
+        TextSelection(
+          baseOffset: start - range.start,
+          extentOffset: end - range.start,
         ),
-        ..._unifiedParagraphController.styleRangesFor(
-          ranges[index].start + localEnd,
-          ranges[index].end,
-          shift: -(ranges[index].start + localEnd) + localStart,
-        ),
-      ];
+        const [NoteBlockData(NoteBlockType.paragraph, '')],
+      );
+      return;
+    }
+
+    final next = document.sublist(0, startIndex);
+    final first = document[startIndex];
+    final firstRange = ranges[startIndex];
+    final prefixLength =
+        start.clamp(firstRange.start, firstRange.end) - firstRange.start;
+    final prefix = _isUnifiedEmbedType(first.type)
+        ? ''
+        : first.text.substring(0, prefixLength);
+    final prefixStyles = _isUnifiedEmbedType(first.type)
+        ? const <NoteTextStyleRange>[]
+        : _unifiedParagraphController.styleRangesFor(
+            firstRange.start,
+            firstRange.start + prefixLength,
+            shift: -firstRange.start,
+          );
+
+    final last = document[endIndex];
+    final lastRange = ranges[endIndex];
+    final suffixStart =
+        end.clamp(lastRange.start, lastRange.end) - lastRange.start;
+    final suffix = _isUnifiedEmbedType(last.type)
+        ? ''
+        : last.text.substring(suffixStart);
+    final suffixStyles = _isUnifiedEmbedType(last.type)
+        ? const <NoteTextStyleRange>[]
+        : _unifiedParagraphController.styleRangesFor(
+            lastRange.start + suffixStart,
+            lastRange.end,
+            shift: -(lastRange.start + suffixStart) + prefix.length,
+          );
+
+    var mergedIndex = -1;
+    if (prefix.isNotEmpty || suffix.isNotEmpty) {
+      final base = prefix.isNotEmpty && !_isUnifiedEmbedType(first.type)
+          ? first
+          : !_isUnifiedEmbedType(last.type)
+          ? last
+          : const NoteBlockData(NoteBlockType.paragraph, '');
+      mergedIndex = next.length;
       next.add(
-        _copyTextBlock(
-          block,
-          block.text.replaceRange(localStart, localEnd, ''),
-          styles,
-        ),
+        _copyTextBlock(base, '$prefix$suffix', [
+          ...prefixStyles,
+          ...suffixStyles,
+        ]),
       );
     }
-    if (firstAffected < 0) return;
+    next.addAll(document.skip(endIndex + 1));
     if (next.isEmpty) {
       next.add(const NoteBlockData(NoteBlockType.paragraph, ''));
     }
     _beginDiscreteChange();
-    final target = firstAffected.clamp(0, next.length - 1);
+    final target = (mergedIndex >= 0 ? mergedIndex : startIndex).clamp(
+      0,
+      next.length - 1,
+    );
     final offset = _unifiedBlockStartOffset(next, target);
     _replaceUnifiedDocument(
       next,
       activeIndex: target,
-      selection: TextSelection.collapsed(offset: offset),
+      selection: TextSelection.collapsed(
+        offset: offset + (mergedIndex >= 0 ? prefix.length : 0),
+      ),
     );
     _endDiscreteChange();
   }
@@ -2510,6 +2583,27 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     );
   }
 
+  bool _ensureUnifiedTextInsertionTarget() {
+    final controller = _unifiedParagraphController;
+    final text = controller.visibleTextValue;
+    final selection = controller.visibleSelectionValue;
+    final caret = selection.isValid
+        ? selection.extentOffset.clamp(0, text.length)
+        : text.length;
+    final index = _unifiedParagraphIndexForOffset(caret);
+    if (!_isUnifiedEmbedType(_unifiedBlockMetadata[index].type)) return true;
+    final document = _unifiedParagraphDocument;
+    final target = index + 1;
+    document.insert(target, const NoteBlockData(NoteBlockType.paragraph, ''));
+    final offset = _unifiedBlockStartOffset(document, target);
+    _replaceUnifiedDocument(
+      document,
+      activeIndex: target,
+      selection: TextSelection.collapsed(offset: offset),
+    );
+    return true;
+  }
+
   void undo() {
     if (_documentSyncTimer != null) flushPendingChanges();
     if (_undoStack.isEmpty) return;
@@ -2534,6 +2628,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
   /// taking ownership of the caret or disabling normal keyboard editing.
   bool prepareDictationInsertion() {
     if (_usesUnifiedParagraphEditor) {
+      _ensureUnifiedTextInsertionTarget();
       final text = _unifiedParagraphController.visibleTextValue;
       final selection = _unifiedParagraphController.visibleSelectionValue;
       final caret = selection.isValid
@@ -2542,7 +2637,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
       _unifiedParagraphController.visibleSelectionValue =
           TextSelection.collapsed(offset: caret);
       _activeIndex = _unifiedParagraphIndexForOffset(caret);
-      activeType.value = NoteBlockType.paragraph;
+      activeType.value = _unifiedBlockMetadata[_activeIndex].type;
       return true;
     }
     if (_blocks.isEmpty) return false;
@@ -2623,7 +2718,29 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
   /// model output can never manufacture a live reference to a local file.
   bool appendAssistantText({required String heading, required String text}) {
     if (text.trim().isEmpty) return false;
-    if (_usesUnifiedParagraphEditor) _activateLegacyEditor(refocus: false);
+    if (_usesUnifiedParagraphEditor) {
+      final generated = _safeAssistantBlocks(text);
+      if (generated.isEmpty) return false;
+      _beginDiscreteChange();
+      final document = _unifiedParagraphDocument
+        ..add(NoteBlockData(NoteBlockType.heading, heading, headingLevel: 2))
+        ..addAll(generated);
+      final target = document.length - 1;
+      final offset = _unifiedBlockStartOffset(document, target);
+      _replaceUnifiedDocument(
+        document,
+        activeIndex: target,
+        selection: TextSelection.collapsed(
+          offset:
+              offset +
+              (_isUnifiedEmbedType(document[target].type)
+                  ? 0
+                  : document[target].text.length),
+        ),
+      );
+      _endDiscreteChange();
+      return true;
+    }
     _beginDiscreteChange();
     final generated = _safeAssistantBlocks(text);
     _blocks.add(
@@ -2732,11 +2849,66 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
         NoteRichDocumentCodec.encode(_document) != anchor.expectedDocument) {
       return false;
     }
-    if (_usesUnifiedParagraphEditor) {
-      _activateLegacyEditor(refocus: false);
-    }
     if (placement == NoteAssistantPlacement.append) {
       return appendAssistantText(heading: heading, text: text);
+    }
+    if (_usesUnifiedParagraphEditor) {
+      final document = _unifiedParagraphDocument;
+      final generated = _safeAssistantBlocks(text);
+      if (generated.isEmpty) return false;
+      if (scope == NoteAssistantScope.fullNote) {
+        if (placement != NoteAssistantPlacement.replace) return false;
+        _beginDiscreteChange();
+        final target = generated.length - 1;
+        final offset = _unifiedBlockStartOffset(generated, target);
+        _replaceUnifiedDocument(
+          generated,
+          activeIndex: target,
+          selection: TextSelection.collapsed(
+            offset:
+                offset +
+                (_isUnifiedEmbedType(generated[target].type)
+                    ? 0
+                    : generated[target].text.length),
+          ),
+        );
+        _endDiscreteChange();
+        return true;
+      }
+      if (anchor.blockIndex < 0 || anchor.blockIndex >= document.length) {
+        return false;
+      }
+      final anchored = document[anchor.blockIndex];
+      if (anchored.text != anchor.expectedBlockText) return false;
+      if (placement == NoteAssistantPlacement.replace) {
+        final selection = scope == NoteAssistantScope.selection
+            ? anchor.selection
+            : TextSelection(baseOffset: 0, extentOffset: anchored.text.length);
+        _replaceUnifiedBlockRangeWithBlocks(
+          anchor.blockIndex,
+          selection,
+          generated,
+        );
+        return true;
+      }
+      if (placement != NoteAssistantPlacement.insertBelow) return false;
+      _beginDiscreteChange();
+      document.insertAll(anchor.blockIndex + 1, generated);
+      final target = anchor.blockIndex + generated.length;
+      final offset = _unifiedBlockStartOffset(document, target);
+      _replaceUnifiedDocument(
+        document,
+        activeIndex: target,
+        selection: TextSelection.collapsed(
+          offset:
+              offset +
+              (_isUnifiedEmbedType(document[target].type)
+                  ? 0
+                  : document[target].text.length),
+        ),
+      );
+      _endDiscreteChange();
+      return true;
     }
     if (scope == NoteAssistantScope.fullNote) {
       if (placement != NoteAssistantPlacement.replace) return false;
@@ -2793,6 +2965,227 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     setState(() {});
     _focusAssistantResult();
     return true;
+  }
+
+  void _replaceUnifiedBlockRangeWithBlocks(
+    int index,
+    TextSelection localSelection,
+    List<NoteBlockData> replacement,
+  ) {
+    final document = _unifiedParagraphDocument;
+    if (index < 0 || index >= document.length) return;
+    final current = document[index];
+    if (!_isUnifiedEmbedType(current.type) &&
+        replacement.length == 1 &&
+        replacement.single.type == NoteBlockType.paragraph) {
+      final range = _unifiedParagraphRanges[index];
+      final start = localSelection.start.clamp(0, current.text.length);
+      final end = localSelection.end.clamp(start, current.text.length);
+      final inline = replacement.single;
+      final delta = inline.text.length - (end - start);
+      final inherited = _unifiedParagraphController.attributesForSelection(
+        TextSelection(
+          baseOffset: range.start + start,
+          extentOffset: range.start + end,
+        ),
+      );
+      final inlineStyles =
+          inline.styles.isEmpty &&
+              inherited != NoteTextAttributes.defaults &&
+              inline.text.isNotEmpty
+          ? [NoteTextStyleRange(0, inline.text.length, inherited)]
+          : inline.styles;
+      final styles = [
+        ..._unifiedParagraphController.styleRangesFor(
+          range.start,
+          range.start + start,
+          shift: -range.start,
+        ),
+        for (final style in inlineStyles)
+          NoteTextStyleRange(
+            style.start + start,
+            style.end + start,
+            style.attributes,
+          ),
+        ..._unifiedParagraphController.styleRangesFor(
+          range.start + end,
+          range.end,
+          shift: -range.start + delta,
+        ),
+      ];
+      document[index] = _copyTextBlock(
+        current,
+        current.text.replaceRange(start, end, inline.text),
+        styles,
+      );
+      _beginDiscreteChange();
+      final offset = _unifiedBlockStartOffset(document, index);
+      _replaceUnifiedDocument(
+        document,
+        activeIndex: index,
+        selection: TextSelection.collapsed(
+          offset: offset + start + inline.text.length,
+        ),
+      );
+      _endDiscreteChange();
+      return;
+    }
+    final inserted = <NoteBlockData>[];
+    if (_isUnifiedEmbedType(current.type)) {
+      inserted.addAll(replacement);
+    } else {
+      final start = localSelection.start.clamp(0, current.text.length);
+      final end = localSelection.end.clamp(start, current.text.length);
+      if (start > 0) {
+        inserted.add(
+          _copyTextBlock(
+            current,
+            current.text.substring(0, start),
+            _unifiedParagraphController.styleRangesFor(
+              _unifiedParagraphRanges[index].start,
+              _unifiedParagraphRanges[index].start + start,
+              shift: -_unifiedParagraphRanges[index].start,
+            ),
+          ),
+        );
+      }
+      inserted.addAll(replacement);
+      if (end < current.text.length) {
+        final range = _unifiedParagraphRanges[index];
+        inserted.add(
+          NoteBlockData(
+            NoteBlockType.paragraph,
+            current.text.substring(end),
+            styles: _unifiedParagraphController.styleRangesFor(
+              range.start + end,
+              range.end,
+              shift: -(range.start + end),
+            ),
+          ),
+        );
+      }
+    }
+    if (inserted.isEmpty) {
+      inserted.add(const NoteBlockData(NoteBlockType.paragraph, ''));
+    }
+    _beginDiscreteChange();
+    document.replaceRange(index, index + 1, inserted);
+    final replacementEnd =
+        index +
+        replacement.length +
+        (inserted.length > replacement.length &&
+                !_isUnifiedEmbedType(current.type) &&
+                localSelection.start > 0
+            ? 1
+            : 0);
+    final target = (replacementEnd - 1).clamp(index, document.length - 1);
+    final targetOffset = _unifiedBlockStartOffset(document, target);
+    _replaceUnifiedDocument(
+      document,
+      activeIndex: target,
+      selection: TextSelection.collapsed(
+        offset:
+            targetOffset +
+            (_isUnifiedEmbedType(document[target].type)
+                ? 0
+                : document[target].text.length),
+      ),
+    );
+    _endDiscreteChange();
+  }
+
+  void _replaceUnifiedRangeWithBlocks(
+    TextSelection selection,
+    List<NoteBlockData> replacement,
+  ) {
+    final document = _unifiedParagraphDocument;
+    final textLength = _unifiedParagraphController.visibleTextValue.length;
+    final start = selection.start.clamp(0, textLength);
+    final end = selection.end.clamp(start, textLength);
+    final startIndex = _unifiedParagraphIndexForOffset(start);
+    final endIndex = _unifiedParagraphIndexForOffset(end);
+    if (startIndex == endIndex) {
+      final range = _unifiedParagraphRanges[startIndex];
+      _replaceUnifiedBlockRangeWithBlocks(
+        startIndex,
+        TextSelection(
+          baseOffset: start - range.start,
+          extentOffset: end - range.start,
+        ),
+        replacement,
+      );
+      return;
+    }
+
+    final inserted = <NoteBlockData>[];
+    final first = document[startIndex];
+    final firstRange = _unifiedParagraphRanges[startIndex];
+    final firstCut =
+        start.clamp(firstRange.start, firstRange.end) - firstRange.start;
+    if (!_isUnifiedEmbedType(first.type) && firstCut > 0) {
+      inserted.add(
+        _copyTextBlock(
+          first,
+          first.text.substring(0, firstCut),
+          _unifiedParagraphController.styleRangesFor(
+            firstRange.start,
+            firstRange.start + firstCut,
+            shift: -firstRange.start,
+          ),
+        ),
+      );
+    }
+    final replacementStart = inserted.length;
+    inserted.addAll(replacement);
+
+    final last = document[endIndex];
+    final lastRange = _unifiedParagraphRanges[endIndex];
+    final lastCut = end.clamp(lastRange.start, lastRange.end) - lastRange.start;
+    var hasTrailingText = false;
+    if (!_isUnifiedEmbedType(last.type) && lastCut < last.text.length) {
+      inserted.add(
+        NoteBlockData(
+          NoteBlockType.paragraph,
+          last.text.substring(lastCut),
+          styles: _unifiedParagraphController.styleRangesFor(
+            lastRange.start + lastCut,
+            lastRange.end,
+            shift: -(lastRange.start + lastCut),
+          ),
+        ),
+      );
+      hasTrailingText = true;
+    }
+    if (!hasTrailingText &&
+        replacement.isNotEmpty &&
+        _isUnifiedEmbedType(replacement.last.type) &&
+        endIndex == document.length - 1) {
+      inserted.add(const NoteBlockData(NoteBlockType.paragraph, ''));
+      hasTrailingText = true;
+    }
+    if (inserted.isEmpty) {
+      inserted.add(const NoteBlockData(NoteBlockType.paragraph, ''));
+      hasTrailingText = true;
+    }
+
+    _beginDiscreteChange();
+    document.replaceRange(startIndex, endIndex + 1, inserted);
+    final target = hasTrailingText
+        ? startIndex + inserted.length - 1
+        : startIndex + replacementStart + replacement.length - 1;
+    final targetOffset = _unifiedBlockStartOffset(document, target);
+    _replaceUnifiedDocument(
+      document,
+      activeIndex: target,
+      selection: TextSelection.collapsed(
+        offset:
+            targetOffset +
+            (hasTrailingText || _isUnifiedEmbedType(document[target].type)
+                ? 0
+                : document[target].text.length),
+      ),
+    );
+    _endDiscreteChange();
   }
 
   void _focusAssistantResult() {
@@ -2858,75 +3251,13 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
       final block = _activeEditableBlock;
       return block != null && _pasteMarkdown(block, source);
     }
-    final controller = _unifiedParagraphController;
-    final original = controller.visibleTextValue;
+    final original = _unifiedParagraphController.visibleTextValue;
     final selection = replacedSelection?.isValid == true
         ? replacedSelection!
-        : controller.visibleSelectionValue.isValid
-        ? controller.visibleSelectionValue
+        : _unifiedParagraphController.visibleSelectionValue.isValid
+        ? _unifiedParagraphController.visibleSelectionValue
         : TextSelection.collapsed(offset: original.length);
-    final start = selection.start.clamp(0, original.length);
-    final end = selection.end.clamp(start, original.length);
-    final inserted = _flattenParagraphs(parsed);
-    if (!_supportsUnifiedParagraphs(parsed)) {
-      if (start != 0 || end != original.length) {
-        _activateLegacyEditor(refocus: false);
-        final block = _activeEditableBlock;
-        return block != null && _pasteMarkdown(block, source);
-      }
-      _beginDiscreteChange();
-      _syncing = true;
-      _unifiedBlockMetadata
-        ..clear()
-        ..addAll(parsed.map(_UnifiedTextBlockMetadata.fromBlock));
-      controller.replaceVisibleText(inserted.text, inserted.styles);
-      _activeIndex = parsed.length - 1;
-      _syncing = false;
-      controller.visibleSelectionValue = TextSelection.collapsed(
-        offset: inserted.text.length,
-      );
-      _syncDocument();
-      _refocusUnifiedParagraph(selection: controller.visibleSelectionValue);
-      _endDiscreteChange();
-      return true;
-    }
-    final inherited = controller.attributesForSelection(selection);
-    final delta = inserted.text.length - (end - start);
-    final insertedStyles =
-        inserted.styles.isEmpty &&
-            inherited != NoteTextAttributes.defaults &&
-            inserted.text.isNotEmpty
-        ? [NoteTextStyleRange(start, start + inserted.text.length, inherited)]
-        : [
-            for (final range in inserted.styles)
-              NoteTextStyleRange(
-                range.start + start,
-                range.end + start,
-                range.attributes,
-              ),
-          ];
-    final styles = [
-      ...controller.styleRangesFor(0, start),
-      ...insertedStyles,
-      ...controller.styleRangesFor(end, original.length, shift: delta),
-    ];
-    _beginDiscreteChange();
-    _syncing = true;
-    controller.replaceVisibleText(
-      original.replaceRange(start, end, inserted.text),
-      styles,
-    );
-    _activeIndex = _unifiedParagraphIndexForOffset(
-      start + inserted.text.length,
-    );
-    _reconcileUnifiedBlockMetadata();
-    _syncing = false;
-    controller.visibleSelectionValue = TextSelection.collapsed(
-      offset: start + inserted.text.length,
-    );
-    _syncDocument();
-    _refocusUnifiedParagraph(selection: controller.visibleSelectionValue);
-    _endDiscreteChange();
+    _replaceUnifiedRangeWithBlocks(selection, parsed);
     return true;
   }
 
@@ -3099,6 +3430,8 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
       _dictationSnapshot = _currentSnapshot;
       _dictationBlock = null;
       _dictatingUnifiedDocument = true;
+      _dictating = true;
+      _ensureUnifiedTextInsertionTarget();
       final controller = _unifiedParagraphController;
       final text = controller.visibleTextValue;
       final selection = controller.visibleSelectionValue;
@@ -3108,18 +3441,24 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
       final end = selection.isValid
           ? selection.end.clamp(start, text.length)
           : start;
-      _dictationStart = start;
       _dictationLength = 0;
-      _dictating = true;
       controller.typingAttributes = controller.attributesForSelection(
         TextSelection.collapsed(offset: start),
       );
       if (end > start) {
-        controller.value = TextEditingValue(
-          text: text.replaceRange(start, end, ''),
-          selection: TextSelection.collapsed(offset: start),
-        );
+        if (_hasUnifiedStructuralSelection(selection)) {
+          _deleteUnifiedRange(selection);
+        } else {
+          controller.value = TextEditingValue(
+            text: text.replaceRange(start, end, ''),
+            selection: TextSelection.collapsed(offset: start),
+          );
+        }
       }
+      _dictationStart = controller.visibleSelectionValue.extentOffset.clamp(
+        0,
+        controller.visibleTextValue.length,
+      );
       return true;
     }
     var block = _activeEditableBlock;
@@ -4215,6 +4554,8 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
                 onRemoveBlockFormatting: _removeUnifiedBlockFormattingAt,
                 hasEmbedBefore: _hasUnifiedEmbedBefore,
                 onRemoveEmbedBefore: _removeUnifiedEmbedBefore,
+                hasStructuralSelection: _hasUnifiedStructuralSelection,
+                onDeleteStructuralSelection: _deleteUnifiedRange,
                 shouldExitEmptyBlock: _canExitEmptyUnifiedBlockAt,
                 onExitEmptyBlock: _exitEmptyUnifiedBlockAt,
                 onMultilinePaste: (source, selection) =>
@@ -5608,6 +5949,8 @@ class _ParagraphSeparatorFormatter extends TextInputFormatter {
   final ValueChanged<int> onRemoveBlockFormatting;
   final bool Function(int offset) hasEmbedBefore;
   final ValueChanged<int> onRemoveEmbedBefore;
+  final bool Function(TextSelection selection) hasStructuralSelection;
+  final ValueChanged<TextSelection> onDeleteStructuralSelection;
   final bool Function(int offset) shouldExitEmptyBlock;
   final ValueChanged<int> onExitEmptyBlock;
   final void Function(String source, TextSelection replacedSelection)
@@ -5618,6 +5961,8 @@ class _ParagraphSeparatorFormatter extends TextInputFormatter {
     required this.onRemoveBlockFormatting,
     required this.hasEmbedBefore,
     required this.onRemoveEmbedBefore,
+    required this.hasStructuralSelection,
+    required this.onDeleteStructuralSelection,
     required this.shouldExitEmptyBlock,
     required this.onExitEmptyBlock,
     required this.onMultilinePaste,
@@ -5655,6 +6000,13 @@ class _ParagraphSeparatorFormatter extends TextInputFormatter {
     final inserted = replacement.inserted
         .replaceAll('\r\n', '\n')
         .replaceAll('\r', '\n');
+    if (inserted.isEmpty &&
+        oldSelection.isValid &&
+        !oldSelection.isCollapsed &&
+        hasStructuralSelection(oldSelection)) {
+      scheduleMicrotask(() => onDeleteStructuralSelection(oldSelection));
+      return oldValue;
+    }
     if (inserted == '\n' &&
         oldSelection.isValid &&
         oldSelection.isCollapsed &&

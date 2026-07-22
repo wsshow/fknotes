@@ -691,6 +691,8 @@ print('ok');
     expect(blocks[2].type, NoteBlockType.todo);
     expect(blocks[3].type, NoteBlockType.paragraph);
     expect(blocks[3].text, '附件引用：private/secret.txt');
+    expect(find.byKey(const ValueKey('unified-note-editor')), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
 
     editorKey.currentState!.undo();
     await tester.pump();
@@ -736,6 +738,8 @@ print('ok');
     await tester.pump();
 
     expect(controller.text, '保留这段**新内容**');
+    expect(find.byKey(const ValueKey('unified-note-editor')), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
     editorKey.currentState!.undo();
     await tester.pump();
     expect(controller.text, '保留这段旧内容');
@@ -788,6 +792,8 @@ print('ok');
     );
     await tester.pump();
     expect(controller.text, '# 新文档\n\n替换完成');
+    expect(find.byKey(const ValueKey('unified-note-editor')), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
   });
 
   testWidgets('assistant refuses to overwrite an anchor that has changed', (
@@ -1138,6 +1144,58 @@ print('ok');
 
     expect(copiedText, '上方\n\nprint("ok");\n\n────────\n\n下方');
     expect(copiedText, isNot(contains('```')));
+  });
+
+  testWidgets('deleting across an atomic node merges the surrounding text', (
+    tester,
+  ) async {
+    const blocks = [
+      NoteBlockData(NoteBlockType.paragraph, '左半'),
+      NoteBlockData(NoteBlockType.code, 'print("ok");', codeLanguage: 'dart'),
+      NoteBlockData(NoteBlockType.paragraph, '右半'),
+    ];
+    final controller = TextEditingController(
+      text: NoteBlockCodec.encode(blocks),
+    );
+    final editorKey = GlobalKey<NoteBlockEditorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            key: editorKey,
+            controller: controller,
+            initialRichContent: NoteRichDocumentCodec.encode(blocks),
+            hintText: '开始记录',
+          ),
+        ),
+      ),
+    );
+
+    final field = find.byKey(const ValueKey('unified-note-editor'));
+    await tester.showKeyboard(field);
+    final fieldController = tester.widget<TextField>(field).controller!;
+    final raw = fieldController.text;
+    final start = raw.indexOf('半');
+    final end = raw.lastIndexOf('半');
+    fieldController.selection = TextSelection(
+      baseOffset: start,
+      extentOffset: end,
+    );
+    tester.testTextInput.updateEditingValue(
+      TextEditingValue(
+        text: raw.replaceRange(start, end, ''),
+        selection: TextSelection.collapsed(offset: start),
+      ),
+    );
+    await tester.pump();
+
+    expect(controller.text, '左半');
+    expect(find.byKey(const ValueKey('unified-code-1')), findsNothing);
+    expect(find.byType(TextField), findsOneWidget);
+
+    editorKey.currentState!.undo();
+    await tester.pump();
+    expect(controller.text, NoteBlockCodec.encode(blocks));
   });
 
   testWidgets('standard divider syntax renders as a real divider', (
@@ -1970,6 +2028,42 @@ print('ok');
     expect(controller.text, '前**重点**后');
   });
 
+  testWidgets('structured Markdown paste stays in the unified editor', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: '前后');
+    final editorKey = GlobalKey<NoteBlockEditorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            key: editorKey,
+            controller: controller,
+            hintText: '开始记录',
+          ),
+        ),
+      ),
+    );
+    final field = find.byKey(const ValueKey('unified-note-editor'));
+    await tester.tap(field);
+    tester.widget<TextField>(field).controller!.selection =
+        const TextSelection.collapsed(offset: 2);
+
+    expect(
+      editorKey.currentState!.pasteMarkdown('```dart\nprint("ok");\n```'),
+      isTrue,
+    );
+    await tester.pump();
+
+    expect(controller.text, '前\n\n```dart\nprint("ok");\n```\n\n后');
+    expect(find.byKey(const ValueKey('unified-code-1')), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+
+    editorKey.currentState!.undo();
+    await tester.pump();
+    expect(controller.text, '前后');
+  });
+
   testWidgets('live dictation replaces partial text as one undoable change', (
     tester,
   ) async {
@@ -2053,6 +2147,41 @@ print('ok');
       );
       expect(editorKey.currentState!.insertDictationTextAtCaret('等待'), isFalse);
       expect(controller.text, '已语音有手动继续拼');
+    },
+  );
+
+  testWidgets(
+    'dictation beside an atomic node creates one editable paragraph',
+    (tester) async {
+      final controller = TextEditingController(
+        text: '```dart\nprint("ok");\n```',
+      );
+      final editorKey = GlobalKey<NoteBlockEditorState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: NoteBlockEditor(
+              key: editorKey,
+              controller: controller,
+              hintText: '开始记录',
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        editorKey.currentState!.insertDictationTextAtCaret('语音说明'),
+        isTrue,
+      );
+      await tester.pump();
+
+      expect(controller.text, '```dart\nprint("ok");\n```\n\n语音说明');
+      expect(find.byKey(const ValueKey('unified-code-0')), findsOneWidget);
+      expect(find.byType(TextField), findsOneWidget);
+
+      editorKey.currentState!.undo();
+      await tester.pump();
+      expect(controller.text, '```dart\nprint("ok");\n```');
     },
   );
 
