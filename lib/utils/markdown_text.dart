@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:markdown/markdown.dart' as md;
 
 /// Plain-text projection used by compact previews, statistics and speech.
@@ -5,6 +7,15 @@ import 'package:markdown/markdown.dart' as md;
 /// The stored note remains Markdown. This projection removes formatting
 /// syntax without executing HTML or resolving external resources.
 abstract final class MarkdownText {
+  /// Uses the editor's lossless document when available, then falls back to
+  /// Markdown parsing. This also keeps compact previews clean for notes saved
+  /// by older versions with an ambiguous emphasis boundary.
+  static String toPlainTextDocument(String source, {String? richContent}) {
+    final richText = _richDocumentText(richContent);
+    if (richText?.isNotEmpty == true) return richText!;
+    return toPlainText(source);
+  }
+
   static String toPlainText(String source) {
     if (source.trim().isEmpty) return '';
     try {
@@ -98,5 +109,28 @@ abstract final class MarkdownText {
 
     visit(element);
     return output.toString();
+  }
+
+  static String? _richDocumentText(String? source) {
+    if (source?.trim().isEmpty ?? true) return null;
+    try {
+      final root = jsonDecode(source!) as Map<String, Object?>;
+      if (root['version'] != 2) return null;
+      final blocks = root['blocks'] as List<Object?>?;
+      if (blocks == null || blocks.isEmpty) return null;
+      final lines = <String>[];
+      for (final rawBlock in blocks) {
+        final block = rawBlock as Map<String, Object?>;
+        final type = block['type'] as String? ?? 'paragraph';
+        if (type == 'attachment' || type == 'divider') continue;
+        final text = block['text'] as String? ?? '';
+        final plain = type == 'rawMarkdown' ? toPlainText(text) : text;
+        final normalized = plain.trim();
+        if (normalized.isNotEmpty) lines.add(normalized);
+      }
+      return lines.join('\n');
+    } catch (_) {
+      return null;
+    }
   }
 }

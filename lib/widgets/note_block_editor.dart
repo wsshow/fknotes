@@ -671,7 +671,13 @@ class NoteBlockCodec {
   static int visibleCharacterCount(String source) =>
       decode(source).fold(0, (count, block) => count + block.text.runes.length);
 
-  static String encode(List<NoteBlockData> blocks) {
+  static String encode(List<NoteBlockData> blocks) =>
+      _encodeBlocks(blocks, _encodeInline);
+
+  static String _encodeBlocks(
+    List<NoteBlockData> blocks,
+    String Function(NoteBlockData block) encodeInline,
+  ) {
     var orderedNumber = 0;
     NoteBlockType? previous;
     final sections = <({NoteBlockData block, String markdown})>[];
@@ -686,7 +692,7 @@ class NoteBlockCodec {
       } else {
         orderedNumber = 0;
       }
-      final text = _encodeInline(block);
+      final text = encodeInline(block);
       var markdown = switch (block.type) {
         NoteBlockType.paragraph => text,
         NoteBlockType.heading =>
@@ -745,16 +751,113 @@ class NoteBlockCodec {
         attributes[index] = range.attributes;
       }
     }
-    final output = StringBuffer();
+    final runs = <({String value, NoteTextAttributes attributes})>[];
     var start = 0;
     while (start < block.text.length) {
       final current = attributes[start];
       var end = start + 1;
-      while (end < block.text.length && attributes[end] == current) {
+      while (end < block.text.length &&
+          _sameMarkdownAttributes(attributes[end], current)) {
         end++;
       }
-      output.write(_encodeInlineRun(block.text.substring(start, end), current));
+      runs.add((value: block.text.substring(start, end), attributes: current));
       start = end;
+    }
+    final encoded = runs
+        .map((run) => _encodeInlineRun(run.value, run.attributes))
+        .join();
+    if (!runs.any((run) => _hasEmphasis(run.attributes))) return encoded;
+    if (_inlineEncodingMatches(block.text, attributes, encoded)) {
+      return encoded;
+    }
+
+    // CommonMark emphasis delimiters can become ambiguous when a formatted
+    // run ends with punctuation and plain text immediately follows (for
+    // example `**qq，，，**aaa`). Numeric entities preserve the exact visible
+    // characters while giving the delimiter an unambiguous punctuation
+    // boundary in the Markdown source.
+    return List.generate(runs.length, (index) {
+      final run = runs[index];
+      final touchesEmphasis =
+          (index > 0 &&
+              (_hasEmphasis(runs[index - 1].attributes) ||
+                  _hasEmphasis(run.attributes))) ||
+          (index + 1 < runs.length &&
+              (_hasEmphasis(run.attributes) ||
+                  _hasEmphasis(runs[index + 1].attributes)));
+      final value = touchesEmphasis && !run.attributes.inlineCode
+          ? _escapeBoundaryRunes(
+              run.value,
+              first: index > 0,
+              last: index + 1 < runs.length,
+            )
+          : run.value;
+      return _encodeInlineRun(value, run.attributes);
+    }).join();
+  }
+
+  static bool _inlineEncodingMatches(
+    String text,
+    List<NoteTextAttributes> expected,
+    String encoded,
+  ) {
+    try {
+      final document = md.Document(
+        extensionSet: md.ExtensionSet.gitHubFlavored,
+        encodeHtml: false,
+      );
+      final parsed = _inlineData(document.parseInline(encoded));
+      if (parsed.text != text) return false;
+      final actual = List<NoteTextAttributes>.filled(
+        text.length,
+        NoteTextAttributes.defaults,
+      );
+      for (final range in parsed.styles) {
+        final start = range.start.clamp(0, text.length);
+        final end = range.end.clamp(start, text.length);
+        for (var index = start; index < end; index++) {
+          actual[index] = range.attributes;
+        }
+      }
+      for (var index = 0; index < text.length; index++) {
+        if (!_sameMarkdownAttributes(expected[index], actual[index])) {
+          return false;
+        }
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static bool _sameMarkdownAttributes(
+    NoteTextAttributes left,
+    NoteTextAttributes right,
+  ) =>
+      left.bold == right.bold &&
+      left.italic == right.italic &&
+      left.strikethrough == right.strikethrough &&
+      left.inlineCode == right.inlineCode &&
+      left.image == right.image &&
+      left.link == right.link;
+
+  static bool _hasEmphasis(NoteTextAttributes attributes) =>
+      attributes.bold || attributes.italic || attributes.strikethrough;
+
+  static String _escapeBoundaryRunes(
+    String value, {
+    required bool first,
+    required bool last,
+  }) {
+    final runes = value.runes.toList();
+    if (runes.isEmpty) return value;
+    final output = StringBuffer();
+    for (var index = 0; index < runes.length; index++) {
+      final boundary =
+          (first && index == 0) || (last && index == runes.length - 1);
+      output.write(
+        boundary ? '&#${runes[index]};' : String.fromCharCode(runes[index]),
+      );
     }
     return output.toString();
   }
@@ -809,6 +912,7 @@ class NoteBlockCodec {
 
   static bool structurallyMatches(List<NoteBlockData> cached, String markdown) {
     if (encode(cached) == markdown) return true;
+    if (_encodeBlocks(cached, _encodeInlineLegacy) == markdown) return true;
     final parsed = decode(markdown);
     if (cached.length != parsed.length) return false;
     for (var index = 0; index < cached.length; index++) {
@@ -826,6 +930,33 @@ class NoteBlockCodec {
       }
     }
     return true;
+  }
+
+  static String _encodeInlineLegacy(NoteBlockData block) {
+    if (block.text.isEmpty) return '';
+    final attributes = List<NoteTextAttributes>.filled(
+      block.text.length,
+      NoteTextAttributes.defaults,
+    );
+    for (final range in block.styles) {
+      final start = range.start.clamp(0, block.text.length);
+      final end = range.end.clamp(start, block.text.length);
+      for (var index = start; index < end; index++) {
+        attributes[index] = range.attributes;
+      }
+    }
+    final output = StringBuffer();
+    var start = 0;
+    while (start < block.text.length) {
+      final current = attributes[start];
+      var end = start + 1;
+      while (end < block.text.length && attributes[end] == current) {
+        end++;
+      }
+      output.write(_encodeInlineRun(block.text.substring(start, end), current));
+      start = end;
+    }
+    return output.toString();
   }
 }
 

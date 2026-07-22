@@ -1222,10 +1222,13 @@ class _NoteEditorPageState extends State<NoteEditorPage>
   }
 
   Future<void> _openShareComposer() async {
+    _richContent =
+        _blockEditorKey.currentState?.flushPendingChanges() ?? _richContent;
     final now = DateTime.now();
     final draft = NoteShareDraft(
       title: _title.text,
       content: _content.text,
+      richContent: _richContent,
       tags: List.unmodifiable(_tags),
       attachments: List.unmodifiable(_attachments),
       createdAt: _entry?.createdAt ?? now,

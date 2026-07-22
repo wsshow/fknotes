@@ -137,6 +137,100 @@ void main() {
     expect(longOutput, source);
   });
 
+  test('share layout preserves lossless inline formatting from the editor', () {
+    const blocks = [
+      NoteBlockData(
+        NoteBlockType.paragraph,
+        'qq，，，aaa 与斜体',
+        styles: [
+          NoteTextStyleRange(0, 5, NoteTextAttributes(bold: true)),
+          NoteTextStyleRange(10, 12, NoteTextAttributes(italic: true)),
+        ],
+      ),
+    ];
+    final draft = _draft(
+      content: '**qq，，，**aaa 与*斜体*',
+      richContent: NoteRichDocumentCodec.encode(blocks),
+    );
+
+    final layout = const NoteShareLayoutEngine().paginate(
+      draft: draft,
+      options: const NoteShareOptions(),
+      textDirection: TextDirection.ltr,
+      untitledTitle: '一则笔记',
+    );
+    final shared = layout.pages.single.blocks.single.block;
+
+    expect(shared.text, blocks.single.text);
+    expect(shared.styles, hasLength(2));
+    expect(shared.styles.first.attributes.bold, isTrue);
+    expect(shared.styles.last.attributes.italic, isTrue);
+  });
+
+  testWidgets('share canvas renders bold and italic spans instead of markers', (
+    tester,
+  ) async {
+    const blocks = [
+      NoteBlockData(
+        NoteBlockType.paragraph,
+        'qq，，，aaa 与斜体',
+        styles: [
+          NoteTextStyleRange(0, 5, NoteTextAttributes(bold: true)),
+          NoteTextStyleRange(10, 12, NoteTextAttributes(italic: true)),
+        ],
+      ),
+    ];
+    final draft = _draft(
+      content: '**qq，，，**aaa 与*斜体*',
+      richContent: NoteRichDocumentCodec.encode(blocks),
+    );
+    const options = NoteShareOptions();
+    final layout = const NoteShareLayoutEngine().paginate(
+      draft: draft,
+      options: options,
+      textDirection: TextDirection.ltr,
+      untitledTitle: '一则笔记',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteSharePageCanvas(
+            draft: draft,
+            options: options,
+            layout: layout,
+            pageIndex: 0,
+            untitledTitle: '一则笔记',
+            sourceLabel: '来自「非空笔记」',
+            locale: const Locale('zh'),
+          ),
+        ),
+      ),
+    );
+
+    final body = tester
+        .widgetList<RichText>(find.byType(RichText))
+        .firstWhere(
+          (widget) => widget.text.toPlainText() == blocks.single.text,
+        );
+    final spans = _textSpans(body.text as TextSpan).toList();
+    expect(
+      spans.any(
+        (span) =>
+            span.text == 'qq，，，' && span.style?.fontWeight == FontWeight.w700,
+      ),
+      isTrue,
+    );
+    expect(
+      spans.any(
+        (span) =>
+            span.text == '斜体' && span.style?.fontStyle == FontStyle.italic,
+      ),
+      isTrue,
+    );
+    expect(body.text.toPlainText(), isNot(contains('**')));
+  });
+
   test('fixed cards use remaining page space before continuing', () {
     final longParagraph = List.filled(90, '把文字自然排满当前信纸，再把余下内容延续到下一页。').join();
     final draft = _draft(content: '短引子。\n\n$longParagraph');
@@ -472,13 +566,22 @@ int _pngDimension(List<int> bytes, int offset) =>
     (bytes[offset + 2] << 8) |
     bytes[offset + 3];
 
+Iterable<TextSpan> _textSpans(TextSpan root) sync* {
+  yield root;
+  for (final child in root.children ?? const <InlineSpan>[]) {
+    if (child is TextSpan) yield* _textSpans(child);
+  }
+}
+
 NoteShareDraft _draft({
   String content = '有些念头不必立刻成为答案。先把它们写下来，等待未来的某一天重新打开。\n\n> 认真记录过的生活，不会真正消失。',
+  String? richContent,
 }) {
   final now = DateTime(2026, 7, 22, 10, 30);
   return NoteShareDraft(
     title: '把今天写成一封信',
     content: content,
+    richContent: richContent,
     tags: const ['生活记录', '今日随想'],
     attachments: const [],
     createdAt: now,

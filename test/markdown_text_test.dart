@@ -1,5 +1,8 @@
+import 'package:fknotes/l10n/generated/app_localizations.dart';
 import 'package:fknotes/models/note_entry.dart';
 import 'package:fknotes/utils/markdown_text.dart';
+import 'package:fknotes/widgets/note_card.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -33,6 +36,48 @@ void main() {
     expect(entry.previewText, '标题\n重点');
     expect(entry.attachmentSummary, '文字 · 4 字');
     expect(entry.readableContent, '# 标题\n\n**重点**');
+  });
+
+  test('lossless editor text cleans previews from legacy ambiguous emphasis', () {
+    final entry = NoteEntry(
+      type: NoteType.text,
+      content: '**qq，，，**aaa',
+      richContent:
+          '{"version":2,"blocks":[{"type":"paragraph","text":"qq，，，aaa","styles":[{"start":0,"end":5,"bold":true}]}]}',
+      createdAt: DateTime(2026),
+      updatedAt: DateTime(2026),
+    );
+
+    expect(entry.previewText, 'qq，，，aaa');
+    expect(entry.previewText, isNot(contains('**')));
+  });
+
+  testWidgets('library card displays a clean summary without Markdown syntax', (
+    tester,
+  ) async {
+    final entry = NoteEntry(
+      type: NoteType.text,
+      title: '语音笔记',
+      content: '**qq，，，**aaa',
+      richContent:
+          '{"version":2,"blocks":[{"type":"paragraph","text":"qq，，，aaa","styles":[{"start":0,"end":5,"bold":true}]}]}',
+      createdAt: DateTime(2026),
+      updatedAt: DateTime(2026),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: Scaffold(
+          body: NoteCard(entry: entry, onTap: () {}),
+        ),
+      ),
+    );
+
+    expect(find.text('qq，，，aaa'), findsOneWidget);
+    expect(find.textContaining('**'), findsNothing);
   });
 
   test('plain-text projection keeps special characters readable', () {

@@ -592,6 +592,18 @@ void main() {
 
     await tester.enterText(find.byType(TextField).first, '刚刚写下的标题');
     await tester.pump();
+    final editor = find.byType(NoteBlockEditor);
+    final bodyField = find
+        .descendant(of: editor, matching: find.byType(TextField))
+        .first;
+    await tester.enterText(bodyField, 'qq，，，aaa');
+    final bodyController = tester.widget<TextField>(bodyField).controller!;
+    bodyController.selection = const TextSelection(
+      baseOffset: 0,
+      extentOffset: 5,
+    );
+    tester.state<NoteBlockEditorState>(editor).toggleBold();
+    await tester.pump();
     await tester.tap(find.byTooltip('更多笔记操作'));
     await tester.pumpAndSettle();
     expect(find.text('分享为图片'), findsOneWidget);
@@ -604,6 +616,12 @@ void main() {
       find.byType(NoteShareComposerPage),
     );
     expect(composer.draft.title, '刚刚写下的标题');
+    expect(composer.draft.content, isNot(contains('**qq，，，**aaa')));
+    final sharedBlocks = NoteRichDocumentCodec.tryDecode(
+      composer.draft.richContent,
+    )!;
+    expect(sharedBlocks.single.text, 'qq，，，aaa');
+    expect(sharedBlocks.single.styles.single.attributes.bold, isTrue);
   });
 
   testWidgets('unsaved note asks before discarding meaningful content', (

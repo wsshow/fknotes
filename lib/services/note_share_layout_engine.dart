@@ -320,7 +320,12 @@ class NoteShareLayoutEngine {
     NoteShareDraft draft,
     NoteShareOptions options,
   ) {
-    final decoded = NoteBlockCodec.decode(draft.content);
+    final richBlocks = NoteRichDocumentCodec.tryDecode(draft.richContent);
+    final decoded =
+        richBlocks != null &&
+            NoteBlockCodec.structurallyMatches(richBlocks, draft.content)
+        ? richBlocks
+        : NoteBlockCodec.decode(draft.content);
     final result = <NoteBlockData>[];
     final referencedPaths = <String>{};
     for (final block in decoded) {

@@ -436,7 +436,10 @@ class NoteEntry {
     );
   }
 
-  String get plainTextContent => MarkdownText.toPlainText(readableContent);
+  String get plainTextContent => MarkdownText.toPlainTextDocument(
+    readableContent,
+    richContent: richContent,
+  );
 
   bool get hasMedia => allAttachments.isNotEmpty;
 }

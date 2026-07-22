@@ -201,6 +201,46 @@ print('ok');
     expect(NoteBlockCodec.encode(decoded), '**重要**内容');
   });
 
+  test('inline formatting remains valid beside punctuation and plain text', () {
+    const variants = [
+      NoteTextAttributes(bold: true),
+      NoteTextAttributes(italic: true),
+      NoteTextAttributes(strikethrough: true),
+      NoteTextAttributes(bold: true, italic: true),
+    ];
+    for (final attributes in variants) {
+      final blocks = [
+        NoteBlockData(
+          NoteBlockType.paragraph,
+          'qq，，，aaa',
+          styles: [NoteTextStyleRange(0, 5, attributes)],
+        ),
+      ];
+      final encoded = NoteBlockCodec.encode(blocks);
+      final decoded = NoteBlockCodec.decode(encoded).single;
+
+      expect(decoded.text, blocks.single.text);
+      for (var offset = 0; offset < 5; offset++) {
+        final decodedAttributes = decoded.styles
+            .firstWhere((range) => range.start <= offset && range.end > offset)
+            .attributes;
+        expect(decodedAttributes, attributes);
+      }
+      expect(NoteBlockCodec.structurallyMatches(blocks, encoded), isTrue);
+    }
+    expect(
+      NoteBlockCodec.structurallyMatches(const [
+        NoteBlockData(
+          NoteBlockType.paragraph,
+          'qq，，，aaa',
+          styles: [NoteTextStyleRange(0, 5, NoteTextAttributes(bold: true))],
+        ),
+      ], '**qq，，，**aaa'),
+      isTrue,
+      reason: 'notes saved by the previous serializer must keep rich styles',
+    );
+  });
+
   testWidgets(
     'selected formatting emits Markdown and lossless editor metadata',
     (tester) async {

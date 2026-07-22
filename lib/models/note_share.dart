@@ -263,6 +263,7 @@ class NoteShareOptions {
 class NoteShareDraft {
   final String title;
   final String content;
+  final String? richContent;
   final List<String> tags;
   final List<NoteAttachment> attachments;
   final DateTime createdAt;
@@ -271,6 +272,7 @@ class NoteShareDraft {
   const NoteShareDraft({
     required this.title,
     required this.content,
+    this.richContent,
     required this.tags,
     required this.attachments,
     required this.createdAt,
