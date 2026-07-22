@@ -337,7 +337,7 @@ void main() {
       of: editor,
       matching: find.byType(TextField),
     );
-    expect(bodyFields, findsNWidgets(2));
+    expect(bodyFields, findsOneWidget);
 
     final firstBlankTap = Offset(editorRect.center.dx, editorRect.bottom - 8);
     await tester.tapAt(firstBlankTap);
@@ -345,11 +345,10 @@ void main() {
     final initiallyFocusedLastField = tester.widget<TextField>(bodyFields.last);
     expect(initiallyFocusedLastField.focusNode?.hasFocus, isTrue);
     expect(tester.testTextInput.isVisible, isTrue);
+    expect(initiallyFocusedLastField.controller?.selection.isCollapsed, isTrue);
     expect(
-      initiallyFocusedLastField.controller?.selection,
-      TextSelection.collapsed(
-        offset: initiallyFocusedLastField.controller!.text.length,
-      ),
+      initiallyFocusedLastField.controller?.selection.extentOffset,
+      initiallyFocusedLastField.controller!.text.length,
     );
 
     final firstBodyRect = tester.getRect(bodyFields.first);
@@ -384,17 +383,11 @@ void main() {
       final inputMethods = tester.testTextInput.log
           .map((call) => call.method)
           .toList();
+      expect(inputMethods, contains('TextInput.show'));
+      expect(lastField.controller?.selection.isCollapsed, isTrue);
       expect(
-        inputMethods,
-        containsAllInOrder([
-          'TextInput.clearClient',
-          'TextInput.setClient',
-          'TextInput.show',
-        ]),
-      );
-      expect(
-        lastField.controller?.selection,
-        TextSelection.collapsed(offset: lastField.controller!.text.length),
+        lastField.controller?.selection.extentOffset,
+        lastField.controller!.text.length,
       );
     }
 
@@ -1219,10 +1212,16 @@ void main() {
     expect(menuRect.bottom, lessThan(paragraphMenuRect.top));
     await tester.tap(find.text('引用'));
     await tester.pump();
+    await tester.pump();
 
-    expect(focusNode.hasFocus, isTrue);
+    final structuredBodyField = find.byType(TextField).at(1);
+    final structuredField = tester.widget<TextField>(structuredBodyField);
+    expect(structuredField.focusNode?.hasFocus, isTrue);
     expect(tester.testTextInput.isVisible, isTrue);
-    expect(controller.selection, const TextSelection.collapsed(offset: 2));
+    expect(
+      structuredField.controller?.selection,
+      const TextSelection.collapsed(offset: 2),
+    );
 
     // Dispose the page before its autosave debounce reaches the database.
     await tester.pumpWidget(const SizedBox.shrink());

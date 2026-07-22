@@ -1,5 +1,6 @@
 import 'package:fknotes/app.dart';
 import 'package:fknotes/services/note_assistant_prompt_builder.dart';
+import 'package:fknotes/widgets/editor_context_menu.dart';
 import 'package:fknotes/widgets/note_block_editor.dart';
 import 'package:fknotes/models/note_entry.dart';
 import 'package:flutter/material.dart';
@@ -544,7 +545,7 @@ print('ok');
     expect(controller.text, '一段连续输入');
   });
 
-  testWidgets('undo keeps exactly one caret across rebuilt blocks', (
+  testWidgets('undo keeps one caret in the unified document editor', (
     tester,
   ) async {
     EditableText.debugDeterministicCursor = true;
@@ -608,7 +609,7 @@ print('ok');
         (state) =>
             statesBeforeUndo.any((oldState) => identical(oldState, state)),
       ),
-      isFalse,
+      isTrue,
     );
 
     editorKey.currentState!.redo();
@@ -732,7 +733,8 @@ print('ok');
         ),
       ),
     );
-    await tester.tap(find.byType(TextField).first);
+    final unifiedField = find.byType(TextField).first;
+    await tester.tapAt(tester.getTopLeft(unifiedField) + const Offset(24, 18));
     final blockAnchor = editorKey.currentState!.captureAssistantContext()!;
     expect(blockAnchor.currentBlockContent, '第一段');
 
@@ -1060,13 +1062,17 @@ print('ok');
       ),
     );
 
-    final emptyField = find.byType(TextField).at(1);
-    await tester.tap(emptyField);
+    final field = find.byType(TextField);
+    await tester.tap(field);
+    final fieldController = tester.widget<TextField>(field).controller!;
+    fieldController.selection = TextSelection.collapsed(
+      offset: editorBlockBoundary.length + '上一行\n\n'.length,
+    );
     await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
     await tester.pump();
 
     expect(controller.text, '上一行\n\n下一行');
-    expect(find.byType(TextField), findsNWidgets(2));
+    expect(find.byType(TextField), findsOneWidget);
   });
 
   testWidgets('software keyboard backspace removes an empty paragraph', (
@@ -1092,18 +1098,25 @@ print('ok');
       ),
     );
 
-    final emptyField = find.byType(TextField).at(1);
-    await tester.showKeyboard(emptyField);
+    final field = find.byType(TextField);
+    await tester.showKeyboard(field);
+    final fieldController = tester.widget<TextField>(field).controller!;
+    final rawText = fieldController.text;
+    final emptyParagraphStart = rawText.indexOf('\n\n') + 2;
     tester.testTextInput.updateEditingValue(
-      const TextEditingValue(
-        text: '',
-        selection: TextSelection.collapsed(offset: 0),
+      TextEditingValue(
+        text: rawText.replaceRange(
+          emptyParagraphStart,
+          emptyParagraphStart + 1,
+          '',
+        ),
+        selection: TextSelection.collapsed(offset: emptyParagraphStart),
       ),
     );
     await tester.pump();
 
     expect(controller.text, '上一行\n\n下一行');
-    expect(find.byType(TextField), findsNWidgets(2));
+    expect(find.byType(TextField), findsOneWidget);
   });
 
   testWidgets('software keyboard backspace removes formatting at block start', (
@@ -1174,6 +1187,82 @@ print('ok');
     await tester.pump();
     expect(copiedText, isNotEmpty);
     expect(copiedText, isNot(contains('\u200B')));
+  });
+
+  testWidgets('plain paragraphs share one editable and Select All copies all', (
+    tester,
+  ) async {
+    String? copiedText;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copiedText = (call.arguments as Map)['text'] as String?;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    final controller = TextEditingController(text: '第一段\n\n第二段\n\n第三段');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(controller: controller, hintText: '开始记录'),
+        ),
+      ),
+    );
+
+    final field = find.byKey(const ValueKey('unified-note-editor'));
+    expect(field, findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+
+    await tester.longPressAt(tester.getTopLeft(field) + const Offset(24, 18));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('全选'), findsOneWidget);
+    await tester.tap(find.text('全选'));
+    await tester.pump();
+    await tester.tap(find.text('复制'));
+    await tester.pump();
+
+    expect(copiedText, '第一段\n\n第二段\n\n第三段');
+  });
+
+  testWidgets('long-press selection extends across paragraph boundaries', (
+    tester,
+  ) async {
+    final controller = TextEditingController(
+      text: 'first paragraph\n\nsecond paragraph\n\nthird paragraph',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(controller: controller, hintText: '开始记录'),
+        ),
+      ),
+    );
+
+    final field = find.byKey(const ValueKey('unified-note-editor'));
+    final gesture = await tester.startGesture(
+      tester.getTopLeft(field) + const Offset(24, 18),
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+    await gesture.moveTo(tester.getBottomRight(field) - const Offset(24, 18));
+    await tester.pump();
+    await gesture.up();
+    await tester.pump();
+
+    final selection = tester.widget<TextField>(field).controller!.selection;
+    expect(selection.isCollapsed, isFalse);
+    expect(selection.start, lessThan('first paragraph'.length + 1));
+    expect(
+      selection.end,
+      greaterThan('first paragraph\n\nsecond paragraph'.length),
+    );
   });
 
   testWidgets('custom context menu pastes clipboard text', (tester) async {
@@ -1515,7 +1604,22 @@ print('ok');
       ),
     );
 
-    await tester.enterText(find.byType(TextField).first, '已修改');
+    final field = find.byType(TextField);
+    await tester.showKeyboard(field);
+    final fieldController = tester.widget<TextField>(field).controller!;
+    final firstRawText = fieldController.text;
+    tester.testTextInput.updateEditingValue(
+      TextEditingValue(
+        text: firstRawText.replaceRange(
+          editorBlockBoundary.length,
+          editorBlockBoundary.length + blocks.first.text.length,
+          '已修改',
+        ),
+        selection: TextSelection.collapsed(
+          offset: editorBlockBoundary.length + '已修改'.length,
+        ),
+      ),
+    );
     expect(controller.text, original);
     expect(richUpdates, 0);
 
@@ -1523,7 +1627,19 @@ print('ok');
     expect(controller.text, startsWith('已修改'));
     expect(richUpdates, 1);
 
-    await tester.enterText(find.byType(TextField).first, '再次修改');
+    final secondRawText = fieldController.text;
+    tester.testTextInput.updateEditingValue(
+      TextEditingValue(
+        text: secondRawText.replaceRange(
+          editorBlockBoundary.length,
+          editorBlockBoundary.length + '已修改'.length,
+          '再次修改',
+        ),
+        selection: TextSelection.collapsed(
+          offset: editorBlockBoundary.length + '再次修改'.length,
+        ),
+      ),
+    );
     final rich = editorKey.currentState!.flushPendingChanges();
     expect(controller.text, startsWith('再次修改'));
     expect(NoteRichDocumentCodec.tryDecode(rich)!.first.text, '再次修改');
