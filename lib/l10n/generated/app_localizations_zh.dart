@@ -84,6 +84,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get movedToTrash => '已移到回收站';
 
   @override
+  String get discardNote => '放弃笔记';
+
+  @override
+  String get discardNoteQuestion => '放弃这篇笔记？';
+
+  @override
+  String get discardNoteDescription => '未保存的内容和新添加的附件将被删除，且无法恢复。';
+
+  @override
+  String get noteDeleteFailed => '无法删除笔记，请稍后重试';
+
+  @override
   String get captureMoment => '捕捉此刻';
 
   @override

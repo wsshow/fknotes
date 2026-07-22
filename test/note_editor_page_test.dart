@@ -529,6 +529,120 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('saved note can move to trash from the editor with undo', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final provider = _DeletionTrackingProvider();
+    final entry = NoteEntry(
+      id: 71,
+      type: NoteType.text,
+      title: '待整理笔记',
+      content: '正文',
+      createdAt: DateTime(2026),
+      updatedAt: DateTime(2026),
+    );
+    await _pumpEditorRoute(
+      tester,
+      provider: provider,
+      page: NoteEditorPage(existingEntry: entry),
+    );
+
+    await tester.tap(find.byTooltip('更多笔记操作'));
+    await tester.pumpAndSettle();
+
+    final deleteItem = find.ancestor(
+      of: find.text('移到回收站'),
+      matching: find.byType(MenuItemButton),
+    );
+    expect(deleteItem, findsOneWidget);
+    expect(
+      tester
+          .widgetList<Icon>(
+            find.descendant(of: deleteItem, matching: find.byType(Icon)),
+          )
+          .first
+          .color,
+      AppColors.coral,
+    );
+
+    await tester.tap(find.text('移到回收站'));
+    await tester.pumpAndSettle();
+
+    expect(provider.movedToTrash?.id, entry.id);
+    expect(find.byType(NoteEditorPage), findsNothing);
+    expect(find.text('已移到回收站'), findsOneWidget);
+
+    await tester.tap(find.text('撤销'));
+    await tester.pump();
+    expect(provider.restored?.id, entry.id);
+  });
+
+  testWidgets('unsaved note asks before discarding meaningful content', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final provider = _DeletionTrackingProvider();
+    await _pumpEditorRoute(
+      tester,
+      provider: provider,
+      page: const NoteEditorPage(),
+    );
+
+    await tester.enterText(find.byType(TextField).first, '尚未保存的想法');
+    await tester.pump();
+    await tester.tap(find.byTooltip('更多笔记操作'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('放弃笔记'), findsOneWidget);
+
+    await tester.tap(find.text('放弃笔记'));
+    await tester.pumpAndSettle();
+    expect(find.text('放弃这篇笔记？'), findsOneWidget);
+    expect(find.textContaining('无法恢复'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, '放弃笔记'));
+    await tester.pumpAndSettle();
+
+    expect(provider.addCalls, 0);
+    expect(provider.movedToTrash, isNull);
+    expect(find.byType(NoteEditorPage), findsNothing);
+  });
+
+  testWidgets('trashed note requires confirmation before permanent deletion', (
+    tester,
+  ) async {
+    _usePhoneViewport(tester);
+    final provider = _DeletionTrackingProvider();
+    final entry = NoteEntry(
+      id: 72,
+      type: NoteType.text,
+      title: '回收站笔记',
+      isDeleted: true,
+      deletedAt: DateTime(2026, 7, 1),
+      createdAt: DateTime(2026),
+      updatedAt: DateTime(2026),
+    );
+    await _pumpEditorRoute(
+      tester,
+      provider: provider,
+      page: NoteEditorPage(existingEntry: entry),
+    );
+
+    await tester.tap(find.byTooltip('更多笔记操作'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('永久删除'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('永久删除？'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, '永久删除'));
+    await tester.pumpAndSettle();
+
+    expect(provider.deletedPermanently?.id, entry.id);
+    expect(find.byType(NoteEditorPage), findsNothing);
+    expect(find.text('撤销'), findsNothing);
+  });
+
   testWidgets('editor chrome renders in English without overflow', (
     tester,
   ) async {
@@ -1075,6 +1189,35 @@ void _usePhoneViewport(WidgetTester tester) {
   addTearDown(tester.view.reset);
 }
 
+Future<void> _pumpEditorRoute(
+  WidgetTester tester, {
+  required NoteProvider provider,
+  required NoteEditorPage page,
+}) async {
+  await tester.pumpWidget(
+    ChangeNotifierProvider<NoteProvider>(
+      create: (_) => provider,
+      child: MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => FilledButton(
+              key: const Key('open-test-editor'),
+              onPressed: () => Navigator.push<void>(
+                context,
+                MaterialPageRoute(builder: (_) => page),
+              ),
+              child: const Text('打开编辑器'),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.byKey(const Key('open-test-editor')));
+  await tester.pumpAndSettle();
+  expect(find.byType(NoteEditorPage), findsOneWidget);
+}
+
 Future<void> _pumpHomePage(
   WidgetTester tester, {
   TextScaler textScaler = TextScaler.noScaling,
@@ -1130,6 +1273,34 @@ class _InMemoryNoteProvider extends NoteProvider {
 
   @override
   Future<void> updateEntry(NoteEntry entry) async {}
+}
+
+class _DeletionTrackingProvider extends _InMemoryNoteProvider {
+  int addCalls = 0;
+  NoteEntry? movedToTrash;
+  NoteEntry? restored;
+  NoteEntry? deletedPermanently;
+
+  @override
+  Future<int> addEntry(NoteEntry entry) async {
+    addCalls++;
+    return super.addEntry(entry);
+  }
+
+  @override
+  Future<void> moveToTrash(NoteEntry entry) async {
+    movedToTrash = entry;
+  }
+
+  @override
+  Future<void> restore(NoteEntry entry) async {
+    restored = entry;
+  }
+
+  @override
+  Future<void> deletePermanently(NoteEntry entry) async {
+    deletedPermanently = entry;
+  }
 }
 
 class _RecentNotesProvider extends NoteProvider {

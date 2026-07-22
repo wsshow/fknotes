@@ -88,6 +88,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get movedToTrash => 'Moved to Trash';
 
   @override
+  String get discardNote => 'Discard note';
+
+  @override
+  String get discardNoteQuestion => 'Discard this note?';
+
+  @override
+  String get discardNoteDescription =>
+      'Unsaved content and newly added attachments will be deleted and cannot be recovered.';
+
+  @override
+  String get noteDeleteFailed => 'Couldn\'t delete the note. Try again later.';
+
+  @override
   String get captureMoment => 'Capture';
 
   @override

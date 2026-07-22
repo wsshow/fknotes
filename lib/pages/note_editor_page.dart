@@ -95,6 +95,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
   Timer? _recoverySave;
   bool _changed = false;
   bool _saving = false;
+  bool _deletePending = false;
   bool _autosaveFailed = false;
   bool _saveAgain = false;
   bool _disposing = false;
@@ -1248,6 +1249,165 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     if (saved && mounted) Navigator.pop(context);
   }
 
+  bool get _hasDiscardableDraft =>
+      _title.text.trim().isNotEmpty ||
+      _content.text.trim().isNotEmpty ||
+      _attachments.isNotEmpty ||
+      _removedAttachments.isNotEmpty ||
+      _importJobIds.isNotEmpty ||
+      _tags.isNotEmpty ||
+      _favorite ||
+      _pinned ||
+      _coverMode != NoteCoverMode.automatic ||
+      _coverAttachmentPath != null;
+
+  Future<void> _deleteCurrentNote() async {
+    if (_deletePending) return;
+    _autosave?.cancel();
+    _recoverySave?.cancel();
+    _recoverySave = null;
+    setState(() => _deletePending = true);
+
+    while (_saving) {
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+    }
+    if (!mounted) return;
+
+    var entry = _entry;
+    if (entry == null) {
+      final confirmed =
+          !_hasDiscardableDraft ||
+          await _confirmDestructiveAction(
+            title: context.l10n.discardNoteQuestion,
+            description: context.l10n.discardNoteDescription,
+            actionLabel: context.l10n.discardNote,
+          );
+      if (!mounted) return;
+      if (!confirmed) {
+        _resumePersistenceAfterDeleteCanceled();
+        return;
+      }
+      await _discardUnsavedNote();
+      return;
+    }
+
+    if (entry.isDeleted) {
+      final confirmed = await _confirmDestructiveAction(
+        title: context.l10n.deletePermanentlyQuestion,
+        description: context.l10n.deletePermanentlyDescription,
+        actionLabel: context.l10n.deletePermanently,
+      );
+      if (!mounted) return;
+      if (!confirmed) {
+        _resumePersistenceAfterDeleteCanceled();
+        return;
+      }
+    }
+
+    if (_changed && !await _persist()) {
+      if (mounted) _resumePersistenceAfterDeleteCanceled();
+      return;
+    }
+    if (!mounted) return;
+    entry = _entry;
+    if (entry == null) {
+      await _discardUnsavedNote();
+      return;
+    }
+    final targetEntry = entry;
+
+    final provider = _provider ?? context.read<NoteProvider>();
+    try {
+      if (targetEntry.isDeleted) {
+        await provider.deletePermanently(targetEntry);
+      } else {
+        await provider.moveToTrash(targetEntry);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      _resumePersistenceAfterDeleteCanceled();
+      AppFeedback.error(context, context.l10n.noteDeleteFailed);
+      return;
+    }
+    _changed = false;
+    await _clearRecoveryAfterDeletion();
+    if (!mounted) return;
+    if (!targetEntry.isDeleted) {
+      AppFeedback.action(
+        context,
+        context.l10n.movedToTrash,
+        actionLabel: context.l10n.undo,
+        onAction: () => provider.restore(targetEntry),
+      );
+    }
+    Navigator.pop(context);
+  }
+
+  Future<bool> _confirmDestructiveAction({
+    required String title,
+    required String description,
+    required String actionLabel,
+  }) async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(title),
+          content: Text(description),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(context.l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.coral,
+                foregroundColor: Colors.white,
+              ),
+              child: Text(actionLabel),
+            ),
+          ],
+        ),
+      ) ??
+      false;
+
+  void _resumePersistenceAfterDeleteCanceled() {
+    if (!mounted) return;
+    setState(() => _deletePending = false);
+    if (_changed) {
+      _scheduleAutosave();
+      _queueRecoveryDraft();
+    }
+  }
+
+  Future<void> _discardUnsavedNote() async {
+    _changed = false;
+    await _clearRecoveryAfterDeletion();
+    final paths = <String?>{
+      for (final attachment in [..._attachments, ..._removedAttachments])
+        attachment.filePath,
+      for (final attachment in [..._attachments, ..._removedAttachments])
+        attachment.thumbnailPath,
+    };
+    for (final path in paths) {
+      try {
+        await _storage.deleteFile(path);
+      } on FileSystemException {
+        // The draft is already abandoned; orphan cleanup can retry later.
+      }
+    }
+    if (mounted) Navigator.pop(context);
+  }
+
+  Future<void> _clearRecoveryAfterDeletion() async {
+    try {
+      await _clearRecoveryDrafts();
+    } catch (_) {
+      // Deleting the note is authoritative. A stale recovery file is harmless
+      // and can be cleaned by the regular recovery maintenance path.
+    }
+  }
+
   Future<void> _editTags() async {
     final tags = await showModalBottomSheet<List<String>>(
       context: context,
@@ -1368,6 +1528,10 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                   unawaited(_showCoverSettings());
                   return;
                 }
+                if (value == 'delete') {
+                  unawaited(_deleteCurrentNote());
+                  return;
+                }
                 setState(() {
                   if (value == 'favorite') _favorite = !_favorite;
                   if (value == 'pin') _pinned = !_pinned;
@@ -1397,6 +1561,19 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                   icon: Icons.vertical_align_top_rounded,
                   label: _pinned ? context.l10n.unpin : context.l10n.pin,
                   selected: _pinned,
+                ),
+                AppMenuAction(
+                  value: 'delete',
+                  icon: _entry?.isDeleted == true
+                      ? Icons.delete_forever_outlined
+                      : Icons.delete_outline_rounded,
+                  label: _entry == null
+                      ? context.l10n.discardNote
+                      : _entry!.isDeleted
+                      ? context.l10n.deletePermanently
+                      : context.l10n.moveToTrash,
+                  enabled: !_deletePending,
+                  destructive: true,
                 ),
               ],
             ),

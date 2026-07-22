@@ -235,7 +235,8 @@ class _TaskSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      key: const Key('background-task-summary-card'),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(18),
@@ -245,11 +246,9 @@ class _TaskSummaryCard extends StatelessWidget {
         children: [
           Expanded(
             child: _TaskSummaryStat(
-              icon: Icons.sync_rounded,
               value: runningCount,
               label: context.l10n.runningTasks,
-              color: AppColors.moss,
-              background: AppColors.softGreen,
+              valueColor: runningCount > 0 ? AppColors.moss : AppColors.ink,
             ),
           ),
           Padding(
@@ -257,20 +256,15 @@ class _TaskSummaryCard extends StatelessWidget {
             child: Container(
               key: const Key('background-task-summary-divider'),
               width: 1,
-              height: 36,
+              height: 38,
               color: AppColors.line,
             ),
           ),
           Expanded(
             child: _TaskSummaryStat(
-              iconKey: const Key('background-task-failed-summary-icon'),
-              icon: Icons.error_outline_rounded,
               value: failedCount,
               label: context.l10n.tasksNeedingAttention,
-              color: failedCount > 0 ? AppColors.coral : AppColors.muted,
-              background: failedCount > 0
-                  ? AppColors.softCoral
-                  : AppColors.softBlue,
+              valueColor: failedCount > 0 ? AppColors.coral : AppColors.ink,
             ),
           ),
         ],
@@ -280,63 +274,42 @@ class _TaskSummaryCard extends StatelessWidget {
 }
 
 class _TaskSummaryStat extends StatelessWidget {
-  final Key? iconKey;
-  final IconData icon;
   final int value;
   final String label;
-  final Color color;
-  final Color background;
+  final Color valueColor;
 
   const _TaskSummaryStat({
-    this.iconKey,
-    required this.icon,
     required this.value,
     required this.label,
-    required this.color,
-    required this.background,
+    required this.valueColor,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Container(
-          key: iconKey,
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(color: background, shape: BoxShape.circle),
-          child: Icon(icon, size: 20, color: color),
+        Text(
+          '$value',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: valueColor,
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            height: 1.1,
+          ),
         ),
-        const SizedBox(width: 11),
-        Flexible(
-          fit: FlexFit.loose,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(
-                '$value',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  height: 1.1,
-                ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: AppColors.muted,
-                  fontSize: 12,
-                  height: 1.1,
-                ),
-              ),
-            ],
+        const SizedBox(height: 4),
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: AppColors.muted,
+            fontSize: 12,
+            height: 1.1,
           ),
         ),
       ],

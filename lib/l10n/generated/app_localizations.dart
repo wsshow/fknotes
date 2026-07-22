@@ -248,6 +248,30 @@ abstract class AppLocalizations {
   /// **'已移到回收站'**
   String get movedToTrash;
 
+  /// No description provided for @discardNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'放弃笔记'**
+  String get discardNote;
+
+  /// No description provided for @discardNoteQuestion.
+  ///
+  /// In zh, this message translates to:
+  /// **'放弃这篇笔记？'**
+  String get discardNoteQuestion;
+
+  /// No description provided for @discardNoteDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'未保存的内容和新添加的附件将被删除，且无法恢复。'**
+  String get discardNoteDescription;
+
+  /// No description provided for @noteDeleteFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法删除笔记，请稍后重试'**
+  String get noteDeleteFailed;
+
   /// No description provided for @captureMoment.
   ///
   /// In zh, this message translates to:
