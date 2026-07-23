@@ -52,6 +52,9 @@ dependencies:
   archive: ^4.0.9
   share_plus: ^13.2.0
   package_info_plus: ^10.2.0
+  # Delta JSON is the canonical note document. Flutter Quill owns editing,
+  # selection, IME composition, undo/redo, and clipboard behavior.
+  flutter_quill: 11.5.1
   local_auth: ^3.0.2
   local_auth_android: ^2.0.9
   local_auth_darwin: ^2.0.3
@@ -61,9 +64,9 @@ dependencies:
   # the same Dart API and Android build fixes while using ORT 1.24.3.
   sherpa_onnx: 1.13.3
   crypto: ^3.0.7
-  # Markdown is the canonical semantic format for notes and model output.
-  # Pin parser and renderer together so AST/rendering behavior changes only
-  # through an intentional, tested upgrade.
+  # Markdown remains an import/export and model-output boundary format only.
+  # Pin parser and renderer together so boundary behavior changes only through
+  # an intentional, tested upgrade.
   markdown: 7.3.1
   flutter_markdown_plus: 1.0.12
   # Pure Flutter KaTeX-compatible renderer used by the shared Markdown view.
