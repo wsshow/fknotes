@@ -527,6 +527,13 @@ final value = 1;
         findsNothing,
       );
 
+      await tester.drag(imageFinder, const Offset(0, -80));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(ValueKey('note-image-actions-${asset.id.value}')),
+        findsNothing,
+      );
+
       focusNode.requestFocus();
       await tester.pump();
       expect(focusNode.hasFocus, isTrue);

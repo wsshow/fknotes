@@ -734,7 +734,7 @@ final class _NoteDividerEmbedBuilder extends quill.EmbedBuilder {
   );
 }
 
-final class _ImageAssetBlock extends StatefulWidget {
+final class _ImageAssetBlock extends StatelessWidget {
   const _ImageAssetBlock({
     required this.asset,
     required this.provider,
@@ -752,44 +752,37 @@ final class _ImageAssetBlock extends StatefulWidget {
   final VoidCallback onToggleActions;
   final VoidCallback? onOpen;
 
-  @override
-  State<_ImageAssetBlock> createState() => _ImageAssetBlockState();
-}
-
-final class _ImageAssetBlockState extends State<_ImageAssetBlock> {
   void _handleImageTap() {
-    widget.onInteraction();
-    if (widget.readOnly) {
-      widget.onOpen?.call();
+    onInteraction();
+    if (readOnly) {
+      onOpen?.call();
       return;
     }
-    widget.onToggleActions();
+    onToggleActions();
   }
 
   @override
   Widget build(BuildContext context) {
-    final asset = widget.asset;
-    final imageProvider = widget.provider;
     return Semantics(
       label: '图片：${asset.displayTitle}',
       button: true,
       onTap: _handleImageTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Listener(
+        child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onPointerDown: (_) => _handleImageTap(),
+          onTap: _handleImageTap,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(AppRadius.medium),
             child: Material(
               color: AppColors.surfaceMuted,
-              child: imageProvider == null
+              child: provider == null
                   ? _AssetFallback(asset: asset, minHeight: 180)
                   : ConstrainedBox(
                       constraints: const BoxConstraints(minHeight: 120),
                       child: Image(
                         key: ValueKey('note-image-${asset.id.value}'),
-                        image: imageProvider,
+                        image: provider!,
                         width: double.infinity,
                         fit: BoxFit.fitWidth,
                         errorBuilder: (_, _, _) =>
