@@ -641,7 +641,7 @@ abstract class AppLocalizations {
   /// No description provided for @backupScopeDescription.
   ///
   /// In zh, this message translates to:
-  /// **'包含笔记、聊天与附件；不包含本地模型、缓存、应用锁和云同步账号。'**
+  /// **'仅包含结构化笔记及其正文附件；不包含聊天、模型、缓存、应用锁和云同步账号。'**
   String get backupScopeDescription;
 
   /// No description provided for @createNewBackup.

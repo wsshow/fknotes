@@ -291,7 +291,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get restoreFromBackupSubtitle => '从备份历史或外部文件恢复，恢复前会完整校验';
 
   @override
-  String get backupScopeDescription => '包含笔记、聊天与附件；不包含本地模型、缓存、应用锁和云同步账号。';
+  String get backupScopeDescription => '仅包含结构化笔记及其正文附件；不包含聊天、模型、缓存、应用锁和云同步账号。';
 
   @override
   String get createNewBackup => '创建新备份';

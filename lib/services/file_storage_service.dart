@@ -31,6 +31,9 @@ class FileStorageService {
     final dirs = [
       p.join(_baseDir, 'notes', 'images'),
       p.join(_baseDir, 'notes', 'thumbnails'),
+      p.join(_baseDir, 'notes', 'audio'),
+      p.join(_baseDir, 'notes', 'video'),
+      p.join(_baseDir, 'notes', 'files'),
       p.join(_baseDir, 'images'),
       p.join(_baseDir, 'audio'),
       p.join(_baseDir, 'video'),
@@ -142,7 +145,7 @@ class FileStorageService {
     final normalized = await Isolate.run(() => _normalizeNoteImageBytes(bytes));
     final storageKey = await writeBytes(
       normalized.bytes,
-      p.join('notes', 'images'),
+      p.posix.join('notes', 'images'),
       extension: normalized.extension,
     );
     return StoredNoteImage(
@@ -217,7 +220,7 @@ class FileStorageService {
   Future<String> generateNoteThumbnailInBackground(String imagePath) async {
     return _generateThumbnailInBackground(
       imagePath,
-      p.join('notes', 'thumbnails'),
+      p.posix.join('notes', 'thumbnails'),
     );
   }
 

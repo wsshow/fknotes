@@ -326,7 +326,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get backupScopeDescription =>
-      'Includes notes, chats, and attachments. Local models, caches, app lock, and cloud accounts are excluded.';
+      'Includes structured notes and their body attachments only. Chats, models, caches, app lock, and cloud accounts are excluded.';
 
   @override
   String get createNewBackup => 'Create a new backup';

@@ -16,10 +16,13 @@ import '../providers/note_library_controller.dart';
 import '../services/app_build_metadata.dart';
 import '../services/app_lock_preferences_service.dart';
 import '../services/file_storage_service.dart';
+import '../widgets/app_feedback.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/navigation_icons.dart';
 import '../widgets/note_delta_preview.dart';
 import 'app_lock_settings_page.dart';
+import 'backup_export_page.dart';
+import 'backup_restore_page.dart';
 import 'language_settings_page.dart';
 import 'model_management_page.dart';
 import 'note_library_page.dart';
@@ -51,14 +54,18 @@ final class QuillHomePage extends StatefulWidget {
 
 final class _QuillHomePageState extends State<QuillHomePage> {
   late final NoteLibraryController _recentController;
+  late final NoteLibraryController _libraryController;
   late final bool _ownsRecentController;
+  late final bool _ownsLibraryController;
   var _tab = 0;
 
   @override
   void initState() {
     super.initState();
     _ownsRecentController = widget.recentController == null;
+    _ownsLibraryController = widget.libraryController == null;
     _recentController = widget.recentController ?? NoteLibraryController();
+    _libraryController = widget.libraryController ?? NoteLibraryController();
     _recentController.addListener(_onRecentChanged);
     unawaited(_recentController.initialize());
   }
@@ -84,6 +91,13 @@ final class _QuillHomePageState extends State<QuillHomePage> {
     if (mounted) await _recentController.refresh();
   }
 
+  Future<void> _refreshAfterRestore() async {
+    await _recentController.refresh();
+    if (!identical(_recentController, _libraryController)) {
+      await _libraryController.refresh();
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     extendBody: true,
@@ -97,13 +111,14 @@ final class _QuillHomePageState extends State<QuillHomePage> {
           onOpenLibrary: () => _selectTab(1),
         ),
         NoteLibraryPage(
-          controller: widget.libraryController,
+          controller: _libraryController,
           editorBuilder: widget.editorBuilder,
         ),
         _QuillDataTab(
           controller: _recentController,
           dataSizeLoader:
               widget.dataSizeLoader ?? FileStorageService.instance.userDataSize,
+          onRestoreCompleted: _refreshAfterRestore,
         ),
       ],
     ),
@@ -151,6 +166,7 @@ final class _QuillHomePageState extends State<QuillHomePage> {
   void dispose() {
     _recentController.removeListener(_onRecentChanged);
     if (_ownsRecentController) _recentController.dispose();
+    if (_ownsLibraryController) _libraryController.dispose();
     super.dispose();
   }
 }
@@ -438,10 +454,15 @@ final class _RecentDeltaNoteCard extends StatelessWidget {
 }
 
 final class _QuillDataTab extends StatefulWidget {
-  const _QuillDataTab({required this.controller, required this.dataSizeLoader});
+  const _QuillDataTab({
+    required this.controller,
+    required this.dataSizeLoader,
+    required this.onRestoreCompleted,
+  });
 
   final NoteLibraryController controller;
   final NoteHomeDataSizeLoader dataSizeLoader;
+  final AsyncCallback onRestoreCompleted;
 
   @override
   State<_QuillDataTab> createState() => _QuillDataTabState();
@@ -510,6 +531,25 @@ final class _QuillDataTabState extends State<_QuillDataTab> {
             noteCount: notes.length,
             attachmentCount: attachmentCount,
             dataSize: _dataSize,
+          ),
+          const SizedBox(height: 22),
+          _SettingsSection(
+            title: context.l10n.backupAndMigration,
+            children: [
+              _SettingsRow(
+                icon: Icons.ios_share_rounded,
+                title: context.l10n.exportCompleteBackup,
+                subtitle: context.l10n.exportCompleteBackupSubtitle,
+                onTap: _openBackupExport,
+              ),
+              const Divider(height: 1),
+              _SettingsRow(
+                icon: Icons.settings_backup_restore_rounded,
+                title: context.l10n.restoreFromBackup,
+                subtitle: context.l10n.restoreFromBackupSubtitle,
+                onTap: _openBackupRestore,
+              ),
+            ],
           ),
           const SizedBox(height: 22),
           _SettingsSection(
@@ -589,6 +629,27 @@ final class _QuillDataTabState extends State<_QuillDataTab> {
         ],
       ),
     );
+  }
+
+  Future<void> _openBackupExport() async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(builder: (_) => const BackupExportPage()),
+    );
+    await _loadDataSize();
+  }
+
+  Future<void> _openBackupRestore() async {
+    final restored = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => const BackupRestorePage()),
+    );
+    if (restored != true) return;
+    await widget.onRestoreCompleted();
+    await _loadDataSize();
+    if (mounted) {
+      AppFeedback.success(context, context.l10n.backupRestored);
+    }
   }
 }
 

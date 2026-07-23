@@ -96,7 +96,7 @@
   "exportCompleteBackupSubtitle": "Keep multiple versions to share or save in a chosen location",
   "restoreFromBackup": "Restore from backup",
   "restoreFromBackupSubtitle": "Restore from backup history or an external file after verification",
-  "backupScopeDescription": "Includes notes, chats, and attachments. Local models, caches, app lock, and cloud accounts are excluded.",
+  "backupScopeDescription": "Includes structured notes and their body attachments only. Chats, models, caches, app lock, and cloud accounts are excluded.",
   "createNewBackup": "Create a new backup",
   "backupName": "Backup name",
   "backupNameHint": "Optional, for example: Before migration",

@@ -58,7 +58,7 @@ void main() {
           child: QuillHomePage(
             recentController: recentController,
             libraryController: libraryController,
-          dataSizeLoader: () async => 2048,
+            dataSizeLoader: () async => 2048,
             editorBuilder: _testEditor,
           ),
         ),
@@ -80,6 +80,8 @@ void main() {
       await _pump(tester);
       expect(find.text('本地数据'), findsOneWidget);
       expect(find.text('2.0 KB'), findsOneWidget);
+      expect(find.text('导出完整备份'), findsOneWidget);
+      expect(find.text('从备份恢复'), findsOneWidget);
     },
   );
 }

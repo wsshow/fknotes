@@ -16,6 +16,7 @@ final class NoteDatabaseService {
 
   static final NoteDatabaseService instance = NoteDatabaseService();
   static const String databaseFileName = 'fknotes.db';
+  static const int schemaVersion = 1;
 
   final String? databasePath;
   Database? _database;
@@ -37,7 +38,7 @@ final class NoteDatabaseService {
         p.join(FileStorageService.instance.baseDir, databaseFileName);
     return openDatabase(
       path,
-      version: 1,
+      version: schemaVersion,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await database.execute('PRAGMA journal_mode = WAL');
@@ -46,7 +47,7 @@ final class NoteDatabaseService {
     );
   }
 
-  Future<void> validate() async {
+  Future<void> validate({String? assetRoot}) async {
     final db = await database;
     final quickCheck = await db.rawQuery('PRAGMA quick_check');
     if (quickCheck.singleOrNull?.values.singleOrNull != 'ok') {
@@ -68,16 +69,44 @@ final class NoteDatabaseService {
     }
     for (final row in await db.query(
       'note_assets',
-      columns: ['storage_key', 'preview_storage_key'],
+      columns: ['storage_key', 'preview_storage_key', 'byte_length'],
     )) {
-      for (final key in [row['storage_key'], row['preview_storage_key']]) {
+      final storageKey = row['storage_key']! as String;
+      for (final key in [storageKey, row['preview_storage_key']]) {
         if (key == null) continue;
-        final path = FileStorageService.instance.absolutePath(key as String);
-        if (!await File(path).exists()) {
+        final relative = key as String;
+        if (!_isCanonicalAssetKey(relative)) {
+          throw FormatException('笔记附件路径不属于新数据空间：$relative');
+        }
+        final path = assetRoot == null
+            ? FileStorageService.instance.absolutePath(relative)
+            : _resolveInside(assetRoot, relative);
+        final file = File(path);
+        if (!await file.exists()) {
           throw FormatException('笔记附件缺失：$key');
+        }
+        if (relative == storageKey &&
+            await file.length() != row['byte_length']! as int) {
+          throw FormatException('笔记附件大小不匹配：$key');
         }
       }
     }
+  }
+
+  static bool _isCanonicalAssetKey(String value) {
+    final normalized = p.posix.normalize(value.replaceAll('\\', '/'));
+    return normalized == value &&
+        normalized.startsWith('notes/') &&
+        normalized != 'notes/..' &&
+        !normalized.startsWith('notes/../');
+  }
+
+  static String _resolveInside(String root, String relative) {
+    final resolved = p.normalize(p.joinAll([root, ...p.posix.split(relative)]));
+    if (!p.isWithin(root, resolved)) {
+      throw const FormatException('笔记附件路径不安全');
+    }
+    return resolved;
   }
 
   Future<void> close() async {

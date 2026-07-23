@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
@@ -10,40 +11,44 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart' hide XFile;
 
-import 'database_service.dart';
+import '../models/note_document.dart';
 import 'file_storage_service.dart';
+import 'note_database_service.dart';
 
-class BackupService {
+/// Backup boundary for the clean Delta application.
+///
+/// A backup contains one canonical SQLite database and only the note assets
+/// referenced by that database. Legacy databases, Markdown payloads, device
+/// settings, models, chat data and broad storage directories are rejected.
+final class BackupService {
   BackupService._();
+
   static final BackupService instance = BackupService._();
 
   static const _manifestName = 'fknotes-backup.json';
   static const _historyIndexName = 'index.json';
-  static const _backupFormatVersion = 1;
-  static const _maxArchiveFiles = 100000;
-  static const _maxExpandedBytes = 128 * 1024 * 1024 * 1024;
-  static const _appLockPath = 'settings/app-lock.json';
-  static const _cloudSyncSettingsPath = 'settings/cloud-sync.json';
-  static const _recoveryRoot = 'recovery';
-
-  static const _managedRoots = {
+  static const _backupKind = 'fknotes.delta-backup';
+  static const _backupFormatVersion = 2;
+  static const _maxArchiveFiles = 50000;
+  static const _maxExpandedBytes = 8 * 1024 * 1024 * 1024;
+  static const _stagingName = '.fknotes-restore-staging';
+  static const _rollbackName = '.fknotes-restore-rollback';
+  static const _noteAssetDirectories = {
     'images',
+    'thumbnails',
     'audio',
     'video',
-    'documents',
-    'thumbnails',
-    'exports',
-    'assistant',
-    'settings',
-    _recoveryRoot,
-    'fknotes.db',
-    'fknotes.db-journal',
-    'fknotes.db-shm',
-    'fknotes.db-wal',
+    'files',
+  };
+  static const _databaseSidecars = {
+    '${NoteDatabaseService.databaseFileName}-journal',
+    '${NoteDatabaseService.databaseFileName}-shm',
+    '${NoteDatabaseService.databaseFileName}-wal',
   };
 
   final _storage = FileStorageService.instance;
   static const _exportChannel = MethodChannel('fknotes/backup_export');
+  var _operationInProgress = false;
 
   Directory get backupDirectory =>
       Directory(p.join(_storage.baseDir, 'backups'));
@@ -56,14 +61,67 @@ class BackupService {
     return shareManagedBackup(record, sharePositionOrigin: sharePositionOrigin);
   }
 
+  /// Resolves a restore transaction interrupted by process termination.
+  ///
+  /// This must run after file storage initialization and before any feature
+  /// opens the note database.
+  Future<void> recoverInterruptedRestore() => _exclusive(() async {
+    final root = Directory(_storage.baseDir);
+    final staging = Directory(p.join(root.path, _stagingName));
+    final rollback = Directory(p.join(root.path, _rollbackName));
+    if (!await rollback.exists()) {
+      if (await staging.exists()) await staging.delete(recursive: true);
+      return;
+    }
+
+    final liveDatabase = NoteDatabaseService.instance;
+    var liveIsValid = false;
+    final liveDatabaseFile = File(
+      p.join(root.path, NoteDatabaseService.databaseFileName),
+    );
+    if (await liveDatabaseFile.exists()) {
+      try {
+        await liveDatabase.validate(assetRoot: root.path);
+        liveIsValid = true;
+      } catch (_) {
+        await liveDatabase.close();
+      }
+    }
+
+    if (liveIsValid) {
+      await rollback.delete(recursive: true);
+    } else {
+      final rollbackDatabaseFile = File(
+        p.join(rollback.path, NoteDatabaseService.databaseFileName),
+      );
+      if (!await rollbackDatabaseFile.exists()) {
+        throw const FormatException('未完成的恢复事务缺少回滚数据库');
+      }
+      final rollbackDatabase = NoteDatabaseService(
+        databasePath: rollbackDatabaseFile.path,
+      );
+      try {
+        await rollbackDatabase.validate(assetRoot: rollback.path);
+      } finally {
+        await rollbackDatabase.close();
+      }
+      await liveDatabase.close();
+      await _deleteManagedData(root);
+      await _moveManagedData(rollback, root);
+      await _storage.init(baseDir: root.path);
+      await liveDatabase.validate(assetRoot: root.path);
+      if (await rollback.exists()) await rollback.delete(recursive: true);
+    }
+    if (await staging.exists()) await staging.delete(recursive: true);
+  });
+
   Future<BackupRecord> createManagedBackup({
     String? label,
     String? description,
   }) async {
-    final directory = backupDirectory;
-    await directory.create(recursive: true);
+    await backupDirectory.create(recursive: true);
     final artifact = await createBackupArtifact(
-      outputDirectory: directory,
+      outputDirectory: backupDirectory,
       cleanTemporaryArtifacts: false,
       label: label,
       description: description,
@@ -91,17 +149,20 @@ class BackupService {
     if (!await _historyIndex.exists()) return const [];
     try {
       final decoded = jsonDecode(await _historyIndex.readAsString());
-      if (decoded is! Map || decoded['records'] is! List) return const [];
+      if (decoded is! Map ||
+          decoded['formatVersion'] != _backupFormatVersion ||
+          decoded['records'] is! List) {
+        return const [];
+      }
       final records = <BackupRecord>[];
       for (final raw in decoded['records'] as List) {
         if (raw is! Map) continue;
         final record = BackupRecord.fromJson(Map<String, Object?>.from(raw));
-        if (!_isSafeBackupFileName(record.fileName)) continue;
-        if (await File(
-          p.join(backupDirectory.path, record.fileName),
-        ).exists()) {
-          records.add(record);
+        if (record.formatVersion != _backupFormatVersion ||
+            !_isSafeBackupFileName(record.fileName)) {
+          continue;
         }
+        if (await managedBackupFile(record).exists()) records.add(record);
       }
       records.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return List.unmodifiable(records);
@@ -113,9 +174,6 @@ class BackupService {
   }
 
   Future<void> deleteManagedBackup(BackupRecord record) async {
-    if (!_isSafeBackupFileName(record.fileName)) {
-      throw const FormatException('备份文件名不安全');
-    }
     final file = managedBackupFile(record);
     if (await file.exists()) await file.delete();
     final records = await listManagedBackups();
@@ -179,73 +237,82 @@ class BackupService {
     return true;
   }
 
-  /// Creates a verified snapshot containing user data only. Downloaded
-  /// models, inference caches, app-lock state and cloud credentials are never
-  /// included.
   Future<BackupArtifact> createBackupArtifact({
     Directory? outputDirectory,
     bool cleanTemporaryArtifacts = true,
     String? label,
     String? description,
-  }) async {
+  }) => _exclusive(() async {
     final now = DateTime.now();
-    final name =
+    final outputName =
         'fknotes_${now.year}${_two(now.month)}${_two(now.day)}_'
         '${_two(now.hour)}${_two(now.minute)}${_two(now.second)}_'
         '${now.microsecondsSinceEpoch}.fknotes.zip';
-    await DatabaseService.instance.close();
+    final liveDatabase = NoteDatabaseService.instance;
+    await liveDatabase.repository;
+    final database = await liveDatabase.database;
+    await database.rawQuery('PRAGMA wal_checkpoint(TRUNCATE)');
+    await liveDatabase.close();
+
     try {
-      final exportDir =
+      final databasePath = p.join(
+        _storage.baseDir,
+        NoteDatabaseService.databaseFileName,
+      );
+      final snapshotDatabase = NoteDatabaseService(databasePath: databasePath);
+      late final _BackupGraph graph;
+      try {
+        await snapshotDatabase.validate(assetRoot: _storage.baseDir);
+        graph = await _readBackupGraph(snapshotDatabase);
+      } finally {
+        await snapshotDatabase.close();
+      }
+
+      final exportDirectory =
           outputDirectory ??
           Directory(
             p.join((await getTemporaryDirectory()).path, 'fknotes_exports'),
           );
-      await exportDir.create(recursive: true);
+      await exportDirectory.create(recursive: true);
       if (cleanTemporaryArtifacts) {
-        await _cleanupOldArtifacts(exportDir, now);
+        await _cleanupOldArtifacts(exportDirectory, now);
       }
-      final output = File(p.join(exportDir.path, name));
-      final root = Directory(_storage.baseDir);
-      final files = <({File file, String relative})>[];
-      await for (final entity in root.list(
-        recursive: true,
-        followLinks: false,
-      )) {
-        if (entity is! File) continue;
-        final relative = _safeName(
-          p.posix.fromUri(p.toUri(p.relative(entity.path, from: root.path))),
-        );
-        if (_isIncludedBackupPath(relative)) {
-          files.add((file: entity, relative: relative));
-        }
+      final output = File(p.join(exportDirectory.path, outputName));
+      final files = <String, File>{
+        NoteDatabaseService.databaseFileName: File(databasePath),
+        for (final key in graph.assetKeys)
+          key: File(_storage.absolutePath(key)),
+      };
+      final sortedNames = files.keys.toList()..sort();
+      final manifestFiles = SplayTreeMap<String, Object?>();
+      for (final name in sortedNames) {
+        final file = files[name]!;
+        manifestFiles[name] = {
+          'size': await file.length(),
+          'sha256': (await sha256.bind(file.openRead()).first).toString(),
+        };
       }
-      files.sort((left, right) => left.relative.compareTo(right.relative));
+      final contentDigest = _manifestFilesDigest(manifestFiles);
       final encoder = ZipFileEncoder()..create(output.path);
       var encoderOpen = true;
-      late String contentDigest;
       try {
-        final manifestFiles = <String, Object?>{};
-        for (final item in files) {
-          final size = await item.file.length();
-          final digest = await sha256.bind(item.file.openRead()).first;
-          manifestFiles[item.relative] = {
-            'size': size,
-            'sha256': digest.toString(),
-          };
-          await encoder.addFile(item.file, item.relative);
+        for (final name in sortedNames) {
+          await encoder.addFile(files[name]!, name);
         }
-        contentDigest = sha256
-            .convert(utf8.encode(jsonEncode(manifestFiles)))
-            .toString();
         encoder.addArchiveFile(
           ArchiveFile.string(
             _manifestName,
             jsonEncode({
+              'kind': _backupKind,
               'formatVersion': _backupFormatVersion,
+              'databaseSchemaVersion': NoteDatabaseService.schemaVersion,
+              'documentSchemaVersion': NoteDocument.schemaVersion,
               'createdAt': now.toUtc().toIso8601String(),
               if (label?.trim().isNotEmpty == true) 'label': label!.trim(),
               if (description?.trim().isNotEmpty == true)
                 'description': description!.trim(),
+              'noteCount': graph.noteCount,
+              'assetCount': graph.assetCount,
               'contentDigest': contentDigest,
               'files': manifestFiles,
             }),
@@ -253,27 +320,29 @@ class BackupService {
         );
         await encoder.close();
         encoderOpen = false;
+      } catch (_) {
+        if (await output.exists()) await output.delete();
+        rethrow;
       } finally {
         if (encoderOpen) {
           try {
             await encoder.close();
           } catch (_) {
-            // Preserve the original export failure.
+            // Preserve the original snapshot error.
           }
         }
       }
-      final archiveDigest = await sha256.bind(output.openRead()).first;
       return BackupArtifact(
         file: output,
         contentDigest: contentDigest,
-        archiveSha256: archiveDigest.toString(),
+        archiveSha256: (await sha256.bind(output.openRead()).first).toString(),
         sizeBytes: await output.length(),
         createdAt: now.toUtc(),
       );
     } finally {
-      await DatabaseService.instance.database;
+      await liveDatabase.repository;
     }
-  }
+  });
 
   Future<bool> restoreBackup() async {
     final selected = await chooseBackupFile();
@@ -288,99 +357,148 @@ class BackupService {
     return selected == null ? null : File(selected.path);
   }
 
-  Future<void> restoreBackupFile(File backup) async {
+  Future<void> restoreBackupFile(File backup) => _exclusive(() async {
     if (!await backup.exists()) throw const FormatException('备份文件不存在');
     final input = InputFileStream(backup.path);
-    late final Archive archive;
-    try {
-      archive = ZipDecoder().decodeStream(input, verify: true);
-    } catch (_) {
-      await input.close();
-      rethrow;
-    }
-    final entries = archive.where((entry) => entry.isFile).toList();
-    if (entries.length > _maxArchiveFiles ||
-        entries.fold<int>(0, (sum, entry) => sum + entry.size) >
-            _maxExpandedBytes) {
-      await input.close();
-      throw const FormatException('备份文件数量或容量异常');
-    }
-    final names = entries.map((entry) => _safeName(entry.name)).toList();
-    if (names.toSet().length != names.length) {
-      await input.close();
-      throw const FormatException('备份中包含重复路径');
-    }
-    final manifestIndex = names.indexOf(_manifestName);
-    Map<String, Object?>? manifest;
-    try {
-      manifest = manifestIndex < 0
-          ? null
-          : _decodeManifest(entries[manifestIndex]);
-    } catch (_) {
-      await input.close();
-      rethrow;
-    }
-    final files = <ArchiveFile>[];
-    final fileNames = <String>[];
-    for (var index = 0; index < entries.length; index++) {
-      if (index == manifestIndex) continue;
-      files.add(entries[index]);
-      fileNames.add(names[index]);
-    }
-    if (!fileNames.contains('fknotes.db')) {
-      await input.close();
-      throw const FormatException('这不是有效的非空笔记备份');
-    }
-    if (fileNames.any((name) => !_isIncludedBackupPath(name))) {
-      await input.close();
-      throw const FormatException('备份中包含不属于非空笔记的数据');
-    }
-
-    await DatabaseService.instance.close();
     final root = Directory(_storage.baseDir);
-    final previous = Directory('${root.path}.fknotes-previous');
-    if (await previous.exists()) await previous.delete(recursive: true);
-    await previous.create(recursive: true);
-    var moveCompleted = false;
+    final staging = Directory(p.join(root.path, _stagingName));
+    final rollback = Directory(p.join(root.path, _rollbackName));
+    var swapStarted = false;
+    var restoreCompleted = false;
     try {
-      await _moveManagedData(root, previous);
-      moveCompleted = true;
-      await root.create(recursive: true);
+      final Archive archive;
+      try {
+        archive = ZipDecoder().decodeStream(input, verify: true);
+      } catch (_) {
+        throw const FormatException('备份压缩包损坏');
+      }
+      final entries = archive.where((entry) => entry.isFile).toList();
+      final expandedBytes = entries.fold<int>(
+        0,
+        (total, entry) => total + entry.size,
+      );
+      if (entries.length > _maxArchiveFiles ||
+          expandedBytes > _maxExpandedBytes) {
+        throw const FormatException('备份文件数量或容量异常');
+      }
+      final names = entries.map((entry) => _safeName(entry.name)).toList();
+      if (names.toSet().length != names.length) {
+        throw const FormatException('备份中包含重复路径');
+      }
+      final manifestIndexes = <int>[
+        for (var index = 0; index < names.length; index++)
+          if (names[index] == _manifestName) index,
+      ];
+      if (manifestIndexes.length != 1) {
+        throw const FormatException('这不是新版非空笔记备份');
+      }
+      final manifestIndex = manifestIndexes.single;
+      final manifest = _decodeManifest(entries[manifestIndex]);
+      final files = <ArchiveFile>[];
+      final fileNames = <String>[];
+      for (var index = 0; index < entries.length; index++) {
+        if (index == manifestIndex) continue;
+        final name = names[index];
+        if (!_isAllowedArchivePath(name)) {
+          throw FormatException('备份包含新数据边界之外的内容：$name');
+        }
+        files.add(entries[index]);
+        fileNames.add(name);
+      }
+      if (!fileNames.contains(NoteDatabaseService.databaseFileName)) {
+        throw const FormatException('备份缺少笔记数据库');
+      }
+
+      await _resetInternalDirectory(staging);
+      await _resetInternalDirectory(rollback);
       for (var index = 0; index < files.length; index++) {
-        final entry = files[index];
-        final relative = fileNames[index];
-        final output = File(p.join(root.path, relative));
+        final output = File(
+          p.joinAll([staging.path, ...p.posix.split(fileNames[index])]),
+        );
         await output.parent.create(recursive: true);
         final stream = OutputFileStream(output.path);
         try {
-          entry.writeContent(stream);
+          files[index].writeContent(stream);
         } finally {
           stream.closeSync();
         }
       }
-      await _preserveDeviceOnlySettings(previous, root);
-      await _storage.init(baseDir: root.path);
-      if (manifest != null) await _validateManifest(manifest, root, fileNames);
-      await DatabaseService.instance.validateUserData();
+      await _validateManifest(manifest, staging, fileNames);
+
+      final stagedDatabase = NoteDatabaseService(
+        databasePath: p.join(
+          staging.path,
+          NoteDatabaseService.databaseFileName,
+        ),
+      );
+      late final _BackupGraph stagedGraph;
       try {
-        await previous.delete(recursive: true);
-      } on FileSystemException {
-        // The restored data is already validated; stale rollback data can be
-        // removed on the next restore attempt.
+        await stagedDatabase.validate(assetRoot: staging.path);
+        stagedGraph = await _readBackupGraph(stagedDatabase);
+      } finally {
+        await stagedDatabase.close();
       }
-      return;
-    } catch (_) {
-      await DatabaseService.instance.close();
-      if (moveCompleted) await _deleteManagedData(root);
-      await _moveManagedData(previous, root);
-      if (await previous.exists()) await previous.delete(recursive: true);
+      final expectedNames = <String>{
+        NoteDatabaseService.databaseFileName,
+        ...stagedGraph.assetKeys,
+      };
+      if (!expectedNames.containsAll(fileNames) ||
+          !fileNames.toSet().containsAll(expectedNames)) {
+        throw const FormatException('备份附件与数据库引用不一致');
+      }
+      if (manifest['noteCount'] != stagedGraph.noteCount ||
+          manifest['assetCount'] != stagedGraph.assetCount) {
+        throw const FormatException('备份数据计数校验失败');
+      }
+
+      final liveDatabase = NoteDatabaseService.instance;
+      await liveDatabase.close();
+      await _moveManagedData(root, rollback);
+      swapStarted = true;
+      await _moveManagedData(staging, root);
       await _storage.init(baseDir: root.path);
-      await DatabaseService.instance.database;
-      rethrow;
+      await liveDatabase.validate(assetRoot: root.path);
+      await liveDatabase.repository;
+      restoreCompleted = true;
+      try {
+        await rollback.delete(recursive: true);
+      } on FileSystemException {
+        // The restored graph is valid; stale rollback data is cleaned later.
+      }
+    } catch (error, stackTrace) {
+      if (swapStarted) {
+        try {
+          final liveDatabase = NoteDatabaseService.instance;
+          await liveDatabase.close();
+          await _deleteManagedData(root);
+          await _moveManagedData(rollback, root);
+          await _storage.init(baseDir: root.path);
+          await liveDatabase.validate(assetRoot: root.path);
+          await liveDatabase.repository;
+          swapStarted = false;
+        } catch (rollbackError) {
+          throw StateError('恢复失败且自动回滚未完成：$rollbackError');
+        }
+      }
+      Error.throwWithStackTrace(error, stackTrace);
     } finally {
       await input.close();
+      if (await staging.exists()) {
+        try {
+          await staging.delete(recursive: true);
+        } on FileSystemException {
+          // A decoder may release a file handle shortly after this operation.
+        }
+      }
+      if ((restoreCompleted || !swapStarted) && await rollback.exists()) {
+        try {
+          await rollback.delete(recursive: true);
+        } on FileSystemException {
+          // Never let cleanup hide the restore result.
+        }
+      }
     }
-  }
+  });
 
   Map<String, Object?> _decodeManifest(ArchiveFile entry) {
     if (entry.size > 1024 * 1024) {
@@ -389,8 +507,17 @@ class BackupService {
     final bytes = entry.readBytes();
     if (bytes == null) throw const FormatException('备份清单不完整');
     final decoded = jsonDecode(utf8.decode(bytes));
-    if (decoded is! Map || decoded['formatVersion'] != _backupFormatVersion) {
-      throw const FormatException('不支持的备份版本');
+    if (decoded is! Map ||
+        decoded['kind'] != _backupKind ||
+        decoded['formatVersion'] != _backupFormatVersion ||
+        decoded['databaseSchemaVersion'] != NoteDatabaseService.schemaVersion ||
+        decoded['documentSchemaVersion'] != NoteDocument.schemaVersion ||
+        DateTime.tryParse(decoded['createdAt']?.toString() ?? '') == null ||
+        decoded['noteCount'] is! int ||
+        decoded['assetCount'] is! int ||
+        decoded['contentDigest'] is! String ||
+        decoded['files'] is! Map) {
+      throw const FormatException('不支持的备份格式或数据版本');
     }
     return Map<String, Object?>.from(decoded);
   }
@@ -406,38 +533,71 @@ class BackupService {
         !rawFiles.keys.toSet().containsAll(fileNames)) {
       throw const FormatException('备份清单与文件不匹配');
     }
+    final normalizedFiles = SplayTreeMap<String, Object?>();
     for (final relative in fileNames) {
       final metadata = rawFiles[relative];
       if (metadata is! Map) throw const FormatException('备份清单损坏');
-      final file = File(p.join(root.path, relative));
       final expectedSize = metadata['size'];
       final expectedDigest = metadata['sha256'];
-      if (expectedSize is! int ||
-          expectedDigest is! String ||
+      if (expectedSize is! int || expectedDigest is! String) {
+        throw const FormatException('备份清单损坏');
+      }
+      final file = File(p.joinAll([root.path, ...p.posix.split(relative)]));
+      if (!await file.exists() ||
           await file.length() != expectedSize ||
           (await sha256.bind(file.openRead()).first).toString() !=
               expectedDigest) {
         throw FormatException('备份文件校验失败：$relative');
       }
+      normalizedFiles[relative] = {
+        'size': expectedSize,
+        'sha256': expectedDigest,
+      };
+    }
+    if (_manifestFilesDigest(normalizedFiles) != manifest['contentDigest']) {
+      throw const FormatException('备份内容摘要校验失败');
     }
   }
 
-  Future<void> _preserveDeviceOnlySettings(
-    Directory previous,
-    Directory root,
-  ) async {
-    for (final relative in const [_appLockPath, _cloudSyncSettingsPath]) {
-      final source = File(p.join(previous.path, relative));
-      if (!await source.exists()) continue;
-      final destination = File(p.join(root.path, relative));
-      await destination.parent.create(recursive: true);
-      await source.copy(destination.path);
+  Future<_BackupGraph> _readBackupGraph(NoteDatabaseService service) async {
+    final database = await service.database;
+    final noteCount =
+        (await database.rawQuery(
+              'SELECT COUNT(*) AS count FROM notes',
+            )).single['count']!
+            as int;
+    final rows = await database.query(
+      'note_assets',
+      columns: ['storage_key', 'preview_storage_key'],
+    );
+    final keys = <String>{};
+    for (final row in rows) {
+      for (final value in [row['storage_key'], row['preview_storage_key']]) {
+        if (value == null) continue;
+        final key = value as String;
+        if (!_isCanonicalNoteAssetPath(key)) {
+          throw FormatException('笔记附件不属于新数据空间：$key');
+        }
+        keys.add(key);
+      }
     }
+    final sortedKeys = keys.toList()..sort();
+    return _BackupGraph(
+      noteCount: noteCount,
+      assetCount: rows.length,
+      assetKeys: List.unmodifiable(sortedKeys),
+    );
   }
+
+  String _manifestFilesDigest(Map<String, Object?> files) => sha256
+      .convert(utf8.encode(jsonEncode(SplayTreeMap<String, Object?>.of(files))))
+      .toString();
 
   String _safeName(String value) {
     final normalized = p.posix.normalize(value.replaceAll('\\', '/'));
-    if (p.posix.isAbsolute(normalized) ||
+    if (normalized.isEmpty ||
+        normalized == '.' ||
+        p.posix.isAbsolute(normalized) ||
         normalized.startsWith('../') ||
         normalized == '..') {
       throw const FormatException('备份中包含不安全路径');
@@ -445,25 +605,27 @@ class BackupService {
     return normalized;
   }
 
-  bool _isManagedPath(String relativePath) {
-    final rootName = p.posix.split(relativePath).firstOrNull;
-    return rootName != null && _managedRoots.contains(rootName);
+  bool _isAllowedArchivePath(String value) =>
+      value == NoteDatabaseService.databaseFileName ||
+      _isCanonicalNoteAssetPath(value);
+
+  bool _isCanonicalNoteAssetPath(String value) {
+    final normalized = p.posix.normalize(value.replaceAll('\\', '/'));
+    final parts = p.posix.split(normalized);
+    return normalized == value &&
+        parts.length >= 3 &&
+        parts.first == 'notes' &&
+        _noteAssetDirectories.contains(parts[1]) &&
+        !parts.contains('..');
   }
-
-  bool _isIncludedBackupPath(String relativePath) =>
-      !_isDeviceOnlySetting(relativePath) &&
-      p.posix.split(relativePath).firstOrNull != _recoveryRoot &&
-      _isManagedPath(relativePath);
-
-  bool _isDeviceOnlySetting(String relativePath) =>
-      relativePath == _appLockPath ||
-      relativePath.startsWith('$_appLockPath.') ||
-      relativePath == _cloudSyncSettingsPath ||
-      relativePath.startsWith('$_cloudSyncSettingsPath.');
 
   Future<void> _moveManagedData(Directory source, Directory target) async {
     await target.create(recursive: true);
-    for (final name in _managedRoots) {
+    for (final name in {
+      'notes',
+      NoteDatabaseService.databaseFileName,
+      ..._databaseSidecars,
+    }) {
       final sourcePath = p.join(source.path, name);
       final targetPath = p.join(target.path, name);
       switch (await FileSystemEntity.type(sourcePath, followLinks: false)) {
@@ -478,7 +640,11 @@ class BackupService {
   }
 
   Future<void> _deleteManagedData(Directory root) async {
-    for (final name in _managedRoots) {
+    for (final name in {
+      'notes',
+      NoteDatabaseService.databaseFileName,
+      ..._databaseSidecars,
+    }) {
       final path = p.join(root.path, name);
       switch (await FileSystemEntity.type(path, followLinks: false)) {
         case FileSystemEntityType.file:
@@ -488,6 +654,23 @@ class BackupService {
         default:
           break;
       }
+    }
+  }
+
+  Future<void> _resetInternalDirectory(Directory directory) async {
+    if (await directory.exists()) await directory.delete(recursive: true);
+    await directory.create(recursive: true);
+  }
+
+  Future<T> _exclusive<T>(Future<T> Function() operation) async {
+    if (_operationInProgress) {
+      throw StateError('已有备份或恢复任务正在执行');
+    }
+    _operationInProgress = true;
+    try {
+      return await operation();
+    } finally {
+      _operationInProgress = false;
     }
   }
 
@@ -510,7 +693,7 @@ class BackupService {
     final temporary = File('${_historyIndex.path}.tmp');
     await temporary.writeAsString(
       jsonEncode({
-        'formatVersion': 1,
+        'formatVersion': _backupFormatVersion,
         'records': records.map((record) => record.toJson()).toList(),
       }),
       flush: true,
@@ -535,16 +718,19 @@ class BackupService {
   String _two(int value) => value.toString().padLeft(2, '0');
 }
 
-class BackupRecord {
-  final String fileName;
-  final String label;
-  final String description;
-  final String contentDigest;
-  final String archiveSha256;
-  final int sizeBytes;
-  final DateTime createdAt;
-  final int formatVersion;
+final class _BackupGraph {
+  const _BackupGraph({
+    required this.noteCount,
+    required this.assetCount,
+    required this.assetKeys,
+  });
 
+  final int noteCount;
+  final int assetCount;
+  final List<String> assetKeys;
+}
+
+final class BackupRecord {
   const BackupRecord({
     required this.fileName,
     required this.label,
@@ -587,6 +773,15 @@ class BackupRecord {
     );
   }
 
+  final String fileName;
+  final String label;
+  final String description;
+  final String contentDigest;
+  final String archiveSha256;
+  final int sizeBytes;
+  final DateTime createdAt;
+  final int formatVersion;
+
   Map<String, Object?> toJson() => {
     'fileName': fileName,
     'label': label,
@@ -599,13 +794,7 @@ class BackupRecord {
   };
 }
 
-class BackupArtifact {
-  final File file;
-  final String contentDigest;
-  final String archiveSha256;
-  final int sizeBytes;
-  final DateTime createdAt;
-
+final class BackupArtifact {
   const BackupArtifact({
     required this.file,
     required this.contentDigest,
@@ -613,4 +802,10 @@ class BackupArtifact {
     required this.sizeBytes,
     required this.createdAt,
   });
+
+  final File file;
+  final String contentDigest;
+  final String archiveSha256;
+  final int sizeBytes;
+  final DateTime createdAt;
 }
