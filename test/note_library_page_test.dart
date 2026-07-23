@@ -96,6 +96,41 @@ void main() {
     expect(find.text('格式笔记'), findsOneWidget);
   });
 
+  testWidgets('returning from a note does not restore search focus', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _TestApp(
+        child: NoteLibraryPage(
+          controller: controller,
+          editorBuilder: (editorContext, note) => Scaffold(
+            body: Center(
+              child: TextButton(
+                key: const Key('close-test-editor'),
+                onPressed: () => Navigator.pop(editorContext),
+                child: const Text('返回主页'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await _pump(tester);
+
+    await tester.tap(find.byKey(const Key('delta-library-search')));
+    await tester.pump();
+    expect(_searchEditable(tester).focusNode.hasFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isTrue);
+
+    await tester.tap(find.text('格式笔记'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('close-test-editor')));
+    await tester.pumpAndSettle();
+
+    expect(_searchEditable(tester).focusNode.hasFocus, isFalse);
+    expect(tester.testTextInput.isVisible, isFalse);
+  });
+
   testWidgets('card deletion requires confirmation and removes the note', (
     tester,
   ) async {
@@ -215,6 +250,14 @@ Future<void> _pump(WidgetTester tester) async {
     await tester.pump(const Duration(milliseconds: 50));
   }
 }
+
+EditableText _searchEditable(WidgetTester tester) =>
+    tester.widget<EditableText>(
+      find.descendant(
+        of: find.byKey(const Key('delta-library-search')),
+        matching: find.byType(EditableText),
+      ),
+    );
 
 final class _PageLibraryStore implements NoteLibraryStore {
   _PageLibraryStore(this.notes);

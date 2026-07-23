@@ -128,6 +128,33 @@ void main() {
       expect(find.text('云同步'), findsOneWidget);
     },
   );
+
+  testWidgets('returning from new note keeps the home keyboard closed', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _TestApp(
+        child: QuillHomePage(
+          controller: controller,
+          editorBuilder: _testEditor,
+        ),
+      ),
+    );
+    await _pump(tester);
+
+    await tester.tap(find.byKey(const Key('delta-library-search')));
+    await tester.pump();
+    expect(_searchEditable(tester).focusNode.hasFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isTrue);
+
+    await tester.tap(find.byKey(const Key('quill-home-new-note')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('close-test-editor')));
+    await tester.pumpAndSettle();
+
+    expect(_searchEditable(tester).focusNode.hasFocus, isFalse);
+    expect(tester.testTextInput.isVisible, isFalse);
+  });
 }
 
 Widget _testEditor(BuildContext context, Note? note) => Scaffold(
@@ -173,6 +200,14 @@ Future<void> _pump(WidgetTester tester) async {
     await tester.pump(const Duration(milliseconds: 50));
   }
 }
+
+EditableText _searchEditable(WidgetTester tester) =>
+    tester.widget<EditableText>(
+      find.descendant(
+        of: find.byKey(const Key('delta-library-search')),
+        matching: find.byType(EditableText),
+      ),
+    );
 
 final class _HomeStore implements NoteLibraryStore {
   _HomeStore(this.notes);

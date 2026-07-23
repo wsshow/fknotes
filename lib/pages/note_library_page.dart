@@ -44,6 +44,7 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
   late final NoteLibraryController _controller;
   late final bool _ownsController;
   final _searchController = TextEditingController();
+  final _searchFocusNode = FocusNode(debugLabel: 'note-library-search');
   final Set<NoteId> _selectedNoteIds = {};
   Timer? _searchTimer;
   var _selectionBusy = false;
@@ -137,6 +138,7 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
   }
 
   Future<void> _openEditor([Note? note]) async {
+    _dismissSearchFocus();
     final builder =
         widget.editorBuilder ??
         (context, value) => NoteQuillEditorPage(initialNote: value);
@@ -144,7 +146,24 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
       context,
       MaterialPageRoute(builder: (context) => builder(context, note)),
     );
-    if (mounted) await _controller.refresh();
+    if (!mounted) return;
+    _dismissSearchFocus();
+    await _controller.refresh();
+  }
+
+  void _dismissSearchFocus() {
+    _searchFocusNode.unfocus(disposition: UnfocusDisposition.scope);
+    FocusScope.of(context).unfocus(disposition: UnfocusDisposition.scope);
+  }
+
+  void _openAssistant() {
+    _dismissSearchFocus();
+    widget.onOpenAssistant?.call();
+  }
+
+  void _openData() {
+    _dismissSearchFocus();
+    widget.onOpenData?.call();
   }
 
   Future<void> _runAction(Future<void> Function() action) async {
@@ -254,7 +273,7 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
                     IconButton(
                       key: const Key('quill-home-assistant'),
                       tooltip: context.l10n.localAssistant,
-                      onPressed: widget.onOpenAssistant,
+                      onPressed: _openAssistant,
                       style: IconButton.styleFrom(
                         backgroundColor: AppColors.surface,
                         fixedSize: const Size.square(44),
@@ -267,7 +286,7 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
                     IconButton(
                       key: const Key('delta-library-open-data'),
                       tooltip: context.l10n.localData,
-                      onPressed: widget.onOpenData,
+                      onPressed: _openData,
                       style: IconButton.styleFrom(
                         backgroundColor: AppColors.surface,
                         fixedSize: const Size.square(44),
@@ -292,6 +311,7 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
               SearchBar(
                 key: const Key('delta-library-search'),
                 controller: _searchController,
+                focusNode: _searchFocusNode,
                 hintText: context.l10n.searchNotes,
                 elevation: const WidgetStatePropertyAll(0),
                 backgroundColor: const WidgetStatePropertyAll(
@@ -458,6 +478,7 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
   void dispose() {
     _searchTimer?.cancel();
     _searchController.dispose();
+    _searchFocusNode.dispose();
     _controller.removeListener(_onChanged);
     if (_ownsController) _controller.dispose();
     super.dispose();

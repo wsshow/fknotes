@@ -70,6 +70,7 @@ final class _QuillHomePageState extends State<QuillHomePage> {
   }
 
   Future<void> _openEditor([Note? note]) async {
+    _dismissRouteFocus();
     final builder =
         widget.editorBuilder ??
         (context, value) => NoteQuillEditorPage(initialNote: value);
@@ -77,10 +78,13 @@ final class _QuillHomePageState extends State<QuillHomePage> {
       context,
       MaterialPageRoute(builder: (context) => builder(context, note)),
     );
-    if (mounted) await _refreshAfterRestore();
+    if (!mounted) return;
+    _dismissRouteFocus();
+    await _refreshAfterRestore();
   }
 
   Future<void> _openAssistant() async {
+    _dismissRouteFocus();
     final builder =
         widget.assistantBuilder ??
         (context, onOpenNote) => LocalChatPage(onOpenNote: onOpenNote);
@@ -90,7 +94,9 @@ final class _QuillHomePageState extends State<QuillHomePage> {
         builder: (context) => builder(context, _openAssistantSource),
       ),
     );
-    if (mounted) await _refreshAfterRestore();
+    if (!mounted) return;
+    _dismissRouteFocus();
+    await _refreshAfterRestore();
   }
 
   Future<void> _openAssistantSource(LocalChatNoteContext source) async {
@@ -111,6 +117,7 @@ final class _QuillHomePageState extends State<QuillHomePage> {
   }
 
   Future<void> _openData() async {
+    _dismissRouteFocus();
     await _controller.refresh();
     if (!mounted) return;
     await Navigator.push<void>(
@@ -128,6 +135,13 @@ final class _QuillHomePageState extends State<QuillHomePage> {
           ),
         ),
       ),
+    );
+    if (mounted) _dismissRouteFocus();
+  }
+
+  void _dismissRouteFocus() {
+    FocusManager.instance.primaryFocus?.unfocus(
+      disposition: UnfocusDisposition.scope,
     );
   }
 
