@@ -1,72 +1,69 @@
-import '../models/local_chat.dart';
-import '../models/note_entry.dart';
-import '../widgets/note_block_editor.dart';
+import 'package:flutter_quill/quill_delta.dart';
 
-class LocalChatNoteAction {
-  static NoteEntry createNote(
+import '../models/local_chat.dart';
+import '../models/note.dart';
+import '../models/note_document.dart';
+
+/// Applies a user-confirmed assistant write to canonical Delta notes.
+final class LocalChatNoteAction {
+  static Note createNote(
     LocalChatToolCall call, {
     required DateTime now,
     required String untitledLabel,
   }) {
+    final content = call.content?.trim();
     if (call.name != LocalChatToolName.createNote ||
-        call.content?.trim().isEmpty != false) {
+        content?.isNotEmpty != true) {
       throw const FormatException('创建笔记提案不完整');
     }
-    final blocks = _safeBlocks(call.content!);
-    return NoteEntry(
-      type: NoteType.text,
+    return Note(
+      id: NoteId.generate(),
       title: call.title?.trim().isNotEmpty == true
           ? call.title!.trim()
           : untitledLabel,
-      content: NoteBlockCodec.encode(blocks),
-      richContent: NoteRichDocumentCodec.encode(blocks),
+      document: NoteDocument.fromPlainText(content!),
       createdAt: now,
       updatedAt: now,
     );
   }
 
-  static NoteEntry applyToNote(
+  static Note applyToNote(
     LocalChatToolCall call,
-    NoteEntry target, {
+    Note target, {
     required DateTime now,
   }) {
-    if (target.id == null || call.noteId != target.id) {
+    if (call.noteId != target.id) {
       throw const FormatException('目标笔记不匹配');
     }
     final incoming = call.content?.trim();
     if (incoming == null || incoming.isEmpty) {
       throw const FormatException('写入内容不能为空');
     }
-    final incomingBlocks = _safeBlocks(incoming);
-    final blocks = switch (call.name) {
-      LocalChatToolName.appendNote => [
-        ..._existingBlocks(target),
-        ...incomingBlocks,
-      ],
-      LocalChatToolName.replaceNote => incomingBlocks,
+    return switch (call.name) {
+      LocalChatToolName.appendNote => target.copyWith(
+        document: _append(target.document, incoming),
+        updatedAt: now,
+      ),
+      LocalChatToolName.replaceNote => target.copyWith(
+        document: NoteDocument.fromPlainText(incoming),
+        assets: const [],
+        coverAttachmentId: null,
+        updatedAt: now,
+      ),
       _ => throw const FormatException('不是可应用到现有笔记的操作'),
     };
-    return target.copyWith(
-      content: NoteBlockCodec.encode(blocks),
-      richContent: NoteRichDocumentCodec.encode(blocks),
-      updatedAt: now,
-    );
   }
 
-  static List<NoteBlockData> _existingBlocks(NoteEntry target) {
-    final rich = NoteRichDocumentCodec.tryDecode(target.richContent);
-    if (rich != null &&
-        NoteBlockCodec.structurallyMatches(rich, target.content ?? '')) {
-      return rich;
+  static NoteDocument _append(NoteDocument existing, String incoming) {
+    if (existing.project().isVisuallyEmpty) {
+      return NoteDocument.fromPlainText(incoming);
     }
-    return NoteBlockCodec.decode(target.content ?? '');
+    final combined = Delta.from(existing.toDelta());
+    for (final operation in NoteDocument.fromPlainText(
+      incoming,
+    ).toDelta().operations) {
+      combined.push(operation);
+    }
+    return NoteDocument.fromDelta(combined);
   }
-
-  static List<NoteBlockData> _safeBlocks(String source) =>
-      NoteBlockCodec.decode(source.trim())
-          .map((block) {
-            if (block.type != NoteBlockType.attachment) return block;
-            return const NoteBlockData(NoteBlockType.paragraph, '[附件引用已忽略]');
-          })
-          .toList(growable: false);
 }

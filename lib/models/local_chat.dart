@@ -1,3 +1,5 @@
+import 'note.dart';
+
 enum LocalChatRole { user, assistant }
 
 enum LocalChatMessageStatus { complete, stopped }
@@ -14,7 +16,7 @@ class LocalChatToolCall {
   final String id;
   final LocalChatToolName name;
   final String? query;
-  final int? noteId;
+  final NoteId? noteId;
   final String? title;
   final String? content;
   final LocalChatToolStatus status;
@@ -46,7 +48,7 @@ class LocalChatToolCall {
     'id': id,
     'name': name.name,
     'query': query,
-    'noteId': noteId,
+    'noteId': noteId?.value,
     'title': title,
     'content': content,
     'status': status.name,
@@ -64,7 +66,10 @@ class LocalChatToolCall {
       id: id,
       name: name.first,
       query: json['query'] as String?,
-      noteId: json['noteId'] as int?,
+      noteId: switch (json['noteId']) {
+        final String value => NoteId.parse(value),
+        _ => null,
+      },
       title: json['title'] as String?,
       content: json['content'] as String?,
       status: json['status'] == LocalChatToolStatus.completed.name
@@ -75,7 +80,7 @@ class LocalChatToolCall {
 }
 
 class LocalChatNoteContext {
-  final int noteId;
+  final NoteId noteId;
   final String title;
   final LocalChatNoteScope scope;
   final String content;
@@ -98,7 +103,7 @@ class LocalChatNoteContext {
   );
 
   Map<String, Object> toJson() => {
-    'noteId': noteId,
+    'noteId': noteId.value,
     'title': title,
     'scope': scope.name,
     'content': content,
@@ -110,15 +115,14 @@ class LocalChatNoteContext {
     final title = json['title'];
     final content = json['content'];
     final updatedAt = DateTime.tryParse(json['updatedAt'] as String? ?? '');
-    if (noteId is! int ||
-        noteId <= 0 ||
+    if (noteId is! String ||
         title is! String ||
         content is! String ||
         updatedAt == null) {
       throw const FormatException('聊天笔记上下文格式不正确');
     }
     return LocalChatNoteContext(
-      noteId: noteId,
+      noteId: NoteId.parse(noteId),
       title: title,
       scope: LocalChatNoteScope.values.firstWhere(
         (value) => value.name == json['scope'],

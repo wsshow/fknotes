@@ -1,5 +1,6 @@
 import 'package:fknotes/models/local_chat.dart';
 import 'package:fknotes/models/local_llm.dart';
+import 'package:fknotes/models/note.dart';
 import 'package:fknotes/services/local_chat_prompt_builder.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -21,7 +22,7 @@ void main() {
 
   LocalChatNoteContext noteContext({String content = '项目预算为 20 万元。'}) =>
       LocalChatNoteContext(
-        noteId: 7,
+        noteId: NoteId.parse('f1341a17-27a4-42f8-bd30-b589550f0f57'),
         title: '项目计划',
         scope: LocalChatNoteScope.fullNote,
         content: content,
@@ -47,6 +48,7 @@ void main() {
     expect(request.messages.first.content, contains('LaTeX'));
     expect(request.messages.first.content, contains('<fknotes_tool>'));
     expect(request.messages.first.content, contains('search_notes'));
+    expect(request.messages.first.content, contains('UUID'));
     expect(request.messages.first.content, contains(r'行内公式用 $...$'));
     expect(request.messages.map((item) => item.role), [
       LocalLlmRole.system,
@@ -121,7 +123,7 @@ void main() {
 
   test('labels multiple note sources in selection order', () {
     final second = LocalChatNoteContext(
-      noteId: 9,
+      noteId: NoteId.parse('1f166ea4-1df5-40c8-b494-7042929cf7cc'),
       title: '风险清单',
       scope: LocalChatNoteScope.fullNote,
       content: '主要风险是测试时间不足。',

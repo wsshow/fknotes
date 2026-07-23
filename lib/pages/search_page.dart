@@ -85,11 +85,7 @@ class _SearchPageState extends State<SearchPage> {
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => LocalChatPage(
-            initialSessionId: result.chatSessionId,
-            onOpenNote: (source) =>
-                NoteEditorPage.openById(context, source.noteId),
-          ),
+          builder: (_) => LocalChatPage(initialSessionId: result.chatSessionId),
         ),
       );
     }

@@ -11,7 +11,6 @@ import '../app.dart';
 import '../debug/app_diagnostics.dart';
 import '../l10n/l10n.dart';
 import '../l10n/local_model_l10n.dart';
-import '../models/local_chat.dart';
 import '../models/note.dart';
 import '../models/note_document.dart';
 import '../models/note_entry.dart';
@@ -20,7 +19,6 @@ import '../providers/note_provider.dart';
 import '../services/file_storage_service.dart';
 import '../services/editor_draft_recovery_service.dart';
 import '../services/language_model_service.dart';
-import '../services/local_chat_note_context_builder.dart';
 import '../services/local_model_manager.dart';
 import '../services/kokoro_tts_model_service.dart';
 import '../services/note_read_aloud_service.dart';
@@ -716,62 +714,10 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     required NoteAssistantEditorContext anchor,
     required NoteAssistantScope scope,
   }) async {
-    final sourceContent = switch (scope) {
-      NoteAssistantScope.selection => anchor.selectedText,
-      NoteAssistantScope.currentBlock => anchor.currentBlockContent,
-      NoteAssistantScope.fullNote => _content.text,
-    };
-    if (_title.text.trim().isEmpty && sourceContent.trim().isEmpty) {
-      AppFeedback.show(context, context.l10n.chatNoteEmpty);
-      return;
-    }
     if (!await _persist() || !mounted) return;
-    final entry = _entry;
-    if (entry?.id == null) {
-      AppFeedback.show(context, context.l10n.chatNoteEmpty);
-      return;
-    }
-    final noteContext = LocalChatNoteContextBuilder.fit([
-      LocalChatNoteContextBuilder.fromNote(
-        entry!,
-        untitledLabel: context.l10n.untitled,
-        scope: switch (scope) {
-          NoteAssistantScope.selection => LocalChatNoteScope.selection,
-          NoteAssistantScope.currentBlock => LocalChatNoteScope.currentBlock,
-          NoteAssistantScope.fullNote => LocalChatNoteScope.fullNote,
-        },
-        content: sourceContent,
-      ),
-    ]).single;
     await Navigator.push<void>(
       context,
-      MaterialPageRoute(
-        builder: (_) => LocalChatPage(
-          initialNoteContext: noteContext,
-          onOpenNote: (source) async {
-            if (!mounted) return;
-            if (source.noteId == _entry?.id) {
-              Navigator.pop(context);
-              return;
-            }
-            await NoteEditorPage.openById(context, source.noteId);
-          },
-          onWriteBack: (source, text, placement) async {
-            if (!mounted || source.noteId != _entry?.id) return false;
-            final inserted =
-                _blockEditorKey.currentState?.applyAssistantResult(
-                  anchor: anchor,
-                  scope: scope,
-                  placement: placement,
-                  text: text,
-                  heading: context.l10n.assistantChatResultHeading,
-                ) ??
-                false;
-            if (!inserted) return false;
-            return _persist(showError: false);
-          },
-        ),
-      ),
+      MaterialPageRoute(builder: (_) => const LocalChatPage()),
     );
   }
 

@@ -5,15 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
 
 import '../app.dart';
 import '../l10n/l10n.dart';
 import '../l10n/local_model_l10n.dart';
 import '../models/local_chat.dart';
 import '../models/local_llm.dart';
-import '../models/note_entry.dart';
-import '../providers/note_provider.dart';
+import '../models/note.dart';
 import '../services/language_model_service.dart';
 import '../services/local_assistant_service.dart';
 import '../services/local_chat_citation_formatter.dart';
@@ -25,9 +23,8 @@ import '../services/local_model_manager.dart';
 import '../services/local_llm/local_llm_output_filter.dart';
 import '../services/note_assistant_prompt_builder.dart';
 import '../services/local_chat_note_action.dart';
-import '../services/note_service.dart';
-import '../services/search_service.dart';
 import '../services/file_storage_service.dart';
+import '../services/note_database_service.dart';
 import '../services/realtime_dictation_service.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/app_popup_menu.dart';
@@ -786,11 +783,11 @@ class _LocalChatPageState extends State<LocalChatPage>
     List<LocalChatNoteContext> existing, {
     required String untitledLabel,
   }) async {
-    final results = await SearchService.instance.search(query);
+    final repository = await NoteDatabaseService.instance.repository;
+    final results = await repository.search(query);
     final contexts = <LocalChatNoteContext>[...existing];
-    for (final result in results) {
-      final note = result.note;
-      if (note == null || note.id == null) continue;
+    for (final note in results) {
+      if (note.status != NoteStatus.active) continue;
       contexts.add(
         LocalChatNoteContextBuilder.fromNote(
           note,
@@ -853,11 +850,13 @@ class _LocalChatPageState extends State<LocalChatPage>
     LocalChatToolCall call,
   ) async {
     if (call.status == LocalChatToolStatus.completed || !call.isWrite) return;
-    NoteEntry? target;
+    final repository = await NoteDatabaseService.instance.repository;
+    if (!mounted) return;
+    Note? target;
     if (call.name != LocalChatToolName.createNote) {
-      target = await NoteService.instance.getEntry(call.noteId!);
+      target = await repository.get(call.noteId!);
       if (!mounted) return;
-      if (target == null || target.isDeleted) {
+      if (target == null || target.status == NoteStatus.trashed) {
         AppFeedback.error(context, context.l10n.toolActionTargetMissing);
         return;
       }
@@ -869,10 +868,9 @@ class _LocalChatPageState extends State<LocalChatPage>
     );
     if (confirmed != true || !mounted) return;
     try {
-      final provider = context.read<NoteProvider>();
       final now = DateTime.now();
       if (call.name == LocalChatToolName.createNote) {
-        await provider.addEntry(
+        await repository.create(
           LocalChatNoteAction.createNote(
             call,
             now: now,
@@ -880,9 +878,10 @@ class _LocalChatPageState extends State<LocalChatPage>
           ),
         );
       } else {
-        await provider.updateEntry(
+        final updated = await repository.update(
           LocalChatNoteAction.applyToNote(call, target!, now: now),
         );
+        await _deleteRemovedNoteAssets(target, updated);
       }
       final currentIndex = _session.messages.indexWhere(
         (item) => item.id == message.id,
@@ -914,6 +913,26 @@ class _LocalChatPageState extends State<LocalChatPage>
         context,
         context.l10n.toolActionFailed(_cleanError(error)),
       );
+    }
+  }
+
+  Future<void> _deleteRemovedNoteAssets(Note before, Note after) async {
+    final retained = <String>{
+      for (final asset in after.assets) ...[
+        asset.storageKey,
+        ?asset.previewStorageKey,
+      ],
+    };
+    for (final asset in before.assets) {
+      for (final key in [asset.storageKey, asset.previewStorageKey]) {
+        if (key == null || retained.contains(key)) continue;
+        try {
+          await _storage.deleteFile(key);
+        } on FileSystemException {
+          // The Delta document is already committed. A stale orphan can be
+          // reclaimed by storage maintenance without rolling back user data.
+        }
+      }
     }
   }
 
@@ -2102,7 +2121,7 @@ String _toolTargetLabel(
   for (final source in message.noteContexts) {
     if (source.noteId == call.noteId) return source.title;
   }
-  return '${context.l10n.toolTargetNote} #${call.noteId}';
+  return context.l10n.toolTargetNote;
 }
 
 String _placementLabel(

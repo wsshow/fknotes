@@ -2,13 +2,16 @@ import 'dart:ui';
 
 import 'package:fknotes/l10n/generated/app_localizations.dart';
 import 'package:fknotes/models/local_chat.dart';
+import 'package:fknotes/models/note.dart';
 import 'package:fknotes/pages/local_chat_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  LocalChatNoteContext source(int id, String title) => LocalChatNoteContext(
-    noteId: id,
+  LocalChatNoteContext source(int index, String title) => LocalChatNoteContext(
+    noteId: NoteId.parse(
+      '00000000-0000-4000-8000-${index.toString().padLeft(12, '0')}',
+    ),
     title: title,
     scope: LocalChatNoteScope.fullNote,
     content: '$title 正文',
@@ -54,9 +57,9 @@ void main() {
       isTrue,
     );
 
-    await tester.tap(find.byKey(const Key('local-chat-note-source-42')));
+    await tester.tap(find.byKey(Key('local-chat-note-source-${note.noteId}')));
     await tester.pump();
-    expect(opened?.noteId, 42);
+    expect(opened?.noteId, note.noteId);
     expect(tester.takeException(), isNull);
   });
 

@@ -1,4 +1,5 @@
 import 'package:fknotes/models/local_chat.dart';
+import 'package:fknotes/models/note.dart';
 import 'package:fknotes/services/local_chat_tool_protocol.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -16,16 +17,17 @@ void main() {
   });
 
   test('parses and validates controlled search and write calls', () {
+    const noteId = 'f1341a17-27a4-42f8-bd30-b589550f0f57';
     final calls = LocalChatToolProtocol.parseCalls(
       '<fknotes_tool>{"name":"search_notes","query":"项目预算"}</fknotes_tool>'
-      '<fknotes_tool>{"name":"append_note","noteId":42,"content":"新增结论"}</fknotes_tool>',
+      '<fknotes_tool>{"name":"append_note","noteId":"$noteId","content":"新增结论"}</fknotes_tool>',
     );
 
     expect(calls, hasLength(2));
     expect(calls.first.name, LocalChatToolName.searchNotes);
     expect(calls.first.query, '项目预算');
     expect(calls.last.name, LocalChatToolName.appendNote);
-    expect(calls.last.noteId, 42);
+    expect(calls.last.noteId, NoteId.parse(noteId));
     expect(calls.last.content, '新增结论');
     expect(calls.last.status, LocalChatToolStatus.proposed);
   });
@@ -34,6 +36,7 @@ void main() {
     final calls = LocalChatToolProtocol.parseCalls(
       '<fknotes_tool>{"name":"delete_note","noteId":1}</fknotes_tool>'
       '<fknotes_tool>{"name":"replace_note","content":"缺少目标"}</fknotes_tool>'
+      '<fknotes_tool>{"name":"append_note","noteId":42,"content":"整数 ID 不再受理"}</fknotes_tool>'
       '<fknotes_tool>not-json</fknotes_tool>',
     );
 

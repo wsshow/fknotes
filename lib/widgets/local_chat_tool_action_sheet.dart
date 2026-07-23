@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import '../app.dart';
 import '../l10n/l10n.dart';
 import '../models/local_chat.dart';
-import '../models/note_entry.dart';
-import 'fk_markdown_view.dart';
+import '../models/note.dart';
+import 'note_delta_preview.dart';
 
 class LocalChatToolActionCard extends StatelessWidget {
   final LocalChatToolCall call;
@@ -89,7 +89,7 @@ class LocalChatToolActionCard extends StatelessWidget {
 Future<bool?> showLocalChatToolActionSheet(
   BuildContext context, {
   required LocalChatToolCall call,
-  NoteEntry? target,
+  Note? target,
 }) => showModalBottomSheet<bool>(
   context: context,
   isScrollControlled: true,
@@ -99,13 +99,13 @@ Future<bool?> showLocalChatToolActionSheet(
 
 class _LocalChatToolActionSheet extends StatelessWidget {
   final LocalChatToolCall call;
-  final NoteEntry? target;
+  final Note? target;
 
   const _LocalChatToolActionSheet({required this.call, required this.target});
 
   @override
   Widget build(BuildContext context) {
-    final current = target?.content?.trim() ?? '';
+    final current = target?.contentProjection.plainText.trim() ?? '';
     return SizedBox(
       height: MediaQuery.sizeOf(context).height * .84,
       child: Column(
@@ -181,15 +181,15 @@ class _LocalChatToolActionSheet extends StatelessWidget {
                             '—',
                             style: TextStyle(color: AppColors.muted),
                           )
-                        : FkMarkdownView(data: current, compact: true),
+                        : NoteDeltaPreview(note: target!, maxLines: 12),
                   ),
                 ],
                 const SizedBox(height: 14),
                 _PreviewSection(
                   label: context.l10n.toolProposedContent,
-                  child: FkMarkdownView(
-                    data: call.content?.trim() ?? '',
-                    compact: true,
+                  child: Text(
+                    call.content?.trim() ?? '',
+                    style: const TextStyle(height: 1.55),
                   ),
                 ),
               ],

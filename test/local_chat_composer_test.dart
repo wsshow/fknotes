@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:fknotes/models/local_chat.dart';
+import 'package:fknotes/models/note.dart';
 import 'package:fknotes/l10n/generated/app_localizations.dart';
 import 'package:fknotes/pages/local_chat_page.dart';
 import 'package:fknotes/services/file_storage_service.dart';
@@ -149,7 +150,7 @@ void main() {
     final focusNode = FocusNode();
     var removed = false;
     final note = LocalChatNoteContext(
-      noteId: 12,
+      noteId: NoteId.parse('f1341a17-27a4-42f8-bd30-b589550f0f57'),
       title: '产品路线图',
       scope: LocalChatNoteScope.fullNote,
       content: '路线图正文',

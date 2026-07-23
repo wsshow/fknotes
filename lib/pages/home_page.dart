@@ -169,11 +169,7 @@ class _HomePageState extends State<HomePage> {
 
   void _openAssistant() => Navigator.push(
     context,
-    MaterialPageRoute(
-      builder: (_) => LocalChatPage(
-        onOpenNote: (source) => NoteEditorPage.openById(context, source.noteId),
-      ),
-    ),
+    MaterialPageRoute(builder: (_) => const LocalChatPage()),
   );
 
   Future<void> _moveToTrash(NoteEntry entry) async {

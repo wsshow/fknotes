@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import '../models/local_chat.dart';
-import '../models/note_entry.dart';
+import '../models/note.dart';
 
 class LocalChatNoteContextBuilder {
   static const maxNotes = 5;
@@ -9,15 +9,13 @@ class LocalChatNoteContextBuilder {
   static const maxCharactersPerNote = 1200;
 
   static LocalChatNoteContext fromNote(
-    NoteEntry note, {
+    Note note, {
     LocalChatNoteScope scope = LocalChatNoteScope.fullNote,
     String? content,
     String untitledLabel = '无标题',
   }) {
-    final noteId = note.id;
-    if (noteId == null) throw ArgumentError('笔记必须先保存才能作为对话来源');
     return LocalChatNoteContext(
-      noteId: noteId,
+      noteId: note.id,
       title: note.title.trim().isEmpty ? untitledLabel : note.title.trim(),
       scope: scope,
       content: content ?? _readableSource(note),
@@ -28,7 +26,7 @@ class LocalChatNoteContextBuilder {
   static List<LocalChatNoteContext> fit(
     Iterable<LocalChatNoteContext> contexts,
   ) {
-    final unique = <int, LocalChatNoteContext>{};
+    final unique = <NoteId, LocalChatNoteContext>{};
     for (final context in contexts) {
       unique.putIfAbsent(context.noteId, () => context);
       if (unique.length == maxNotes) break;
@@ -47,16 +45,27 @@ class LocalChatNoteContextBuilder {
         .toList(growable: false);
   }
 
-  static String _readableSource(NoteEntry note) {
+  static String _readableSource(Note note) {
+    final ocr = _assetText(note.assets, (asset) => asset.ocrText);
+    final transcripts = _assetText(note.assets, (asset) => asset.transcript);
     final parts = <String>[
-      if (note.plainTextContent.trim().isNotEmpty) note.plainTextContent.trim(),
-      if (note.aggregateOcr.trim().isNotEmpty)
-        '【图片 OCR】\n${note.aggregateOcr.trim()}',
-      if (note.aggregateTranscripts.trim().isNotEmpty)
-        '【语音转写】\n${note.aggregateTranscripts.trim()}',
+      if (note.contentProjection.plainText.trim().isNotEmpty)
+        note.contentProjection.plainText.trim(),
+      if (ocr.isNotEmpty) '【图片 OCR】\n$ocr',
+      if (transcripts.isNotEmpty) '【语音转写】\n$transcripts',
     ];
     return parts.join('\n\n');
   }
+
+  static String _assetText(
+    List<NoteAsset> assets,
+    String? Function(NoteAsset asset) select,
+  ) => assets
+      .map(select)
+      .whereType<String>()
+      .map((value) => value.trim())
+      .where((value) => value.isNotEmpty)
+      .join('\n');
 
   static String _bounded(String value, int limit) {
     if (value.length <= limit) return value;

@@ -5,18 +5,17 @@ import 'package:flutter/material.dart';
 import '../app.dart';
 import '../l10n/l10n.dart';
 import '../models/local_chat.dart';
-import '../models/note_entry.dart';
+import '../models/note.dart';
 import '../services/local_chat_note_context_builder.dart';
-import '../services/note_service.dart';
-import '../services/search_service.dart';
+import '../services/note_database_service.dart';
 import 'app_feedback.dart';
 import 'editor_context_menu.dart';
-import 'note_card.dart';
+import 'note_delta_preview.dart';
 
 Future<List<LocalChatNoteContext>?> showLocalChatNotePicker(
   BuildContext context, {
   List<LocalChatNoteContext> initialSelection = const [],
-  Set<int> excludedNoteIds = const {},
+  Set<NoteId> excludedNoteIds = const {},
   int maxSelection = LocalChatNoteContextBuilder.maxNotes,
 }) => showModalBottomSheet<List<LocalChatNoteContext>>(
   context: context,
@@ -31,7 +30,7 @@ Future<List<LocalChatNoteContext>?> showLocalChatNotePicker(
 
 class _LocalChatNotePicker extends StatefulWidget {
   final List<LocalChatNoteContext> initialSelection;
-  final Set<int> excludedNoteIds;
+  final Set<NoteId> excludedNoteIds;
   final int maxSelection;
 
   const _LocalChatNotePicker({
@@ -47,11 +46,9 @@ class _LocalChatNotePicker extends StatefulWidget {
 class _LocalChatNotePickerState extends State<_LocalChatNotePicker> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
-  final _search = SearchService.instance;
-  final _notes = NoteService.instance;
-  final _selected = <int, LocalChatNoteContext>{};
+  final _selected = <NoteId, LocalChatNoteContext>{};
   Timer? _debounce;
-  List<NoteEntry> _results = const [];
+  List<Note> _results = const [];
   bool _loading = true;
   int _requestId = 0;
 
@@ -91,7 +88,8 @@ class _LocalChatNotePickerState extends State<_LocalChatNotePicker> {
 
   Future<void> _loadRecent() async {
     final request = ++_requestId;
-    final notes = await _notes.getAllEntries();
+    final repository = await NoteDatabaseService.instance.repository;
+    final notes = await repository.list();
     if (!mounted ||
         request != _requestId ||
         _controller.text.trim().isNotEmpty) {
@@ -99,10 +97,7 @@ class _LocalChatNotePickerState extends State<_LocalChatNotePicker> {
     }
     setState(() {
       _results = notes
-          .where(
-            (note) =>
-                !note.isDeleted && !widget.excludedNoteIds.contains(note.id),
-          )
+          .where((note) => !widget.excludedNoteIds.contains(note.id))
           .take(30)
           .toList(growable: false);
       _loading = false;
@@ -111,17 +106,17 @@ class _LocalChatNotePickerState extends State<_LocalChatNotePicker> {
 
   Future<void> _searchNotes(String query) async {
     final request = ++_requestId;
-    final results = await _search.search(query);
+    final repository = await NoteDatabaseService.instance.repository;
+    final results = await repository.search(query);
     if (!mounted || request != _requestId || query != _controller.text.trim()) {
       return;
     }
     setState(() {
       _results = results
-          .map((result) => result.note)
-          .whereType<NoteEntry>()
           .where(
             (note) =>
-                !note.isDeleted && !widget.excludedNoteIds.contains(note.id),
+                note.status == NoteStatus.active &&
+                !widget.excludedNoteIds.contains(note.id),
           )
           .take(40)
           .toList(growable: false);
@@ -129,9 +124,8 @@ class _LocalChatNotePickerState extends State<_LocalChatNotePicker> {
     });
   }
 
-  void _toggle(NoteEntry note) {
+  void _toggle(Note note) {
     final noteId = note.id;
-    if (noteId == null) return;
     if (_selected.remove(noteId) != null) {
       setState(() {});
       return;
@@ -270,29 +264,24 @@ class _LocalChatNotePickerState extends State<_LocalChatNotePicker> {
       separatorBuilder: (_, _) => const Divider(height: 1),
       itemBuilder: (context, index) {
         final note = _results[index];
-        final noteId = note.id!;
+        final noteId = note.id;
         final selected = _selected.containsKey(noteId);
-        final color = NoteCard.colorForType(note.primaryType);
         return CheckboxListTile(
           key: Key('local-chat-note-option-$noteId'),
           value: selected,
           onChanged: (_) => _toggle(note),
           controlAffinity: ListTileControlAffinity.trailing,
-          secondary: CircleAvatar(
-            backgroundColor: color.withValues(alpha: .12),
-            foregroundColor: color,
-            child: Icon(NoteCard.iconForType(note.primaryType), size: 19),
+          secondary: const CircleAvatar(
+            backgroundColor: AppColors.canvas,
+            foregroundColor: AppColors.muted,
+            child: Icon(Icons.description_outlined, size: 19),
           ),
           title: Text(
             note.title.trim().isEmpty ? context.l10n.untitled : note.title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          subtitle: Text(
-            note.previewText,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
+          subtitle: NoteDeltaPreview(note: note, maxLines: 2),
         );
       },
     );

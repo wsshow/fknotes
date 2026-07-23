@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:uuid/uuid.dart';
 
 import '../models/local_chat.dart';
+import '../models/note.dart';
 
 class LocalChatToolProtocol {
   static const _openTag = '<fknotes_tool>';
@@ -53,11 +54,14 @@ class LocalChatToolProtocol {
     final query = _boundedString(json['query'], 120);
     final title = _boundedString(json['title'], 120);
     final content = _boundedString(json['content'], 6000);
-    final noteId = switch (json['noteId']) {
-      int value when value > 0 => value,
-      String value => int.tryParse(value),
-      _ => null,
-    };
+    NoteId? noteId;
+    if (json['noteId'] case final String value) {
+      try {
+        noteId = NoteId.parse(value);
+      } on FormatException {
+        noteId = null;
+      }
+    }
     final name = switch (rawName) {
       'search_notes' => LocalChatToolName.searchNotes,
       'create_note' => LocalChatToolName.createNote,
@@ -70,7 +74,7 @@ class LocalChatToolProtocol {
       LocalChatToolName.searchNotes => query?.isNotEmpty == true,
       LocalChatToolName.createNote => content?.isNotEmpty == true,
       LocalChatToolName.appendNote || LocalChatToolName.replaceNote =>
-        noteId != null && noteId > 0 && content?.isNotEmpty == true,
+        noteId != null && content?.isNotEmpty == true,
     };
     if (!valid) return null;
     return LocalChatToolCall(

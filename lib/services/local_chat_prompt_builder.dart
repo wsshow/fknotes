@@ -2,6 +2,7 @@ import '../models/local_chat.dart';
 import '../models/local_llm.dart';
 
 class LocalChatPromptBuilder {
+  static const _exampleNoteId = '00000000-0000-4000-8000-000000000001';
   static const maxContextCharacters = 2800;
   static const maxSystemPromptCharacters = 2000;
   static const maxMultimodalAttachments = 4;
@@ -30,17 +31,19 @@ class LocalChatPromptBuilder {
       '<fknotes_tool>{"name":"search_notes","query":"关键词"}</fknotes_tool>，等待应用返回结果。'
       '需要修改数据时不得声称已经完成，只能提出以下一种操作：'
       '<fknotes_tool>{"name":"create_note","title":"标题","content":"正文"}</fknotes_tool>、'
-      '<fknotes_tool>{"name":"append_note","noteId":1,"content":"追加内容"}</fknotes_tool> 或 '
-      '<fknotes_tool>{"name":"replace_note","noteId":1,"content":"替换内容"}</fknotes_tool>。'
-      'noteId 必须来自笔记来源区块。标签内使用单行有效 JSON，不要放进 Markdown 代码块；写操作会由用户预览确认。';
+      '<fknotes_tool>{"name":"append_note","noteId":"$_exampleNoteId","content":"追加内容"}</fknotes_tool> 或 '
+      '<fknotes_tool>{"name":"replace_note","noteId":"$_exampleNoteId","content":"替换内容"}</fknotes_tool>。'
+      'noteId 必须是笔记来源区块中的 UUID；content 使用纯文本，应用会将它写入 Delta 文档。'
+      '标签内使用单行有效 JSON，不要放进 Markdown 代码块；写操作会由用户预览确认。';
   static const englishToolInstruction =
       'You may use controlled FKNotes tools. To search the library, output only '
       '<fknotes_tool>{"name":"search_notes","query":"keywords"}</fknotes_tool> and wait for results. '
       'Never claim a write already happened. Propose exactly one of: '
       '<fknotes_tool>{"name":"create_note","title":"Title","content":"Body"}</fknotes_tool>, '
-      '<fknotes_tool>{"name":"append_note","noteId":1,"content":"Text"}</fknotes_tool>, or '
-      '<fknotes_tool>{"name":"replace_note","noteId":1,"content":"Text"}</fknotes_tool>. '
-      'A noteId must come from a note-source block. Use valid one-line JSON without Markdown fences; users preview and confirm writes.';
+      '<fknotes_tool>{"name":"append_note","noteId":"$_exampleNoteId","content":"Text"}</fknotes_tool>, or '
+      '<fknotes_tool>{"name":"replace_note","noteId":"$_exampleNoteId","content":"Text"}</fknotes_tool>. '
+      'A noteId must be the UUID from a note-source block. Content is plain text that the app writes into a Delta document. '
+      'Use valid one-line JSON without Markdown fences; users preview and confirm writes.';
 
   static LocalLlmGenerationRequest build({
     required String systemPrompt,

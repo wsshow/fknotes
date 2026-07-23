@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:fknotes/models/local_chat.dart';
+import 'package:fknotes/models/note.dart';
 import 'package:fknotes/services/file_storage_service.dart';
 import 'package:fknotes/services/local_chat_database_service.dart';
 import 'package:fknotes/services/local_chat_store.dart';
@@ -176,8 +177,9 @@ void main() {
   });
 
   test('persists note contexts used by a conversation', () async {
+    final noteId = NoteId.parse('f1341a17-27a4-42f8-bd30-b589550f0f57');
     final noteContext = LocalChatNoteContext(
-      noteId: 42,
+      noteId: noteId,
       title: '发布计划',
       scope: LocalChatNoteScope.currentBlock,
       content: '周五发布测试版本。',
@@ -202,7 +204,7 @@ void main() {
     final restored = (await store.loadSessions()).single;
 
     expect(restored.messages.last.noteContexts, hasLength(1));
-    expect(restored.messages.last.noteContexts.single.noteId, 42);
+    expect(restored.messages.last.noteContexts.single.noteId, noteId);
     expect(restored.messages.last.noteContexts.single.title, '发布计划');
     expect(
       restored.messages.last.noteContexts.single.scope,
@@ -211,16 +213,17 @@ void main() {
   });
 
   test('persists controlled tool proposals and completion state', () async {
+    final noteId = NoteId.parse('f1341a17-27a4-42f8-bd30-b589550f0f57');
     var session = store.createSession().copyWith(
       messages: [
         store.createMessage(
           role: LocalChatRole.assistant,
           content: '请确认是否追加到笔记。',
-          toolCalls: const [
+          toolCalls: [
             LocalChatToolCall(
               id: 'tool-1',
               name: LocalChatToolName.appendNote,
-              noteId: 42,
+              noteId: noteId,
               content: '追加内容',
             ),
           ],
@@ -230,7 +233,7 @@ void main() {
     await store.saveSession(session);
 
     var restored = (await store.loadSessions()).single;
-    expect(restored.messages.single.toolCalls.single.noteId, 42);
+    expect(restored.messages.single.toolCalls.single.noteId, noteId);
     expect(
       restored.messages.single.toolCalls.single.status,
       LocalChatToolStatus.proposed,
