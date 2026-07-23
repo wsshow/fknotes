@@ -39,7 +39,7 @@ final class NoteQuillEditor extends StatelessWidget {
         expands: true,
         scrollable: true,
         readOnlyMouseCursor: SystemMouseCursors.text,
-        padding: const EdgeInsets.fromLTRB(24, 18, 24, 120),
+        padding: const EdgeInsets.fromLTRB(24, 18, 24, 48),
         placeholder: placeholder,
         enableInteractiveSelection: true,
         enableSelectionToolbar: true,
@@ -72,38 +72,47 @@ final class NoteQuillToolbar extends StatelessWidget {
   final String dividerTooltip;
 
   @override
-  Widget build(BuildContext context) => Material(
-    color: AppColors.surface,
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: const BoxDecoration(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      boxShadow: [
+        BoxShadow(
+          color: Color(0x0F202124),
+          blurRadius: 18,
+          offset: Offset(0, -4),
+        ),
+      ],
+    ),
     child: SafeArea(
       top: false,
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          border: Border(top: BorderSide(color: AppColors.line)),
-        ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
         child: Row(
           children: [
             if (onInsertImage != null) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
+              Material(
+                color: AppColors.accentSoft,
+                borderRadius: BorderRadius.circular(AppRadius.small),
                 child: IconButton(
                   key: const Key('quill-insert-image'),
                   tooltip: imageTooltip,
                   onPressed: onInsertImage,
-                  color: AppColors.coral,
-                  icon: const Icon(Icons.add_photo_alternate_outlined),
+                  color: AppColors.accent,
+                  icon: const Icon(
+                    Icons.add_photo_alternate_outlined,
+                    size: 21,
+                  ),
                 ),
               ),
-              const SizedBox(
-                height: 28,
-                child: VerticalDivider(width: 1, color: AppColors.line),
-              ),
+              const SizedBox(width: 4),
             ],
             Expanded(
               child: quill.QuillSimpleToolbar(
                 controller: controller.quillController,
                 config: quill.QuillSimpleToolbarConfig(
                   multiRowsDisplay: false,
-                  toolbarSize: 46,
+                  toolbarSize: 44,
                   showDividers: false,
                   color: AppColors.surface,
                   sectionDividerColor: AppColors.line,
@@ -137,7 +146,7 @@ final class NoteQuillToolbar extends StatelessWidget {
                       constraints: BoxConstraints(minWidth: 44, minHeight: 44),
                     ),
                     iconButtonSelectedData: quill.IconButtonData(
-                      color: AppColors.coral,
+                      color: AppColors.accent,
                       iconSize: 21,
                       padding: EdgeInsets.all(10),
                       constraints: BoxConstraints(minWidth: 44, minHeight: 44),
@@ -252,11 +261,11 @@ final class _ImageAssetBlock extends StatelessWidget {
       label: '图片：${asset.displayTitle}',
       button: onOpen != null,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
+        padding: const EdgeInsets.symmetric(vertical: 12),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppRadius.medium),
           child: Material(
-            color: AppColors.softBlue,
+            color: AppColors.surfaceMuted,
             child: Stack(
               alignment: Alignment.topRight,
               children: [
@@ -275,7 +284,7 @@ final class _ImageAssetBlock extends StatelessWidget {
                 ),
                 if (!readOnly)
                   Padding(
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.all(10),
                     child: _RemoveButton(
                       key: ValueKey('remove-note-asset-${asset.id.value}'),
                       onPressed: onRemove,
@@ -308,10 +317,9 @@ final class _FileAssetBlock extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 8),
     child: Material(
-      color: AppColors.canvas,
+      color: AppColors.surfaceMuted,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: AppColors.line),
+        borderRadius: BorderRadius.circular(AppRadius.medium),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -324,10 +332,14 @@ final class _FileAssetBlock extends StatelessWidget {
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                  color: AppColors.softCoral,
-                  borderRadius: BorderRadius.circular(12),
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(AppRadius.small),
                 ),
-                child: Icon(_iconFor(asset.kind), color: AppColors.coral),
+                child: Icon(
+                  _iconFor(asset.kind),
+                  color: AppColors.accent,
+                  size: 21,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -381,14 +393,13 @@ final class _RemoveButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Material(
     color: AppColors.surface.withValues(alpha: .92),
-    elevation: 1,
     shape: const CircleBorder(),
     child: IconButton(
       tooltip: '移除',
       onPressed: onPressed,
-      icon: const Icon(Icons.close_rounded, size: 19),
-      color: AppColors.ink,
-      constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+      icon: const Icon(Icons.close_rounded, size: 18),
+      color: AppColors.muted,
+      constraints: const BoxConstraints.tightFor(width: 38, height: 38),
       padding: EdgeInsets.zero,
       visualDensity: VisualDensity.standard,
     ),

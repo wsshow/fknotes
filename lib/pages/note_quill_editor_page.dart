@@ -894,8 +894,9 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     _EditorSaveState.failed => Icons.error_outline_rounded,
   };
 
-  Color get _saveColor =>
-      _saveState == _EditorSaveState.failed ? AppColors.coral : AppColors.muted;
+  Color get _saveColor => _saveState == _EditorSaveState.failed
+      ? AppColors.danger
+      : AppColors.muted;
 
   @override
   Widget build(BuildContext context) => PopScope<Note?>(
@@ -913,7 +914,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
             children: [
               _buildHeader(context),
               Padding(
-                padding: const EdgeInsets.fromLTRB(24, 14, 24, 2),
+                padding: const EdgeInsets.fromLTRB(24, 18, 24, 2),
                 child: TextField(
                   key: const Key('quill-note-title'),
                   controller: _titleController,
@@ -923,7 +924,10 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
                   textInputAction: TextInputAction.next,
                   inputFormatters: [LengthLimitingTextInputFormatter(200)],
                   onSubmitted: (_) => _editorFocusNode.requestFocus(),
-                  style: Theme.of(context).textTheme.headlineLarge,
+                  style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                    fontSize: 29,
+                    height: 1.25,
+                  ),
                   decoration: InputDecoration(
                     hintText: context.l10n.newNote,
                     filled: false,
@@ -947,8 +951,8 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
               if (_importingImage)
                 const LinearProgressIndicator(
                   minHeight: 2,
-                  color: AppColors.coral,
-                  backgroundColor: AppColors.softCoral,
+                  color: AppColors.accent,
+                  backgroundColor: AppColors.accentSoft,
                 ),
               NoteQuillToolbar(
                 controller: _editor,
@@ -963,7 +967,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
   );
 
   Widget _buildTags(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(24, 8, 24, 4),
+    padding: const EdgeInsets.fromLTRB(24, 10, 24, 2),
     child: Align(
       alignment: Alignment.centerLeft,
       child: Wrap(
@@ -975,6 +979,9 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
               key: ValueKey('quill-note-tag-$tag'),
               label: Text('#$tag'),
               onDeleted: () => _removeTag(tag),
+              backgroundColor: AppColors.surfaceMuted,
+              side: BorderSide.none,
+              deleteIconColor: AppColors.subtle,
               visualDensity: VisualDensity.compact,
             ),
           ActionChip(
@@ -984,6 +991,14 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
               _tags.isEmpty ? context.l10n.addTags : context.l10n.tags,
             ),
             onPressed: _editTags,
+            backgroundColor: _tags.isEmpty
+                ? AppColors.surfaceMuted
+                : Colors.transparent,
+            side: BorderSide.none,
+            labelStyle: const TextStyle(
+              color: AppColors.muted,
+              fontWeight: FontWeight.w500,
+            ),
             visualDensity: VisualDensity.compact,
           ),
         ],
@@ -992,54 +1007,48 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
   );
 
   Widget _buildHeader(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(12, 6, 18, 0),
+    padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
     child: Row(
       children: [
         IconButton(
           key: const Key('quill-editor-back'),
           tooltip: MaterialLocalizations.of(context).backButtonTooltip,
           onPressed: _closing ? null : _requestClose,
-          icon: const Icon(Icons.arrow_back_rounded),
+          style: IconButton.styleFrom(fixedSize: const Size.square(42)),
+          icon: const Icon(Icons.arrow_back_rounded, size: 22),
         ),
-        const SizedBox(width: 6),
+        const SizedBox(width: 4),
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _note.revision == 0
-                    ? context.l10n.newNote
-                    : context.l10n.editNote,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 1),
-              InkWell(
-                key: const Key('quill-save-status'),
-                onTap: _saveState == _EditorSaveState.failed
-                    ? () => unawaited(_persistLatest())
-                    : null,
-                borderRadius: BorderRadius.circular(8),
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 180),
-                  child: Row(
-                    key: ValueKey(_saveState),
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(_saveIcon, size: 13, color: _saveColor),
-                      const SizedBox(width: 5),
-                      Text(
-                        _saveLabel(context),
-                        style: TextStyle(
-                          color: _saveColor,
-                          fontSize: 12,
-                          height: 1.3,
-                        ),
+          child: InkWell(
+            key: const Key('quill-save-status'),
+            onTap: _saveState == _EditorSaveState.failed
+                ? () => unawaited(_persistLatest())
+                : null,
+            borderRadius: BorderRadius.circular(AppRadius.small),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 180),
+              child: Row(
+                key: ValueKey(_saveState),
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(_saveIcon, size: 14, color: _saveColor),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      _saveLabel(context),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: _saveColor,
+                        fontSize: 12,
+                        height: 1.3,
+                        fontWeight: FontWeight.w500,
                       ),
-                    ],
+                    ),
                   ),
-                ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
         if (_closing || _actionPending || _saveState == _EditorSaveState.saving)
@@ -1052,7 +1061,8 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
             key: const Key('quill-local-assistant'),
             tooltip: context.l10n.localAssistant,
             onPressed: _openLocalAssistant,
-            icon: const Icon(Icons.auto_awesome_outlined),
+            style: IconButton.styleFrom(fixedSize: const Size.square(40)),
+            icon: const Icon(Icons.auto_awesome_outlined, size: 21),
           ),
           IconButton(
             key: const Key('quill-read-aloud'),
@@ -1060,6 +1070,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
                 ? context.l10n.stopReadAloud
                 : context.l10n.readAloud,
             onPressed: _toggleReadAloud,
+            style: IconButton.styleFrom(fixedSize: const Size.square(40)),
             icon: _readAloud.status == ReadAloudStatus.generating
                 ? const SizedBox.square(
                     dimension: 19,
@@ -1069,6 +1080,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
                     _readAloud.isActive
                         ? Icons.stop_circle_outlined
                         : Icons.volume_up_outlined,
+                    size: 21,
                   ),
           ),
           AppAnchoredMenuButton<_QuillEditorMenuAction>(
