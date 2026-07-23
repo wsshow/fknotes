@@ -245,13 +245,14 @@ class _LocalChatPageState extends State<LocalChatPage>
 
   Widget _buildPage(BuildContext context) => Scaffold(
     appBar: AppBar(
-      titleSpacing: 4,
+      toolbarHeight: 64,
+      titleSpacing: 2,
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             context.l10n.localAssistant,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            style: Theme.of(context).textTheme.titleLarge,
           ),
           if (!_loading)
             Text(
@@ -261,7 +262,7 @@ class _LocalChatPageState extends State<LocalChatPage>
               style: const TextStyle(
                 color: AppColors.muted,
                 fontSize: 11,
-                fontWeight: FontWeight.w400,
+                fontWeight: FontWeight.w500,
               ),
             ),
         ],
@@ -368,7 +369,7 @@ class _LocalChatPageState extends State<LocalChatPage>
             onNotification: _handleTimelineScroll,
             child: ListView.builder(
               controller: _scroll,
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 80),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 84),
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               itemCount: _session.messages.length,
               itemBuilder: (context, index) {
@@ -1448,80 +1449,82 @@ class _ModelBar extends StatelessWidget {
     label:
         '$name, ${installed ? context.l10n.installedState : context.l10n.notInstalledState}, $roleLabel',
     onTap: onModelTap,
-    child: Material(
-      color: AppColors.surface,
-      child: InkWell(
-        onTap: onModelTap,
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
-          decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: AppColors.line)),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                installed ? Icons.memory_rounded : Icons.download_outlined,
-                size: 18,
-                color: installed ? AppColors.moss : AppColors.muted,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  '$name · ${installed ? context.l10n.installedState : context.l10n.notInstalledState}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12),
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+      child: Material(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onModelTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 9, 10, 9),
+            child: Row(
+              children: [
+                Icon(
+                  installed ? Icons.memory_rounded : Icons.download_outlined,
+                  size: 18,
+                  color: installed ? AppColors.accent : AppColors.muted,
                 ),
-              ),
-              const SizedBox(width: 6),
-              LocalLlmRuntimeBadge(
-                snapshot: runtimeSnapshot,
-                modelId: modelId,
-                installed: installed,
-              ),
-              const SizedBox(width: 6),
-              Material(
-                color: AppColors.softGreen,
-                borderRadius: BorderRadius.circular(20),
-                child: InkWell(
-                  key: const Key('local-chat-persona-switcher'),
-                  onTap: onRoleTap,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '$name · ${installed ? context.l10n.installedState : context.l10n.notInstalledState}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                LocalLlmRuntimeBadge(
+                  snapshot: runtimeSnapshot,
+                  modelId: modelId,
+                  installed: installed,
+                ),
+                const SizedBox(width: 6),
+                Material(
+                  color: AppColors.accentSoft,
                   borderRadius: BorderRadius.circular(20),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(9, 5, 5, 5),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 92),
-                          child: Text(
-                            roleLabel,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: AppColors.moss,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
+                  child: InkWell(
+                    key: const Key('local-chat-persona-switcher'),
+                    onTap: onRoleTap,
+                    borderRadius: BorderRadius.circular(20),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(9, 5, 5, 5),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 92),
+                            child: Text(
+                              roleLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppColors.accent,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
-                        ),
-                        const Icon(
-                          Icons.expand_more_rounded,
-                          size: 16,
-                          color: AppColors.moss,
-                        ),
-                      ],
+                          const Icon(
+                            Icons.expand_more_rounded,
+                            size: 16,
+                            color: AppColors.accent,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 5),
-              Icon(
-                Icons.chevron_right_rounded,
-                size: 19,
-                color: onModelTap == null ? AppColors.line : AppColors.muted,
-              ),
-            ],
+                const SizedBox(width: 5),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 19,
+                  color: onModelTap == null ? AppColors.line : AppColors.muted,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1537,15 +1540,19 @@ class _ActiveNoteContextBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     key: const Key('local-chat-active-note-context'),
-    width: double.infinity,
-    padding: const EdgeInsets.fromLTRB(16, 9, 16, 9),
-    decoration: const BoxDecoration(
-      color: AppColors.softGreen,
-      border: Border(bottom: BorderSide(color: AppColors.line)),
+    margin: const EdgeInsets.fromLTRB(12, 2, 12, 4),
+    padding: const EdgeInsets.fromLTRB(14, 9, 14, 9),
+    decoration: BoxDecoration(
+      color: AppColors.accentSoft,
+      borderRadius: BorderRadius.circular(AppRadius.small),
     ),
     child: Row(
       children: [
-        const Icon(Icons.description_outlined, size: 18, color: AppColors.moss),
+        const Icon(
+          Icons.description_outlined,
+          size: 18,
+          color: AppColors.accent,
+        ),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
@@ -1570,19 +1577,19 @@ class _EmptyChat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
-    padding: const EdgeInsets.fromLTRB(26, 64, 26, 28),
+    padding: const EdgeInsets.fromLTRB(26, 58, 26, 28),
     child: Column(
       children: [
         Container(
           width: 62,
           height: 62,
-          decoration: const BoxDecoration(
-            color: AppColors.softGreen,
-            shape: BoxShape.circle,
+          decoration: BoxDecoration(
+            color: AppColors.accentSoft,
+            borderRadius: BorderRadius.circular(AppRadius.large),
           ),
           child: const Icon(
             Icons.auto_awesome_rounded,
-            color: AppColors.moss,
+            color: AppColors.accent,
             size: 29,
           ),
         ),
@@ -1629,10 +1636,22 @@ class _Suggestion extends StatelessWidget {
         minimumSize: const Size(double.infinity, 48),
         alignment: Alignment.centerLeft,
         foregroundColor: AppColors.ink,
-        side: const BorderSide(color: AppColors.line),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        backgroundColor: AppColors.surface,
+        side: BorderSide.none,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.medium),
+        ),
       ),
-      child: Text(text),
+      child: Row(
+        children: [
+          Expanded(child: Text(text)),
+          const Icon(
+            Icons.arrow_upward_rounded,
+            size: 17,
+            color: AppColors.subtle,
+          ),
+        ],
+      ),
     ),
   );
 }
@@ -1691,14 +1710,13 @@ class _ChatBubble extends StatelessWidget {
           margin: const EdgeInsets.only(bottom: 14),
           padding: EdgeInsets.fromLTRB(14, 11, 14, user ? 10 : 8),
           decoration: BoxDecoration(
-            color: user ? AppColors.moss : AppColors.surface,
+            color: user ? AppColors.accent : AppColors.surface,
             borderRadius: BorderRadius.only(
               topLeft: const Radius.circular(17),
               topRight: const Radius.circular(17),
               bottomLeft: Radius.circular(user ? 17 : 5),
               bottomRight: Radius.circular(user ? 5 : 17),
             ),
-            border: user ? null : Border.all(color: AppColors.line),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2205,14 +2223,7 @@ class LocalChatComposer extends StatelessWidget {
                     borderRadius: BorderRadius.circular(
                       pendingAttachments.isEmpty ? 28 : 24,
                     ),
-                    border: Border.all(color: AppColors.line),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.ink.withValues(alpha: .08),
-                        blurRadius: 14,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+                    boxShadow: AppShadows.low,
                   ),
                   clipBehavior: Clip.antiAlias,
                   child: Column(
@@ -2562,20 +2573,20 @@ class _ChatComposerAction extends StatelessWidget {
       fixedSize: const Size(44, 44),
       padding: EdgeInsets.zero,
       backgroundColor: filled
-          ? AppColors.moss
+          ? AppColors.accent
           : active
-          ? AppColors.softCoral
+          ? AppColors.accentSoft
           : AppColors.surface,
       foregroundColor: filled
           ? Colors.white
           : active
-          ? AppColors.coral
+          ? AppColors.accent
           : AppColors.ink,
       disabledBackgroundColor: AppColors.softBlue,
       disabledForegroundColor: AppColors.muted,
       side: filled
           ? BorderSide.none
-          : BorderSide(color: active ? AppColors.coral : AppColors.line),
+          : BorderSide(color: active ? AppColors.accent : AppColors.line),
     ),
     icon: loading
         ? const SizedBox(
