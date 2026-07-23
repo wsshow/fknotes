@@ -27,6 +27,7 @@ Future<NoteAssistantInvocation?> showNoteAssistantTaskSheet(
   BuildContext context, {
   Set<NoteAssistantScope> availableScopes = const {NoteAssistantScope.fullNote},
   NoteAssistantScope initialScope = NoteAssistantScope.fullNote,
+  bool allowChat = true,
 }) {
   assert(availableScopes.isNotEmpty);
   return showModalBottomSheet<NoteAssistantInvocation>(
@@ -37,6 +38,7 @@ Future<NoteAssistantInvocation?> showNoteAssistantTaskSheet(
       initialScope: availableScopes.contains(initialScope)
           ? initialScope
           : availableScopes.first,
+      allowChat: allowChat,
     ),
   );
 }
@@ -44,10 +46,12 @@ Future<NoteAssistantInvocation?> showNoteAssistantTaskSheet(
 class _NoteAssistantTaskSheet extends StatefulWidget {
   final Set<NoteAssistantScope> availableScopes;
   final NoteAssistantScope initialScope;
+  final bool allowChat;
 
   const _NoteAssistantTaskSheet({
     required this.availableScopes,
     required this.initialScope,
+    required this.allowChat,
   });
 
   @override
@@ -134,33 +138,35 @@ class _NoteAssistantTaskSheetState extends State<_NoteAssistantTaskSheet> {
                 ],
               ),
               const SizedBox(height: 14),
-              ListTile(
-                key: const Key('note-assistant-open-chat'),
-                contentPadding: EdgeInsets.zero,
-                leading: Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: AppColors.softCoral,
-                    borderRadius: BorderRadius.circular(12),
+              if (widget.allowChat) ...[
+                ListTile(
+                  key: const Key('note-assistant-open-chat'),
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: AppColors.softCoral,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.forum_outlined,
+                      color: AppColors.coral,
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.forum_outlined,
-                    color: AppColors.coral,
+                  title: Text(
+                    context.l10n.chatWithThisNote,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: Text(context.l10n.chatWithThisNoteDescription),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.pop(
+                    context,
+                    NoteAssistantInvocation.chat(scope: _scope),
                   ),
                 ),
-                title: Text(
-                  context.l10n.chatWithThisNote,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-                subtitle: Text(context.l10n.chatWithThisNoteDescription),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () => Navigator.pop(
-                  context,
-                  NoteAssistantInvocation.chat(scope: _scope),
-                ),
-              ),
-              const SizedBox(height: 4),
+                const SizedBox(height: 4),
+              ],
               TextField(
                 key: const Key('note-assistant-custom-instruction'),
                 controller: _controller,
@@ -245,6 +251,7 @@ class _TaskTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListTile(
+    key: Key('note-assistant-task-${task.name}'),
     contentPadding: EdgeInsets.zero,
     leading: Container(
       width: 42,

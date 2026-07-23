@@ -12,6 +12,7 @@ import 'package:quill_native_bridge/quill_native_bridge.dart';
 
 import '../models/note.dart';
 import '../models/note_document.dart';
+import 'note_assistant_editing.dart';
 
 typedef NoteImageImporter = Future<NoteAsset?> Function(Uint8List bytes);
 typedef NoteClipboardImageReader = Future<Uint8List?> Function();
@@ -86,6 +87,122 @@ final class NoteEditorController extends ChangeNotifier {
       document: document,
       assets: List.unmodifiable(reconciledAssets),
     );
+  }
+
+  NoteAssistantAnchor captureAssistantAnchor() {
+    final delta = quillController.document.toDelta();
+    final plainText = quillController.document.toPlainText();
+    final rawSelection = quillController.selection;
+    final documentEnd = plainText.isEmpty ? 0 : plainText.length - 1;
+    final start = rawSelection.start.clamp(0, documentEnd);
+    final end = rawSelection.end.clamp(start, documentEnd);
+    final extent = rawSelection.extentOffset.clamp(0, documentEnd);
+    final previousNewline = extent == 0
+        ? -1
+        : plainText.lastIndexOf('\n', extent - 1);
+    final lineStart = previousNewline + 1;
+    final nextNewline = plainText.indexOf('\n', extent);
+    final lineEnd = nextNewline < 0 ? documentEnd : nextNewline;
+    String readable(String value) => value
+        .replaceAll(NoteDocument.objectReplacementCharacter, '')
+        .trimRight();
+    return NoteAssistantAnchor(
+      expectedDocument: encodeAssistantExpectedDocument(delta),
+      selection: TextSelection(baseOffset: start, extentOffset: end),
+      lineStart: lineStart,
+      lineEnd: lineEnd,
+      selectedText: readable(plainText.substring(start, end)),
+      currentLineText: readable(plainText.substring(lineStart, lineEnd)),
+    );
+  }
+
+  bool applyAssistantMarkdown({
+    required NoteAssistantAnchor anchor,
+    required NoteAssistantEditScope scope,
+    required NoteAssistantEditPlacement placement,
+    required String markdown,
+  }) {
+    if (markdown.trim().isEmpty ||
+        encodeAssistantExpectedDocument(quillController.document.toDelta()) !=
+            anchor.expectedDocument) {
+      return false;
+    }
+    final generated = NoteAssistantMarkdownCodec.decode(markdown);
+    final documentLength = quillController.document.length;
+    late final int offset;
+    late final int length;
+    late final Delta replacement;
+
+    if (placement == NoteAssistantEditPlacement.append) {
+      offset = (documentLength - 1).clamp(0, documentLength);
+      length = 0;
+      replacement = Delta();
+      if (documentLength > 1) replacement.insert('\n');
+      final generatedBody = _deltaWithoutTerminalNewline(generated);
+      for (final operation in generatedBody.operations) {
+        replacement.push(operation);
+      }
+    } else if (placement == NoteAssistantEditPlacement.insertBelow) {
+      offset = (anchor.lineEnd + 1).clamp(0, documentLength);
+      length = 0;
+      replacement = generated;
+    } else {
+      switch (scope) {
+        case NoteAssistantEditScope.selection:
+          offset = anchor.selection.start;
+          length = anchor.selection.end - anchor.selection.start;
+          replacement = _isSinglePlainParagraph(generated)
+              ? _deltaWithoutTerminalNewline(generated)
+              : generated;
+        case NoteAssistantEditScope.currentLine:
+          offset = anchor.lineStart;
+          length = anchor.lineEnd - anchor.lineStart + 1;
+          replacement = generated;
+        case NoteAssistantEditScope.document:
+          offset = 0;
+          length = documentLength;
+          replacement = generated;
+      }
+    }
+
+    quillController.replaceText(offset, length, replacement, null);
+    final caret = (offset + replacement.length).clamp(
+      0,
+      quillController.document.length - 1,
+    );
+    quillController.updateSelection(
+      TextSelection.collapsed(offset: caret),
+      ChangeSource.local,
+    );
+    return true;
+  }
+
+  static bool _isSinglePlainParagraph(Delta delta) {
+    final operations = delta.operations;
+    if (operations.isEmpty || operations.last.data != '\n') return false;
+    if (operations.last.attributes?.isNotEmpty == true) return false;
+    return operations
+        .take(operations.length - 1)
+        .where((operation) => operation.data is String)
+        .every((operation) => !(operation.data as String).contains('\n'));
+  }
+
+  static Delta _deltaWithoutTerminalNewline(Delta source) {
+    final json = source.toJson().map(Map<String, dynamic>.from).toList();
+    if (json.isEmpty) return Delta();
+    final last = json.last;
+    if (last['insert'] == '\n') {
+      json.removeLast();
+    } else if (last['insert'] is String &&
+        (last['insert'] as String).endsWith('\n')) {
+      final value = last['insert'] as String;
+      if (value.length == 1) {
+        json.removeLast();
+      } else {
+        last['insert'] = value.substring(0, value.length - 1);
+      }
+    }
+    return Delta.fromJson(json);
   }
 
   Future<bool> importImageBytes(Uint8List bytes) async {

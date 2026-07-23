@@ -4,6 +4,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:fknotes/editor/note_assistant_editing.dart';
 import 'package:fknotes/editor/note_editor_controller.dart';
 import 'package:fknotes/l10n/generated/app_localizations.dart';
 import 'package:fknotes/models/note.dart';
@@ -193,6 +194,125 @@ void main() {
         expect(embedOperation.attributes, isNull);
       },
     );
+
+    test('AI Markdown becomes native Delta formatting and list blocks', () {
+      final delta = NoteAssistantMarkdownCodec.decode(
+        '## 摘要\n\n**重点**与 [链接](https://example.com)\n\n- 一\n- 二',
+      );
+      final document = NoteDocument.fromDelta(delta);
+
+      expect(document.project().plainText, '摘要\n重点与 链接\n一\n二');
+      expect(delta.toJson(), [
+        {'insert': '摘要'},
+        {
+          'insert': '\n',
+          'attributes': {'header': 2},
+        },
+        {
+          'insert': '重点',
+          'attributes': {'bold': true},
+        },
+        {'insert': '与 '},
+        {
+          'insert': '链接',
+          'attributes': {'link': 'https://example.com'},
+        },
+        {'insert': '\n一'},
+        {
+          'insert': '\n',
+          'attributes': {'list': 'bullet'},
+        },
+        {'insert': '二'},
+        {
+          'insert': '\n',
+          'attributes': {'list': 'bullet'},
+        },
+      ]);
+    });
+
+    test('AI selection replacement is one native document transaction', () {
+      final controller = NoteEditorController(
+        document: NoteDocument.fromPlainText('保留 需要润色 结尾'),
+        assets: const [],
+      );
+      addTearDown(controller.dispose);
+      controller.quillController.updateSelection(
+        const TextSelection(baseOffset: 3, extentOffset: 7),
+        quill.ChangeSource.local,
+      );
+      final anchor = controller.captureAssistantAnchor();
+
+      final applied = controller.applyAssistantMarkdown(
+        anchor: anchor,
+        scope: NoteAssistantEditScope.selection,
+        placement: NoteAssistantEditPlacement.replace,
+        markdown: '**已润色**',
+      );
+
+      expect(applied, isTrue);
+      expect(controller.snapshot().document.project().plainText, '保留 已润色 结尾');
+      expect(controller.snapshot().document.toDelta().toJson(), [
+        {'insert': '保留 '},
+        {
+          'insert': '已润色',
+          'attributes': {'bold': true},
+        },
+        {'insert': ' 结尾\n'},
+      ]);
+    });
+
+    test('AI refuses stale anchors after the user keeps editing', () {
+      final controller = NoteEditorController(
+        document: NoteDocument.fromPlainText('原文'),
+        assets: const [],
+      );
+      addTearDown(controller.dispose);
+      final anchor = controller.captureAssistantAnchor();
+      controller.quillController.replaceText(
+        0,
+        0,
+        '新',
+        const TextSelection.collapsed(offset: 1),
+      );
+
+      expect(
+        controller.applyAssistantMarkdown(
+          anchor: anchor,
+          scope: NoteAssistantEditScope.document,
+          placement: NoteAssistantEditPlacement.replace,
+          markdown: '生成结果',
+        ),
+        isFalse,
+      );
+      expect(controller.snapshot().document.project().plainText, '新原文');
+    });
+
+    test('AI appends below the current line without merging paragraphs', () {
+      final controller = NoteEditorController(
+        document: NoteDocument.fromPlainText('第一行\n第二行'),
+        assets: const [],
+      );
+      addTearDown(controller.dispose);
+      controller.quillController.updateSelection(
+        const TextSelection.collapsed(offset: 2),
+        quill.ChangeSource.local,
+      );
+      final anchor = controller.captureAssistantAnchor();
+
+      expect(
+        controller.applyAssistantMarkdown(
+          anchor: anchor,
+          scope: NoteAssistantEditScope.currentLine,
+          placement: NoteAssistantEditPlacement.insertBelow,
+          markdown: '插入行',
+        ),
+        isTrue,
+      );
+      expect(
+        controller.snapshot().document.project().plainText,
+        '第一行\n插入行\n第二行',
+      );
+    });
   });
 
   testWidgets(

@@ -6,6 +6,7 @@ import 'package:fknotes/l10n/generated/app_localizations.dart';
 import 'package:fknotes/models/note.dart';
 import 'package:fknotes/models/note_document.dart';
 import 'package:fknotes/pages/note_quill_editor_page.dart';
+import 'package:fknotes/services/note_assistant_prompt_builder.dart';
 import 'package:fknotes/services/note_read_aloud_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
@@ -261,6 +262,81 @@ void main() {
     expect(readAloud.spoken.single, isNot(contains('OCR')));
     expect(readAloud.spoken.single, isNot(contains('——')));
     expect(writer.notes, isEmpty);
+  });
+
+  testWidgets('applies local assistant output as formatted Delta content', (
+    tester,
+  ) async {
+    final now = DateTime.utc(2026, 7, 23, 19);
+    final initial = Note(
+      id: NoteId.generate(),
+      title: '项目备忘',
+      document: NoteDocument.fromPlainText('原始正文'),
+      tags: const ['工作'],
+      createdAt: now,
+      updatedAt: now,
+    );
+    String? receivedContent;
+    Set<NoteAssistantPlacement>? receivedPlacements;
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: NoteQuillEditorPage(
+          initialNote: initial,
+          writerLoader: () async => writer,
+          autosaveDelay: const Duration(milliseconds: 50),
+          assistantResultPresenter:
+              (
+                context, {
+                required action,
+                required scope,
+                required title,
+                required content,
+                required languageCode,
+                required placements,
+              }) async {
+                expect(scope, NoteAssistantScope.fullNote);
+                expect(title, isEmpty);
+                expect(languageCode, 'zh');
+                receivedContent = content;
+                receivedPlacements = placements;
+                return const NoteAssistantResult(
+                  text: '**核心结论**',
+                  placement: NoteAssistantPlacement.append,
+                );
+              },
+        ),
+      ),
+    );
+    await _pumpFor(tester, const Duration(milliseconds: 200));
+
+    await tester.tap(find.byKey(const Key('quill-local-assistant')));
+    await _pumpFor(tester, const Duration(milliseconds: 300));
+    await tester.tap(find.byKey(const Key('note-assistant-scope-fullNote')));
+    await tester.pump();
+    final summarize = find.byKey(const Key('note-assistant-task-summarize'));
+    await tester.ensureVisible(summarize);
+    await tester.pump();
+    await tester.tap(summarize);
+    await _pumpFor(tester, const Duration(milliseconds: 500));
+
+    expect(receivedContent, contains('标题:\n项目备忘'));
+    expect(receivedContent, contains('标签:\n工作'));
+    expect(receivedContent, contains('正文:\n原始正文'));
+    expect(receivedPlacements, {
+      NoteAssistantPlacement.replace,
+      NoteAssistantPlacement.append,
+    });
+    final saved = writer.notes.single;
+    expect(saved.contentProjection.plainText, '原始正文\n本地助手摘要\n核心结论');
+    expect(saved.contentProjection.plainText, isNot(contains('**')));
+    expect(
+      saved.document.toDelta().operations.any(
+        (operation) =>
+            operation.data == '核心结论' && operation.attributes?['bold'] == true,
+      ),
+      isTrue,
+    );
   });
 }
 

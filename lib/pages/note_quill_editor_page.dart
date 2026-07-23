@@ -6,17 +6,23 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../app.dart';
+import '../editor/note_assistant_editing.dart';
 import '../editor/note_editor_controller.dart';
 import '../l10n/l10n.dart';
+import '../l10n/local_model_l10n.dart';
 import '../models/note.dart';
 import '../models/note_semantic_projection.dart';
 import '../services/file_storage_service.dart';
 import '../services/kokoro_tts_model_service.dart';
+import '../services/language_model_service.dart';
+import '../services/local_model_manager.dart';
 import '../services/note_asset_import_service.dart';
+import '../services/note_assistant_prompt_builder.dart';
 import '../services/note_database_service.dart';
 import '../services/note_read_aloud_service.dart';
 import '../services/note_repository.dart';
 import '../widgets/app_feedback.dart';
+import '../widgets/note_assistant_sheet.dart';
 import '../widgets/note_quill_editor.dart';
 import 'model_management_page.dart';
 
@@ -51,6 +57,16 @@ typedef NoteImagePicker = Future<PickedNoteImage?> Function(ImageSource source);
 typedef NoteImageAssetImporter =
     Future<NoteAsset> Function(Uint8List bytes, {required String originalName});
 typedef NoteReadAloudAvailabilityChecker = Future<bool> Function();
+typedef NoteAssistantResultPresenter =
+    Future<NoteAssistantResult?> Function(
+      BuildContext context, {
+      required NoteAssistantAction action,
+      required NoteAssistantScope scope,
+      required String title,
+      required String content,
+      required String languageCode,
+      required Set<NoteAssistantPlacement> placements,
+    });
 
 /// The clean-slate Delta editor route.
 ///
@@ -66,6 +82,7 @@ final class NoteQuillEditorPage extends StatefulWidget {
     this.resolveImage,
     this.readAloud,
     this.readAloudAvailabilityChecker,
+    this.assistantResultPresenter,
     this.now,
     this.autosaveDelay = const Duration(milliseconds: 700),
     super.key,
@@ -78,6 +95,7 @@ final class NoteQuillEditorPage extends StatefulWidget {
   final NoteAssetImageProvider? resolveImage;
   final NoteReadAloudDriver? readAloud;
   final NoteReadAloudAvailabilityChecker? readAloudAvailabilityChecker;
+  final NoteAssistantResultPresenter? assistantResultPresenter;
   final DateTime Function()? now;
   final Duration autosaveDelay;
 
@@ -290,6 +308,174 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     }
     return false;
   }
+
+  Future<void> _openLocalAssistant() async {
+    try {
+      final anchor = _editor.captureAssistantAnchor();
+      final scopes = <NoteAssistantScope>{NoteAssistantScope.fullNote};
+      if (anchor.hasCurrentLine) scopes.add(NoteAssistantScope.currentBlock);
+      if (anchor.hasSelection) scopes.add(NoteAssistantScope.selection);
+      final initialScope = anchor.hasSelection
+          ? NoteAssistantScope.selection
+          : anchor.hasCurrentLine
+          ? NoteAssistantScope.currentBlock
+          : NoteAssistantScope.fullNote;
+      final invocation = await showNoteAssistantTaskSheet(
+        context,
+        availableScopes: scopes,
+        initialScope: initialScope,
+        allowChat: false,
+      );
+      if (invocation == null || !mounted || invocation.opensChat) return;
+
+      final languageCode = Localizations.localeOf(context).languageCode;
+      final projection = NoteSemanticProjection.fromNote(_currentSnapshot());
+      final sourceContent = switch (invocation.scope) {
+        NoteAssistantScope.selection => anchor.selectedText,
+        NoteAssistantScope.currentBlock => anchor.currentLineText,
+        NoteAssistantScope.fullNote => projection.assistantSource(
+          languageCode: languageCode,
+        ),
+      };
+      final placements = invocation.scope == NoteAssistantScope.fullNote
+          ? const {
+              NoteAssistantPlacement.replace,
+              NoteAssistantPlacement.append,
+            }
+          : NoteAssistantPlacement.values.toSet();
+      final presenter = widget.assistantResultPresenter ?? _presentAssistant;
+      final generated = await presenter(
+        context,
+        action: invocation.action,
+        scope: invocation.scope,
+        title: invocation.scope == NoteAssistantScope.fullNote
+            ? ''
+            : _titleController.text.trim(),
+        content: sourceContent,
+        languageCode: languageCode,
+        placements: placements,
+      );
+      if (generated == null || !mounted) return;
+
+      final markdown = generated.placement == NoteAssistantPlacement.append
+          ? '## ${_assistantResultHeading(invocation.action)}\n\n${generated.text}'
+          : generated.text;
+      final applied = _editor.applyAssistantMarkdown(
+        anchor: anchor,
+        scope: switch (invocation.scope) {
+          NoteAssistantScope.selection => NoteAssistantEditScope.selection,
+          NoteAssistantScope.currentBlock => NoteAssistantEditScope.currentLine,
+          NoteAssistantScope.fullNote => NoteAssistantEditScope.document,
+        },
+        placement: switch (generated.placement) {
+          NoteAssistantPlacement.replace => NoteAssistantEditPlacement.replace,
+          NoteAssistantPlacement.insertBelow =>
+            NoteAssistantEditPlacement.insertBelow,
+          NoteAssistantPlacement.append => NoteAssistantEditPlacement.append,
+        },
+        markdown: markdown,
+      );
+      if (!applied) {
+        AppFeedback.show(context, context.l10n.noteChangedRetryAssistant);
+        return;
+      }
+      _editorFocusNode.requestFocus();
+      AppFeedback.success(context, switch (generated.placement) {
+        NoteAssistantPlacement.replace => context.l10n.assistantReplacedContent,
+        NoteAssistantPlacement.insertBelow =>
+          context.l10n.assistantInsertedBelow,
+        NoteAssistantPlacement.append => context.l10n.assistantAppended,
+      });
+    } catch (error) {
+      if (mounted) {
+        AppFeedback.error(
+          context,
+          context.l10n.assistantLaunchFailed(error.toString()),
+        );
+      }
+    }
+  }
+
+  Future<NoteAssistantResult?> _presentAssistant(
+    BuildContext hostContext, {
+    required NoteAssistantAction action,
+    required NoteAssistantScope scope,
+    required String title,
+    required String content,
+    required String languageCode,
+    required Set<NoteAssistantPlacement> placements,
+  }) async {
+    if (!await _ensureLanguageModelAvailable() ||
+        !mounted ||
+        !hostContext.mounted) {
+      return null;
+    }
+    return showModalBottomSheet<NoteAssistantResult>(
+      context: hostContext,
+      isScrollControlled: true,
+      builder: (sheetContext) => NoteAssistantResultSheet(
+        action: action,
+        scope: scope,
+        title: title,
+        content: content,
+        languageCode: languageCode,
+        placements: placements,
+      ),
+    );
+  }
+
+  Future<bool> _ensureLanguageModelAvailable() async {
+    final models = LanguageModelService.instance;
+    final selectedId = await models.selectedModelId();
+    final installed = await models.inspect(selectedId);
+    if (installed.installed) return true;
+    if (!mounted) return false;
+    final downloadSize =
+        '${(models.downloadSizeBytes(selectedId) / 1073741824).toStringAsFixed(1)} GB';
+    final openModels = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.l10n.localLanguageModelRequired),
+        content: Text(
+          context.l10n.localLanguageModelDownloadDescription(
+            localizedModelName(
+              context.l10n,
+              LocalModelManager.instance.modelOf(selectedId),
+            ),
+            downloadSize,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(context.l10n.maybeLater),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(context.l10n.manageModels),
+          ),
+        ],
+      ),
+    );
+    if (openModels != true || !mounted) return false;
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ModelManagementPage(focusModelId: selectedId),
+      ),
+    );
+    if (!mounted) return false;
+    final currentId = await models.selectedModelId();
+    return (await models.inspect(currentId)).installed;
+  }
+
+  String _assistantResultHeading(NoteAssistantAction action) =>
+      switch (action.task) {
+        NoteAssistantTask.summarize => context.l10n.assistantSummaryHeading,
+        NoteAssistantTask.extractTodos => context.l10n.assistantTodosHeading,
+        NoteAssistantTask.polish => context.l10n.assistantPolishedHeading,
+        null => context.l10n.assistantGeneratedHeading,
+      };
 
   Future<NoteAsset?> _importClipboardImage(Uint8List bytes) async {
     try {
@@ -605,6 +791,12 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
             child: CircularProgressIndicator(strokeWidth: 2),
           )
         else ...[
+          IconButton(
+            key: const Key('quill-local-assistant'),
+            tooltip: context.l10n.localAssistant,
+            onPressed: _openLocalAssistant,
+            icon: const Icon(Icons.auto_awesome_outlined),
+          ),
           IconButton(
             key: const Key('quill-read-aloud'),
             tooltip: _readAloud.isActive
