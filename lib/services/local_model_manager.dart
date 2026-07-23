@@ -491,7 +491,6 @@ class LocalModelManager extends ChangeNotifier {
       );
     }
     try {
-      await _languageModels.retireMnnGemmaModels();
       await Future.wait([
         _remoteCatalog.loadCache(),
         _liteRtCatalog.loadCache(),

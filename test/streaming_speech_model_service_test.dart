@@ -20,39 +20,30 @@ void main() {
   });
 
   test(
-    'reuses a legacy bilingual installation for the bpe vocab upgrade',
+    'counts only resumable bytes from the transactional download area',
     () async {
-      final active = Directory(
-        p.join(
-          storageDirectory.path,
-          'models',
-          'asr',
-          'streaming-zipformer-bilingual-zh-en-2023-02-20',
-          'active',
-        ),
+      final root = p.join(
+        storageDirectory.path,
+        'models',
+        'asr',
+        'streaming-zipformer-bilingual-zh-en-2023-02-20',
       );
-      await active.create(recursive: true);
-      const legacyFiles = {
-        'encoder.int8.onnx': 181895032,
-        'decoder.onnx': 13091040,
-        'joiner.int8.onnx': 3228404,
-        'tokens.txt': 56317,
-      };
-      for (final entry in legacyFiles.entries) {
-        final output = await File(
-          p.join(active.path, entry.key),
-        ).open(mode: FileMode.write);
-        await output.truncate(entry.value);
-        await output.close();
-      }
+      final partial = File(p.join(root, '.download', 'encoder.int8.onnx.part'));
+      await partial.parent.create(recursive: true);
+      await partial.writeAsBytes(List.filled(137, 1));
+      final incompleteActive = File(p.join(root, 'active', 'tokens.txt'));
+      await incompleteActive.parent.create(recursive: true);
+      await incompleteActive.writeAsBytes(List.filled(89, 1));
 
-      final reusable = await StreamingSpeechModelService.instance
+      final bytes = await StreamingSpeechModelService.instance
           .partialDownloadBytes(StreamingSpeechModelService.bilingualModelId);
-      expect(reusable, 198270793);
-      expect(
-        StreamingSpeechModelService.bilingualDownloadSizeBytes - reusable,
-        12564,
+
+      expect(bytes, 137);
+      final info = await StreamingSpeechModelService.instance.inspect(
+        modelId: StreamingSpeechModelService.bilingualModelId,
       );
+      expect(info.installed, isFalse);
+      expect(info.problem, '实时语音模型尚未安装');
     },
   );
 }

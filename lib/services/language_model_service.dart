@@ -110,14 +110,6 @@ class LanguageModelService {
     gemma4E2BLiteRtId,
     gemma4E4BLiteRtId,
   ];
-  static const _retiredMnnGemmaModelIds = {
-    'gemma-4-e2b-it-mnn-int4',
-    'gemma-4-e4b-it-mnn-int4',
-  };
-  static const _retiredMnnGemmaStorageFolders = {
-    'gemma-4-e2b-it-mnn-int4',
-    'gemma-4-e4b-it-mnn-int4',
-  };
   static const _manifestFileName = 'manifest.json';
 
   static const _specs = <_LanguageModelSpec>[
@@ -581,33 +573,6 @@ class LanguageModelService {
       return qwen35Id;
     } on FileSystemException {
       return qwen35Id;
-    }
-  }
-
-  /// Removes Gemma 4 assets created by releases that routed the model through
-  /// MNN. Gemma 4 now has a separate LiteRT-LM installation and engine, so the
-  /// two formats must never share selection state or model storage.
-  Future<void> retireMnnGemmaModels() async {
-    for (final id in _retiredMnnGemmaModelIds) {
-      _dynamicSpecs.remove(id);
-    }
-    final root = p.join(_storage.baseDir, 'models', 'llm');
-    for (final folder in _retiredMnnGemmaStorageFolders) {
-      final directory = Directory(p.join(root, folder));
-      if (await directory.exists()) await directory.delete(recursive: true);
-    }
-    final selection = File(_selectionPath);
-    if (!await selection.exists()) return;
-    try {
-      final decoded = jsonDecode(await selection.readAsString());
-      final id = decoded is Map ? decoded['modelId'] : null;
-      if (id is String && _retiredMnnGemmaModelIds.contains(id)) {
-        await selection.delete();
-      }
-    } on FormatException {
-      // Corrupt selection files already fall back to the curated default.
-    } on FileSystemException {
-      // A failed best-effort migration must not prevent app startup.
     }
   }
 

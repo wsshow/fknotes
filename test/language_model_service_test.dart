@@ -68,25 +68,6 @@ void main() {
     }
   });
 
-  test('retires legacy MNN Gemma 4 assets and selection', () async {
-    final modelRoot = Directory(
-      p.join(storage.path, 'models', 'llm', 'gemma-4-e2b-it-mnn-int4'),
-    );
-    await modelRoot.create(recursive: true);
-    await File(p.join(modelRoot.path, 'legacy.bin')).writeAsString('legacy');
-    final selection = File(
-      p.join(storage.path, 'models', 'llm', 'selection.json'),
-    );
-    await selection.parent.create(recursive: true);
-    await selection.writeAsString('{"modelId":"gemma-4-e2b-it-mnn-int4"}');
-
-    await service.retireMnnGemmaModels();
-
-    expect(await modelRoot.exists(), isFalse);
-    expect(await selection.exists(), isFalse);
-    expect(await service.selectedModelId(), LanguageModelService.qwen35Id);
-  });
-
   test('partial bytes include independently resumable files', () async {
     final download = Directory(
       p.join(

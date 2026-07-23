@@ -109,7 +109,6 @@ class StreamingSpeechModelService {
     _StreamingModelSpec(
       id: modelId,
       displayName: 'Streaming Zipformer 中文',
-      // Keep the original path so existing installations remain valid.
       storageFolder: 'streaming-zipformer-zh-14m',
       repository:
           'csukuangfj/sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30',
@@ -282,9 +281,6 @@ class StreamingSpeechModelService {
     final files = [...runtimeFiles, manifest];
     if (!manifest.existsSync() ||
         runtimeFiles.any((file) => !file.existsSync())) {
-      if (spec.modelingUnit == 'cjkchar+bpe' && !bpeVocab.existsSync()) {
-        return unavailable('中英模型需补充热词词表，请继续下载完成增量升级');
-      }
       return unavailable('实时语音模型尚未安装');
     }
     try {
@@ -340,14 +336,6 @@ class StreamingSpeechModelService {
       final partial = File(_partialPath(spec, definition));
       if (await partial.exists()) {
         total += (await partial.length()).clamp(0, definition.sizeBytes);
-        continue;
-      }
-      // Count reusable files from a previous model layout so the model manager
-      // accurately presents a tiny metadata upgrade instead of a full re-download.
-      final active = File(p.join(_activeDir(spec), definition.localName));
-      if (await active.exists() &&
-          await active.length() == definition.sizeBytes) {
-        total += definition.sizeBytes;
       }
     }
     return total;
@@ -428,13 +416,6 @@ class StreamingSpeechModelService {
         await partial.delete();
         size = 0;
       }
-      if (size == 0) {
-        final reusable = File(p.join(_activeDir(spec), definition.localName));
-        if (await _matchesDefinition(reusable, definition)) {
-          await reusable.copy(partial.path);
-          size = definition.sizeBytes;
-        }
-      }
       currentBytes[definition.localName] = size;
     }
 
@@ -472,17 +453,6 @@ class StreamingSpeechModelService {
       shouldCancel: shouldCancel,
     );
   });
-
-  Future<bool> _matchesDefinition(
-    File file,
-    _RemoteModelFile definition,
-  ) async {
-    if (!await file.exists() || await file.length() != definition.sizeBytes) {
-      return false;
-    }
-    final digest = await sha256.bind(file.openRead()).first;
-    return digest.toString() == definition.sha256;
-  }
 
   Future<void> _downloadFile(
     _StreamingModelSpec spec,
