@@ -413,14 +413,14 @@ void main() {
     expect(find.byKey(const ValueKey('quill-note-tag-灵感')), findsOneWidget);
   });
 
-  testWidgets('moves a persisted note to trash from the editor menu', (
+  testWidgets('permanently deletes a persisted note after confirmation', (
     tester,
   ) async {
     final now = DateTime.utc(2026, 7, 23, 22);
     final persisted = Note(
       id: NoteId.generate(),
       title: '待删除笔记',
-      document: NoteDocument.fromPlainText('仍可恢复'),
+      document: NoteDocument.fromPlainText('即将永久删除'),
       revision: 1,
       createdAt: now,
       updatedAt: now,
@@ -439,42 +439,6 @@ void main() {
 
     await tester.tap(find.byKey(const Key('quill-editor-more')));
     await _pumpFor(tester, const Duration(milliseconds: 120));
-    await tester.tap(find.text('移到回收站'));
-    await _pumpFor(tester, const Duration(milliseconds: 700));
-
-    expect(find.byKey(const Key('open-quill-editor')), findsOneWidget);
-    expect(writer.notes.single.status, NoteStatus.trashed);
-    expect(writer.notes.single.trashedAt, isNotNull);
-  });
-
-  testWidgets('permanently deletes only from the trash with confirmation', (
-    tester,
-  ) async {
-    final now = DateTime.utc(2026, 7, 23, 23);
-    final trashed = Note(
-      id: NoteId.generate(),
-      title: '回收站笔记',
-      document: NoteDocument.fromPlainText('即将永久删除'),
-      status: NoteStatus.trashed,
-      revision: 3,
-      createdAt: now,
-      updatedAt: now,
-      trashedAt: now,
-    );
-    writer.notes.add(trashed);
-    await tester.pumpWidget(
-      _RouteTestApp(
-        page: NoteQuillEditorPage(
-          initialNote: trashed,
-          writerLoader: () async => writer,
-        ),
-      ),
-    );
-    await tester.tap(find.byKey(const Key('open-quill-editor')));
-    await _pumpFor(tester, const Duration(milliseconds: 250));
-
-    await tester.tap(find.byKey(const Key('quill-editor-more')));
-    await _pumpFor(tester, const Duration(milliseconds: 120));
     await tester.tap(find.text('永久删除'));
     await _pumpFor(tester, const Duration(milliseconds: 150));
     expect(find.text('永久删除？'), findsOneWidget);
@@ -483,7 +447,7 @@ void main() {
 
     expect(find.byKey(const Key('open-quill-editor')), findsOneWidget);
     expect(writer.notes, isEmpty);
-    expect(writer.deletedNotes.single.id, trashed.id);
+    expect(writer.deletedNotes.single.id, persisted.id);
   });
 }
 

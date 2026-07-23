@@ -81,27 +81,15 @@ void main() {
     expect((await repository.get(original.id))?.title, '新标题');
   });
 
-  test(
-    'keeps trashed notes out of search and cascades permanent deletion',
-    () async {
-      final original = await repository.create(_noteFixture().note);
-      final trashed = await repository.update(
-        original.copyWith(
-          status: NoteStatus.trashed,
-          trashedAt: original.updatedAt.add(const Duration(minutes: 1)),
-          updatedAt: original.updatedAt.add(const Duration(minutes: 1)),
-        ),
-      );
+  test('permanent deletion cascades through the complete note graph', () async {
+    final original = await repository.create(_noteFixture().note);
+    expect(await repository.search('正文'), hasLength(1));
 
-      expect(await repository.search('正文'), isEmpty);
-      expect(await repository.list(status: NoteStatus.trashed), hasLength(1));
-
-      await repository.deletePermanently(trashed.id);
-      expect(await repository.get(trashed.id), isNull);
-      expect(await database.query('note_assets'), isEmpty);
-      expect(await database.query('note_tags'), isEmpty);
-    },
-  );
+    await repository.deletePermanently(original.id);
+    expect(await repository.get(original.id), isNull);
+    expect(await database.query('note_assets'), isEmpty);
+    expect(await database.query('note_tags'), isEmpty);
+  });
 
   test('rejects missing and detached assets before persistence', () {
     final fixture = _noteFixture();

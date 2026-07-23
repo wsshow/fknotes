@@ -85,9 +85,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'The note and its files cannot be recovered.';
 
   @override
-  String get movedToTrash => 'Moved to Trash';
-
-  @override
   String get discardNote => 'Discard note';
 
   @override
@@ -205,9 +202,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get search => 'Search';
 
   @override
-  String get emptyTrash => 'Empty Trash';
-
-  @override
   String get sort => 'Sort';
 
   @override
@@ -223,39 +217,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get all => 'All';
 
   @override
-  String get favorites => 'Favorites';
-
-  @override
-  String get archive => 'Archive';
-
-  @override
-  String get trash => 'Trash';
-
-  @override
-  String get emptyActive => 'No content matches this filter';
-
-  @override
-  String get emptyFavorites => 'Favorite notes will appear here';
-
-  @override
-  String get emptyArchive => 'The archive is empty';
-
-  @override
-  String get emptyTrashDescription => 'Trash is empty';
-
-  @override
-  String get emptyTrashQuestion => 'Empty Trash?';
-
-  @override
-  String emptyTrashConfirmation(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count items and their files',
-      one: '1 item and its files',
-    );
-    return 'This will permanently delete $_temp0.';
-  }
+  String get emptyActive => 'No notes yet';
 
   @override
   String get clear => 'Empty';
@@ -1614,8 +1576,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get sourceNoteUnavailable =>
-      'This source note no longer exists or is in the trash.';
+  String get sourceNoteUnavailable => 'This source note no longer exists.';
 
   @override
   String get referenceNotes => 'Reference library notes';
@@ -1973,12 +1934,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get moreNoteActions => 'More note actions';
 
   @override
-  String get removeFavorite => 'Remove from favorites';
-
-  @override
-  String get addFavorite => 'Add to favorites';
-
-  @override
   String get unpin => 'Unpin';
 
   @override
@@ -2281,13 +2236,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get quickNoteTile => 'Quick\nnote';
 
   @override
-  String get removeFromArchive => 'Remove from archive';
-
-  @override
   String get edit => 'Edit';
-
-  @override
-  String get moveToTrash => 'Move to trash';
 
   @override
   String mixedAttachmentMetadata(int count) {
@@ -3077,7 +3026,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get missingFileDescription =>
-      'Keep the note information or move it to Trash.';
+      'Keep the note information or delete it permanently.';
 
   @override
   String get openWithLocalApp => 'Open with local app';

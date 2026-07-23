@@ -242,12 +242,6 @@ abstract class AppLocalizations {
   /// **'笔记和关联文件将无法恢复。'**
   String get deletePermanentlyDescription;
 
-  /// No description provided for @movedToTrash.
-  ///
-  /// In zh, this message translates to:
-  /// **'已移到回收站'**
-  String get movedToTrash;
-
   /// No description provided for @discardNote.
   ///
   /// In zh, this message translates to:
@@ -422,12 +416,6 @@ abstract class AppLocalizations {
   /// **'搜索'**
   String get search;
 
-  /// No description provided for @emptyTrash.
-  ///
-  /// In zh, this message translates to:
-  /// **'清空回收站'**
-  String get emptyTrash;
-
   /// No description provided for @sort.
   ///
   /// In zh, this message translates to:
@@ -458,59 +446,11 @@ abstract class AppLocalizations {
   /// **'全部'**
   String get all;
 
-  /// No description provided for @favorites.
-  ///
-  /// In zh, this message translates to:
-  /// **'收藏'**
-  String get favorites;
-
-  /// No description provided for @archive.
-  ///
-  /// In zh, this message translates to:
-  /// **'归档'**
-  String get archive;
-
-  /// No description provided for @trash.
-  ///
-  /// In zh, this message translates to:
-  /// **'回收站'**
-  String get trash;
-
   /// No description provided for @emptyActive.
   ///
   /// In zh, this message translates to:
-  /// **'当前筛选下没有内容'**
+  /// **'还没有笔记'**
   String get emptyActive;
-
-  /// No description provided for @emptyFavorites.
-  ///
-  /// In zh, this message translates to:
-  /// **'收藏的内容会出现在这里'**
-  String get emptyFavorites;
-
-  /// No description provided for @emptyArchive.
-  ///
-  /// In zh, this message translates to:
-  /// **'归档箱是空的'**
-  String get emptyArchive;
-
-  /// No description provided for @emptyTrashDescription.
-  ///
-  /// In zh, this message translates to:
-  /// **'回收站是空的'**
-  String get emptyTrashDescription;
-
-  /// No description provided for @emptyTrashQuestion.
-  ///
-  /// In zh, this message translates to:
-  /// **'清空回收站？'**
-  String get emptyTrashQuestion;
-
-  /// No description provided for @emptyTrashConfirmation.
-  ///
-  /// In zh, this message translates to:
-  /// **'将永久删除 {count} 条内容和关联文件。'**
-  String emptyTrashConfirmation(int count);
 
   /// No description provided for @clear.
   ///
@@ -2795,7 +2735,7 @@ abstract class AppLocalizations {
   /// No description provided for @sourceNoteUnavailable.
   ///
   /// In zh, this message translates to:
-  /// **'这篇来源笔记已不存在或位于回收站'**
+  /// **'这篇来源笔记已不存在'**
   String get sourceNoteUnavailable;
 
   /// No description provided for @referenceNotes.
@@ -3416,18 +3356,6 @@ abstract class AppLocalizations {
   /// **'更多笔记操作'**
   String get moreNoteActions;
 
-  /// No description provided for @removeFavorite.
-  ///
-  /// In zh, this message translates to:
-  /// **'取消收藏'**
-  String get removeFavorite;
-
-  /// No description provided for @addFavorite.
-  ///
-  /// In zh, this message translates to:
-  /// **'收藏'**
-  String get addFavorite;
-
   /// No description provided for @unpin.
   ///
   /// In zh, this message translates to:
@@ -3956,23 +3884,11 @@ abstract class AppLocalizations {
   /// **'随\n笔'**
   String get quickNoteTile;
 
-  /// No description provided for @removeFromArchive.
-  ///
-  /// In zh, this message translates to:
-  /// **'移出归档'**
-  String get removeFromArchive;
-
   /// No description provided for @edit.
   ///
   /// In zh, this message translates to:
   /// **'编辑'**
   String get edit;
-
-  /// No description provided for @moveToTrash.
-  ///
-  /// In zh, this message translates to:
-  /// **'移到回收站'**
-  String get moveToTrash;
 
   /// No description provided for @mixedAttachmentMetadata.
   ///
@@ -5309,7 +5225,7 @@ abstract class AppLocalizations {
   /// No description provided for @missingFileDescription.
   ///
   /// In zh, this message translates to:
-  /// **'可以保留笔记信息或将它移到回收站'**
+  /// **'可以保留笔记信息或永久删除它'**
   String get missingFileDescription;
 
   /// No description provided for @openWithLocalApp.

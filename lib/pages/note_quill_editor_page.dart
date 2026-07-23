@@ -564,33 +564,10 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     }
   }
 
-  Future<void> _toggleFavorite() async {
-    await _updatePersistedMetadata(
-      (note) => note.copyWith(isFavorite: !note.isFavorite),
-    );
-  }
-
   Future<void> _togglePinned() async {
     await _updatePersistedMetadata(
       (note) => note.copyWith(isPinned: !note.isPinned),
     );
-  }
-
-  Future<void> _archiveOrRestore() async {
-    final target = _note.status == NoteStatus.archived
-        ? NoteStatus.active
-        : NoteStatus.archived;
-    final updated = await _updatePersistedMetadata(
-      (note) => note.copyWith(status: target, trashedAt: null),
-    );
-    if (updated) await _leaveEditor(_note);
-  }
-
-  Future<void> _restoreFromTrash() async {
-    final updated = await _updatePersistedMetadata(
-      (note) => note.copyWith(status: NoteStatus.active, trashedAt: null),
-    );
-    if (updated) await _leaveEditor(_note);
   }
 
   Future<void> _deleteNote() async {
@@ -605,16 +582,6 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
       await _imageImport;
       await _discardUnsavedAssets();
       if (mounted) await _leaveEditor(null);
-      return;
-    }
-
-    if (_note.status != NoteStatus.trashed) {
-      final updated = await _updatePersistedMetadata(
-        (note) => note.copyWith(status: NoteStatus.trashed, trashedAt: _now),
-      );
-      if (!updated || !mounted) return;
-      AppFeedback.show(context, context.l10n.movedToTrash);
-      await _leaveEditor(_note);
       return;
     }
 
@@ -684,14 +651,8 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
         unawaited(_openShareComposer());
       case _QuillEditorMenuAction.tags:
         unawaited(_editTags());
-      case _QuillEditorMenuAction.favorite:
-        unawaited(_toggleFavorite());
       case _QuillEditorMenuAction.pin:
         unawaited(_togglePinned());
-      case _QuillEditorMenuAction.archiveOrRestore:
-        unawaited(_archiveOrRestore());
-      case _QuillEditorMenuAction.restoreFromTrash:
-        unawaited(_restoreFromTrash());
       case _QuillEditorMenuAction.save:
         unawaited(_persistLatest());
       case _QuillEditorMenuAction.delete:
@@ -1108,38 +1069,12 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
       icon: Icons.label_outline_rounded,
       label: context.l10n.tags,
     ),
-    if (_note.status != NoteStatus.trashed) ...[
-      AppMenuAction(
-        value: _QuillEditorMenuAction.favorite,
-        icon: _note.isFavorite
-            ? Icons.star_rounded
-            : Icons.star_outline_rounded,
-        label: _note.isFavorite
-            ? context.l10n.removeFavorite
-            : context.l10n.addFavorite,
-        selected: _note.isFavorite,
-      ),
-      AppMenuAction(
-        value: _QuillEditorMenuAction.pin,
-        icon: Icons.push_pin_outlined,
-        label: _note.isPinned ? context.l10n.unpin : context.l10n.pin,
-        selected: _note.isPinned,
-      ),
-      AppMenuAction(
-        value: _QuillEditorMenuAction.archiveOrRestore,
-        icon: _note.status == NoteStatus.archived
-            ? Icons.unarchive_outlined
-            : Icons.archive_outlined,
-        label: _note.status == NoteStatus.archived
-            ? context.l10n.removeFromArchive
-            : context.l10n.archive,
-      ),
-    ] else
-      AppMenuAction(
-        value: _QuillEditorMenuAction.restoreFromTrash,
-        icon: Icons.restore_rounded,
-        label: context.l10n.restore,
-      ),
+    AppMenuAction(
+      value: _QuillEditorMenuAction.pin,
+      icon: Icons.push_pin_outlined,
+      label: _note.isPinned ? context.l10n.unpin : context.l10n.pin,
+      selected: _note.isPinned,
+    ),
     AppMenuAction(
       value: _QuillEditorMenuAction.save,
       icon: Icons.save_outlined,
@@ -1147,14 +1082,10 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     ),
     AppMenuAction(
       value: _QuillEditorMenuAction.delete,
-      icon: _note.status == NoteStatus.trashed
-          ? Icons.delete_forever_outlined
-          : Icons.delete_outline_rounded,
+      icon: Icons.delete_outline_rounded,
       label: _note.revision == 0
           ? context.l10n.discardNote
-          : _note.status == NoteStatus.trashed
-          ? context.l10n.deletePermanently
-          : context.l10n.moveToTrash,
+          : context.l10n.deletePermanently,
       destructive: true,
     ),
   ];
@@ -1181,16 +1112,7 @@ enum _EditorSaveState { enabled, pending, saving, saved, failed }
 
 enum _FailedSaveAction { keepEditing, retry, discard }
 
-enum _QuillEditorMenuAction {
-  share,
-  tags,
-  favorite,
-  pin,
-  archiveOrRestore,
-  restoreFromTrash,
-  save,
-  delete,
-}
+enum _QuillEditorMenuAction { share, tags, pin, save, delete }
 
 bool _sameTags(List<String> left, List<String> right) {
   if (left.length != right.length) return false;

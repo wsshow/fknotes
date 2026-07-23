@@ -113,11 +113,7 @@ class _LocalChatNotePickerState extends State<_LocalChatNotePicker> {
     }
     setState(() {
       _results = results
-          .where(
-            (note) =>
-                note.status == NoteStatus.active &&
-                !widget.excludedNoteIds.contains(note.id),
-          )
+          .where((note) => !widget.excludedNoteIds.contains(note.id))
           .take(40)
           .toList(growable: false);
       _loading = false;

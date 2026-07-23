@@ -60,6 +60,18 @@ void main() {
   });
 
   test(
+    'shares one repository initialization across concurrent callers',
+    () async {
+      final repositories = await Future.wait(
+        List.generate(12, (_) => service.repository),
+      );
+
+      expect(repositories.toSet(), hasLength(1));
+      expect(await service.repository, same(repositories.first));
+    },
+  );
+
+  test(
     'has only the canonical note body and stable attachment schema',
     () async {
       final database = await service.database;

@@ -13,9 +13,7 @@ void main() {
   setUp(() {
     store = _MemoryLibraryStore([
       _note('普通笔记', body: '正文', revision: 1),
-      _note('收藏笔记', favorite: true, revision: 2),
-      _note('归档笔记', status: NoteStatus.archived, revision: 1),
-      _note('已删除笔记', status: NoteStatus.trashed, revision: 3),
+      _note('另一篇笔记', revision: 2),
     ]);
     controller = NoteLibraryController(
       storeLoader: () async => store,
@@ -24,22 +22,10 @@ void main() {
     addTearDown(controller.dispose);
   });
 
-  test(
-    'loads independent active, favorite, archive and trash scopes',
-    () async {
-      await controller.initialize();
-      expect(controller.notes.map((note) => note.title), ['普通笔记', '收藏笔记']);
-
-      await controller.setScope(NoteLibraryScope.favorites);
-      expect(controller.notes.map((note) => note.title), ['收藏笔记']);
-
-      await controller.setScope(NoteLibraryScope.archived);
-      expect(controller.notes.map((note) => note.title), ['归档笔记']);
-
-      await controller.setScope(NoteLibraryScope.trash);
-      expect(controller.notes.map((note) => note.title), ['已删除笔记']);
-    },
-  );
+  test('loads one unified note collection', () async {
+    await controller.initialize();
+    expect(controller.notes.map((note) => note.title), ['普通笔记', '另一篇笔记']);
+  });
 
   test('a late search response cannot replace a newer query', () async {
     final oldResponse = Completer<List<Note>>();
@@ -58,7 +44,7 @@ void main() {
     expect(controller.notes.map((note) => note.title), ['新结果']);
   });
 
-  test('mutations preserve revisions and refresh the visible scope', () async {
+  test('pinning preserves revisions and refreshes the collection', () async {
     await controller.initialize();
     final original = controller.notes.first;
 
@@ -69,23 +55,7 @@ void main() {
     expect(pinned.isPinned, isTrue);
     expect(pinned.revision, 2);
     expect(pinned.updatedAt, DateTime.utc(2026, 7, 23, 18));
-
-    await controller.archive(pinned);
-    expect(controller.notes.any((note) => note.id == original.id), isFalse);
-    expect(store.note(original.id).status, NoteStatus.archived);
-    expect(store.note(original.id).revision, 3);
   });
-
-  test(
-    'trash search is local because repository search excludes trash',
-    () async {
-      await controller.setScope(NoteLibraryScope.trash);
-      await controller.search('已删除');
-
-      expect(controller.notes.map((note) => note.title), ['已删除笔记']);
-      expect(store.searchCalls, 0);
-    },
-  );
 
   test(
     'write conflicts reload fresh state and remain visible as errors',
@@ -95,29 +65,27 @@ void main() {
       store.updateError = NoteWriteConflict(original.id);
 
       await expectLater(
-        controller.toggleFavorite(original),
+        controller.togglePinned(original),
         throwsA(isA<NoteWriteConflict>()),
       );
 
       expect(controller.error, isA<NoteWriteConflict>());
       expect(controller.isBusy(original.id), isFalse);
-      expect(controller.notes.first.isFavorite, isFalse);
+      expect(controller.notes.first.isPinned, isFalse);
     },
   );
 
-  test(
-    'permanent deletion removes the complete note graph from the scope',
-    () async {
-      await controller.setScope(NoteLibraryScope.trash);
-      final deleted = controller.notes.single;
+  test('permanent deletion removes only the selected note', () async {
+    await controller.initialize();
+    final deleted = controller.notes.first;
 
-      await controller.deletePermanently(deleted);
+    await controller.deletePermanently(deleted);
 
-      expect(controller.notes, isEmpty);
-      expect(store.deletedNotes, [deleted]);
-      expect(store.notes.any((note) => note.id == deleted.id), isFalse);
-    },
-  );
+    expect(controller.notes, hasLength(1));
+    expect(controller.notes.any((note) => note.id == deleted.id), isFalse);
+    expect(store.deletedNotes, [deleted]);
+    expect(store.notes.any((note) => note.id == deleted.id), isFalse);
+  });
 }
 
 final class _MemoryLibraryStore implements NoteLibraryStore {
@@ -132,8 +100,7 @@ final class _MemoryLibraryStore implements NoteLibraryStore {
   Note note(NoteId id) => notes.singleWhere((candidate) => candidate.id == id);
 
   @override
-  Future<List<Note>> list({required NoteStatus status}) async =>
-      notes.where((note) => note.status == status).toList(growable: false);
+  Future<List<Note>> list() async => List.of(notes);
 
   @override
   Future<List<Note>> search(String query) {
@@ -143,11 +110,7 @@ final class _MemoryLibraryStore implements NoteLibraryStore {
     final normalized = query.toLowerCase();
     return Future.value(
       notes
-          .where(
-            (note) =>
-                note.status != NoteStatus.trashed &&
-                note.searchText.toLowerCase().contains(normalized),
-          )
+          .where((note) => note.searchText.toLowerCase().contains(normalized))
           .toList(growable: false),
     );
   }
@@ -169,23 +132,14 @@ final class _MemoryLibraryStore implements NoteLibraryStore {
   }
 }
 
-Note _note(
-  String title, {
-  String body = '',
-  NoteStatus status = NoteStatus.active,
-  bool favorite = false,
-  int revision = 0,
-}) {
+Note _note(String title, {String body = '', int revision = 0}) {
   final now = DateTime.utc(2026, 7, 23, 12);
   return Note(
     id: NoteId.generate(),
     title: title,
     document: NoteDocument.fromPlainText(body),
-    status: status,
-    isFavorite: favorite,
     revision: revision,
     createdAt: now,
     updatedAt: now,
-    trashedAt: status == NoteStatus.trashed ? now : null,
   );
 }

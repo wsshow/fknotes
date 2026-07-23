@@ -788,7 +788,6 @@ class _LocalChatPageState extends State<LocalChatPage>
     final results = await repository.search(query);
     final contexts = <LocalChatNoteContext>[...existing];
     for (final note in results) {
-      if (note.status != NoteStatus.active) continue;
       contexts.add(
         LocalChatNoteContextBuilder.fromNote(
           note,
@@ -857,7 +856,7 @@ class _LocalChatPageState extends State<LocalChatPage>
     if (call.name != LocalChatToolName.createNote) {
       target = await repository.get(call.noteId!);
       if (!mounted) return;
-      if (target == null || target.status == NoteStatus.trashed) {
+      if (target == null) {
         AppFeedback.error(context, context.l10n.toolActionTargetMissing);
         return;
       }

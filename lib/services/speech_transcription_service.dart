@@ -95,8 +95,8 @@ final class NoteTranscriptWriter {
     final repository = await _repositoryLoader();
     for (var attempt = 0; attempt < 2; attempt++) {
       final note = await repository.get(noteId);
-      if (note == null || note.status == NoteStatus.trashed) {
-        throw StateError('目标笔记不存在或已移入废纸篓');
+      if (note == null) {
+        throw StateError('目标笔记不存在');
       }
       final assetIndex = note.assets.indexWhere((asset) => asset.id == assetId);
       if (assetIndex < 0) throw StateError('目标音频附件已被移除');

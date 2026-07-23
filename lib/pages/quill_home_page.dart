@@ -40,8 +40,7 @@ typedef NoteHomeAssistantBuilder =
 /// entry points converge on [NoteQuillEditorPage].
 final class QuillHomePage extends StatefulWidget {
   const QuillHomePage({
-    this.recentController,
-    this.libraryController,
+    this.controller,
     this.editorBuilder,
     this.assistantBuilder,
     this.noteLoader,
@@ -49,8 +48,7 @@ final class QuillHomePage extends StatefulWidget {
     super.key,
   });
 
-  final NoteLibraryController? recentController;
-  final NoteLibraryController? libraryController;
+  final NoteLibraryController? controller;
   final NoteLibraryEditorBuilder? editorBuilder;
   final NoteHomeAssistantBuilder? assistantBuilder;
   final NoteHomeNoteLoader? noteLoader;
@@ -61,24 +59,14 @@ final class QuillHomePage extends StatefulWidget {
 }
 
 final class _QuillHomePageState extends State<QuillHomePage> {
-  late final NoteLibraryController _recentController;
-  late final NoteLibraryController _libraryController;
-  late final bool _ownsRecentController;
-  late final bool _ownsLibraryController;
+  late final NoteLibraryController _controller;
+  late final bool _ownsController;
 
   @override
   void initState() {
     super.initState();
-    _ownsRecentController = widget.recentController == null;
-    _ownsLibraryController = widget.libraryController == null;
-    _recentController = widget.recentController ?? NoteLibraryController();
-    _libraryController = widget.libraryController ?? NoteLibraryController();
-    _recentController.addListener(_onRecentChanged);
-    unawaited(_recentController.initialize());
-  }
-
-  void _onRecentChanged() {
-    if (mounted) setState(() {});
+    _ownsController = widget.controller == null;
+    _controller = widget.controller ?? NoteLibraryController();
   }
 
   Future<void> _openEditor([Note? note]) async {
@@ -111,7 +99,7 @@ final class _QuillHomePageState extends State<QuillHomePage> {
         (id) async => (await NoteDatabaseService.instance.repository).get(id);
     final note = await loader(source.noteId);
     if (!mounted) return;
-    if (note == null || note.status == NoteStatus.trashed) {
+    if (note == null) {
       AppFeedback.error(context, context.l10n.toolActionTargetMissing);
       return;
     }
@@ -119,14 +107,11 @@ final class _QuillHomePageState extends State<QuillHomePage> {
   }
 
   Future<void> _refreshAfterRestore() async {
-    await _recentController.refresh();
-    if (!identical(_recentController, _libraryController)) {
-      await _libraryController.refresh();
-    }
+    await _controller.refresh();
   }
 
   Future<void> _openData() async {
-    await _recentController.refresh();
+    await _controller.refresh();
     if (!mounted) return;
     await Navigator.push<void>(
       context,
@@ -134,7 +119,7 @@ final class _QuillHomePageState extends State<QuillHomePage> {
         builder: (pageContext) => Scaffold(
           backgroundColor: AppColors.canvas,
           body: _QuillDataTab(
-            controller: _recentController,
+            controller: _controller,
             dataSizeLoader:
                 widget.dataSizeLoader ??
                 FileStorageService.instance.userDataSize,
@@ -150,7 +135,7 @@ final class _QuillHomePageState extends State<QuillHomePage> {
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: AppColors.canvas,
     body: NoteLibraryPage(
-      controller: _libraryController,
+      controller: _controller,
       editorBuilder: widget.editorBuilder,
       onOpenAssistant: _openAssistant,
       onOpenData: _openData,
@@ -166,9 +151,7 @@ final class _QuillHomePageState extends State<QuillHomePage> {
 
   @override
   void dispose() {
-    _recentController.removeListener(_onRecentChanged);
-    if (_ownsRecentController) _recentController.dispose();
-    if (_ownsLibraryController) _libraryController.dispose();
+    if (_ownsController) _controller.dispose();
     super.dispose();
   }
 }

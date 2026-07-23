@@ -92,14 +92,6 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
     switch (action) {
       case _LibraryNoteAction.pin:
         await _runAction(() => _controller.togglePinned(note));
-      case _LibraryNoteAction.favorite:
-        await _runAction(() => _controller.toggleFavorite(note));
-      case _LibraryNoteAction.archive:
-        await _runAction(() => _controller.archive(note));
-      case _LibraryNoteAction.restore:
-        await _runAction(() => _controller.restore(note));
-      case _LibraryNoteAction.trash:
-        await _runAction(() => _controller.moveToTrash(note));
       case _LibraryNoteAction.delete:
         if (await _confirmPermanentDelete(note) == true) {
           await _runAction(() => _controller.deletePermanently(note));
@@ -133,7 +125,6 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
       child: Column(
         children: [
           _buildHeader(context),
-          _buildScopeSelector(context),
           const SizedBox(height: 14),
           Expanded(child: _buildContent(context)),
         ],
@@ -153,7 +144,9 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _scopeTitle(context),
+                    widget.onOpenData == null
+                        ? context.l10n.library
+                        : context.l10n.appTitle,
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
                   const SizedBox(height: 2),
@@ -249,51 +242,6 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
     ),
   );
 
-  Widget _buildScopeSelector(BuildContext context) => SingleChildScrollView(
-    scrollDirection: Axis.horizontal,
-    padding: const EdgeInsets.symmetric(horizontal: 20),
-    child: DecoratedBox(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceMuted,
-        borderRadius: BorderRadius.circular(AppRadius.medium),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(4),
-        child: Row(
-          children: [
-            _ScopeChip(
-              label: context.l10n.all,
-              selected: _controller.scope == NoteLibraryScope.active,
-              onTap: () => _selectScope(NoteLibraryScope.active),
-            ),
-            _ScopeChip(
-              label: context.l10n.favorites,
-              selected: _controller.scope == NoteLibraryScope.favorites,
-              onTap: () => _selectScope(NoteLibraryScope.favorites),
-            ),
-            _ScopeChip(
-              label: context.l10n.archive,
-              selected: _controller.scope == NoteLibraryScope.archived,
-              onTap: () => _selectScope(NoteLibraryScope.archived),
-            ),
-            _ScopeChip(
-              label: context.l10n.trash,
-              selected: _controller.scope == NoteLibraryScope.trash,
-              onTap: () => _selectScope(NoteLibraryScope.trash),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-
-  void _selectScope(NoteLibraryScope scope) {
-    _searchTimer?.cancel();
-    _searchController.clear();
-    unawaited(_controller.setScope(scope));
-    setState(() {});
-  }
-
   Widget _buildContent(BuildContext context) {
     if (_controller.isLoading && _controller.notes.isEmpty) {
       return const Center(child: CircularProgressIndicator());
@@ -307,7 +255,10 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
       );
     }
     if (_controller.notes.isEmpty) {
-      return _LibraryMessage(icon: _scopeIcon, message: _emptyMessage(context));
+      return _LibraryMessage(
+        icon: Icons.notes_rounded,
+        message: context.l10n.emptyActive,
+      );
     }
     return RefreshIndicator(
       onRefresh: _controller.refresh,
@@ -325,7 +276,6 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
           return _DeltaNoteCard(
             key: ValueKey('delta-note-${note.id.value}'),
             note: note,
-            scope: _controller.scope,
             busy: _controller.isBusy(note.id),
             resolveImage: widget.resolveImage ?? _resolveManagedImage,
             onTap: () => _openEditor(note),
@@ -335,28 +285,6 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
       ),
     );
   }
-
-  String _scopeTitle(BuildContext context) => switch (_controller.scope) {
-    NoteLibraryScope.active =>
-      widget.onOpenData == null ? context.l10n.library : context.l10n.appTitle,
-    NoteLibraryScope.favorites => context.l10n.favorites,
-    NoteLibraryScope.archived => context.l10n.archive,
-    NoteLibraryScope.trash => context.l10n.trash,
-  };
-
-  IconData get _scopeIcon => switch (_controller.scope) {
-    NoteLibraryScope.active => Icons.notes_rounded,
-    NoteLibraryScope.favorites => Icons.star_outline_rounded,
-    NoteLibraryScope.archived => Icons.archive_outlined,
-    NoteLibraryScope.trash => Icons.delete_outline_rounded,
-  };
-
-  String _emptyMessage(BuildContext context) => switch (_controller.scope) {
-    NoteLibraryScope.active => context.l10n.emptyActive,
-    NoteLibraryScope.favorites => context.l10n.emptyFavorites,
-    NoteLibraryScope.archived => context.l10n.emptyArchive,
-    NoteLibraryScope.trash => context.l10n.emptyTrashDescription,
-  };
 
   ImageProvider? _resolveManagedImage(NoteAsset asset) {
     final key = asset.previewStorageKey ?? asset.storageKey;
@@ -378,12 +306,11 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
   }
 }
 
-enum _LibraryNoteAction { pin, favorite, archive, restore, trash, delete }
+enum _LibraryNoteAction { pin, delete }
 
 final class _DeltaNoteCard extends StatelessWidget {
   const _DeltaNoteCard({
     required this.note,
-    required this.scope,
     required this.busy,
     required this.resolveImage,
     required this.onTap,
@@ -392,7 +319,6 @@ final class _DeltaNoteCard extends StatelessWidget {
   });
 
   final Note note;
-  final NoteLibraryScope scope;
   final bool busy;
   final NoteLibraryImageResolver resolveImage;
   final VoidCallback onTap;
@@ -466,15 +392,6 @@ final class _DeltaNoteCard extends StatelessWidget {
                 color: AppColors.accent,
               ),
             ),
-          if (note.isFavorite)
-            const Padding(
-              padding: EdgeInsets.only(right: 6),
-              child: Icon(
-                Icons.star_rounded,
-                size: 16,
-                color: AppColors.accent,
-              ),
-            ),
           Expanded(
             child: Text(
               note.title.trim().isEmpty ? context.l10n.untitled : note.title,
@@ -538,61 +455,19 @@ final class _DeltaNoteCard extends StatelessWidget {
     return null;
   }
 
-  List<AppMenuAction<_LibraryNoteAction>> _actions(
-    BuildContext context,
-  ) => switch (scope) {
-    NoteLibraryScope.active || NoteLibraryScope.favorites => [
-      AppMenuAction(
-        value: _LibraryNoteAction.pin,
-        icon: note.isPinned ? Icons.push_pin_outlined : Icons.push_pin_rounded,
-        label: note.isPinned ? context.l10n.unpin : context.l10n.pin,
-      ),
-      AppMenuAction(
-        value: _LibraryNoteAction.favorite,
-        icon: note.isFavorite ? Icons.star_outline_rounded : Icons.star_rounded,
-        label: note.isFavorite
-            ? context.l10n.removeFavorite
-            : context.l10n.addFavorite,
-      ),
-      AppMenuAction(
-        value: _LibraryNoteAction.archive,
-        icon: Icons.archive_outlined,
-        label: context.l10n.archive,
-      ),
-      AppMenuAction(
-        value: _LibraryNoteAction.trash,
-        icon: Icons.delete_outline_rounded,
-        label: context.l10n.moveToTrash,
-        destructive: true,
-      ),
-    ],
-    NoteLibraryScope.archived => [
-      AppMenuAction(
-        value: _LibraryNoteAction.restore,
-        icon: Icons.unarchive_outlined,
-        label: context.l10n.removeFromArchive,
-      ),
-      AppMenuAction(
-        value: _LibraryNoteAction.trash,
-        icon: Icons.delete_outline_rounded,
-        label: context.l10n.moveToTrash,
-        destructive: true,
-      ),
-    ],
-    NoteLibraryScope.trash => [
-      AppMenuAction(
-        value: _LibraryNoteAction.restore,
-        icon: Icons.restore_rounded,
-        label: context.l10n.restore,
-      ),
-      AppMenuAction(
-        value: _LibraryNoteAction.delete,
-        icon: Icons.delete_forever_outlined,
-        label: context.l10n.deletePermanently,
-        destructive: true,
-      ),
-    ],
-  };
+  List<AppMenuAction<_LibraryNoteAction>> _actions(BuildContext context) => [
+    AppMenuAction(
+      value: _LibraryNoteAction.pin,
+      icon: note.isPinned ? Icons.push_pin_outlined : Icons.push_pin_rounded,
+      label: note.isPinned ? context.l10n.unpin : context.l10n.pin,
+    ),
+    AppMenuAction(
+      value: _LibraryNoteAction.delete,
+      icon: Icons.delete_forever_outlined,
+      label: context.l10n.deletePermanently,
+      destructive: true,
+    ),
+  ];
 
   static String _friendlyTime(BuildContext context, DateTime date) {
     final now = DateTime.now();
@@ -606,47 +481,6 @@ final class _DeltaNoteCard extends StatelessWidget {
       Localizations.localeOf(context).toLanguageTag(),
     ).format(date);
   }
-}
-
-final class _ScopeChip extends StatelessWidget {
-  const _ScopeChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => Material(
-    color: selected ? AppColors.surface : Colors.transparent,
-    borderRadius: BorderRadius.circular(AppRadius.small),
-    clipBehavior: Clip.antiAlias,
-    child: InkWell(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOutCubic,
-        constraints: const BoxConstraints(minWidth: 62, minHeight: 38),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(AppRadius.small),
-          boxShadow: selected ? AppShadows.low : null,
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? AppColors.ink : AppColors.muted,
-            fontSize: 13,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-          ),
-        ),
-      ),
-    ),
-  );
 }
 
 final class _LibraryMessage extends StatelessWidget {

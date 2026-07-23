@@ -33,8 +33,6 @@ final class NoteId {
   String toString() => value;
 }
 
-enum NoteStatus { active, archived, trashed }
-
 enum NoteAssetKind { image, audio, video, file }
 
 final class NoteAsset {
@@ -182,27 +180,17 @@ final class Note {
     required this.title,
     required this.document,
     Iterable<String> tags = const [],
-    this.status = NoteStatus.active,
-    this.isFavorite = false,
     this.isPinned = false,
     this.coverAttachmentId,
     Iterable<NoteAsset> assets = const [],
     this.revision = 0,
     required DateTime createdAt,
     required DateTime updatedAt,
-    DateTime? trashedAt,
   }) : tags = List.unmodifiable(_normalizeTags(tags)),
        assets = List.unmodifiable(assets),
        createdAt = createdAt.toUtc(),
-       updatedAt = updatedAt.toUtc(),
-       trashedAt = trashedAt?.toUtc() {
+       updatedAt = updatedAt.toUtc() {
     if (revision < 0) throw ArgumentError.value(revision, 'revision');
-    if (status == NoteStatus.trashed && trashedAt == null) {
-      throw ArgumentError('A trashed note requires trashedAt.');
-    }
-    if (status != NoteStatus.trashed && trashedAt != null) {
-      throw ArgumentError('Only a trashed note may have trashedAt.');
-    }
     _validateAssetGraph();
   }
 
@@ -221,15 +209,12 @@ final class Note {
   final String title;
   final NoteDocument document;
   final List<String> tags;
-  final NoteStatus status;
-  final bool isFavorite;
   final bool isPinned;
   final NoteAttachmentId? coverAttachmentId;
   final List<NoteAsset> assets;
   final int revision;
   final DateTime createdAt;
   final DateTime updatedAt;
-  final DateTime? trashedAt;
 
   UnmodifiableMapView<NoteAttachmentId, NoteAsset> get assetsById =>
       UnmodifiableMapView({for (final asset in assets) asset.id: asset});
@@ -271,22 +256,17 @@ final class Note {
     String? title,
     NoteDocument? document,
     Iterable<String>? tags,
-    NoteStatus? status,
-    bool? isFavorite,
     bool? isPinned,
     Object? coverAttachmentId = _unchanged,
     Iterable<NoteAsset>? assets,
     int? revision,
     DateTime? createdAt,
     DateTime? updatedAt,
-    Object? trashedAt = _unchanged,
   }) => Note(
     id: id,
     title: title ?? this.title,
     document: document ?? this.document,
     tags: tags ?? this.tags,
-    status: status ?? this.status,
-    isFavorite: isFavorite ?? this.isFavorite,
     isPinned: isPinned ?? this.isPinned,
     coverAttachmentId: identical(coverAttachmentId, _unchanged)
         ? this.coverAttachmentId
@@ -295,9 +275,6 @@ final class Note {
     revision: revision ?? this.revision,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
-    trashedAt: identical(trashedAt, _unchanged)
-        ? this.trashedAt
-        : trashedAt as DateTime?,
   );
 
   void _validateAssetGraph() {

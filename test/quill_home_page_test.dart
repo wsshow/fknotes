@@ -13,8 +13,7 @@ import 'package:provider/provider.dart';
 
 void main() {
   late _HomeStore store;
-  late NoteLibraryController recentController;
-  late NoteLibraryController libraryController;
+  late NoteLibraryController controller;
 
   setUp(() {
     final base = DateTime.utc(2026, 7, 23, 8);
@@ -22,10 +21,8 @@ void main() {
       _note('较早置顶', updatedAt: base, pinned: true),
       _note('最新笔记', updatedAt: base.add(const Duration(hours: 2))),
     ]);
-    recentController = NoteLibraryController(storeLoader: () async => store);
-    libraryController = NoteLibraryController(storeLoader: () async => store);
-    addTearDown(recentController.dispose);
-    addTearDown(libraryController.dispose);
+    controller = NoteLibraryController(storeLoader: () async => store);
+    addTearDown(controller.dispose);
   });
 
   testWidgets('single home exposes the complete searchable note library', (
@@ -34,8 +31,7 @@ void main() {
     await tester.pumpWidget(
       _TestApp(
         child: QuillHomePage(
-          recentController: recentController,
-          libraryController: libraryController,
+          controller: controller,
           dataSizeLoader: () async => 2048,
           editorBuilder: _testEditor,
           noteLoader: store.get,
@@ -64,8 +60,7 @@ void main() {
       await tester.pumpWidget(
         _TestApp(
           child: QuillHomePage(
-            recentController: recentController,
-            libraryController: libraryController,
+            controller: controller,
             dataSizeLoader: () async => 2048,
             editorBuilder: _testEditor,
             noteLoader: store.get,
@@ -93,8 +88,7 @@ void main() {
       await tester.pumpWidget(
         _TestApp(
           child: QuillHomePage(
-            recentController: recentController,
-            libraryController: libraryController,
+            controller: controller,
             dataSizeLoader: () async => 2048,
             editorBuilder: _testEditor,
             noteLoader: store.get,
@@ -193,12 +187,10 @@ final class _HomeStore implements NoteLibraryStore {
   }
 
   @override
-  Future<List<Note>> list({required NoteStatus status}) async =>
-      notes.where((note) => note.status == status).toList(growable: false);
+  Future<List<Note>> list() async => List.of(notes);
 
   @override
   Future<List<Note>> search(String query) async => notes
-      .where((note) => note.status != NoteStatus.trashed)
       .where((note) => note.searchText.contains(query))
       .toList(growable: false);
 

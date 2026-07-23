@@ -7,10 +7,8 @@ import '../services/file_storage_service.dart';
 import '../services/note_database_service.dart';
 import '../services/note_repository.dart';
 
-enum NoteLibraryScope { active, favorites, archived, trash }
-
 abstract interface class NoteLibraryStore {
-  Future<List<Note>> list({required NoteStatus status});
+  Future<List<Note>> list();
 
   Future<List<Note>> search(String query);
 
@@ -27,8 +25,7 @@ final class RepositoryNoteLibraryStore implements NoteLibraryStore {
   final FileStorageService storage;
 
   @override
-  Future<List<Note>> list({required NoteStatus status}) =>
-      repository.list(status: status);
+  Future<List<Note>> list() => repository.list();
 
   @override
   Future<List<Note>> search(String query) => repository.search(query);
@@ -74,14 +71,12 @@ final class NoteLibraryController extends ChangeNotifier {
   final DateTime Function() _now;
   final Set<NoteId> _busyNoteIds = {};
   List<Note> _notes = const [];
-  NoteLibraryScope _scope = NoteLibraryScope.active;
   String _query = '';
   Object? _error;
   var _loading = false;
   var _requestGeneration = 0;
 
   List<Note> get notes => _notes;
-  NoteLibraryScope get scope => _scope;
   String get query => _query;
   Object? get error => _error;
   bool get isLoading => _loading;
@@ -89,14 +84,6 @@ final class NoteLibraryController extends ChangeNotifier {
   bool isBusy(NoteId id) => _busyNoteIds.contains(id);
 
   Future<void> initialize() => refresh();
-
-  Future<void> setScope(NoteLibraryScope value) async {
-    if (_scope == value) return;
-    _scope = value;
-    _query = '';
-    notifyListeners();
-    await refresh();
-  }
 
   Future<void> search(String value) async {
     final normalized = value.replaceAll(RegExp(r'\s+'), ' ').trim();
@@ -113,7 +100,9 @@ final class NoteLibraryController extends ChangeNotifier {
     notifyListeners();
     try {
       final store = await _storeLoader();
-      final loaded = await _loadForCurrentFilter(store);
+      final loaded = _query.isEmpty
+          ? await store.list()
+          : await store.search(_query);
       if (generation != _requestGeneration) return;
       _notes = List.unmodifiable(loaded);
     } catch (error) {
@@ -127,54 +116,8 @@ final class NoteLibraryController extends ChangeNotifier {
     }
   }
 
-  Future<List<Note>> _loadForCurrentFilter(NoteLibraryStore store) async {
-    final status = switch (_scope) {
-      NoteLibraryScope.active ||
-      NoteLibraryScope.favorites => NoteStatus.active,
-      NoteLibraryScope.archived => NoteStatus.archived,
-      NoteLibraryScope.trash => NoteStatus.trashed,
-    };
-    List<Note> loaded;
-    if (_query.isEmpty) {
-      loaded = await store.list(status: status);
-    } else if (status == NoteStatus.trashed) {
-      final candidates = await store.list(status: status);
-      final lowerQuery = _query.toLowerCase();
-      loaded = candidates
-          .where((note) => note.searchText.toLowerCase().contains(lowerQuery))
-          .toList(growable: false);
-    } else {
-      loaded = (await store.search(
-        _query,
-      )).where((note) => note.status == status).toList(growable: false);
-    }
-    if (_scope == NoteLibraryScope.favorites) {
-      loaded = loaded.where((note) => note.isFavorite).toList(growable: false);
-    }
-    return loaded;
-  }
-
   Future<void> togglePinned(Note note) =>
       _mutate(note, (value) => value.copyWith(isPinned: !value.isPinned));
-
-  Future<void> toggleFavorite(Note note) =>
-      _mutate(note, (value) => value.copyWith(isFavorite: !value.isFavorite));
-
-  Future<void> archive(Note note) => _mutate(
-    note,
-    (value) => value.copyWith(status: NoteStatus.archived, trashedAt: null),
-  );
-
-  Future<void> restore(Note note) => _mutate(
-    note,
-    (value) => value.copyWith(status: NoteStatus.active, trashedAt: null),
-  );
-
-  Future<void> moveToTrash(Note note) => _mutate(
-    note,
-    (value) =>
-        value.copyWith(status: NoteStatus.trashed, trashedAt: _now().toUtc()),
-  );
 
   Future<void> _mutate(Note note, Note Function(Note value) change) async {
     if (!_busyNoteIds.add(note.id)) return;

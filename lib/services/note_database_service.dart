@@ -20,16 +20,41 @@ final class NoteDatabaseService {
 
   final String? databasePath;
   Database? _database;
+  Future<Database>? _databaseOpening;
   NoteRepository? _repository;
+  Future<NoteRepository>? _repositoryOpening;
 
-  Future<Database> get database async => _database ??= await _open();
+  Future<Database> get database {
+    final existing = _database;
+    if (existing != null) return Future.value(existing);
+    return _databaseOpening ??= _openOnce();
+  }
 
-  Future<NoteRepository> get repository async {
+  Future<Database> _openOnce() async {
+    try {
+      final opened = await _open();
+      _database = opened;
+      return opened;
+    } finally {
+      _databaseOpening = null;
+    }
+  }
+
+  Future<NoteRepository> get repository {
     final existing = _repository;
-    if (existing != null) return existing;
-    final created = NoteRepository(await database);
-    await created.initialize();
-    return _repository = created;
+    if (existing != null) return Future.value(existing);
+    return _repositoryOpening ??= _initializeRepositoryOnce();
+  }
+
+  Future<NoteRepository> _initializeRepositoryOnce() async {
+    try {
+      final created = NoteRepository(await database);
+      await created.initialize();
+      _repository = created;
+      return created;
+    } finally {
+      _repositoryOpening = null;
+    }
   }
 
   Future<Database> _open() async {
@@ -136,6 +161,8 @@ final class NoteDatabaseService {
   Future<void> close() async {
     await _database?.close();
     _database = null;
+    _databaseOpening = null;
     _repository = null;
+    _repositoryOpening = null;
   }
 }

@@ -81,9 +81,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deletePermanentlyDescription => '笔记和关联文件将无法恢复。';
 
   @override
-  String get movedToTrash => '已移到回收站';
-
-  @override
   String get discardNote => '放弃笔记';
 
   @override
@@ -181,9 +178,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get search => '搜索';
 
   @override
-  String get emptyTrash => '清空回收站';
-
-  @override
   String get sort => '排序';
 
   @override
@@ -199,33 +193,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get all => '全部';
 
   @override
-  String get favorites => '收藏';
-
-  @override
-  String get archive => '归档';
-
-  @override
-  String get trash => '回收站';
-
-  @override
-  String get emptyActive => '当前筛选下没有内容';
-
-  @override
-  String get emptyFavorites => '收藏的内容会出现在这里';
-
-  @override
-  String get emptyArchive => '归档箱是空的';
-
-  @override
-  String get emptyTrashDescription => '回收站是空的';
-
-  @override
-  String get emptyTrashQuestion => '清空回收站？';
-
-  @override
-  String emptyTrashConfirmation(int count) {
-    return '将永久删除 $count 条内容和关联文件。';
-  }
+  String get emptyActive => '还没有笔记';
 
   @override
   String get clear => '清空';
@@ -1474,7 +1442,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get sourceNoteUnavailable => '这篇来源笔记已不存在或位于回收站';
+  String get sourceNoteUnavailable => '这篇来源笔记已不存在';
 
   @override
   String get referenceNotes => '引用资料库笔记';
@@ -1809,12 +1777,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get moreNoteActions => '更多笔记操作';
 
   @override
-  String get removeFavorite => '取消收藏';
-
-  @override
-  String get addFavorite => '收藏';
-
-  @override
   String get unpin => '取消置顶';
 
   @override
@@ -2108,13 +2070,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get quickNoteTile => '随\n笔';
 
   @override
-  String get removeFromArchive => '移出归档';
-
-  @override
   String get edit => '编辑';
-
-  @override
-  String get moveToTrash => '移到回收站';
 
   @override
   String mixedAttachmentMetadata(int count) {
@@ -2853,7 +2809,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get originalFileMissing => '原文件不存在';
 
   @override
-  String get missingFileDescription => '可以保留笔记信息或将它移到回收站';
+  String get missingFileDescription => '可以保留笔记信息或永久删除它';
 
   @override
   String get openWithLocalApp => '用本地应用打开';

@@ -30,18 +30,11 @@ final class NoteRepository {
         title TEXT NOT NULL,
         document_json TEXT NOT NULL,
         search_text TEXT NOT NULL,
-        status TEXT NOT NULL CHECK(status IN ('active', 'archived', 'trashed')),
-        is_favorite INTEGER NOT NULL CHECK(is_favorite IN (0, 1)),
         is_pinned INTEGER NOT NULL CHECK(is_pinned IN (0, 1)),
         cover_attachment_id TEXT,
         revision INTEGER NOT NULL CHECK(revision > 0),
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
-        trashed_at INTEGER,
-        CHECK(
-          (status = 'trashed' AND trashed_at IS NOT NULL) OR
-          (status != 'trashed' AND trashed_at IS NULL)
-        ),
         FOREIGN KEY(cover_attachment_id) REFERENCES note_assets(id)
           ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED
       )
@@ -79,8 +72,8 @@ final class NoteRepository {
       )
     ''');
     await _database.execute(
-      'CREATE INDEX IF NOT EXISTS idx_notes_state_updated '
-      'ON notes(status, is_pinned DESC, updated_at DESC)',
+      'CREATE INDEX IF NOT EXISTS idx_notes_updated '
+      'ON notes(is_pinned DESC, updated_at DESC)',
     );
     await _database.execute(
       'CREATE INDEX IF NOT EXISTS idx_note_assets_note ON note_assets(note_id)',
@@ -149,11 +142,9 @@ final class NoteRepository {
     return (await _hydrate(rows)).single;
   }
 
-  Future<List<Note>> list({NoteStatus status = NoteStatus.active}) async {
+  Future<List<Note>> list() async {
     final rows = await _database.query(
       'notes',
-      where: 'status = ?',
-      whereArgs: [status.name],
       orderBy: 'is_pinned DESC, updated_at DESC',
     );
     return _hydrate(rows);
@@ -173,7 +164,7 @@ final class NoteRepository {
           SELECT notes.*
           FROM note_search_fts
           JOIN notes ON notes.id = note_search_fts.note_id
-          WHERE note_search_fts MATCH ? AND notes.status != 'trashed'
+          WHERE note_search_fts MATCH ?
           ORDER BY notes.is_pinned DESC, notes.updated_at DESC
           ''',
           [phrase],
@@ -194,7 +185,7 @@ final class NoteRepository {
   Future<List<Map<String, Object?>>> _searchWithLike(String query) =>
       _database.query(
         'notes',
-        where: "status != 'trashed' AND search_text LIKE ? ESCAPE '\\'",
+        where: "search_text LIKE ? ESCAPE '\\'",
         whereArgs: ['%${_escapeLike(query)}%'],
         orderBy: 'is_pinned DESC, updated_at DESC',
       );
@@ -334,14 +325,11 @@ final class NoteRepository {
         'title': note.title,
         'document_json': note.document.toJsonString(),
         'search_text': note.searchText,
-        'status': note.status.name,
-        'is_favorite': note.isFavorite ? 1 : 0,
         'is_pinned': note.isPinned ? 1 : 0,
         'cover_attachment_id': cover?.value,
         'revision': note.revision,
         'created_at': note.createdAt.millisecondsSinceEpoch,
         'updated_at': note.updatedAt.millisecondsSinceEpoch,
-        'trashed_at': note.trashedAt?.toUtc().millisecondsSinceEpoch,
       };
 
   static Map<String, Object?> _assetMap(NoteId noteId, NoteAsset asset) => {
@@ -372,8 +360,6 @@ final class NoteRepository {
     title: map['title']! as String,
     document: NoteDocument.fromJsonString(map['document_json']! as String),
     tags: tags,
-    status: NoteStatus.values.byName(map['status']! as String),
-    isFavorite: map['is_favorite'] == 1,
     isPinned: map['is_pinned'] == 1,
     coverAttachmentId: map['cover_attachment_id'] == null
         ? null
@@ -388,12 +374,6 @@ final class NoteRepository {
       map['updated_at']! as int,
       isUtc: true,
     ),
-    trashedAt: map['trashed_at'] == null
-        ? null
-        : DateTime.fromMillisecondsSinceEpoch(
-            map['trashed_at']! as int,
-            isUtc: true,
-          ),
   );
 
   static NoteAsset _assetFromMap(Map<String, Object?> map) => NoteAsset(

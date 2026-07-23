@@ -21,17 +21,12 @@ void main() {
           ..insert('\n'),
       ),
       _note('普通笔记', document: Delta()..insert('可搜索内容\n')),
-      _note(
-        '归档笔记',
-        status: NoteStatus.archived,
-        document: Delta()..insert('归档正文\n'),
-      ),
     ]);
     controller = NoteLibraryController(storeLoader: () async => store);
     addTearDown(controller.dispose);
   });
 
-  testWidgets('shows styled Delta cards and switches library scopes', (
+  testWidgets('shows styled Delta cards without organizational scopes', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -42,12 +37,9 @@ void main() {
     expect(find.text('格式笔记'), findsOneWidget);
     expect(find.text('普通笔记'), findsOneWidget);
     expect(find.byType(NoteDeltaPreview), findsNWidgets(2));
-
-    await tester.tap(find.text('归档'));
-    await _pump(tester);
-
-    expect(find.text('归档笔记'), findsOneWidget);
-    expect(find.text('格式笔记'), findsNothing);
+    expect(find.text('收藏'), findsNothing);
+    expect(find.text('归档'), findsNothing);
+    expect(find.text('回收站'), findsNothing);
   });
 
   testWidgets('debounces search and never exposes Markdown marker fields', (
@@ -101,7 +93,7 @@ void main() {
     expect(find.text('格式笔记'), findsOneWidget);
   });
 
-  testWidgets('card actions mutate the Delta note and refresh the scope', (
+  testWidgets('card deletion requires confirmation and removes the note', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -116,11 +108,14 @@ void main() {
       find.descendant(of: card, matching: find.byIcon(Icons.more_vert_rounded)),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('移到回收站'));
+    await tester.tap(find.text('永久删除'));
+    await tester.pumpAndSettle();
+    expect(find.text('永久删除？'), findsOneWidget);
+    await tester.tap(find.text('永久删除').last);
     await _pump(tester);
 
     expect(find.text('格式笔记'), findsNothing);
-    expect(store.notes.first.status, NoteStatus.trashed);
+    expect(store.notes, hasLength(1));
   });
 }
 
@@ -136,16 +131,11 @@ final class _PageLibraryStore implements NoteLibraryStore {
   final List<Note> notes;
 
   @override
-  Future<List<Note>> list({required NoteStatus status}) async =>
-      notes.where((note) => note.status == status).toList(growable: false);
+  Future<List<Note>> list() async => List.of(notes);
 
   @override
   Future<List<Note>> search(String query) async => notes
-      .where(
-        (note) =>
-            note.status != NoteStatus.trashed &&
-            note.searchText.contains(query),
-      )
+      .where((note) => note.searchText.contains(query))
       .toList(growable: false);
 
   @override
@@ -162,21 +152,15 @@ final class _PageLibraryStore implements NoteLibraryStore {
   }
 }
 
-Note _note(
-  String title, {
-  required Delta document,
-  NoteStatus status = NoteStatus.active,
-}) {
+Note _note(String title, {required Delta document}) {
   final now = DateTime.utc(2026, 7, 23, 12);
   return Note(
     id: NoteId.generate(),
     title: title,
     document: NoteDocument.fromDelta(document),
-    status: status,
     revision: 1,
     createdAt: now,
     updatedAt: now,
-    trashedAt: status == NoteStatus.trashed ? now : null,
   );
 }
 
