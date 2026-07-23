@@ -1214,10 +1214,9 @@ final class _ImageSourceAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Material(
-    color: AppColors.canvas,
+    color: AppColors.surfaceMuted,
     shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(16),
-      side: const BorderSide(color: AppColors.line),
+      borderRadius: BorderRadius.circular(AppRadius.medium),
     ),
     clipBehavior: Clip.antiAlias,
     child: InkWell(
@@ -1227,7 +1226,7 @@ final class _ImageSourceAction extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: AppColors.coral),
+            Icon(icon, color: AppColors.accent),
             const SizedBox(height: 8),
             Text(label, style: Theme.of(context).textTheme.labelLarge),
           ],

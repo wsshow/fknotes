@@ -1056,8 +1056,7 @@ class _TwoPassCard extends StatelessWidget {
     padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
     decoration: BoxDecoration(
       color: AppColors.surface,
-      borderRadius: BorderRadius.circular(18),
-      border: Border.all(color: AppColors.line),
+      borderRadius: BorderRadius.circular(AppRadius.large),
     ),
     child: Row(
       children: [
@@ -1116,8 +1115,7 @@ class _NoiseSuppressionCard extends StatelessWidget {
     padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
     decoration: BoxDecoration(
       color: AppColors.surface,
-      borderRadius: BorderRadius.circular(18),
-      border: Border.all(color: AppColors.line),
+      borderRadius: BorderRadius.circular(AppRadius.large),
     ),
     child: Row(
       children: [
@@ -1175,8 +1173,7 @@ class _HotwordsCard extends StatelessWidget {
   Widget build(BuildContext context) => Material(
     color: AppColors.surface,
     shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(18),
-      side: const BorderSide(color: AppColors.line),
+      borderRadius: BorderRadius.circular(AppRadius.large),
     ),
     child: InkWell(
       key: const Key('live-dictation-hotwords-card'),
@@ -1257,8 +1254,7 @@ class _DownloadSourceCard extends StatelessWidget {
     return Material(
       color: AppColors.surface,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(15),
-        side: const BorderSide(color: AppColors.line),
+        borderRadius: BorderRadius.circular(AppRadius.medium),
       ),
       clipBehavior: Clip.antiAlias,
       child: ListTile(
@@ -1266,8 +1262,8 @@ class _DownloadSourceCard extends StatelessWidget {
         onTap: onTap,
         leading: const DecoratedBox(
           decoration: BoxDecoration(
-            color: AppColors.softBlue,
-            shape: BoxShape.circle,
+            color: AppColors.surfaceMuted,
+            borderRadius: BorderRadius.all(Radius.circular(AppRadius.small)),
           ),
           child: Padding(
             padding: EdgeInsets.all(9),
@@ -1336,8 +1332,7 @@ class _ModelCategoryLink extends StatelessWidget {
   Widget build(BuildContext context) => Material(
     color: AppColors.surface,
     shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(17),
-      side: const BorderSide(color: AppColors.line),
+      borderRadius: BorderRadius.circular(AppRadius.large),
     ),
     clipBehavior: Clip.antiAlias,
     child: InkWell(
@@ -1454,8 +1449,7 @@ class _ActiveModelCard extends StatelessWidget {
       key: Key('active-model-${definition.id}'),
       color: AppColors.surface,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: const BorderSide(color: AppColors.line),
+        borderRadius: BorderRadius.circular(AppRadius.large),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -1614,8 +1608,7 @@ class _ModelSummary extends StatelessWidget {
     padding: const EdgeInsets.all(18),
     decoration: BoxDecoration(
       color: AppColors.surface,
-      borderRadius: BorderRadius.circular(18),
-      border: Border.all(color: AppColors.line),
+      borderRadius: BorderRadius.circular(AppRadius.large),
     ),
     child: Row(
       children: [
@@ -2199,9 +2192,8 @@ class _MetaChip extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
     decoration: BoxDecoration(
-      color: AppColors.canvas,
+      color: AppColors.surfaceMuted,
       borderRadius: BorderRadius.circular(9),
-      border: Border.all(color: AppColors.line),
     ),
     child: Text(
       label,

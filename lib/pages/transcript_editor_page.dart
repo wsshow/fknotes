@@ -44,6 +44,7 @@ class _TranscriptEditorPageState extends State<TranscriptEditorPage> {
     return Scaffold(
       backgroundColor: AppColors.canvas,
       appBar: AppBar(
+        toolbarHeight: 64,
         leading: IconButton(
           key: const Key('cancel-transcript-edit'),
           tooltip: context.l10n.cancel,
@@ -52,7 +53,7 @@ class _TranscriptEditorPageState extends State<TranscriptEditorPage> {
         ),
         title: Text(
           context.l10n.editTranscript,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          style: Theme.of(context).textTheme.titleLarge,
         ),
         actions: [
           Padding(
@@ -96,8 +97,7 @@ class _TranscriptEditorPageState extends State<TranscriptEditorPage> {
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: AppColors.line),
+                    borderRadius: BorderRadius.circular(AppRadius.large),
                   ),
                   child: TextField(
                     key: const Key('transcript-editor-field'),
