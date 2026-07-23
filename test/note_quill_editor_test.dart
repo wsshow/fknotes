@@ -364,6 +364,39 @@ final value = 1;
       ]);
     });
 
+    test('Markdown tables and rules become structured block embeds', () {
+      final delta = NoteMarkdownCodec.decode('''
+| 项目 | 状态 |
+| :--- | ---: |
+| Quill | 完成 |
+| 分享图 | 待检查 |
+
+---
+''');
+      final document = NoteDocument.fromDelta(delta);
+      final embeds = delta.operations
+          .where((operation) => operation.data is! String)
+          .map((operation) => NoteEmbed.parse(operation.data))
+          .toList(growable: false);
+
+      expect(embeds.map((embed) => embed.kind), [
+        NoteEmbedKind.table,
+        NoteEmbedKind.divider,
+      ]);
+      expect(embeds.first.table!.rows, const [
+        ['项目', '状态'],
+        ['Quill', '完成'],
+        ['分享图', '待检查'],
+      ]);
+      expect(embeds.first.table!.alignments, const [
+        NoteTableAlignment.start,
+        NoteTableAlignment.end,
+      ]);
+      expect(document.project().plainText, contains('Quill\t完成'));
+      expect(document.project().plainText, isNot(contains('|')));
+      expect(document.project().plainText, isNot(contains('---')));
+    });
+
     test('AI selection replacement is one native document transaction', () {
       final controller = NoteEditorController(
         document: NoteDocument.fromPlainText('保留 需要润色 结尾'),
@@ -660,6 +693,99 @@ final value = 1;
 
     expect(controller.snapshot().document.project().plainText, '第一行\n第二行');
   });
+
+  testWidgets(
+    'converts Android IME Markdown paste before raw text reaches the document',
+    (tester) async {
+      final controller = NoteEditorController(
+        document: NoteDocument.empty(),
+        assets: const [],
+      );
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(
+        _EditorTestApp(child: NoteQuillEditor(controller: controller)),
+      );
+      await tester.pump();
+      await tester.tap(find.byType(quill.QuillRawEditor));
+      await tester.pump();
+      const pasted = '# 系统粘贴\n\n正文 **重点**\n';
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: pasted,
+          selection: TextSelection.collapsed(offset: pasted.length - 1),
+        ),
+      );
+      await tester.pump();
+
+      expect(controller.snapshot().document.project().plainText, '系统粘贴\n正文 重点');
+      expect(controller.snapshot().document.toDelta().toJson(), [
+        {'insert': '系统粘贴'},
+        {
+          'insert': '\n',
+          'attributes': {'header': 1},
+        },
+        {'insert': '正文 '},
+        {
+          'insert': '重点',
+          'attributes': {'bold': true},
+        },
+        {'insert': '\n'},
+      ]);
+
+      controller.quillController.undo();
+      expect(controller.snapshot().document.project().isVisuallyEmpty, isTrue);
+    },
+  );
+
+  testWidgets(
+    'renders pasted Markdown table and reveals block actions only after tap',
+    (tester) async {
+      final controller = NoteEditorController(
+        document: NoteDocument.empty(),
+        assets: const [],
+      );
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(
+        _EditorTestApp(child: NoteQuillEditor(controller: controller)),
+      );
+      await tester.pump();
+      await tester.tap(find.byType(quill.QuillRawEditor));
+      await tester.pump();
+      const pasted = '''
+| 项目 | 状态 |
+| :--- | ---: |
+| Quill | 完成 |
+
+---
+''';
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: pasted,
+          selection: TextSelection.collapsed(offset: pasted.length - 1),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('项目'), findsOneWidget);
+      expect(find.text('状态'), findsOneWidget);
+      expect(find.text('Quill'), findsOneWidget);
+      expect(find.text('完成'), findsOneWidget);
+      expect(find.byKey(const ValueKey('remove-note-table')), findsNothing);
+      expect(find.byKey(const ValueKey('remove-note-divider')), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('note-table-0')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('remove-note-table')), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('note-divider-2')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('remove-note-divider')), findsOneWidget);
+      expect(find.byKey(const ValueKey('remove-note-table')), findsNothing);
+      await tester.pump(const Duration(milliseconds: 400));
+    },
+  );
 
   testWidgets('provides a single-row rich text toolbar', (tester) async {
     final controller = NoteEditorController(

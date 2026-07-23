@@ -148,6 +148,28 @@ void main() {
       expect(block.runs.single.text, '甲乙');
       expect(block.runs.single.style.bold, isTrue);
     });
+
+    test('keeps table rows available to search, speech and AI consumers', () {
+      final table = NoteTable(
+        rows: const [
+          ['项目', '状态'],
+          ['Quill', '完成'],
+        ],
+      );
+      final note = _note(
+        Delta()
+          ..insert(NoteEmbed.table(table).toDeltaData())
+          ..insert('\n'),
+      );
+
+      final projection = NoteSemanticProjection.fromNote(note);
+
+      expect(projection.blocks.single.kind, NoteSemanticBlockKind.table);
+      expect(projection.blocks.single.table!.rows, table.rows);
+      expect(projection.bodyText, '项目\t状态\nQuill\t完成');
+      expect(projection.speechText(), contains('Quill'));
+      expect(projection.assistantSource(), contains('表格：\n项目\t状态'));
+    });
   });
 }
 

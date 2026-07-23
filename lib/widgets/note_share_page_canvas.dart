@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../app.dart';
 import '../models/note.dart';
+import '../models/note_document.dart';
 import '../models/note_share.dart';
 import '../models/note_share_theme.dart';
 import '../services/file_storage_service.dart';
@@ -457,6 +458,13 @@ class _ShareBlockView extends StatelessWidget {
         landscape: landscape,
       );
     }
+    if (block.type == NoteShareBlockType.table) {
+      return _ShareTable(
+        table: block.table!,
+        palette: palette,
+        densityScale: options.density.scale,
+      );
+    }
 
     final scale = options.density.scale;
     final baseStyle = NoteShareTextPresentation.baseStyle(
@@ -532,6 +540,76 @@ class _ShareBlockView extends StatelessWidget {
       },
     );
   }
+}
+
+class _ShareTable extends StatelessWidget {
+  const _ShareTable({
+    required this.table,
+    required this.palette,
+    required this.densityScale,
+  });
+
+  final NoteTable table;
+  final _SharePalette palette;
+  final double densityScale;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: EdgeInsets.only(
+      bottom: NoteShareLayoutEngine.blockBottomGap * densityScale,
+    ),
+    clipBehavior: Clip.antiAlias,
+    decoration: BoxDecoration(
+      border: Border.all(color: palette.line),
+      borderRadius: BorderRadius.circular(7),
+    ),
+    child: Table(
+      border: TableBorder(
+        horizontalInside: BorderSide(color: palette.line),
+        verticalInside: BorderSide(color: palette.line),
+      ),
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      children: [
+        for (var rowIndex = 0; rowIndex < table.rows.length; rowIndex++)
+          TableRow(
+            decoration: rowIndex == 0
+                ? BoxDecoration(color: palette.code)
+                : null,
+            children: [
+              for (
+                var columnIndex = 0;
+                columnIndex < table.columnCount;
+                columnIndex++
+              )
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal:
+                        NoteShareLayoutEngine.tableCellHorizontalPadding,
+                    vertical: NoteShareLayoutEngine.tableCellVerticalPadding,
+                  ),
+                  child: Text(
+                    table.rows[rowIndex][columnIndex],
+                    textAlign: switch (table.alignments[columnIndex]) {
+                      NoteTableAlignment.start => TextAlign.start,
+                      NoteTableAlignment.center => TextAlign.center,
+                      NoteTableAlignment.end => TextAlign.end,
+                    },
+                    style: TextStyle(
+                      color: palette.ink,
+                      fontSize:
+                          NoteShareLayoutEngine.tableFontSize * densityScale,
+                      height: NoteShareLayoutEngine.tableLineHeight,
+                      fontWeight: rowIndex == 0
+                          ? FontWeight.w700
+                          : FontWeight.w400,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+      ],
+    ),
+  );
 }
 
 class _ShareAttachment extends StatelessWidget {

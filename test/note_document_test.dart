@@ -52,6 +52,7 @@ void main() {
         resolveEmbedText: (embed) => switch (embed.kind) {
           NoteEmbedKind.attachment => '【${embed.attachmentId}】',
           NoteEmbedKind.divider => '——',
+          NoteEmbedKind.table => embed.table!.plainText,
         },
       );
 
@@ -59,6 +60,52 @@ void main() {
       expect(projection.referencedAttachmentIds, [firstId, secondId]);
       expect(projection.hasEmbeds, isTrue);
       expect(projection.isVisuallyEmpty, isFalse);
+    });
+
+    test('round trips a bounded table embed without losing cell content', () {
+      final table = NoteTable(
+        rows: const [
+          ['项目', '状态'],
+          ['Quill', '完成'],
+          ['分享图', '待检查'],
+        ],
+        alignments: const [NoteTableAlignment.start, NoteTableAlignment.center],
+      );
+      final document = NoteDocument.fromDelta(
+        Delta()
+          ..insert(NoteEmbed.table(table).toDeltaData())
+          ..insert('\n'),
+      );
+      final restored = NoteDocument.fromJsonString(document.toJsonString());
+      final embed = NoteEmbed.parse(restored.toDelta().operations.first.data);
+
+      expect(embed.kind, NoteEmbedKind.table);
+      expect(embed.table!.rows, table.rows);
+      expect(embed.table!.alignments, table.alignments);
+      expect(restored.project().plainText, '项目\t状态\nQuill\t完成\n分享图\t待检查');
+      expect(restored.project().searchText, '项目 状态 Quill 完成 分享图 待检查');
+    });
+
+    test('rejects malformed and unbounded table embeds', () {
+      expect(
+        () => NoteEmbed.parse({
+          NoteEmbed.tableType: {
+            'rows': [
+              ['项目', 1],
+            ],
+            'alignments': ['start', 'end'],
+          },
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => NoteTable(
+          rows: [
+            for (var index = 0; index <= NoteTable.maxRows; index++) ['$index'],
+          ],
+        ),
+        throwsFormatException,
+      );
     });
 
     test('an embed-only document is not visually empty', () {

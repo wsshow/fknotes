@@ -170,6 +170,92 @@ void main() {
     expect(longOutput, source);
   });
 
+  test('share layout paginates tables by row and repeats the header', () {
+    final table = NoteTable(
+      rows: [
+        const ['序号', '项目', '状态'],
+        for (var index = 1; index <= 28; index++)
+          ['$index', '检查项 $index', index.isEven ? '完成' : '待处理'],
+      ],
+      alignments: const [
+        NoteTableAlignment.end,
+        NoteTableAlignment.start,
+        NoteTableAlignment.center,
+      ],
+    );
+    final draft = _draft(
+      blocks: [NoteShareBlock(type: NoteShareBlockType.table, table: table)],
+    );
+
+    final layout = const NoteShareLayoutEngine().paginate(
+      draft: draft,
+      options: const NoteShareOptions(),
+      textDirection: TextDirection.ltr,
+      untitledTitle: '一则笔记',
+    );
+    final tableBlocks = layout.pages
+        .expand((page) => page.blocks)
+        .map((item) => item.block)
+        .where((block) => block.type == NoteShareBlockType.table)
+        .toList(growable: false);
+    final restoredRows = [
+      tableBlocks.first.table!.rows.first,
+      for (final block in tableBlocks) ...block.table!.rows.skip(1),
+    ];
+
+    expect(tableBlocks.length, greaterThan(1));
+    expect(
+      tableBlocks.every(
+        (block) =>
+            block.table!.rows.first.join('|') == table.rows.first.join('|'),
+      ),
+      isTrue,
+    );
+    expect(restoredRows, table.rows);
+  });
+
+  testWidgets('share canvas renders table cells as a bordered grid', (
+    tester,
+  ) async {
+    final table = NoteTable(
+      rows: const [
+        ['项目', '状态'],
+        ['Quill', '完成'],
+      ],
+    );
+    final draft = _draft(
+      blocks: [NoteShareBlock(type: NoteShareBlockType.table, table: table)],
+    );
+    const options = NoteShareOptions();
+    final layout = const NoteShareLayoutEngine().paginate(
+      draft: draft,
+      options: options,
+      textDirection: TextDirection.ltr,
+      untitledTitle: '一则笔记',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteSharePageCanvas(
+            draft: draft,
+            options: options,
+            layout: layout,
+            pageIndex: 0,
+            untitledTitle: '一则笔记',
+            sourceLabel: '来自「非空笔记」',
+            locale: const Locale('zh'),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(Table), findsOneWidget);
+    expect(find.text('项目'), findsOneWidget);
+    expect(find.text('完成'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   test('share layout preserves lossless inline formatting from the editor', () {
     final blocks = [
       NoteShareBlock(

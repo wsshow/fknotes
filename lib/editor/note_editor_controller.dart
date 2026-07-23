@@ -71,6 +71,7 @@ final class NoteEditorController extends ChangeNotifier {
     quillController = QuillController(
       document: document.toQuillDocument(),
       selection: const TextSelection.collapsed(offset: 0),
+      onReplaceText: _handleReplaceText,
       config: QuillControllerConfig(
         clipboardConfig: QuillClipboardConfig(
           onClipboardPaste: _handleClipboardPaste,
@@ -362,7 +363,12 @@ final class NoteEditorController extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool isAttachmentEmbedAtOffset(int offset) {
+  bool isBlockEmbedAtOffset(int offset) => _noteEmbedAtOffset(offset) != null;
+
+  bool isAttachmentEmbedAtOffset(int offset) =>
+      _noteEmbedAtOffset(offset)?.kind == NoteEmbedKind.attachment;
+
+  NoteEmbed? _noteEmbedAtOffset(int offset) {
     final document = quillController.document;
     final maximum = document.length - 1;
     for (final candidate in [offset, offset - 1]) {
@@ -370,14 +376,12 @@ final class NoteEditorController extends ChangeNotifier {
       final leaf = document.querySegmentLeafNode(candidate).leaf;
       if (leaf is! Embed) continue;
       try {
-        if (NoteEmbed.parse(leaf.value.toJson()).attachmentId != null) {
-          return true;
-        }
+        return NoteEmbed.parse(leaf.value.toJson());
       } on FormatException {
         // Other Quill embeds keep their normal selection behavior.
       }
     }
-    return false;
+    return null;
   }
 
   void insertDivider() => _insertBlockEmbed(const NoteEmbed.divider());
@@ -448,26 +452,57 @@ final class NoteEditorController extends ChangeNotifier {
     if (source == null) return false;
     final markdown = NoteMarkdownCodec.decodeIfRich(source);
     if (markdown == null) return false;
-    _pasteMarkdown(markdown);
-    return true;
-  }
-
-  void _pasteMarkdown(Delta markdown) {
     final selection = quillController.selection;
     final documentEnd = quillController.document.length - 1;
     final start = selection.start.clamp(0, documentEnd);
     final end = selection.end.clamp(start, documentEnd);
+    _replaceWithMarkdown(
+      start: start,
+      replaceLength: end - start,
+      markdown: markdown,
+    );
+    return true;
+  }
+
+  bool _handleReplaceText(int index, int length, Object? data) {
+    // Android keyboards such as Gboard submit clipboard text through the IME
+    // connection instead of Quill's clipboard command. A multi-character
+    // plain-string replacement is the only point where that payload can be
+    // converted before raw Markdown reaches the document and undo history.
+    if (data is! String || data.length < 2) return true;
+    final markdown = NoteMarkdownCodec.decodeIfRich(data);
+    if (markdown == null) return true;
+    _replaceWithMarkdown(
+      start: index,
+      replaceLength: length,
+      markdown: markdown,
+    );
+    return false;
+  }
+
+  void _replaceWithMarkdown({
+    required int start,
+    required int replaceLength,
+    required Delta markdown,
+  }) {
+    final documentEnd = quillController.document.length - 1;
+    final safeStart = start.clamp(0, documentEnd);
+    final safeLength = replaceLength.clamp(
+      0,
+      quillController.document.length - safeStart,
+    );
+    final end = safeStart + safeLength;
 
     if (_isSinglePlainParagraph(markdown)) {
       final insertion = _deltaWithoutTerminalNewline(markdown);
-      quillController.replaceText(start, end - start, insertion, null);
-      _moveCaretAfter(start, insertion);
+      quillController.replaceText(safeStart, safeLength, insertion, null);
+      _moveCaretAfter(safeStart, insertion);
       return;
     }
 
     final plainText = quillController.document.toPlainText();
     final startsAtLineBoundary =
-        start == 0 || plainText.codeUnitAt(start - 1) == 10;
+        safeStart == 0 || plainText.codeUnitAt(safeStart - 1) == 10;
     final insertion = Delta();
     if (!startsAtLineBoundary) insertion.insert('\n');
     for (final operation in markdown.operations) {
@@ -480,12 +515,12 @@ final class NoteEditorController extends ChangeNotifier {
     final consumesBoundaryNewline =
         end < plainText.length && plainText.codeUnitAt(end) == 10;
     quillController.replaceText(
-      start,
-      end - start + (consumesBoundaryNewline ? 1 : 0),
+      safeStart,
+      safeLength + (consumesBoundaryNewline ? 1 : 0),
       insertion,
       null,
     );
-    _moveCaretAfter(start, insertion);
+    _moveCaretAfter(safeStart, insertion);
   }
 
   void _moveCaretAfter(int offset, Delta insertion) {

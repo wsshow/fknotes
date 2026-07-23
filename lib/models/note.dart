@@ -223,9 +223,14 @@ final class Note {
     final byId = assetsById;
     return document.project(
       resolveEmbedText: (embed) {
-        if (embed.kind == NoteEmbedKind.divider) return '——';
-        final asset = byId[embed.attachmentId];
-        return asset == null ? '' : '【${asset.displayTitle}】';
+        return switch (embed.kind) {
+          NoteEmbedKind.divider => '——',
+          NoteEmbedKind.table => embed.table!.plainText,
+          NoteEmbedKind.attachment =>
+            byId[embed.attachmentId] == null
+                ? ''
+                : '【${byId[embed.attachmentId]!.displayTitle}】',
+        };
       },
     );
   }

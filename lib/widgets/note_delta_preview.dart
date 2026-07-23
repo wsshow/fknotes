@@ -69,6 +69,7 @@ final class NoteDeltaPreview extends StatelessWidget {
           embedLabel?.call(embed, asset) ??
           switch (embed.kind) {
             NoteEmbedKind.divider => '  —  ',
+            NoteEmbedKind.table => embed.table!.plainText,
             NoteEmbedKind.attachment =>
               asset == null ? '【附件】' : '【${asset.displayTitle}】',
           };

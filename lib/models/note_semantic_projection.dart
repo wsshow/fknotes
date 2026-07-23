@@ -14,6 +14,7 @@ enum NoteSemanticBlockKind {
   codeBlock,
   attachment,
   divider,
+  table,
 }
 
 enum NoteSemanticAlignment { start, center, end, justify }
@@ -73,6 +74,7 @@ final class NoteSemanticBlock {
     this.indent = 0,
     this.alignment = NoteSemanticAlignment.start,
     this.asset,
+    this.table,
   }) : runs = List.unmodifiable(runs);
 
   factory NoteSemanticBlock.text({
@@ -83,7 +85,8 @@ final class NoteSemanticBlock {
     NoteSemanticAlignment alignment = NoteSemanticAlignment.start,
   }) {
     if (kind == NoteSemanticBlockKind.attachment ||
-        kind == NoteSemanticBlockKind.divider) {
+        kind == NoteSemanticBlockKind.divider ||
+        kind == NoteSemanticBlockKind.table) {
       throw ArgumentError.value(kind, 'kind', 'Expected a text block.');
     }
     return NoteSemanticBlock._(
@@ -101,14 +104,19 @@ final class NoteSemanticBlock {
   factory NoteSemanticBlock.divider() =>
       NoteSemanticBlock._(kind: NoteSemanticBlockKind.divider);
 
+  factory NoteSemanticBlock.table(NoteTable table) =>
+      NoteSemanticBlock._(kind: NoteSemanticBlockKind.table, table: table);
+
   final NoteSemanticBlockKind kind;
   final List<NoteSemanticRun> runs;
   final int? headingLevel;
   final int indent;
   final NoteSemanticAlignment alignment;
   final NoteAsset? asset;
+  final NoteTable? table;
 
-  String get plainText => runs.map((run) => run.text).join();
+  String get plainText =>
+      table?.plainText ?? runs.map((run) => run.text).join();
 }
 
 /// Consumer-neutral reading of a canonical note.
@@ -216,6 +224,11 @@ final class NoteSemanticProjection {
           }
         case NoteSemanticBlockKind.divider:
           _writeSeparatedLine(body, '——');
+        case NoteSemanticBlockKind.table:
+          _writeSeparatedLine(
+            body,
+            '${english ? 'Table' : '表格'}：\n${block.table!.plainText}',
+          );
         case NoteSemanticBlockKind.heading:
           _writeSeparatedLine(
             body,
@@ -340,6 +353,7 @@ final class _NoteDeltaSemanticParser {
           _assets[embed.attachmentId]!,
         ),
         NoteEmbedKind.divider => NoteSemanticBlock.divider(),
+        NoteEmbedKind.table => NoteSemanticBlock.table(embed.table!),
       });
       _pendingEmbed = null;
       return;

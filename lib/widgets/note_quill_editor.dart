@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
@@ -51,6 +52,7 @@ final class NoteQuillEditor extends StatefulWidget {
 
 final class _NoteQuillEditorState extends State<NoteQuillEditor> {
   NoteAttachmentId? _activeImageId;
+  ({NoteEmbedKind kind, int offset})? _activeBlock;
 
   @override
   Widget build(BuildContext context) {
@@ -81,9 +83,12 @@ final class _NoteQuillEditorState extends State<NoteQuillEditor> {
       TextPosition Function(Offset offset) getPosition,
     ) {
       final position = getPosition(globalPosition);
-      if (!controller.isAttachmentEmbedAtOffset(position.offset)) {
-        if (_activeImageId != null) {
-          setState(() => _activeImageId = null);
+      if (!controller.isBlockEmbedAtOffset(position.offset)) {
+        if (_activeImageId != null || _activeBlock != null) {
+          setState(() {
+            _activeImageId = null;
+            _activeBlock = null;
+          });
         }
         return false;
       }
@@ -94,6 +99,8 @@ final class _NoteQuillEditorState extends State<NoteQuillEditor> {
     final activeImage = _activeImageId == null
         ? null
         : controller.asset(_activeImageId!);
+    final activeBlock = _activeBlock;
+    final showsContextActions = activeImage != null || activeBlock != null;
     final editor = quill.QuillEditor.basic(
       controller: controller.quillController,
       focusNode: focusNode,
@@ -106,7 +113,7 @@ final class _NoteQuillEditorState extends State<NoteQuillEditor> {
           24,
           18,
           24,
-          activeImage == null ? 48 : 104,
+          showsContextActions ? 104 : 48,
         ),
         placeholder: placeholder,
         enableInteractiveSelection: true,
@@ -124,11 +131,21 @@ final class _NoteQuillEditorState extends State<NoteQuillEditor> {
             audioPlayback: audioPlayback,
             onOpenAsset: onOpenAsset,
             onAssetInteraction: dismissEditorFocus,
-            onToggleImageActions: (id) => setState(
-              () => _activeImageId = _activeImageId == id ? null : id,
-            ),
+            onToggleImageActions: (id) => setState(() {
+              _activeBlock = null;
+              _activeImageId = _activeImageId == id ? null : id;
+            }),
           ),
-          _NoteDividerEmbedBuilder(session: controller),
+          _NoteDividerEmbedBuilder(
+            onInteraction: dismissEditorFocus,
+            onToggleActions: (offset) =>
+                _toggleBlockActions(NoteEmbedKind.divider, offset),
+          ),
+          _NoteTableEmbedBuilder(
+            onInteraction: dismissEditorFocus,
+            onToggleActions: (offset) =>
+                _toggleBlockActions(NoteEmbedKind.table, offset),
+          ),
         ],
       ),
     );
@@ -161,8 +178,35 @@ final class _NoteQuillEditorState extends State<NoteQuillEditor> {
               },
             ),
           ),
+        if (!readOnly && activeBlock != null)
+          Positioned(
+            left: 24,
+            right: 24,
+            bottom: 12,
+            child: _BlockActionBar(
+              key: ValueKey(
+                'note-block-actions-${activeBlock.kind.name}-'
+                '${activeBlock.offset}',
+              ),
+              kind: activeBlock.kind,
+              onRemove: () {
+                controller.removeEmbedAt(activeBlock.offset);
+                setState(() => _activeBlock = null);
+              },
+            ),
+          ),
       ],
     );
+  }
+
+  void _toggleBlockActions(NoteEmbedKind kind, int offset) {
+    setState(() {
+      _activeImageId = null;
+      final active = _activeBlock;
+      _activeBlock = active?.kind == kind && active?.offset == offset
+          ? null
+          : (kind: kind, offset: offset);
+    });
   }
 }
 
@@ -707,9 +751,13 @@ final class _AudioRenameResult {
 }
 
 final class _NoteDividerEmbedBuilder extends quill.EmbedBuilder {
-  const _NoteDividerEmbedBuilder({required this.session});
+  const _NoteDividerEmbedBuilder({
+    required this.onInteraction,
+    required this.onToggleActions,
+  });
 
-  final NoteEditorController session;
+  final VoidCallback onInteraction;
+  final ValueChanged<int> onToggleActions;
 
   @override
   String get key => NoteEmbed.dividerType;
@@ -718,19 +766,158 @@ final class _NoteDividerEmbedBuilder extends quill.EmbedBuilder {
   String toPlainText(quill.Embed node) => '——';
 
   @override
-  Widget build(BuildContext context, quill.EmbedContext embedContext) => Stack(
-    alignment: Alignment.centerRight,
-    children: [
-      const Padding(
-        padding: EdgeInsets.symmetric(vertical: 20),
-        child: Divider(height: 1, color: AppColors.line),
-      ),
-      if (!embedContext.readOnly)
-        _RemoveButton(
-          onPressed: () =>
-              session.removeEmbedAt(embedContext.node.documentOffset),
+  Widget build(BuildContext context, quill.EmbedContext embedContext) =>
+      Semantics(
+        label: context.l10n.divider,
+        button: !embedContext.readOnly,
+        child: GestureDetector(
+          key: ValueKey('note-divider-${embedContext.node.documentOffset}'),
+          behavior: HitTestBehavior.opaque,
+          onTap: embedContext.readOnly
+              ? null
+              : () {
+                  onInteraction();
+                  onToggleActions(embedContext.node.documentOffset);
+                },
+          child: const Padding(
+            padding: EdgeInsets.symmetric(vertical: 20),
+            child: Divider(height: 1, color: AppColors.line),
+          ),
         ),
-    ],
+      );
+}
+
+final class _NoteTableEmbedBuilder extends quill.EmbedBuilder {
+  const _NoteTableEmbedBuilder({
+    required this.onInteraction,
+    required this.onToggleActions,
+  });
+
+  final VoidCallback onInteraction;
+  final ValueChanged<int> onToggleActions;
+
+  @override
+  String get key => NoteEmbed.tableType;
+
+  @override
+  String toPlainText(quill.Embed node) =>
+      NoteEmbed.parse(node.value.toJson()).table!.plainText;
+
+  @override
+  Widget build(BuildContext context, quill.EmbedContext embedContext) {
+    final table = NoteEmbed.parse(embedContext.node.value.toJson()).table!;
+    final offset = embedContext.node.documentOffset;
+    return _NoteTableBlock(
+      key: ValueKey('note-table-$offset'),
+      table: table,
+      readOnly: embedContext.readOnly,
+      onTap: () {
+        onInteraction();
+        onToggleActions(offset);
+      },
+    );
+  }
+}
+
+final class _NoteTableBlock extends StatelessWidget {
+  const _NoteTableBlock({
+    required this.table,
+    required this.readOnly,
+    required this.onTap,
+    super.key,
+  });
+
+  final NoteTable table;
+  final bool readOnly;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: context.l10n.tableDimensions(table.columnCount, table.rows.length),
+    button: !readOnly,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: readOnly ? null : onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final width = math.max(
+              constraints.maxWidth,
+              table.columnCount * 116.0,
+            );
+            return DecoratedBox(
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(AppRadius.medium),
+                border: Border.all(color: AppColors.line),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.medium),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: width,
+                    child: Table(
+                      border: const TableBorder(
+                        horizontalInside: BorderSide(color: AppColors.line),
+                        verticalInside: BorderSide(color: AppColors.line),
+                      ),
+                      children: [
+                        for (
+                          var rowIndex = 0;
+                          rowIndex < table.rows.length;
+                          rowIndex++
+                        )
+                          TableRow(
+                            decoration: rowIndex == 0
+                                ? const BoxDecoration(
+                                    color: AppColors.surfaceMuted,
+                                  )
+                                : null,
+                            children: [
+                              for (
+                                var columnIndex = 0;
+                                columnIndex < table.columnCount;
+                                columnIndex++
+                              )
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                  child: Text(
+                                    table.rows[rowIndex][columnIndex],
+                                    textAlign: switch (table
+                                        .alignments[columnIndex]) {
+                                      NoteTableAlignment.start =>
+                                        TextAlign.start,
+                                      NoteTableAlignment.center =>
+                                        TextAlign.center,
+                                      NoteTableAlignment.end => TextAlign.end,
+                                    },
+                                    style: TextStyle(
+                                      color: AppColors.ink,
+                                      fontSize: 14,
+                                      height: 1.35,
+                                      fontWeight: rowIndex == 0
+                                          ? FontWeight.w700
+                                          : FontWeight.w400,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    ),
   );
 }
 
@@ -860,6 +1047,61 @@ final class _ImageActionBar extends StatelessWidget {
       ),
     ),
   );
+}
+
+final class _BlockActionBar extends StatelessWidget {
+  const _BlockActionBar({
+    required this.kind,
+    required this.onRemove,
+    super.key,
+  });
+
+  final NoteEmbedKind kind;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final table = kind == NoteEmbedKind.table;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+        border: Border.all(color: AppColors.line),
+        boxShadow: AppShadows.floating,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 7, 8, 7),
+        child: Row(
+          children: [
+            Icon(
+              table ? Icons.table_chart_outlined : Icons.horizontal_rule,
+              size: 20,
+              color: AppColors.muted,
+            ),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Text(
+                table ? context.l10n.markdownTable : context.l10n.divider,
+                style: const TextStyle(
+                  color: AppColors.ink,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            TextButton.icon(
+              key: ValueKey('remove-note-${kind.name}'),
+              onPressed: onRemove,
+              icon: const Icon(Icons.delete_outline_rounded, size: 19),
+              label: Text(
+                table ? context.l10n.deleteTable : context.l10n.delete,
+              ),
+              style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 final class _ImageActionButton extends StatelessWidget {

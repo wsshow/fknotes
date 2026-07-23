@@ -271,6 +271,7 @@ enum NoteShareBlockType {
   quote,
   code,
   divider,
+  table,
   attachment,
 }
 
@@ -320,6 +321,7 @@ final class NoteShareBlock {
     this.indent = 0,
     this.headingLevel = 0,
     this.asset,
+    this.table,
     Iterable<NoteShareTextRange> styles = const [],
   }) : styles = List.unmodifiable(styles) {
     if (type == NoteShareBlockType.attachment && asset == null) {
@@ -327,6 +329,12 @@ final class NoteShareBlock {
     }
     if (type != NoteShareBlockType.attachment && asset != null) {
       throw ArgumentError('Only attachment share blocks may own an asset.');
+    }
+    if (type == NoteShareBlockType.table && table == null) {
+      throw ArgumentError('A table share block requires its table.');
+    }
+    if (type != NoteShareBlockType.table && table != null) {
+      throw ArgumentError('Only table share blocks may own a table.');
     }
     for (final range in this.styles) {
       if (range.end > text.length) {
@@ -344,6 +352,9 @@ final class NoteShareBlock {
     }
     if (block.kind == NoteSemanticBlockKind.divider) {
       return NoteShareBlock(type: NoteShareBlockType.divider);
+    }
+    if (block.kind == NoteSemanticBlockKind.table) {
+      return NoteShareBlock(type: NoteShareBlockType.table, table: block.table);
     }
     final text = StringBuffer();
     final styles = <NoteShareTextRange>[];
@@ -367,7 +378,8 @@ final class NoteShareBlock {
         NoteSemanticBlockKind.blockQuote => NoteShareBlockType.quote,
         NoteSemanticBlockKind.codeBlock => NoteShareBlockType.code,
         NoteSemanticBlockKind.attachment ||
-        NoteSemanticBlockKind.divider => throw StateError('Handled above.'),
+        NoteSemanticBlockKind.divider ||
+        NoteSemanticBlockKind.table => throw StateError('Handled above.'),
       },
       text: text.toString(),
       checked: block.kind == NoteSemanticBlockKind.checkedList,
@@ -383,9 +395,15 @@ final class NoteShareBlock {
   final int indent;
   final int headingLevel;
   final NoteAsset? asset;
+  final NoteTable? table;
   final List<NoteShareTextRange> styles;
 
   NoteShareBlock slice(int start, int end) {
+    if (type == NoteShareBlockType.attachment ||
+        type == NoteShareBlockType.divider ||
+        type == NoteShareBlockType.table) {
+      throw StateError('Only text share blocks can be sliced.');
+    }
     final slicedStyles = <NoteShareTextRange>[];
     for (final range in styles) {
       final overlapStart = math.max(start, range.start);
@@ -406,7 +424,6 @@ final class NoteShareBlock {
       checked: checked,
       indent: indent,
       headingLevel: headingLevel,
-      asset: asset,
       styles: slicedStyles,
     );
   }
@@ -462,7 +479,8 @@ final class NoteShareDraft {
       blocks.any(
         (block) =>
             block.text.trim().isNotEmpty ||
-            block.type == NoteShareBlockType.attachment,
+            block.type == NoteShareBlockType.attachment ||
+            block.type == NoteShareBlockType.table,
       );
 }
 

@@ -61,6 +61,30 @@ void main() {
 
     expect(find.textContaining('【设计稿.png】'), findsOneWidget);
   });
+
+  testWidgets('keeps table cell content visible in the library preview', (
+    tester,
+  ) async {
+    final table = NoteTable(
+      rows: const [
+        ['项目', '状态'],
+        ['Quill', '完成'],
+      ],
+    );
+    final note = _noteWithDocument(
+      Delta()
+        ..insert(NoteEmbed.table(table).toDeltaData())
+        ..insert('\n'),
+    );
+
+    await tester.pumpWidget(_TestApp(child: NoteDeltaPreview(note: note)));
+
+    final text = tester.widget<Text>(
+      find.byKey(const Key('note-delta-preview-text')),
+    );
+    expect(text.textSpan!.toPlainText(), contains('项目\t状态'));
+    expect(text.textSpan!.toPlainText(), contains('Quill\t完成'));
+  });
 }
 
 Note _noteWithDocument(Delta delta) {

@@ -1,6 +1,8 @@
 import 'package:flutter_quill/quill_delta.dart';
 import 'package:markdown/markdown.dart' as md;
 
+import '../models/note_document.dart';
+
 /// Converts Markdown boundary content into native Quill semantics.
 ///
 /// Notes remain Delta documents. Markdown is accepted only at explicit
@@ -142,11 +144,9 @@ final class NoteMarkdownCodec {
             );
         output.addCodeBlock(code.textContent.replaceFirst(RegExp(r'\n$'), ''));
       case 'hr':
-        // Markdown boundaries cannot mint domain embeds. A readable divider is
-        // a safe semantic substitute and remains fully editable.
-        output.addInlineBlock(const [_InlineRun('——')]);
+        output.addEmbed(const NoteEmbed.divider());
       case 'table':
-        output.addInlineBlock([_InlineRun(_tableText(node))]);
+        output.addEmbed(NoteEmbed.table(_table(node)));
       default:
         final inline = _inlineRuns(node.children);
         if (inline.any((run) => run.text.trim().isNotEmpty)) {
@@ -257,16 +257,25 @@ final class NoteMarkdownCodec {
     return null;
   }
 
-  static String _tableText(md.Element table) {
-    final rows = <String>[];
+  static NoteTable _table(md.Element table) {
+    final rows = <List<String>>[];
+    final alignments = <NoteTableAlignment>[];
     void visit(md.Element element) {
       if (element.tag == 'tr') {
         final cells = (element.children ?? const <md.Node>[])
             .whereType<md.Element>()
             .where((child) => child.tag == 'th' || child.tag == 'td')
-            .map((child) => child.textContent.trim())
             .toList(growable: false);
-        if (cells.isNotEmpty) rows.add(cells.join('\t'));
+        if (cells.isNotEmpty) {
+          rows.add(
+            cells
+                .map((cell) => cell.textContent.trim())
+                .toList(growable: false),
+          );
+          if (alignments.isEmpty) {
+            alignments.addAll(cells.map(_tableAlignment));
+          }
+        }
         return;
       }
       for (final child
@@ -276,7 +285,19 @@ final class NoteMarkdownCodec {
     }
 
     visit(table);
-    return rows.join('\n');
+    return NoteTable(rows: rows, alignments: alignments);
+  }
+
+  static NoteTableAlignment _tableAlignment(md.Element cell) {
+    final value = [
+      cell.attributes['align'],
+      cell.attributes['style'],
+    ].whereType<String>().join(' ').toLowerCase();
+    if (value.contains('center')) return NoteTableAlignment.center;
+    if (value.contains('right') || value.contains('end')) {
+      return NoteTableAlignment.end;
+    }
+    return NoteTableAlignment.start;
   }
 
   static Delta _plainTextDelta(String source) {
@@ -325,6 +346,12 @@ final class _DeltaBlockWriter {
       if (line.isNotEmpty) _delta.insert(line);
       _delta.insert('\n', {'code-block': true});
     }
+  }
+
+  void addEmbed(NoteEmbed embed) {
+    _delta
+      ..insert(embed.toDeltaData())
+      ..insert('\n');
   }
 
   Delta finish({required String fallback}) =>

@@ -38,31 +38,146 @@ final class NoteAttachmentId {
   String toString() => value;
 }
 
-enum NoteEmbedKind { attachment, divider }
+enum NoteEmbedKind { attachment, divider, table }
+
+enum NoteTableAlignment { start, center, end }
+
+/// A bounded, presentation-neutral table stored inside a note Delta.
+final class NoteTable {
+  factory NoteTable({
+    required Iterable<Iterable<String>> rows,
+    Iterable<NoteTableAlignment> alignments = const [],
+  }) {
+    final normalizedRows = _normalizeRows(rows);
+    return NoteTable._(
+      normalizedRows,
+      _normalizeAlignments(normalizedRows.first.length, alignments),
+    );
+  }
+
+  const NoteTable._(this.rows, this.alignments);
+
+  factory NoteTable.fromJson(Object? source) {
+    if (source is! Map ||
+        source.keys.any((key) => key is! String) ||
+        source['rows'] is! List ||
+        source['alignments'] is! List) {
+      throw const FormatException('Invalid table embed payload.');
+    }
+    final rawRows = source['rows'] as List;
+    final rawAlignments = source['alignments'] as List;
+    if (rawRows.any(
+          (row) => row is! List || row.any((cell) => cell is! String),
+        ) ||
+        rawAlignments.any((alignment) => alignment is! String)) {
+      throw const FormatException('Invalid table embed values.');
+    }
+    return NoteTable(
+      rows: rawRows.map((row) => (row as List).cast<String>()),
+      alignments: rawAlignments.map(
+        (value) => NoteTableAlignment.values.firstWhere(
+          (alignment) => alignment.name == value,
+          orElse: () => throw const FormatException('Invalid table alignment.'),
+        ),
+      ),
+    );
+  }
+
+  static const int maxRows = 200;
+  static const int maxColumns = 24;
+  static const int maxCellCharacters = 4000;
+  static const int maxTotalCharacters = 100000;
+
+  final List<List<String>> rows;
+  final List<NoteTableAlignment> alignments;
+
+  int get columnCount => rows.first.length;
+
+  String get plainText => rows.map((row) => row.join('\t')).join('\n');
+
+  Map<String, Object> toJson() => <String, Object>{
+    'rows': [for (final row in rows) List<String>.of(row)],
+    'alignments': alignments.map((alignment) => alignment.name).toList(),
+  };
+
+  static List<List<String>> _normalizeRows(Iterable<Iterable<String>> source) {
+    final materialized = source
+        .map((row) => row.map((cell) => cell.trim()).toList(growable: false))
+        .toList(growable: false);
+    if (materialized.isEmpty || materialized.length > maxRows) {
+      throw const FormatException('A table must contain 1 to 200 rows.');
+    }
+    final columns = materialized.fold<int>(
+      0,
+      (count, row) => row.length > count ? row.length : count,
+    );
+    if (columns == 0 || columns > maxColumns) {
+      throw const FormatException('A table must contain 1 to 24 columns.');
+    }
+    var totalCharacters = 0;
+    final normalized = <List<String>>[];
+    for (final row in materialized) {
+      final cells = <String>[];
+      for (var index = 0; index < columns; index++) {
+        final cell = index < row.length ? row[index] : '';
+        if (cell.length > maxCellCharacters) {
+          throw const FormatException('A table cell is too large.');
+        }
+        totalCharacters += cell.length;
+        cells.add(cell);
+      }
+      normalized.add(List.unmodifiable(cells));
+    }
+    if (totalCharacters > maxTotalCharacters) {
+      throw const FormatException('A table is too large.');
+    }
+    return List.unmodifiable(normalized);
+  }
+
+  static List<NoteTableAlignment> _normalizeAlignments(
+    int columns,
+    Iterable<NoteTableAlignment> source,
+  ) {
+    final values = source.toList(growable: false);
+    return List.unmodifiable([
+      for (var index = 0; index < columns; index++)
+        index < values.length ? values[index] : NoteTableAlignment.start,
+    ]);
+  }
+}
 
 /// A domain-owned Quill embed.
 ///
 /// Keeping the payload deliberately small prevents presentation details and
 /// local file paths from leaking into the canonical document.
 final class NoteEmbed {
-  const NoteEmbed._({required this.kind, this.attachmentId});
+  const NoteEmbed._({required this.kind, this.attachmentId, this.table});
 
   factory NoteEmbed.attachment(NoteAttachmentId id) =>
       NoteEmbed._(kind: NoteEmbedKind.attachment, attachmentId: id);
 
-  const NoteEmbed.divider() : kind = NoteEmbedKind.divider, attachmentId = null;
+  const NoteEmbed.divider()
+    : kind = NoteEmbedKind.divider,
+      attachmentId = null,
+      table = null;
+
+  factory NoteEmbed.table(NoteTable table) =>
+      NoteEmbed._(kind: NoteEmbedKind.table, table: table);
 
   static const String attachmentType = 'fknotes.attachment';
   static const String dividerType = 'fknotes.divider';
+  static const String tableType = 'fknotes.table';
 
   final NoteEmbedKind kind;
   final NoteAttachmentId? attachmentId;
+  final NoteTable? table;
 
   Map<String, Object> toDeltaData() => switch (kind) {
     NoteEmbedKind.attachment => <String, Object>{
       attachmentType: <String, Object>{'id': attachmentId!.value},
     },
     NoteEmbedKind.divider => const <String, Object>{dividerType: true},
+    NoteEmbedKind.table => <String, Object>{tableType: table!.toJson()},
   };
 
   static NoteEmbed parse(Object? data) {
@@ -81,6 +196,9 @@ final class NoteEmbed {
     }
     if (type == dividerType && payload == true) {
       return const NoteEmbed.divider();
+    }
+    if (type == tableType) {
+      return NoteEmbed.table(NoteTable.fromJson(payload));
     }
     throw FormatException('Unsupported note embed type: $type');
   }
@@ -184,7 +302,10 @@ final class NoteDocument {
       if (attachmentId != null && seenAttachmentIds.add(attachmentId)) {
         attachmentIds.add(attachmentId);
       }
-      text.write(resolveEmbedText?.call(embed) ?? '');
+      text.write(
+        resolveEmbedText?.call(embed) ??
+            (embed.kind == NoteEmbedKind.table ? embed.table!.plainText : ''),
+      );
     }
 
     final plainText = _withoutTerminalNewline(text.toString());
