@@ -6,6 +6,7 @@ import 'package:fknotes/l10n/generated/app_localizations.dart';
 import 'package:fknotes/models/note.dart';
 import 'package:fknotes/models/note_document.dart';
 import 'package:fknotes/pages/note_quill_editor_page.dart';
+import 'package:fknotes/services/note_read_aloud_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:flutter_quill/quill_delta.dart';
@@ -200,6 +201,94 @@ void main() {
     ]);
     expect(find.byIcon(Icons.add_photo_alternate_outlined), findsOneWidget);
   });
+
+  testWidgets('reads the current Delta text without media extraction noise', (
+    tester,
+  ) async {
+    final imageId = NoteAttachmentId.generate();
+    final now = DateTime.utc(2026, 7, 23, 18);
+    final image = NoteAsset(
+      id: imageId,
+      kind: NoteAssetKind.image,
+      storageKey: 'images/read-aloud.png',
+      originalName: '检查单.png',
+      byteLength: 12,
+      mimeType: 'image/png',
+      ocrText: '不应被朗读的 OCR 文字',
+      createdAt: now,
+      updatedAt: now,
+    );
+    final note = Note(
+      id: NoteId.generate(),
+      title: '未保存前的标题',
+      document: NoteDocument.fromDelta(
+        Delta()
+          ..insert('第一段\n')
+          ..insert(NoteEmbed.attachment(imageId).toDeltaData())
+          ..insert('\n')
+          ..insert(const NoteEmbed.divider().toDeltaData())
+          ..insert('\n')
+          ..insert('第二段\n'),
+      ),
+      assets: [image],
+      createdAt: now,
+      updatedAt: now,
+    );
+    final readAloud = _FakeReadAloudDriver();
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: NoteQuillEditorPage(
+          initialNote: note,
+          writerLoader: () async => writer,
+          readAloud: readAloud,
+          readAloudAvailabilityChecker: () async => true,
+          resolveImage: (_) => MemoryImage(_onePixelPng),
+        ),
+      ),
+    );
+    await _pumpFor(tester, const Duration(milliseconds: 200));
+    await tester.enterText(
+      find.byKey(const Key('quill-note-title')),
+      '当前 Delta 标题',
+    );
+
+    await tester.tap(find.byKey(const Key('quill-read-aloud')));
+    await _pumpFor(tester, const Duration(milliseconds: 200));
+
+    expect(readAloud.spoken, ['当前 Delta 标题\n\n第一段\n第二段']);
+    expect(readAloud.spoken.single, isNot(contains('检查单')));
+    expect(readAloud.spoken.single, isNot(contains('OCR')));
+    expect(readAloud.spoken.single, isNot(contains('——')));
+    expect(writer.notes, isEmpty);
+  });
+}
+
+final class _FakeReadAloudDriver extends ChangeNotifier
+    implements NoteReadAloudDriver {
+  final List<String> spoken = [];
+
+  @override
+  ReadAloudStatus status = ReadAloudStatus.idle;
+
+  @override
+  String? errorMessage;
+
+  @override
+  bool get isActive => status != ReadAloudStatus.idle;
+
+  @override
+  Future<void> speak(String rawText) async {
+    spoken.add(rawText);
+    status = ReadAloudStatus.playing;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> stop() async {
+    status = ReadAloudStatus.idle;
+    notifyListeners();
+  }
 }
 
 final class _MemoryNoteWriter implements NoteEditorWriter {

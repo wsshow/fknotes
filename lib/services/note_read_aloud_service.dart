@@ -13,7 +13,20 @@ import 'local_inference_coordinator.dart';
 
 enum ReadAloudStatus { idle, generating, playing, paused, failed }
 
-class NoteReadAloudService extends ChangeNotifier {
+abstract interface class NoteReadAloudDriver implements Listenable {
+  ReadAloudStatus get status;
+
+  String? get errorMessage;
+
+  bool get isActive;
+
+  Future<void> speak(String rawText);
+
+  Future<void> stop();
+}
+
+class NoteReadAloudService extends ChangeNotifier
+    implements NoteReadAloudDriver {
   NoteReadAloudService._() {
     _player.playerStateStream.listen((state) {
       if (state.playing && status != ReadAloudStatus.playing) {
@@ -42,12 +55,17 @@ class NoteReadAloudService extends ChangeNotifier {
   Future<void> _transition = Future.value();
   Future<void>? _workerCleanupFuture;
 
+  @override
   ReadAloudStatus status = ReadAloudStatus.idle;
+
+  @override
   String? errorMessage;
 
+  @override
   bool get isActive =>
       status != ReadAloudStatus.idle && status != ReadAloudStatus.failed;
 
+  @override
   Future<void> speak(String rawText) async {
     final text = rawText.trim();
     if (text.isEmpty) throw StateError('笔记中没有可朗读的文字');
@@ -139,6 +157,7 @@ class NoteReadAloudService extends ChangeNotifier {
     await _player.play();
   }
 
+  @override
   Future<void> stop() => _serializeTransition(_stopInternal);
 
   Future<void> _stopInternal() async {

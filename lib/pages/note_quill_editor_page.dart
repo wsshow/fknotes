@@ -9,12 +9,16 @@ import '../app.dart';
 import '../editor/note_editor_controller.dart';
 import '../l10n/l10n.dart';
 import '../models/note.dart';
+import '../models/note_semantic_projection.dart';
 import '../services/file_storage_service.dart';
+import '../services/kokoro_tts_model_service.dart';
 import '../services/note_asset_import_service.dart';
 import '../services/note_database_service.dart';
+import '../services/note_read_aloud_service.dart';
 import '../services/note_repository.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/note_quill_editor.dart';
+import 'model_management_page.dart';
 
 abstract interface class NoteEditorWriter {
   Future<Note> create(Note note);
@@ -46,6 +50,7 @@ final class PickedNoteImage {
 typedef NoteImagePicker = Future<PickedNoteImage?> Function(ImageSource source);
 typedef NoteImageAssetImporter =
     Future<NoteAsset> Function(Uint8List bytes, {required String originalName});
+typedef NoteReadAloudAvailabilityChecker = Future<bool> Function();
 
 /// The clean-slate Delta editor route.
 ///
@@ -59,6 +64,8 @@ final class NoteQuillEditorPage extends StatefulWidget {
     this.importImage,
     this.pickImage,
     this.resolveImage,
+    this.readAloud,
+    this.readAloudAvailabilityChecker,
     this.now,
     this.autosaveDelay = const Duration(milliseconds: 700),
     super.key,
@@ -69,6 +76,8 @@ final class NoteQuillEditorPage extends StatefulWidget {
   final NoteImageAssetImporter? importImage;
   final NoteImagePicker? pickImage;
   final NoteAssetImageProvider? resolveImage;
+  final NoteReadAloudDriver? readAloud;
+  final NoteReadAloudAvailabilityChecker? readAloudAvailabilityChecker;
   final DateTime Function()? now;
   final Duration autosaveDelay;
 
@@ -86,6 +95,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
   late final NoteImageAssetImporter _importImage;
   late final NoteEditorWriterLoader _writerLoader;
   late final NoteImagePicker _pickImage;
+  late final NoteReadAloudDriver _readAloud;
 
   Timer? _autosaveTimer;
   Future<void> _saveTail = Future<void>.value();
@@ -113,6 +123,8 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
           await NoteDatabaseService.instance.repository,
         );
     _pickImage = widget.pickImage ?? _pickImageFromDevice;
+    _readAloud = widget.readAloud ?? NoteReadAloudService.instance;
+    _readAloud.addListener(_onReadAloudChanged);
     _observedTitle = _note.title;
     _titleController = TextEditingController(text: _note.title)
       ..addListener(_onTitleChanged);
@@ -134,6 +146,10 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     if (value == _observedTitle) return;
     _observedTitle = value;
     _markDirty();
+  }
+
+  void _onReadAloudChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -172,18 +188,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     final targetVersion = _dirtyVersion;
     if (mounted) setState(() => _saveState = _EditorSaveState.saving);
     try {
-      final snapshot = _editor.snapshot();
-      final coverId = _note.coverAttachmentId;
-      final retainedCover =
-          coverId != null &&
-          snapshot.assets.any((asset) => asset.id == coverId);
-      final candidate = _note.copyWith(
-        title: _titleController.text.trim(),
-        document: snapshot.document,
-        assets: snapshot.assets,
-        coverAttachmentId: retainedCover ? coverId : null,
-        updatedAt: _now,
-      );
+      final candidate = _currentSnapshot(updatedAt: _now);
 
       if (candidate.revision == 0 && candidate.isMeaningfullyEmpty) {
         _savedVersion = targetVersion;
@@ -206,6 +211,84 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
       if (mounted) setState(() => _saveState = _EditorSaveState.failed);
       return false;
     }
+  }
+
+  Note _currentSnapshot({DateTime? updatedAt}) {
+    final snapshot = _editor.snapshot();
+    final coverId = _note.coverAttachmentId;
+    final retainedCover =
+        coverId != null && snapshot.assets.any((asset) => asset.id == coverId);
+    return _note.copyWith(
+      title: _titleController.text.trim(),
+      document: snapshot.document,
+      assets: snapshot.assets,
+      coverAttachmentId: retainedCover ? coverId : null,
+      updatedAt: updatedAt ?? _note.updatedAt,
+    );
+  }
+
+  Future<void> _toggleReadAloud() async {
+    if (_readAloud.isActive) {
+      await _readAloud.stop();
+      return;
+    }
+    if (_readAloud.status == ReadAloudStatus.failed) {
+      await _readAloud.stop();
+    }
+    if (!await _ensureReadAloudAvailable() || !mounted) return;
+
+    final text = NoteSemanticProjection.fromNote(
+      _currentSnapshot(),
+    ).speechText();
+    if (text.trim().isEmpty) {
+      AppFeedback.show(context, context.l10n.noteReadAloudFailed);
+      return;
+    }
+    try {
+      await _readAloud.speak(text);
+    } catch (_) {
+      if (!mounted) return;
+      AppFeedback.error(
+        context,
+        _readAloud.errorMessage ?? context.l10n.noteReadAloudFailed,
+      );
+    }
+  }
+
+  Future<bool> _ensureReadAloudAvailable() async {
+    final checker = widget.readAloudAvailabilityChecker;
+    if (checker != null) return checker();
+    final model = await KokoroTtsModelService.instance.inspect();
+    if (model.installed) return true;
+    if (!mounted) return false;
+    final openModels = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.l10n.offlineReadAloudModelRequired),
+        content: Text(context.l10n.readAloudModelDownloadDescription),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(context.l10n.maybeLater),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(context.l10n.manageModels),
+          ),
+        ],
+      ),
+    );
+    if (openModels == true && mounted) {
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const ModelManagementPage(
+            focusModelId: KokoroTtsModelService.modelId,
+          ),
+        ),
+      );
+    }
+    return false;
   }
 
   Future<NoteAsset?> _importClipboardImage(Uint8List bytes) async {
@@ -521,13 +604,31 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
             dimension: 20,
             child: CircularProgressIndicator(strokeWidth: 2),
           )
-        else
+        else ...[
+          IconButton(
+            key: const Key('quill-read-aloud'),
+            tooltip: _readAloud.isActive
+                ? context.l10n.stopReadAloud
+                : context.l10n.readAloud,
+            onPressed: _toggleReadAloud,
+            icon: _readAloud.status == ReadAloudStatus.generating
+                ? const SizedBox.square(
+                    dimension: 19,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(
+                    _readAloud.isActive
+                        ? Icons.stop_circle_outlined
+                        : Icons.volume_up_outlined,
+                  ),
+          ),
           IconButton(
             key: const Key('quill-save-now'),
             tooltip: context.l10n.save,
             onPressed: () => unawaited(_persistLatest()),
             icon: const Icon(Icons.check_rounded, color: AppColors.coral),
           ),
+        ],
       ],
     ),
   );
@@ -540,6 +641,8 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _autosaveTimer?.cancel();
+    _readAloud.removeListener(_onReadAloudChanged);
+    if (_readAloud.isActive) unawaited(_readAloud.stop());
     _titleController.dispose();
     _titleFocusNode.dispose();
     _editorFocusNode.dispose();
