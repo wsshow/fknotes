@@ -419,7 +419,7 @@ NoteAsset _imageAsset() {
   return NoteAsset(
     id: NoteAttachmentId.parse('3d2be3d5-00c8-4f5c-8e69-e90085dc2873'),
     kind: NoteAssetKind.image,
-    storageKey: 'images/3d2be3d5.png',
+    storageKey: 'notes/images/3d2be3d5.png',
     originalName: '原图.png',
     byteLength: _onePixelPng.length,
     mimeType: 'image/png',

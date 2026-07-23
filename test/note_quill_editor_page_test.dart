@@ -166,7 +166,7 @@ void main() {
             importedAsset = NoteAsset(
               id: NoteAttachmentId.generate(),
               kind: NoteAssetKind.image,
-              storageKey: 'images/managed.png',
+              storageKey: 'notes/images/managed.png',
               originalName: originalName,
               byteLength: bytes.length,
               mimeType: 'image/png',
@@ -197,7 +197,7 @@ void main() {
     final saved = writer.notes.single;
     expect(saved.assets, hasLength(1));
     expect(saved.assets.single.displayTitle, '选择的图片.png');
-    expect(saved.assets.single.storageKey, startsWith('images/'));
+    expect(saved.assets.single.storageKey, startsWith('notes/images/'));
     expect(saved.document.project().referencedAttachmentIds, [
       saved.assets.single.id,
     ]);
@@ -212,7 +212,7 @@ void main() {
     final image = NoteAsset(
       id: imageId,
       kind: NoteAssetKind.image,
-      storageKey: 'images/read-aloud.png',
+      storageKey: 'notes/images/read-aloud.png',
       originalName: '检查单.png',
       byteLength: 12,
       mimeType: 'image/png',

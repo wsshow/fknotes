@@ -180,7 +180,12 @@ NoteAsset _asset(
   return NoteAsset(
     id: id,
     kind: kind,
-    storageKey: 'assets/${id.value}',
+    storageKey: switch (kind) {
+      NoteAssetKind.image => 'notes/images/${id.value}',
+      NoteAssetKind.audio => 'notes/audio/${id.value}',
+      NoteAssetKind.video => 'notes/video/${id.value}',
+      NoteAssetKind.file => 'notes/files/${id.value}',
+    },
     originalName: name,
     byteLength: 10,
     mimeType: switch (kind) {

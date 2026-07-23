@@ -28,18 +28,15 @@ class FileStorageService {
         : Directory(baseDir);
     _baseDir = appDir.path;
 
-    final dirs = [
+    final noteDirectories = [
       p.join(_baseDir, 'notes', 'images'),
       p.join(_baseDir, 'notes', 'thumbnails'),
       p.join(_baseDir, 'notes', 'audio'),
       p.join(_baseDir, 'notes', 'video'),
       p.join(_baseDir, 'notes', 'files'),
-      p.join(_baseDir, 'images'),
-      p.join(_baseDir, 'audio'),
-      p.join(_baseDir, 'video'),
-      p.join(_baseDir, 'documents'),
-      p.join(_baseDir, 'thumbnails'),
-      p.join(_baseDir, 'exports'),
+    ];
+    final dirs = [
+      ...noteDirectories,
       p.join(_baseDir, 'backups'),
       p.join(_baseDir, 'assistant'),
       p.join(_baseDir, 'models', 'asr'),
@@ -49,15 +46,9 @@ class FileStorageService {
     for (final dir in dirs) {
       await Directory(dir).create(recursive: true);
     }
-    for (final folder in [
-      p.join('notes', 'images'),
-      'images',
-      'audio',
-      'video',
-      'documents',
-    ]) {
+    for (final directory in noteDirectories) {
       await for (final entity in Directory(
-        p.join(_baseDir, folder),
+        directory,
       ).list(followLinks: false)) {
         if (entity is File && entity.path.endsWith('.part')) {
           await entity.delete();
@@ -104,19 +95,8 @@ class FileStorageService {
     return resolved;
   }
 
-  /// Copy a file into the Feikong storage and return relative path
-  Future<String> copyFile(File sourceFile, String subDir) async {
-    final ext = p.extension(sourceFile.path);
-    final filename = '${_uuid.v4()}$ext';
-    final relativePath = '$subDir/$filename';
-    final destPath = absolutePath(relativePath);
-
-    await sourceFile.copy(destPath);
-    return relativePath;
-  }
-
   /// Writes trusted in-memory content into managed storage.
-  Future<String> writeBytes(
+  Future<String> _writeBytes(
     Uint8List bytes,
     String subDir, {
     required String extension,
@@ -143,7 +123,7 @@ class FileStorageService {
       throw const FormatException('图片文件为空或超过 20 MB');
     }
     final normalized = await Isolate.run(() => _normalizeNoteImageBytes(bytes));
-    final storageKey = await writeBytes(
+    final storageKey = await _writeBytes(
       normalized.bytes,
       p.posix.join('notes', 'images'),
       extension: normalized.extension,
@@ -153,67 +133,6 @@ class FileStorageService {
       mimeType: normalized.mimeType,
       byteLength: normalized.bytes.length,
     );
-  }
-
-  /// Move an app-owned temporary file into managed storage. This is normally
-  /// an atomic rename and falls back to copy-and-delete across file systems.
-  Future<String> moveTemporaryFile(File sourceFile, String subDir) async {
-    final ext = p.extension(sourceFile.path);
-    final filename = '${_uuid.v4()}$ext';
-    final relativePath = '$subDir/$filename';
-    final destination = File(absolutePath(relativePath));
-    try {
-      await sourceFile.rename(destination.path);
-    } on FileSystemException {
-      await sourceFile.copy(destination.path);
-      await sourceFile.delete();
-    }
-    return relativePath;
-  }
-
-  /// Copy a file while reporting byte-level progress. Used as a non-Android
-  /// fallback where the native content URI importer is unavailable.
-  Future<String> copyFileWithProgress(
-    File sourceFile,
-    String subDir, {
-    required void Function(int copiedBytes, int totalBytes) onProgress,
-    bool Function()? shouldCancel,
-  }) async {
-    final ext = p.extension(sourceFile.path);
-    final filename = '${_uuid.v4()}$ext';
-    final relativePath = '$subDir/$filename';
-    final destination = File(absolutePath(relativePath));
-    final totalBytes = await sourceFile.length();
-    final input = await sourceFile.open();
-    final output = await destination.open(mode: FileMode.write);
-    var copiedBytes = 0;
-    try {
-      onProgress(0, totalBytes);
-      while (true) {
-        if (shouldCancel?.call() == true) {
-          throw const FileSystemException('附件导入已取消');
-        }
-        final chunk = await input.read(256 * 1024);
-        if (chunk.isEmpty) break;
-        await output.writeFrom(chunk);
-        copiedBytes += chunk.length;
-        onProgress(copiedBytes, totalBytes);
-      }
-      await output.flush();
-      return relativePath;
-    } catch (_) {
-      if (await destination.exists()) await destination.delete();
-      rethrow;
-    } finally {
-      await input.close();
-      await output.close();
-    }
-  }
-
-  /// Keep image decoding and JPEG encoding away from the UI isolate on
-  /// platforms that do not provide the native sampled thumbnail path.
-  Future<String> generateThumbnailInBackground(String imagePath) async {
-    return _generateThumbnailInBackground(imagePath, 'thumbnails');
   }
 
   /// Generates a preview inside the isolated Delta-note storage tree.
@@ -274,16 +193,6 @@ class FileStorageService {
     }
   }
 
-  /// Get file size in bytes
-  Future<int> getFileSize(String relativePath) async {
-    final path = absolutePath(relativePath);
-    final file = File(path);
-    if (await file.exists()) {
-      return await file.length();
-    }
-    return 0;
-  }
-
   /// Check if a file exists
   Future<bool> fileExists(String? relativePath) async {
     if (relativePath == null || relativePath.isEmpty) return false;
@@ -310,20 +219,16 @@ class FileStorageService {
   /// Size of content that belongs to the user, excluding downloaded models,
   /// inference caches, application settings and temporary working files.
   Future<int> userDataSize() async {
-    const directoryNames = {
-      'images',
-      'audio',
-      'video',
-      'documents',
-      'thumbnails',
-      'exports',
-      'assistant',
-    };
+    const directoryNames = {'notes', 'assistant', 'backups'};
     const fileNames = {
       'fknotes.db',
       'fknotes.db-journal',
       'fknotes.db-shm',
       'fknotes.db-wal',
+      'fknotes-chat.db',
+      'fknotes-chat.db-journal',
+      'fknotes-chat.db-shm',
+      'fknotes-chat.db-wal',
     };
     var total = 0;
     for (final name in directoryNames) {
@@ -351,63 +256,6 @@ class FileStorageService {
     }
     return total;
   }
-
-  Future<OrphanCleanupResult> cleanupOrphanedAttachments({
-    required Set<String> referencedPaths,
-    Set<String> protectedPaths = const {},
-    Duration minimumAge = const Duration(hours: 24),
-  }) async {
-    const folders = ['images', 'audio', 'video', 'documents', 'thumbnails'];
-    final retained = {
-      ...referencedPaths.map(_normalizeRelativePath),
-      ...protectedPaths.map(_normalizeRelativePath),
-    };
-    final cutoff = DateTime.now().subtract(minimumAge);
-    var deletedFiles = 0;
-    var reclaimedBytes = 0;
-    for (final folder in folders) {
-      final directory = Directory(p.join(_baseDir, folder));
-      if (!await directory.exists()) continue;
-      await for (final entity in directory.list(
-        recursive: true,
-        followLinks: false,
-      )) {
-        if (entity is! File || entity.path.endsWith('.part')) continue;
-        final relative = _normalizeRelativePath(
-          p.relative(entity.path, from: _baseDir),
-        );
-        if (retained.contains(relative)) continue;
-        try {
-          final stat = await entity.stat();
-          if (stat.modified.isAfter(cutoff)) continue;
-          final bytes = stat.size;
-          await entity.delete();
-          deletedFiles++;
-          reclaimedBytes += bytes;
-        } on FileSystemException {
-          // A file may still be open or may have been removed concurrently.
-        }
-      }
-    }
-    return OrphanCleanupResult(
-      deletedFiles: deletedFiles,
-      reclaimedBytes: reclaimedBytes,
-    );
-  }
-
-  String _normalizeRelativePath(String value) => p.posix.normalize(
-    value.replaceAll(p.separator, '/').replaceAll('\\', '/'),
-  );
-}
-
-class OrphanCleanupResult {
-  final int deletedFiles;
-  final int reclaimedBytes;
-
-  const OrphanCleanupResult({
-    required this.deletedFiles,
-    required this.reclaimedBytes,
-  });
 }
 
 class StoredNoteImage {

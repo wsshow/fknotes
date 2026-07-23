@@ -89,7 +89,7 @@ void main() {
     final asset = NoteAsset(
       id: NoteAttachmentId.generate(),
       kind: NoteAssetKind.image,
-      storageKey: 'images/repeated.png',
+      storageKey: 'notes/images/repeated.png',
       originalName: 'repeated.png',
       byteLength: 12,
       mimeType: 'image/png',

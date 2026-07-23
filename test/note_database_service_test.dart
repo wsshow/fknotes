@@ -1,8 +1,10 @@
 import 'dart:io';
 
 import 'package:fknotes/models/note.dart';
+import 'package:fknotes/models/note_document.dart';
 import 'package:fknotes/services/file_storage_service.dart';
 import 'package:fknotes/services/note_database_service.dart';
+import 'package:flutter_quill/quill_delta.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -76,5 +78,47 @@ void main() {
     await service.repository;
 
     await expectLater(service.validate(), completes);
+  });
+
+  test('rejects a database asset that escapes its kind directory', () async {
+    final now = DateTime.utc(2026, 7, 23);
+    final assetId = NoteAttachmentId.parse(
+      '3d2be3d5-00c8-4f5c-8e69-e90085dc2873',
+    );
+    const storageKey = 'notes/images/asset.png';
+    await File(
+      FileStorageService.instance.absolutePath(storageKey),
+    ).writeAsBytes([1, 2, 3]);
+    final repository = await service.repository;
+    await repository.create(
+      Note(
+        id: NoteId.parse('be0afe23-f682-4d98-a942-e6e010a45d07'),
+        title: '图片',
+        document: NoteDocument.fromDelta(
+          Delta()
+            ..insert(NoteEmbed.attachment(assetId).toDeltaData())
+            ..insert('\n'),
+        ),
+        assets: [
+          NoteAsset(
+            id: assetId,
+            kind: NoteAssetKind.image,
+            storageKey: storageKey,
+            originalName: 'asset.png',
+            byteLength: 3,
+            mimeType: 'image/png',
+            createdAt: now,
+            updatedAt: now,
+          ),
+        ],
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    await (await service.database).update('note_assets', {
+      'storage_key': 'notes/files/wrong-kind.png',
+    });
+
+    await expectLater(service.validate(), throwsFormatException);
   });
 }

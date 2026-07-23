@@ -57,10 +57,23 @@ final class NoteAsset {
   }) : transcribedAt = transcribedAt?.toUtc(),
        createdAt = createdAt.toUtc(),
        updatedAt = updatedAt.toUtc() {
-    _validateStorageKey(storageKey, field: 'storageKey');
+    _validateStorageKey(
+      storageKey,
+      field: 'storageKey',
+      root: switch (kind) {
+        NoteAssetKind.image => 'notes/images',
+        NoteAssetKind.audio => 'notes/audio',
+        NoteAssetKind.video => 'notes/video',
+        NoteAssetKind.file => 'notes/files',
+      },
+    );
     final preview = previewStorageKey;
     if (preview != null) {
-      _validateStorageKey(preview, field: 'previewStorageKey');
+      _validateStorageKey(
+        preview,
+        field: 'previewStorageKey',
+        root: 'notes/thumbnails',
+      );
     }
     if (originalName.trim().isEmpty) {
       throw ArgumentError.value(originalName, 'originalName');
@@ -142,13 +155,23 @@ final class NoteAsset {
     updatedAt: updatedAt ?? this.updatedAt,
   );
 
-  static void _validateStorageKey(String value, {required String field}) {
+  static void _validateStorageKey(
+    String value, {
+    required String field,
+    required String root,
+  }) {
     final normalized = value.replaceAll('\\', '/').trim();
-    if (normalized.isEmpty ||
-        normalized.startsWith('/') ||
-        RegExp(r'^[a-zA-Z]:/').hasMatch(normalized) ||
-        normalized.split('/').contains('..')) {
-      throw ArgumentError.value(value, field, 'Must be a managed relative key');
+    if (normalized != value ||
+        !normalized.startsWith('$root/') ||
+        normalized.length == root.length + 1 ||
+        normalized.split('/').contains('..') ||
+        normalized.split('/').contains('.') ||
+        normalized.contains('//')) {
+      throw ArgumentError.value(
+        value,
+        field,
+        'Must be a canonical key inside $root',
+      );
     }
   }
 }

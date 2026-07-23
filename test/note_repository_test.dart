@@ -111,7 +111,7 @@ void main() {
     final detached = NoteAsset(
       id: NoteAttachmentId.generate(),
       kind: NoteAssetKind.file,
-      storageKey: 'files/detached.pdf',
+      storageKey: 'notes/files/detached.pdf',
       originalName: 'detached.pdf',
       byteLength: 10,
       mimeType: 'application/pdf',
@@ -127,7 +127,14 @@ void main() {
   test('rejects absolute and traversing storage paths', () {
     final now = DateTime.utc(2026, 7, 23);
 
-    for (final path in ['/data/image.png', '../image.png', 'C:/image.png']) {
+    for (final path in [
+      '/data/image.png',
+      '../image.png',
+      'C:/image.png',
+      'images/old.png',
+      'notes/files/wrong-kind.png',
+      'notes/images//duplicate.png',
+    ]) {
       expect(
         () => NoteAsset(
           id: NoteAttachmentId.generate(),
@@ -142,6 +149,20 @@ void main() {
         throwsArgumentError,
       );
     }
+    expect(
+      () => NoteAsset(
+        id: NoteAttachmentId.generate(),
+        kind: NoteAssetKind.image,
+        storageKey: 'notes/images/image.png',
+        previewStorageKey: 'thumbnails/old-preview.jpg',
+        originalName: 'image.png',
+        byteLength: 1,
+        mimeType: 'image/png',
+        createdAt: now,
+        updatedAt: now,
+      ),
+      throwsArgumentError,
+    );
   });
 }
 
@@ -153,11 +174,11 @@ void main() {
   final asset = NoteAsset(
     id: attachmentId,
     kind: NoteAssetKind.image,
-    storageKey: 'images/3d2be3d5.png',
+    storageKey: 'notes/images/3d2be3d5.png',
     originalName: '原图.png',
     byteLength: 2048,
     mimeType: 'image/png',
-    previewStorageKey: 'previews/3d2be3d5.webp',
+    previewStorageKey: 'notes/thumbnails/3d2be3d5.webp',
     ocrText: '手写会议纪要',
     createdAt: now,
     updatedAt: now,

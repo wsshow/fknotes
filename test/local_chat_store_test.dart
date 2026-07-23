@@ -146,12 +146,10 @@ void main() {
   });
 
   test('persists image attachments and deletes their managed files', () async {
-    final source = File('${root.path}/source.jpg');
-    await source.writeAsBytes([1, 2, 3, 4]);
-    final filePath = await FileStorageService.instance.copyFile(
-      source,
-      'assistant',
-    );
+    const filePath = 'assistant/test-image.jpg';
+    await File(
+      FileStorageService.instance.absolutePath(filePath),
+    ).writeAsBytes([1, 2, 3, 4]);
     final attachment = store.createImageAttachment(
       filePath: filePath,
       fileName: 'idea.jpg',

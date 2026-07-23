@@ -25,17 +25,19 @@ void main() {
       await file.writeAsBytes(List.filled(bytes, 1));
     }
 
-    await write('audio/recording.m4a', 11);
-    await write('assistant/conversations.json', 13);
+    await write('notes/audio/recording.m4a', 11);
+    await write('assistant/conversation.jpg', 13);
+    await write('backups/manual.fknotes.zip', 19);
     await write('fknotes.db', 17);
+    await write('fknotes-chat.db', 23);
     await write('models/llm/model/weights.bin', 101);
     await write('models/asr/model.onnx', 103);
     await write('mnn-cache/cache.bin', 107);
     await write('transcription_temp/audio.wav', 109);
     await write('settings/app-lock.json', 113);
 
-    expect(await FileStorageService.instance.userDataSize(), 41);
-    expect(await FileStorageService.instance.storageSize(), greaterThan(41));
+    expect(await FileStorageService.instance.userDataSize(), 83);
+    expect(await FileStorageService.instance.storageSize(), greaterThan(83));
   });
 
   test('managed paths cannot escape application storage', () {
@@ -48,8 +50,8 @@ void main() {
       throwsFormatException,
     );
     expect(
-      FileStorageService.instance.absolutePath('images/safe.jpg'),
-      p.join(root.path, 'images', 'safe.jpg'),
+      FileStorageService.instance.absolutePath('notes/images/safe.jpg'),
+      p.join(root.path, 'notes', 'images', 'safe.jpg'),
     );
   });
 
@@ -72,17 +74,18 @@ void main() {
     expect(decoded.height, lessThanOrEqualTo(100));
   });
 
-  test('generates a full-image thumbnail on a fixed portrait canvas', () async {
-    final source = File(p.join(root.path, 'images', 'wide.png'));
+  test('generates a full-image thumbnail in the note asset tree', () async {
+    final source = File(p.join(root.path, 'notes', 'images', 'wide.png'));
     final image = img.Image(width: 800, height: 100);
     img.fill(image, color: img.ColorRgb8(210, 70, 45));
     await source.writeAsBytes(img.encodePng(image));
 
     final relativePath = await FileStorageService.instance
-        .generateThumbnailInBackground('images/wide.png');
+        .generateNoteThumbnailInBackground('notes/images/wide.png');
     final output = File(FileStorageService.instance.absolutePath(relativePath));
     final decoded = img.decodeJpg(await output.readAsBytes());
 
+    expect(relativePath, startsWith('notes/thumbnails/'));
     expect(relativePath, endsWith('_thumb_v2.jpg'));
     expect(decoded, isNotNull);
     expect(decoded!.width, 300);
@@ -140,42 +143,34 @@ void main() {
   });
 
   test(
-    'orphan cleanup preserves referenced, protected and recent files',
+    'initialization creates only canonical note folders and clears parts',
     () async {
-      Future<File> write(String relativePath, {bool old = true}) async {
-        final file = File(p.join(root.path, relativePath));
-        await file.parent.create(recursive: true);
-        await file.writeAsBytes(List.filled(7, 1));
-        if (old) {
-          await file.setLastModified(
-            DateTime.now().subtract(const Duration(days: 2)),
-          );
-        }
-        return file;
+      final partial = File(
+        p.join(root.path, 'notes', 'video', 'active.mp4.part'),
+      );
+      await partial.writeAsBytes([1, 2, 3]);
+
+      await FileStorageService.instance.init(baseDir: root.path);
+
+      expect(await partial.exists(), isFalse);
+      for (final folder in [
+        'images',
+        'audio',
+        'video',
+        'documents',
+        'thumbnails',
+      ]) {
+        expect(await Directory(p.join(root.path, folder)).exists(), isFalse);
       }
-
-      final referenced = await write('images/referenced.jpg');
-      final protected = await write('audio/importing.m4a');
-      final recent = await write('documents/recent.pdf', old: false);
-      final orphan = await write('video/orphan.mp4');
-      final orphanThumbnail = await write('thumbnails/orphan_thumb.jpg');
-      final partial = await write('video/active.mp4.part');
-
-      final result = await FileStorageService.instance
-          .cleanupOrphanedAttachments(
-            referencedPaths: {'images/referenced.jpg'},
-            protectedPaths: {'audio/importing.m4a'},
-            minimumAge: const Duration(hours: 24),
-          );
-
-      expect(await referenced.exists(), isTrue);
-      expect(await protected.exists(), isTrue);
-      expect(await recent.exists(), isTrue);
-      expect(await partial.exists(), isTrue);
-      expect(await orphan.exists(), isFalse);
-      expect(await orphanThumbnail.exists(), isFalse);
-      expect(result.deletedFiles, 2);
-      expect(result.reclaimedBytes, 14);
+      for (final folder in [
+        'notes/images',
+        'notes/audio',
+        'notes/video',
+        'notes/files',
+        'notes/thumbnails',
+      ]) {
+        expect(await Directory(p.join(root.path, folder)).exists(), isTrue);
+      }
     },
   );
 }

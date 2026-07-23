@@ -69,13 +69,22 @@ final class NoteDatabaseService {
     }
     for (final row in await db.query(
       'note_assets',
-      columns: ['storage_key', 'preview_storage_key', 'byte_length'],
+      columns: ['kind', 'storage_key', 'preview_storage_key', 'byte_length'],
     )) {
+      final kind = row['kind']! as String;
       final storageKey = row['storage_key']! as String;
-      for (final key in [storageKey, row['preview_storage_key']]) {
+      for (final entry in [
+        (key: storageKey, isPreview: false),
+        (key: row['preview_storage_key'] as String?, isPreview: true),
+      ]) {
+        final key = entry.key;
         if (key == null) continue;
-        final relative = key as String;
-        if (!_isCanonicalAssetKey(relative)) {
+        final relative = key;
+        if (!_isCanonicalAssetKey(
+          relative,
+          kind: kind,
+          isPreview: entry.isPreview,
+        )) {
           throw FormatException('笔记附件路径不属于新数据空间：$relative');
         }
         final path = assetRoot == null
@@ -83,22 +92,35 @@ final class NoteDatabaseService {
             : _resolveInside(assetRoot, relative);
         final file = File(path);
         if (!await file.exists()) {
-          throw FormatException('笔记附件缺失：$key');
+          throw FormatException('笔记附件缺失：$relative');
         }
-        if (relative == storageKey &&
+        if (!entry.isPreview &&
             await file.length() != row['byte_length']! as int) {
-          throw FormatException('笔记附件大小不匹配：$key');
+          throw FormatException('笔记附件大小不匹配：$relative');
         }
       }
     }
   }
 
-  static bool _isCanonicalAssetKey(String value) {
+  static bool _isCanonicalAssetKey(
+    String value, {
+    required String kind,
+    required bool isPreview,
+  }) {
     final normalized = p.posix.normalize(value.replaceAll('\\', '/'));
+    final root = isPreview
+        ? 'notes/thumbnails'
+        : switch (kind) {
+            'image' => 'notes/images',
+            'audio' => 'notes/audio',
+            'video' => 'notes/video',
+            'file' => 'notes/files',
+            _ => '',
+          };
     return normalized == value &&
-        normalized.startsWith('notes/') &&
-        normalized != 'notes/..' &&
-        !normalized.startsWith('notes/../');
+        root.isNotEmpty &&
+        normalized.startsWith('$root/') &&
+        normalized.length > root.length + 1;
   }
 
   static String _resolveInside(String root, String relative) {

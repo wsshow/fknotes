@@ -36,7 +36,7 @@ void main() {
     final asset = NoteAsset(
       id: id,
       kind: NoteAssetKind.image,
-      storageKey: 'images/preview.png',
+      storageKey: 'notes/images/preview.png',
       originalName: '设计稿.png',
       byteLength: 20,
       mimeType: 'image/png',
