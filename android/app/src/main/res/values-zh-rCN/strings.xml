@@ -1,22 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">非空笔记</string>
-    <string name="unsupported_attachment_type">不支持的附件类型</string>
-    <string name="invalid_attachment_import">附件导入参数无效</string>
     <string name="invalid_audio_decode">音频解码参数无效</string>
     <string name="audio_decode_failed">无法解码音频</string>
     <string name="audio_file_missing">音频文件不存在</string>
     <string name="audio_track_missing">文件中没有可识别的音轨</string>
     <string name="unsupported_pcm_format">设备输出了不支持的 PCM 音频格式</string>
-    <string name="attachment_picker_busy">已有文件选择器正在打开</string>
-    <string name="file_path_missing">缺少文件路径</string>
-    <string name="selected_file_missing">所选文件不存在</string>
-    <string name="attachment_directory_failed">无法创建附件目录</string>
-    <string name="attachment_write_failed">无法完成附件文件写入</string>
-    <string name="attachment_import_failed">附件导入失败</string>
-    <string name="selected_file_read_failed">无法读取所选文件</string>
-    <string name="invalid_attachment_source">附件来源无效</string>
-    <string name="storage_insufficient">存储空间不足：导入至少需要 %1$s，当前可用 %2$s</string>
-    <string name="thumbnail_directory_failed">无法创建缩略图目录</string>
-    <string name="thumbnail_generation_failed">无法生成缩略图</string>
 </resources>
