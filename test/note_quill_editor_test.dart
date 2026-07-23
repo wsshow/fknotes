@@ -91,6 +91,31 @@ void main() {
       },
     );
 
+    test('discards imported files when an embed cannot be inserted', () async {
+      final asset = _imageAsset();
+      NoteAsset? discarded;
+      final document = NoteDocument.fromDelta(
+        Delta()
+          ..insert(NoteEmbed.attachment(asset.id).toDeltaData())
+          ..insert('\n'),
+      );
+      final controller = NoteEditorController(
+        document: document,
+        assets: [asset],
+        importImage: (_) async => asset,
+        discardImportedAsset: (value) async => discarded = value,
+      );
+      addTearDown(controller.dispose);
+
+      await expectLater(
+        controller.importImageBytes(Uint8List.fromList([1])),
+        throwsArgumentError,
+      );
+
+      expect(discarded, asset);
+      expect(controller.snapshot().assets, [asset]);
+    });
+
     test('external rich paste strips path and URL image embeds', () async {
       final controller = NoteEditorController(
         document: NoteDocument.empty(),
@@ -214,6 +239,32 @@ void main() {
       expect(controller.snapshot().document.project().plainText, '图片之前\n图片之后');
     },
   );
+
+  testWidgets('accepts multiline text through the native input connection', (
+    tester,
+  ) async {
+    final controller = NoteEditorController(
+      document: NoteDocument.empty(),
+      assets: const [],
+    );
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      _EditorTestApp(child: NoteQuillEditor(controller: controller)),
+    );
+    await tester.pump();
+    await tester.tap(find.byType(quill.QuillRawEditor));
+    await tester.pump();
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: '第一行\n第二行\n',
+        selection: TextSelection.collapsed(offset: 7),
+      ),
+    );
+    await tester.pump();
+
+    expect(controller.snapshot().document.project().plainText, '第一行\n第二行');
+  });
 
   testWidgets('provides a single-row rich text toolbar', (tester) async {
     final controller = NoteEditorController(

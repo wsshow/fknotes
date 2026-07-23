@@ -15,6 +15,7 @@ import '../models/note_document.dart';
 
 typedef NoteImageImporter = Future<NoteAsset?> Function(Uint8List bytes);
 typedef NoteClipboardImageReader = Future<Uint8List?> Function();
+typedef NoteAssetDisposer = Future<void> Function(NoteAsset asset);
 
 final class NoteEditorSnapshot {
   const NoteEditorSnapshot({required this.document, required this.assets});
@@ -33,6 +34,7 @@ final class NoteEditorController extends ChangeNotifier {
     required NoteDocument document,
     required Iterable<NoteAsset> assets,
     NoteImageImporter? importImage,
+    this.discardImportedAsset,
     NoteClipboardImageReader? readClipboardImage,
   }) : _assets = {for (final asset in assets) asset.id: asset},
        _importImage = importImage,
@@ -60,6 +62,7 @@ final class NoteEditorController extends ChangeNotifier {
   late final StreamSubscription<DocChange> _changes;
   final Map<NoteAttachmentId, NoteAsset> _assets;
   final NoteImageImporter? _importImage;
+  final NoteAssetDisposer? discardImportedAsset;
   final NoteClipboardImageReader? _readClipboardImage;
 
   int contentRevision = 0;
@@ -90,7 +93,12 @@ final class NoteEditorController extends ChangeNotifier {
     if (importer == null) return false;
     final asset = await importer(bytes);
     if (asset == null) return false;
-    insertAsset(asset);
+    try {
+      insertAsset(asset);
+    } catch (_) {
+      await discardImportedAsset?.call(asset);
+      rethrow;
+    }
     return true;
   }
 

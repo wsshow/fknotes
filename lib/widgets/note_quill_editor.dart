@@ -80,57 +80,73 @@ final class NoteQuillToolbar extends StatelessWidget {
         decoration: const BoxDecoration(
           border: Border(top: BorderSide(color: AppColors.line)),
         ),
-        child: quill.QuillSimpleToolbar(
-          controller: controller.quillController,
-          config: quill.QuillSimpleToolbarConfig(
-            multiRowsDisplay: false,
-            toolbarSize: 46,
-            showDividers: false,
-            color: AppColors.surface,
-            sectionDividerColor: AppColors.line,
-            showFontFamily: false,
-            showFontSize: false,
-            showSmallButton: false,
-            showLineHeightButton: false,
-            showColorButton: false,
-            showBackgroundColorButton: false,
-            showClearFormat: true,
-            showAlignmentButtons: false,
-            showDirection: false,
-            showSearchButton: false,
-            showSubscript: false,
-            showSuperscript: false,
-            showIndent: true,
-            showCodeBlock: true,
-            showInlineCode: true,
-            customButtons: [
-              if (onInsertImage != null)
-                quill.QuillToolbarCustomButtonOptions(
+        child: Row(
+          children: [
+            if (onInsertImage != null) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: IconButton(
+                  key: const Key('quill-insert-image'),
                   tooltip: imageTooltip,
-                  icon: const Icon(Icons.add_photo_alternate_outlined),
                   onPressed: onInsertImage,
+                  color: AppColors.coral,
+                  icon: const Icon(Icons.add_photo_alternate_outlined),
                 ),
-              quill.QuillToolbarCustomButtonOptions(
-                tooltip: dividerTooltip,
-                icon: const Icon(Icons.horizontal_rule_rounded),
-                onPressed: controller.insertDivider,
+              ),
+              const SizedBox(
+                height: 28,
+                child: VerticalDivider(width: 1, color: AppColors.line),
               ),
             ],
-            iconTheme: const quill.QuillIconTheme(
-              iconButtonUnselectedData: quill.IconButtonData(
-                color: AppColors.muted,
-                iconSize: 21,
-                padding: EdgeInsets.all(10),
-                constraints: BoxConstraints(minWidth: 44, minHeight: 44),
-              ),
-              iconButtonSelectedData: quill.IconButtonData(
-                color: AppColors.coral,
-                iconSize: 21,
-                padding: EdgeInsets.all(10),
-                constraints: BoxConstraints(minWidth: 44, minHeight: 44),
+            Expanded(
+              child: quill.QuillSimpleToolbar(
+                controller: controller.quillController,
+                config: quill.QuillSimpleToolbarConfig(
+                  multiRowsDisplay: false,
+                  toolbarSize: 46,
+                  showDividers: false,
+                  color: AppColors.surface,
+                  sectionDividerColor: AppColors.line,
+                  showFontFamily: false,
+                  showFontSize: false,
+                  showSmallButton: false,
+                  showLineHeightButton: false,
+                  showColorButton: false,
+                  showBackgroundColorButton: false,
+                  showClearFormat: true,
+                  showAlignmentButtons: false,
+                  showDirection: false,
+                  showSearchButton: false,
+                  showSubscript: false,
+                  showSuperscript: false,
+                  showIndent: true,
+                  showCodeBlock: true,
+                  showInlineCode: true,
+                  customButtons: [
+                    quill.QuillToolbarCustomButtonOptions(
+                      tooltip: dividerTooltip,
+                      icon: const Icon(Icons.horizontal_rule_rounded),
+                      onPressed: controller.insertDivider,
+                    ),
+                  ],
+                  iconTheme: const quill.QuillIconTheme(
+                    iconButtonUnselectedData: quill.IconButtonData(
+                      color: AppColors.muted,
+                      iconSize: 21,
+                      padding: EdgeInsets.all(10),
+                      constraints: BoxConstraints(minWidth: 44, minHeight: 44),
+                    ),
+                    iconButtonSelectedData: quill.IconButtonData(
+                      color: AppColors.coral,
+                      iconSize: 21,
+                      padding: EdgeInsets.all(10),
+                      constraints: BoxConstraints(minWidth: 44, minHeight: 44),
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
+          ],
         ),
       ),
     ),
