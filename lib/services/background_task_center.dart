@@ -4,9 +4,8 @@ import '../debug/app_diagnostics.dart';
 import 'local_inference_coordinator.dart';
 import 'local_model_manager.dart';
 import 'speech_transcription_service.dart';
-import 'video_import_service.dart';
 
-enum BackgroundTaskKind { model, attachment, transcription, inference }
+enum BackgroundTaskKind { model, transcription, inference }
 
 enum BackgroundTaskState { running, failed }
 
@@ -35,7 +34,6 @@ class BackgroundTaskItem {
 class BackgroundTaskCenter extends ChangeNotifier {
   BackgroundTaskCenter._() {
     _models.addListener(_changed);
-    _attachments.addListener(_changed);
     _transcriptions.addListener(_changed);
     _inference.addListener(_changed);
   }
@@ -43,7 +41,6 @@ class BackgroundTaskCenter extends ChangeNotifier {
   static final BackgroundTaskCenter instance = BackgroundTaskCenter._();
 
   final _models = LocalModelManager.instance;
-  final _attachments = AttachmentImportService.instance;
   final _transcriptions = SpeechTranscriptionService.instance;
   final _inference = LocalInferenceCoordinator.instance;
   final Map<String, BackgroundTaskState> _debugStates = {};
@@ -69,36 +66,6 @@ class BackgroundTaskCenter extends ChangeNotifier {
               : _modelStatusLabel(transfer.status),
           progress: transfer.totalBytes > 0 ? transfer.progress : null,
           cancelable: transfer.isRunning && transfer.cancelable,
-        ),
-      );
-    }
-    for (final job in _attachments.jobs) {
-      if (job.committed || job.status == AttachmentImportStatus.canceled) {
-        continue;
-      }
-      if (job.status != AttachmentImportStatus.importing &&
-          job.status != AttachmentImportStatus.completed &&
-          job.status != AttachmentImportStatus.failed) {
-        continue;
-      }
-      result.add(
-        BackgroundTaskItem(
-          id: job.id,
-          kind: BackgroundTaskKind.attachment,
-          state: job.status == AttachmentImportStatus.failed
-              ? BackgroundTaskState.failed
-              : BackgroundTaskState.running,
-          title: job.fileName,
-          description: switch (job.status) {
-            AttachmentImportStatus.importing => '正在导入附件',
-            AttachmentImportStatus.completed => '正在保存到笔记',
-            AttachmentImportStatus.failed => job.errorMessage ?? '附件导入失败',
-            AttachmentImportStatus.canceled => '已取消',
-          },
-          progress: job.status == AttachmentImportStatus.completed
-              ? 1
-              : job.progress,
-          cancelable: job.status == AttachmentImportStatus.importing,
         ),
       );
     }

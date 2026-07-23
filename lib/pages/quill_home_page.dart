@@ -39,8 +39,8 @@ typedef NoteHomeAssistantBuilder =
 
 /// Primary application shell for the clean Delta note system.
 ///
-/// It deliberately owns no [NoteProvider] and never opens the legacy note
-/// database. All note entry points converge on [NoteQuillEditorPage].
+/// It owns no compatibility provider or secondary note database. All note
+/// entry points converge on [NoteQuillEditorPage].
 final class QuillHomePage extends StatefulWidget {
   const QuillHomePage({
     this.recentController,
