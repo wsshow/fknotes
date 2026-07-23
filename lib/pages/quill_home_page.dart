@@ -9,6 +9,7 @@ import '../app.dart';
 import '../debug/debug_console_launcher.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../l10n/l10n.dart';
+import '../models/local_chat.dart';
 import '../models/note.dart';
 import '../providers/app_lock_controller.dart';
 import '../providers/app_locale_controller.dart';
@@ -16,6 +17,7 @@ import '../providers/note_library_controller.dart';
 import '../services/app_build_metadata.dart';
 import '../services/app_lock_preferences_service.dart';
 import '../services/file_storage_service.dart';
+import '../services/note_database_service.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/navigation_icons.dart';
@@ -24,11 +26,15 @@ import 'app_lock_settings_page.dart';
 import 'backup_export_page.dart';
 import 'backup_restore_page.dart';
 import 'language_settings_page.dart';
+import 'local_chat_page.dart';
 import 'model_management_page.dart';
 import 'note_library_page.dart';
 import 'note_quill_editor_page.dart';
 
 typedef NoteHomeDataSizeLoader = Future<int> Function();
+typedef NoteHomeNoteLoader = Future<Note?> Function(NoteId id);
+typedef NoteHomeAssistantBuilder =
+    Widget Function(BuildContext context, LocalChatNoteOpener onOpenNote);
 
 /// Primary application shell for the clean Delta note system.
 ///
@@ -39,6 +45,8 @@ final class QuillHomePage extends StatefulWidget {
     this.recentController,
     this.libraryController,
     this.editorBuilder,
+    this.assistantBuilder,
+    this.noteLoader,
     this.dataSizeLoader,
     super.key,
   });
@@ -46,6 +54,8 @@ final class QuillHomePage extends StatefulWidget {
   final NoteLibraryController? recentController;
   final NoteLibraryController? libraryController;
   final NoteLibraryEditorBuilder? editorBuilder;
+  final NoteHomeAssistantBuilder? assistantBuilder;
+  final NoteHomeNoteLoader? noteLoader;
   final NoteHomeDataSizeLoader? dataSizeLoader;
 
   @override
@@ -91,6 +101,32 @@ final class _QuillHomePageState extends State<QuillHomePage> {
     if (mounted) await _recentController.refresh();
   }
 
+  Future<void> _openAssistant() async {
+    final builder =
+        widget.assistantBuilder ??
+        (context, onOpenNote) => LocalChatPage(onOpenNote: onOpenNote);
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => builder(context, _openAssistantSource),
+      ),
+    );
+    if (mounted) await _recentController.refresh();
+  }
+
+  Future<void> _openAssistantSource(LocalChatNoteContext source) async {
+    final loader =
+        widget.noteLoader ??
+        (id) async => (await NoteDatabaseService.instance.repository).get(id);
+    final note = await loader(source.noteId);
+    if (!mounted) return;
+    if (note == null || note.status == NoteStatus.trashed) {
+      AppFeedback.error(context, context.l10n.toolActionTargetMissing);
+      return;
+    }
+    await _openEditor(note);
+  }
+
   Future<void> _refreshAfterRestore() async {
     await _recentController.refresh();
     if (!identical(_recentController, _libraryController)) {
@@ -108,6 +144,7 @@ final class _QuillHomePageState extends State<QuillHomePage> {
           controller: _recentController,
           onCreate: _openEditor,
           onOpenNote: _openEditor,
+          onOpenAssistant: _openAssistant,
           onOpenLibrary: () => _selectTab(1),
         ),
         NoteLibraryPage(
@@ -176,12 +213,14 @@ final class _QuillOverviewTab extends StatelessWidget {
     required this.controller,
     required this.onCreate,
     required this.onOpenNote,
+    required this.onOpenAssistant,
     required this.onOpenLibrary,
   });
 
   final NoteLibraryController controller;
   final VoidCallback onCreate;
   final ValueChanged<Note> onOpenNote;
+  final VoidCallback onOpenAssistant;
   final VoidCallback onOpenLibrary;
 
   @override
@@ -199,7 +238,7 @@ final class _QuillOverviewTab extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 120),
               sliver: SliverList.list(
                 children: [
-                  const _QuillBrandHeader(),
+                  _QuillBrandHeader(onOpenAssistant: onOpenAssistant),
                   const SizedBox(height: 24),
                   _OverviewSearch(onTap: onOpenLibrary),
                   const SizedBox(height: 22),
@@ -237,7 +276,9 @@ final class _QuillOverviewTab extends StatelessWidget {
 }
 
 final class _QuillBrandHeader extends StatelessWidget {
-  const _QuillBrandHeader();
+  const _QuillBrandHeader({required this.onOpenAssistant});
+
+  final VoidCallback onOpenAssistant;
 
   @override
   Widget build(BuildContext context) => Row(
@@ -258,6 +299,16 @@ final class _QuillBrandHeader extends StatelessWidget {
             ),
           ],
         ),
+      ),
+      IconButton.filledTonal(
+        key: const Key('quill-home-assistant'),
+        tooltip: context.l10n.localAssistant,
+        onPressed: onOpenAssistant,
+        style: IconButton.styleFrom(
+          backgroundColor: AppColors.softGreen,
+          foregroundColor: AppColors.moss,
+        ),
+        icon: const Icon(Icons.auto_awesome_rounded),
       ),
     ],
   );

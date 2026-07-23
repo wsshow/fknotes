@@ -1,4 +1,5 @@
 import 'package:fknotes/l10n/generated/app_localizations.dart';
+import 'package:fknotes/models/local_chat.dart';
 import 'package:fknotes/models/note.dart';
 import 'package:fknotes/models/note_document.dart';
 import 'package:fknotes/pages/note_library_page.dart';
@@ -37,6 +38,9 @@ void main() {
           libraryController: libraryController,
           dataSizeLoader: () async => 2048,
           editorBuilder: _testEditor,
+          noteLoader: store.get,
+          assistantBuilder: (context, onOpenNote) =>
+              _testAssistant(context, onOpenNote, store.notes.last),
         ),
       ),
     );
@@ -60,9 +64,23 @@ void main() {
             libraryController: libraryController,
             dataSizeLoader: () async => 2048,
             editorBuilder: _testEditor,
+            noteLoader: store.get,
+            assistantBuilder: (context, onOpenNote) =>
+                _testAssistant(context, onOpenNote, store.notes.last),
           ),
         ),
       );
+      await _pump(tester);
+
+      await tester.tap(find.byKey(const Key('quill-home-assistant')));
+      await _pump(tester);
+      expect(find.text('全新 Delta 本地助手'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('open-assistant-source')));
+      await _pump(tester);
+      expect(find.text('最新笔记'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('close-test-editor')));
+      await _pump(tester);
+      await tester.binding.handlePopRoute();
       await _pump(tester);
 
       await tester.tap(find.byKey(const Key('quill-home-new-note')));
@@ -96,6 +114,34 @@ Widget _testEditor(BuildContext context, Note? note) => Scaffold(
   ),
 );
 
+Widget _testAssistant(
+  BuildContext context,
+  Future<void> Function(LocalChatNoteContext source) onOpenNote,
+  Note sourceNote,
+) => Scaffold(
+  body: Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text('全新 Delta 本地助手'),
+        TextButton(
+          key: const Key('open-assistant-source'),
+          onPressed: () => onOpenNote(
+            LocalChatNoteContext(
+              noteId: sourceNote.id,
+              title: sourceNote.title,
+              scope: LocalChatNoteScope.fullNote,
+              content: 'Delta 正文',
+              updatedAt: DateTime.utc(2026, 7, 23),
+            ),
+          ),
+          child: const Text('打开来源'),
+        ),
+      ],
+    ),
+  ),
+);
+
 Future<void> _pump(WidgetTester tester) async {
   for (var index = 0; index < 8; index++) {
     await tester.pump(const Duration(milliseconds: 50));
@@ -106,6 +152,13 @@ final class _HomeStore implements NoteLibraryStore {
   _HomeStore(this.notes);
 
   final List<Note> notes;
+
+  Future<Note?> get(NoteId id) async {
+    for (final note in notes) {
+      if (note.id == id) return note;
+    }
+    return null;
+  }
 
   @override
   Future<List<Note>> list({required NoteStatus status}) async =>
