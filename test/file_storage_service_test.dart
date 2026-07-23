@@ -142,6 +142,31 @@ void main() {
     );
   });
 
+  test('atomically imports a completed recording into note storage', () async {
+    final source = File(p.join(root.path, 'temporary-recording.m4a'));
+    await source.writeAsBytes(List<int>.generate(4096, (index) => index % 251));
+
+    final stored = await FileStorageService.instance.importNoteAudioFile(
+      source,
+    );
+    final managed = File(
+      FileStorageService.instance.absolutePath(stored.storageKey),
+    );
+
+    expect(stored.storageKey, startsWith('notes/audio/'));
+    expect(stored.storageKey, endsWith('.m4a'));
+    expect(stored.mimeType, 'audio/mp4');
+    expect(stored.byteLength, 4096);
+    expect(await managed.readAsBytes(), await source.readAsBytes());
+    expect(
+      await managed.parent
+          .list()
+          .where((entity) => entity.path.endsWith('.part'))
+          .isEmpty,
+      isTrue,
+    );
+  });
+
   test(
     'initialization creates only canonical note folders and clears parts',
     () async {

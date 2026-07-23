@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:fknotes/l10n/generated/app_localizations.dart';
@@ -8,7 +9,10 @@ import 'package:fknotes/models/note.dart';
 import 'package:fknotes/models/note_document.dart';
 import 'package:fknotes/pages/note_quill_editor_page.dart';
 import 'package:fknotes/pages/note_share_composer_page.dart';
+import 'package:fknotes/services/note_audio_playback_service.dart';
+import 'package:fknotes/services/note_audio_recording_service.dart';
 import 'package:fknotes/services/note_read_aloud_service.dart';
+import 'package:fknotes/widgets/note_recording_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:flutter_quill/quill_delta.dart';
@@ -182,7 +186,7 @@ void main() {
     );
     await _pumpFor(tester, const Duration(milliseconds: 150));
 
-    await tester.tap(find.byIcon(Icons.add_photo_alternate_outlined));
+    await tester.tap(find.byIcon(Icons.image_outlined));
     await _pumpFor(tester, const Duration(milliseconds: 400));
     await tester.tap(find.byKey(const Key('quill-pick-gallery-image')));
     await _pumpFor(tester, const Duration(milliseconds: 800));
@@ -201,7 +205,99 @@ void main() {
     expect(saved.document.project().referencedAttachmentIds, [
       saved.assets.single.id,
     ]);
-    expect(find.byIcon(Icons.add_photo_alternate_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.image_outlined), findsOneWidget);
+  });
+
+  testWidgets('records, pauses and inserts a managed audio card', (
+    tester,
+  ) async {
+    final temp = Directory.systemTemp.createTempSync(
+      'fknotes_recording_widget_',
+    );
+    addTearDown(() {
+      if (temp.existsSync()) temp.deleteSync(recursive: true);
+    });
+    final recordingPath = '${temp.path}/recording.m4a';
+    final recorder = _FakeAudioRecordingDriver(recordingPath);
+    final playback = _FakeAudioPlaybackDriver();
+    final now = DateTime.utc(2026, 7, 23, 17, 30);
+    NoteAsset? imported;
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: NoteQuillEditorPage(
+          writerLoader: () async => writer,
+          audioRecordingDriver: recorder,
+          audioPlaybackDriver: playback,
+          resolveAssetPath: (_) => '/managed/recording.m4a',
+          importAudio:
+              (
+                source, {
+                required originalName,
+                required displayName,
+                required durationMs,
+              }) async {
+                expect(source.existsSync(), isTrue);
+                expect(originalName, startsWith('recording-'));
+                expect(displayName, startsWith('语音笔记 '));
+                imported = NoteAsset(
+                  id: NoteAttachmentId.generate(),
+                  kind: NoteAssetKind.audio,
+                  storageKey: 'notes/audio/managed.m4a',
+                  originalName: originalName,
+                  displayName: displayName,
+                  byteLength: source.lengthSync(),
+                  mimeType: 'audio/mp4',
+                  durationMs: durationMs,
+                  createdAt: now,
+                  updatedAt: now,
+                );
+                return imported!;
+              },
+          now: () => now,
+          autosaveDelay: const Duration(milliseconds: 50),
+        ),
+      ),
+    );
+    await _pumpFor(tester, const Duration(milliseconds: 150));
+
+    await tester.tap(find.byKey(const Key('quill-record-audio')));
+    await _pumpFor(tester, const Duration(milliseconds: 100));
+    expect(recorder.startCalls, 1);
+    expect(find.byType(NoteRecordingBar), findsOneWidget);
+    expect(find.byKey(const Key('note-recording-waveform')), findsOneWidget);
+    expect(find.byKey(const Key('quill-record-audio')), findsNothing);
+
+    recorder.emitAmplitude(.85);
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('pause-resume-note-recording')));
+    await tester.pump();
+    expect(recorder.pauseCalls, 1);
+    expect(find.text('已暂停'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('pause-resume-note-recording')));
+    await tester.pump();
+    expect(recorder.resumeCalls, 1);
+
+    await tester.tap(find.byKey(const Key('finish-note-recording')));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await _pumpFor(tester, const Duration(milliseconds: 700));
+
+    expect(recorder.stopCalls, 1);
+    expect(recorder.stopCompleted, isTrue);
+    expect(imported, isNotNull);
+    expect(
+      find.byKey(ValueKey('note-asset-${imported!.id.value}')),
+      findsOneWidget,
+    );
+    expect(find.text(imported!.displayTitle), findsOneWidget);
+    expect(writer.notes.single.assets.single.kind, NoteAssetKind.audio);
+    expect(writer.notes.single.document.project().referencedAttachmentIds, [
+      imported!.id,
+    ]);
+    expect(File(recordingPath).existsSync(), isFalse);
   });
 
   testWidgets('reads the current Delta text without media extraction noise', (
@@ -470,6 +566,103 @@ void main() {
     expect(writer.notes, isEmpty);
     expect(writer.deletedNotes.single.id, persisted.id);
   });
+}
+
+final class _FakeAudioRecordingDriver implements NoteAudioRecordingDriver {
+  _FakeAudioRecordingDriver(this.outputPath);
+
+  final String outputPath;
+  final StreamController<double> _amplitudes =
+      StreamController<double>.broadcast();
+  var startCalls = 0;
+  var pauseCalls = 0;
+  var resumeCalls = 0;
+  var stopCalls = 0;
+  var stopCompleted = false;
+  var cancelCalls = 0;
+
+  @override
+  Stream<double> get amplitudes => _amplitudes.stream;
+
+  void emitAmplitude(double value) => _amplitudes.add(value);
+
+  @override
+  Future<void> start() async {
+    startCalls++;
+  }
+
+  @override
+  Future<void> pause() async {
+    pauseCalls++;
+  }
+
+  @override
+  Future<void> resume() async {
+    resumeCalls++;
+  }
+
+  @override
+  Future<RecordedNoteAudio> stop() async {
+    stopCalls++;
+    final file = File(outputPath);
+    file.parent.createSync(recursive: true);
+    file.writeAsBytesSync(List<int>.filled(2048, 5));
+    stopCompleted = true;
+    return RecordedNoteAudio(path: outputPath);
+  }
+
+  @override
+  Future<void> cancel() async {
+    cancelCalls++;
+    final file = File(outputPath);
+    if (file.existsSync()) file.deleteSync();
+  }
+
+  @override
+  Future<void> dispose() async {
+    await _amplitudes.close();
+  }
+}
+
+final class _FakeAudioPlaybackDriver extends ChangeNotifier
+    implements NoteAudioPlaybackDriver {
+  @override
+  String? activeAssetId;
+
+  @override
+  Duration duration = Duration.zero;
+
+  @override
+  String? errorMessage;
+
+  @override
+  Duration position = Duration.zero;
+
+  @override
+  NoteAudioPlaybackStatus status = NoteAudioPlaybackStatus.idle;
+
+  @override
+  Future<void> seek({
+    required String assetId,
+    required Duration position,
+  }) async {}
+
+  @override
+  Future<void> stop() async {
+    activeAssetId = null;
+    status = NoteAudioPlaybackStatus.idle;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> toggle({
+    required String assetId,
+    required String filePath,
+  }) async {
+    activeAssetId = assetId;
+    status = NoteAudioPlaybackStatus.playing;
+    notifyListeners();
+  }
 }
 
 final class _FakeReadAloudDriver extends ChangeNotifier

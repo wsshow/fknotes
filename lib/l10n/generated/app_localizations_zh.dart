@@ -2532,6 +2532,27 @@ class AppLocalizationsZh extends AppLocalizations {
   String get pause => '暂停';
 
   @override
+  String get finishRecording => '完成';
+
+  @override
+  String get savingRecording => '正在保存录音…';
+
+  @override
+  String get recordingAdded => '录音已添加到笔记';
+
+  @override
+  String get playRecording => '播放录音';
+
+  @override
+  String get pauseRecording => '暂停播放';
+
+  @override
+  String get recordingPlaybackFailed => '无法播放这段录音';
+
+  @override
+  String get recordingActions => '录音操作';
+
+  @override
   String get recordAgain => '重录';
 
   @override

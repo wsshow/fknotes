@@ -2723,6 +2723,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get pause => 'Pause';
 
   @override
+  String get finishRecording => 'Done';
+
+  @override
+  String get savingRecording => 'Saving recording…';
+
+  @override
+  String get recordingAdded => 'Recording added to the note';
+
+  @override
+  String get playRecording => 'Play recording';
+
+  @override
+  String get pauseRecording => 'Pause playback';
+
+  @override
+  String get recordingPlaybackFailed => 'Couldn\'t play this recording';
+
+  @override
+  String get recordingActions => 'Recording actions';
+
+  @override
   String get recordAgain => 'Record again';
 
   @override

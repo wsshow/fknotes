@@ -135,6 +135,51 @@ class FileStorageService {
     );
   }
 
+  /// Copies a completed recording into the canonical note audio tree.
+  ///
+  /// The temporary `.part` file keeps interrupted copies out of the note
+  /// graph. Only formats produced by the in-app recorder are accepted here.
+  Future<StoredNoteAudio> importNoteAudioFile(File source) async {
+    if (!await source.exists()) {
+      throw const FormatException('录音文件不存在');
+    }
+    final byteLength = await source.length();
+    if (byteLength <= 0 || byteLength > 512 * 1024 * 1024) {
+      throw const FormatException('录音文件为空或超过 512 MB');
+    }
+    final extension = p.extension(source.path).toLowerCase();
+    final mimeType = switch (extension) {
+      '.m4a' => 'audio/mp4',
+      '.aac' => 'audio/aac',
+      '.wav' => 'audio/wav',
+      _ => throw const FormatException('暂不支持这种录音格式'),
+    };
+    final relativePath = p.posix.join(
+      'notes',
+      'audio',
+      '${_uuid.v4()}$extension',
+    );
+    final destination = File(absolutePath(relativePath));
+    final partial = File('${destination.path}.part');
+    try {
+      await source.openRead().pipe(partial.openWrite());
+      final copiedLength = await partial.length();
+      if (copiedLength != byteLength) {
+        throw const FileSystemException('录音文件复制不完整');
+      }
+      await partial.rename(destination.path);
+      return StoredNoteAudio(
+        storageKey: relativePath,
+        mimeType: mimeType,
+        byteLength: copiedLength,
+      );
+    } catch (_) {
+      if (await partial.exists()) await partial.delete();
+      if (await destination.exists()) await destination.delete();
+      rethrow;
+    }
+  }
+
   /// Generates a preview inside the isolated Delta-note storage tree.
   Future<String> generateNoteThumbnailInBackground(String imagePath) async {
     return _generateThumbnailInBackground(
@@ -260,6 +305,18 @@ class FileStorageService {
 
 class StoredNoteImage {
   const StoredNoteImage({
+    required this.storageKey,
+    required this.mimeType,
+    required this.byteLength,
+  });
+
+  final String storageKey;
+  final String mimeType;
+  final int byteLength;
+}
+
+class StoredNoteAudio {
+  const StoredNoteAudio({
     required this.storageKey,
     required this.mimeType,
     required this.byteLength,

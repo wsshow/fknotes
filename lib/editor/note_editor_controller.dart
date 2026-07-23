@@ -346,6 +346,35 @@ final class NoteEditorController extends ChangeNotifier {
     }
   }
 
+  void updateAsset(NoteAsset asset) {
+    if (!_assets.containsKey(asset.id)) {
+      throw ArgumentError(
+        'The asset is not attached to this note: ${asset.id}',
+      );
+    }
+    _assets[asset.id] = asset;
+    contentRevision++;
+    notifyListeners();
+  }
+
+  bool isAttachmentEmbedAtOffset(int offset) {
+    final document = quillController.document;
+    final maximum = document.length - 1;
+    for (final candidate in [offset, offset - 1]) {
+      if (candidate < 0 || candidate > maximum) continue;
+      final leaf = document.querySegmentLeafNode(candidate).leaf;
+      if (leaf is! Embed) continue;
+      try {
+        if (NoteEmbed.parse(leaf.value.toJson()).attachmentId != null) {
+          return true;
+        }
+      } on FormatException {
+        // Other Quill embeds keep their normal selection behavior.
+      }
+    }
+    return false;
+  }
+
   void insertDivider() => _insertBlockEmbed(const NoteEmbed.divider());
 
   void removeEmbedAt(int documentOffset) {

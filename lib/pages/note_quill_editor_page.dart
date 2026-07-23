@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart' as permissions;
 
 import '../app.dart';
 import '../editor/note_editor_controller.dart';
@@ -20,6 +21,8 @@ import '../services/language_model_service.dart';
 import '../services/local_model_manager.dart';
 import '../services/local_assistant_service.dart';
 import '../services/local_llm/local_llm_output_filter.dart';
+import '../services/note_audio_playback_service.dart';
+import '../services/note_audio_recording_service.dart';
 import '../services/note_asset_import_service.dart';
 import '../services/note_assistant_prompt_builder.dart';
 import '../services/note_database_service.dart';
@@ -29,6 +32,7 @@ import '../widgets/app_feedback.dart';
 import '../widgets/app_popup_menu.dart';
 import '../widgets/note_inline_assistant_composer.dart';
 import '../widgets/note_quill_editor.dart';
+import '../widgets/note_recording_bar.dart';
 import '../widgets/note_tags_editor_sheet.dart';
 import 'model_management_page.dart';
 import 'note_share_composer_page.dart';
@@ -82,6 +86,13 @@ final class PickedNoteImage {
 typedef NoteImagePicker = Future<PickedNoteImage?> Function(ImageSource source);
 typedef NoteImageAssetImporter =
     Future<NoteAsset> Function(Uint8List bytes, {required String originalName});
+typedef NoteAudioAssetImporter =
+    Future<NoteAsset> Function(
+      File source, {
+      required String originalName,
+      required String displayName,
+      required int durationMs,
+    });
 typedef NoteReadAloudAvailabilityChecker = Future<bool> Function();
 typedef NoteLanguageModelAvailabilityChecker = Future<bool> Function();
 
@@ -121,11 +132,15 @@ final class NoteQuillEditorPage extends StatefulWidget {
     this.initialNote,
     this.writerLoader,
     this.importImage,
+    this.importAudio,
     this.pickImage,
     this.resolveImage,
+    this.resolveAssetPath,
     this.readAloud,
     this.readAloudAvailabilityChecker,
     this.inlineAssistantDriver,
+    this.audioRecordingDriver,
+    this.audioPlaybackDriver,
     this.languageModelAvailabilityChecker,
     this.now,
     this.autosaveDelay = const Duration(milliseconds: 700),
@@ -135,11 +150,15 @@ final class NoteQuillEditorPage extends StatefulWidget {
   final Note? initialNote;
   final NoteEditorWriterLoader? writerLoader;
   final NoteImageAssetImporter? importImage;
+  final NoteAudioAssetImporter? importAudio;
   final NoteImagePicker? pickImage;
   final NoteAssetImageProvider? resolveImage;
+  final NoteAssetPathResolver? resolveAssetPath;
   final NoteReadAloudDriver? readAloud;
   final NoteReadAloudAvailabilityChecker? readAloudAvailabilityChecker;
   final NoteInlineAssistantDriver? inlineAssistantDriver;
+  final NoteAudioRecordingDriver? audioRecordingDriver;
+  final NoteAudioPlaybackDriver? audioPlaybackDriver;
   final NoteLanguageModelAvailabilityChecker? languageModelAvailabilityChecker;
   final DateTime Function()? now;
   final Duration autosaveDelay;
@@ -156,10 +175,13 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
   late final FocusNode _titleFocusNode;
   late final FocusNode _editorFocusNode;
   late final NoteImageAssetImporter _importImage;
+  late final NoteAudioAssetImporter _importAudio;
   late final NoteEditorWriterLoader _writerLoader;
   late final NoteImagePicker _pickImage;
   late final NoteReadAloudDriver _readAloud;
   late final NoteInlineAssistantDriver _inlineAssistant;
+  late final NoteAudioRecordingDriver _audioRecorder;
+  late final NoteAudioPlaybackDriver _audioPlayback;
   late final TextEditingController _inlineAssistantController;
   late final FocusNode _inlineAssistantFocusNode;
   late List<String> _tags;
@@ -167,6 +189,9 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
   Timer? _autosaveTimer;
   Future<void> _saveTail = Future<void>.value();
   Future<void>? _imageImport;
+  Future<void>? _audioImport;
+  StreamSubscription<double>? _recordingAmplitudeSubscription;
+  Timer? _recordingTimer;
   _EditorSaveState _saveState = _EditorSaveState.enabled;
   var _dirtyVersion = 0;
   var _savedVersion = 0;
@@ -183,8 +208,15 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
   String _inlineAssistantOutput = '';
   String? _inlineAssistantError;
   NoteAssistantInsertionSession? _inlineAssistantSession;
+  _NoteRecordingState _recordingState = _NoteRecordingState.idle;
+  Duration _recordingElapsed = Duration.zero;
+  List<double> _recordingAmplitudes = List<double>.filled(18, .06);
+  final Stopwatch _recordingClock = Stopwatch();
+  var _recordingRunId = 0;
 
   DateTime get _now => (widget.now ?? DateTime.now)().toUtc();
+
+  bool get _recordingVisible => _recordingState != _NoteRecordingState.idle;
 
   @override
   void initState() {
@@ -194,6 +226,8 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     _tags = [..._note.tags];
     _importImage =
         widget.importImage ?? NoteAssetImportService.instance.importImageBytes;
+    _importAudio =
+        widget.importAudio ?? NoteAssetImportService.instance.importAudioFile;
     _writerLoader =
         widget.writerLoader ??
         () async => RepositoryNoteEditorWriter(
@@ -203,6 +237,13 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     _readAloud = widget.readAloud ?? NoteReadAloudService.instance;
     _inlineAssistant =
         widget.inlineAssistantDriver ?? LocalNoteInlineAssistantDriver();
+    _audioRecorder =
+        widget.audioRecordingDriver ?? LocalNoteAudioRecordingDriver();
+    _audioPlayback =
+        widget.audioPlaybackDriver ?? LocalNoteAudioPlaybackDriver();
+    _recordingAmplitudeSubscription = _audioRecorder.amplitudes.listen(
+      _onRecordingAmplitude,
+    );
     _inlineAssistantController = TextEditingController();
     _inlineAssistantFocusNode = FocusNode();
     _readAloud.addListener(_onReadAloudChanged);
@@ -238,6 +279,9 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
+      if (_recordingState == _NoteRecordingState.recording) {
+        unawaited(_pauseOrResumeRecording());
+      }
       unawaited(_persistLatest());
     }
   }
@@ -809,7 +853,9 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
 
   Future<NoteAsset?> _importClipboardImage(Uint8List bytes) async {
     try {
-      return await _importImage(bytes, originalName: context.l10n.image);
+      final asset = await _importImage(bytes, originalName: context.l10n.image);
+      _editorFocusNode.unfocus();
+      return asset;
     } catch (_) {
       if (mounted) {
         AppFeedback.error(
@@ -888,7 +934,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
         return;
       }
       _editor.insertAsset(imported);
-      _editorFocusNode.requestFocus();
+      _editorFocusNode.unfocus();
     } catch (_) {
       if (imported != null) await _deleteAssetFiles(imported);
       if (mounted) {
@@ -925,10 +971,226 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     await FileStorageService.instance.deleteFile(asset.previewStorageKey);
   }
 
+  void _onRecordingAmplitude(double amplitude) {
+    if (!mounted || _recordingState != _NoteRecordingState.recording) return;
+    setState(() {
+      _recordingAmplitudes = [
+        ..._recordingAmplitudes.skip(1),
+        amplitude.clamp(.06, 1.0),
+      ];
+    });
+  }
+
+  Future<void> _startRecording() async {
+    if (_recordingVisible || _actionPending || _closing) return;
+    final runId = ++_recordingRunId;
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (_readAloud.isActive) await _readAloud.stop();
+    if (!mounted || runId != _recordingRunId) return;
+    setState(() {
+      _recordingState = _NoteRecordingState.preparing;
+      _recordingElapsed = Duration.zero;
+      _recordingAmplitudes = List<double>.filled(18, .06);
+    });
+    try {
+      await _audioRecorder.start();
+      if (!mounted || runId != _recordingRunId) {
+        await _audioRecorder.cancel();
+        return;
+      }
+      _recordingClock
+        ..reset()
+        ..start();
+      _startRecordingTimer();
+      setState(() => _recordingState = _NoteRecordingState.recording);
+    } on NoteMicrophonePermissionDenied {
+      _resetRecordingUi();
+      await _showMicrophonePermissionDialog();
+    } catch (error) {
+      await _audioRecorder.cancel();
+      _resetRecordingUi();
+      if (mounted) {
+        AppFeedback.error(
+          context,
+          context.l10n.recordingStartFailed(_readableError(error)),
+        );
+      }
+    }
+  }
+
+  void _startRecordingTimer() {
+    _recordingTimer?.cancel();
+    _recordingTimer = Timer.periodic(const Duration(milliseconds: 200), (_) {
+      if (!mounted || !_recordingClock.isRunning) return;
+      setState(() => _recordingElapsed = _recordingClock.elapsed);
+    });
+  }
+
+  Future<void> _pauseOrResumeRecording() async {
+    try {
+      if (_recordingState == _NoteRecordingState.recording) {
+        await _audioRecorder.pause();
+        _recordingClock.stop();
+        _recordingTimer?.cancel();
+        _recordingElapsed = _recordingClock.elapsed;
+        if (mounted) {
+          setState(() => _recordingState = _NoteRecordingState.paused);
+        }
+      } else if (_recordingState == _NoteRecordingState.paused) {
+        await _audioRecorder.resume();
+        _recordingClock.start();
+        _startRecordingTimer();
+        if (mounted) {
+          setState(() => _recordingState = _NoteRecordingState.recording);
+        }
+      }
+    } catch (error) {
+      if (mounted) {
+        AppFeedback.error(
+          context,
+          context.l10n.recordingStartFailed(_readableError(error)),
+        );
+      }
+    }
+  }
+
+  Future<void> _finishRecording() async {
+    if (_recordingState != _NoteRecordingState.recording &&
+        _recordingState != _NoteRecordingState.paused) {
+      return;
+    }
+    _recordingElapsed = _recordingClock.elapsed;
+    final runId = _recordingRunId;
+    _recordingClock.stop();
+    _recordingTimer?.cancel();
+    setState(() => _recordingState = _NoteRecordingState.saving);
+    final operation = _saveRecording(runId);
+    _audioImport = operation;
+    await operation;
+    if (identical(_audioImport, operation)) _audioImport = null;
+  }
+
+  Future<void> _saveRecording(int runId) async {
+    File? temporaryFile;
+    NoteAsset? imported;
+    try {
+      final recording = await _audioRecorder.stop();
+      temporaryFile = File(recording.path);
+      if (!mounted || runId != _recordingRunId) return;
+      final timestamp = _now;
+      final local = timestamp.toLocal();
+      final originalName = 'recording-${timestamp.microsecondsSinceEpoch}.m4a';
+      final displayName = context.l10n.voiceNoteDefaultTitle(
+        '${local.year}-${_twoDigits(local.month)}-${_twoDigits(local.day)}',
+        '${_twoDigits(local.hour)}:${_twoDigits(local.minute)}',
+      );
+      imported = await _importAudio(
+        temporaryFile,
+        originalName: originalName,
+        displayName: displayName,
+        durationMs: _recordingElapsed.inMilliseconds,
+      );
+      if (!mounted || runId != _recordingRunId) {
+        await _deleteAssetFiles(imported);
+        return;
+      }
+      _editor.insertAsset(imported);
+      _resetRecordingUi();
+      _editorFocusNode.unfocus();
+      AppFeedback.success(context, context.l10n.recordingAdded);
+    } catch (error) {
+      if (imported != null) await _deleteAssetFiles(imported);
+      await _audioRecorder.cancel();
+      _resetRecordingUi();
+      if (mounted) {
+        AppFeedback.error(
+          context,
+          context.l10n.recordingSaveFailed(_readableError(error)),
+        );
+      }
+    } finally {
+      if (temporaryFile != null && await temporaryFile.exists()) {
+        await temporaryFile.delete();
+      }
+    }
+  }
+
+  Future<void> _cancelRecording() async {
+    if (!_recordingVisible || _recordingState == _NoteRecordingState.saving) {
+      return;
+    }
+    _recordingRunId++;
+    _recordingClock.stop();
+    _recordingTimer?.cancel();
+    try {
+      await _audioRecorder.cancel();
+    } finally {
+      _resetRecordingUi();
+    }
+  }
+
+  void _resetRecordingUi() {
+    _recordingClock
+      ..stop()
+      ..reset();
+    _recordingTimer?.cancel();
+    _recordingTimer = null;
+    if (!mounted) return;
+    setState(() {
+      _recordingState = _NoteRecordingState.idle;
+      _recordingElapsed = Duration.zero;
+      _recordingAmplitudes = List<double>.filled(18, .06);
+    });
+  }
+
+  Future<void> _showMicrophonePermissionDialog() async {
+    if (!mounted) return;
+    final openSettings = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.l10n.microphonePermissionRequired),
+        content: Text(context.l10n.microphonePermissionDescription),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(context.l10n.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(context.l10n.openSettings),
+          ),
+        ],
+      ),
+    );
+    if (openSettings == true) await permissions.openAppSettings();
+  }
+
+  static String _twoDigits(int value) => value.toString().padLeft(2, '0');
+
+  static String _readableError(Object error) => error.toString().replaceFirst(
+    RegExp(r'^(Bad state: |StateError: |Exception: )'),
+    '',
+  );
+
   Future<void> _requestClose() async {
     if (_closing) return;
     setState(() => _closing = true);
     if (_inlineAssistantBusy) await _stopInlineAssistant();
+    if (!mounted) return;
+    if (_recordingState == _NoteRecordingState.saving) {
+      await _audioImport;
+    } else if (_recordingVisible) {
+      final discard = await _confirmDestructiveAction(
+        title: context.l10n.discardRecordingQuestion,
+        description: context.l10n.discardRecordingDescription,
+        actionLabel: context.l10n.discard,
+      );
+      if (!discard || !mounted) {
+        if (mounted) setState(() => _closing = false);
+        return;
+      }
+      await _cancelRecording();
+    }
     if (!mounted) return;
     await _imageImport;
     var saved = await _persistLatest();
@@ -1030,6 +1292,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
                   controller: _titleController,
                   focusNode: _titleFocusNode,
                   autofocus: _note.revision == 0,
+                  readOnly: _recordingVisible,
                   maxLines: 1,
                   textInputAction: TextInputAction.next,
                   inputFormatters: [LengthLimitingTextInputFormatter(200)],
@@ -1055,9 +1318,14 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
                   controller: _editor,
                   focusNode: _editorFocusNode,
                   resolveImage: widget.resolveImage ?? _resolveManagedImage,
+                  resolveAssetPath:
+                      widget.resolveAssetPath ?? _resolveManagedAssetPath,
+                  audioPlayback: _audioPlayback,
                   placeholder: context.l10n.noteStartHint,
                   readOnly:
-                      _inlineAssistantBusy || _inlineAssistantSession != null,
+                      _inlineAssistantBusy ||
+                      _inlineAssistantSession != null ||
+                      _recordingVisible,
                 ),
               ),
               if (_importingImage)
@@ -1066,7 +1334,28 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
                   color: AppColors.accent,
                   backgroundColor: AppColors.accentSoft,
                 ),
-              if (_inlineAssistantOpen)
+              if (_recordingVisible)
+                NoteRecordingBar(
+                  preparing: _recordingState == _NoteRecordingState.preparing,
+                  saving: _recordingState == _NoteRecordingState.saving,
+                  paused: _recordingState == _NoteRecordingState.paused,
+                  elapsed: _recordingElapsed,
+                  amplitudes: _recordingAmplitudes,
+                  onCancel: _recordingState == _NoteRecordingState.saving
+                      ? null
+                      : () => unawaited(_cancelRecording()),
+                  onPauseOrResume:
+                      _recordingState == _NoteRecordingState.recording ||
+                          _recordingState == _NoteRecordingState.paused
+                      ? () => unawaited(_pauseOrResumeRecording())
+                      : null,
+                  onFinish:
+                      _recordingState == _NoteRecordingState.recording ||
+                          _recordingState == _NoteRecordingState.paused
+                      ? () => unawaited(_finishRecording())
+                      : null,
+                )
+              else if (_inlineAssistantOpen)
                 NoteInlineAssistantComposer(
                   controller: _inlineAssistantController,
                   focusNode: _inlineAssistantFocusNode,
@@ -1089,8 +1378,10 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
                   controller: _editor,
                   onOpenAssistant: _toggleInlineAssistant,
                   onInsertImage: _showImageSourceSheet,
+                  onRecordAudio: () => unawaited(_startRecording()),
                   assistantTooltip: context.l10n.writeWithAi,
                   imageTooltip: context.l10n.image,
+                  recordTooltip: context.l10n.record,
                 ),
             ],
           ),
@@ -1195,7 +1486,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
             tooltip: _readAloud.isActive
                 ? context.l10n.stopReadAloud
                 : context.l10n.readAloud,
-            onPressed: _toggleReadAloud,
+            onPressed: _recordingVisible ? null : _toggleReadAloud,
             style: IconButton.styleFrom(fixedSize: const Size.square(40)),
             icon: _readAloud.status == ReadAloudStatus.generating
                 ? const SizedBox.square(
@@ -1212,6 +1503,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
           AppAnchoredMenuButton<_QuillEditorMenuAction>(
             key: const Key('quill-editor-more'),
             tooltip: context.l10n.moreNoteActions,
+            enabled: !_recordingVisible,
             icon: const Icon(Icons.more_vert_rounded),
             onSelected: _handleMenuAction,
             actions: _menuActions(context),
@@ -1259,12 +1551,24 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     File(FileStorageService.instance.absolutePath(asset.storageKey)),
   );
 
+  String _resolveManagedAssetPath(NoteAsset asset) =>
+      FileStorageService.instance.absolutePath(asset.storageKey);
+
+  Future<void> _disposeAudioRecorder() async {
+    await _recordingAmplitudeSubscription?.cancel();
+    _recordingAmplitudeSubscription = null;
+    await _audioRecorder.dispose();
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _inlineAssistantRunId++;
     if (_inlineAssistantBusy) unawaited(_inlineAssistant.cancel());
     _autosaveTimer?.cancel();
+    _recordingTimer?.cancel();
+    unawaited(_disposeAudioRecorder());
+    _audioPlayback.dispose();
     _readAloud.removeListener(_onReadAloudChanged);
     if (_readAloud.isActive) unawaited(_readAloud.stop());
     _titleController.dispose();
@@ -1278,6 +1582,8 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
 }
 
 enum _EditorSaveState { enabled, pending, saving, saved, failed }
+
+enum _NoteRecordingState { idle, preparing, recording, paused, saving }
 
 enum _FailedSaveAction { keepEditing, retry, discard }
 

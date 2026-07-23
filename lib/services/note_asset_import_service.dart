@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
@@ -45,6 +46,37 @@ final class NoteAssetImportService {
     } catch (_) {
       await _storage.deleteFile(stored.storageKey);
       await _storage.deleteFile(previewStorageKey);
+      rethrow;
+    }
+  }
+
+  Future<NoteAsset> importAudioFile(
+    File source, {
+    required String originalName,
+    required String displayName,
+    required int durationMs,
+  }) async {
+    final stored = await _storage.importNoteAudioFile(source);
+    try {
+      final timestamp = _now().toUtc();
+      final safeOriginalName = p.basename(originalName.trim());
+      final safeDisplayName = displayName.trim();
+      return NoteAsset(
+        id: NoteAttachmentId.generate(),
+        kind: NoteAssetKind.audio,
+        storageKey: stored.storageKey,
+        originalName: safeOriginalName.isEmpty
+            ? 'recording.m4a'
+            : safeOriginalName,
+        displayName: safeDisplayName.isEmpty ? null : safeDisplayName,
+        byteLength: stored.byteLength,
+        mimeType: stored.mimeType,
+        durationMs: durationMs,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      );
+    } catch (_) {
+      await _storage.deleteFile(stored.storageKey);
       rethrow;
     }
   }

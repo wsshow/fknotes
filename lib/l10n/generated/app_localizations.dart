@@ -4712,6 +4712,48 @@ abstract class AppLocalizations {
   /// **'暂停'**
   String get pause;
 
+  /// No description provided for @finishRecording.
+  ///
+  /// In zh, this message translates to:
+  /// **'完成'**
+  String get finishRecording;
+
+  /// No description provided for @savingRecording.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在保存录音…'**
+  String get savingRecording;
+
+  /// No description provided for @recordingAdded.
+  ///
+  /// In zh, this message translates to:
+  /// **'录音已添加到笔记'**
+  String get recordingAdded;
+
+  /// No description provided for @playRecording.
+  ///
+  /// In zh, this message translates to:
+  /// **'播放录音'**
+  String get playRecording;
+
+  /// No description provided for @pauseRecording.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂停播放'**
+  String get pauseRecording;
+
+  /// No description provided for @recordingPlaybackFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法播放这段录音'**
+  String get recordingPlaybackFailed;
+
+  /// No description provided for @recordingActions.
+  ///
+  /// In zh, this message translates to:
+  /// **'录音操作'**
+  String get recordingActions;
+
   /// No description provided for @recordAgain.
   ///
   /// In zh, this message translates to:

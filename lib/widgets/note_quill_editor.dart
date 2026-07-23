@@ -1,12 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 
 import '../app.dart';
 import '../editor/note_editor_controller.dart';
+import '../l10n/l10n.dart';
 import '../models/note.dart';
 import '../models/note_document.dart';
+import '../services/note_audio_playback_service.dart';
+import 'app_popup_menu.dart';
 
 typedef NoteAssetImageProvider = ImageProvider? Function(NoteAsset asset);
+typedef NoteAssetPathResolver = String? Function(NoteAsset asset);
 
 final class NoteQuillEditor extends StatelessWidget {
   const NoteQuillEditor({
@@ -14,6 +20,8 @@ final class NoteQuillEditor extends StatelessWidget {
     this.focusNode,
     this.scrollController,
     this.resolveImage,
+    this.resolveAssetPath,
+    this.audioPlayback,
     this.onOpenAsset,
     this.readOnly = false,
     this.placeholder = '开始记录…',
@@ -24,6 +32,8 @@ final class NoteQuillEditor extends StatelessWidget {
   final FocusNode? focusNode;
   final ScrollController? scrollController;
   final NoteAssetImageProvider? resolveImage;
+  final NoteAssetPathResolver? resolveAssetPath;
+  final NoteAudioPlaybackDriver? audioPlayback;
   final ValueChanged<NoteAsset>? onOpenAsset;
   final bool readOnly;
   final String placeholder;
@@ -31,6 +41,25 @@ final class NoteQuillEditor extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     controller.quillController.readOnly = readOnly;
+    void dismissEditorFocus() {
+      final editorFocus = focusNode;
+      if (editorFocus != null) {
+        editorFocus.unfocus(disposition: UnfocusDisposition.scope);
+      } else {
+        FocusManager.instance.primaryFocus?.unfocus();
+      }
+    }
+
+    bool handleAssetTap(
+      Offset globalPosition,
+      TextPosition Function(Offset offset) getPosition,
+    ) {
+      final position = getPosition(globalPosition);
+      if (!controller.isAttachmentEmbedAtOffset(position.offset)) return false;
+      dismissEditorFocus();
+      return true;
+    }
+
     return quill.QuillEditor.basic(
       controller: controller.quillController,
       focusNode: focusNode,
@@ -44,11 +73,18 @@ final class NoteQuillEditor extends StatelessWidget {
         enableInteractiveSelection: true,
         enableSelectionToolbar: true,
         textInputAction: TextInputAction.newline,
+        onTapDown: (details, getPosition) =>
+            handleAssetTap(details.globalPosition, getPosition),
+        onTapUp: (details, getPosition) =>
+            handleAssetTap(details.globalPosition, getPosition),
         embedBuilders: [
           _NoteAssetEmbedBuilder(
             session: controller,
             resolveImage: resolveImage,
+            resolveAssetPath: resolveAssetPath,
+            audioPlayback: audioPlayback,
             onOpenAsset: onOpenAsset,
+            onAssetInteraction: dismissEditorFocus,
           ),
           _NoteDividerEmbedBuilder(session: controller),
         ],
@@ -62,8 +98,10 @@ final class NoteQuillToolbar extends StatelessWidget {
     required this.controller,
     this.onOpenAssistant,
     this.onInsertImage,
+    this.onRecordAudio,
     this.assistantTooltip = 'AI 创作',
     this.imageTooltip = '插入图片',
+    this.recordTooltip = '录音',
     this.dividerTooltip = '插入分隔线',
     super.key,
   });
@@ -71,8 +109,10 @@ final class NoteQuillToolbar extends StatelessWidget {
   final NoteEditorController controller;
   final VoidCallback? onOpenAssistant;
   final VoidCallback? onInsertImage;
+  final VoidCallback? onRecordAudio;
   final String assistantTooltip;
   final String imageTooltip;
+  final String recordTooltip;
   final String dividerTooltip;
 
   @override
@@ -132,7 +172,14 @@ final class NoteQuillToolbar extends StatelessWidget {
                     key: const Key('quill-insert-image'),
                     tooltip: imageTooltip,
                     onPressed: onInsertImage!,
-                    icon: Icons.add_photo_alternate_outlined,
+                    icon: Icons.image_outlined,
+                  ),
+                if (onRecordAudio != null)
+                  _NoteToolbarActionButton(
+                    key: const Key('quill-record-audio'),
+                    tooltip: recordTooltip,
+                    onPressed: onRecordAudio!,
+                    icon: Icons.graphic_eq_rounded,
                   ),
                 quill.QuillToolbarHistoryButton(
                   key: const Key('quill-toolbar-undo'),
@@ -245,12 +292,18 @@ final class _NoteAssetEmbedBuilder extends quill.EmbedBuilder {
   const _NoteAssetEmbedBuilder({
     required this.session,
     required this.resolveImage,
+    required this.resolveAssetPath,
+    required this.audioPlayback,
     required this.onOpenAsset,
+    required this.onAssetInteraction,
   });
 
   final NoteEditorController session;
   final NoteAssetImageProvider? resolveImage;
+  final NoteAssetPathResolver? resolveAssetPath;
+  final NoteAudioPlaybackDriver? audioPlayback;
   final ValueChanged<NoteAsset>? onOpenAsset;
+  final VoidCallback onAssetInteraction;
 
   @override
   String get key => NoteEmbed.attachmentType;
@@ -275,8 +328,27 @@ final class _NoteAssetEmbedBuilder extends quill.EmbedBuilder {
         asset: asset,
         provider: resolveImage?.call(asset),
         readOnly: embedContext.readOnly,
+        onInteraction: onAssetInteraction,
         onOpen: onOpenAsset == null ? null : () => onOpenAsset!(asset),
         onRemove: () => session.removeEmbedAt(embedContext.node.documentOffset),
+      );
+    }
+    if (asset.kind == NoteAssetKind.audio) {
+      return _AudioAssetBlock(
+        key: ValueKey('note-asset-${asset.id.value}'),
+        asset: asset,
+        filePath: resolveAssetPath?.call(asset),
+        playback: audioPlayback,
+        readOnly: embedContext.readOnly,
+        onInteraction: onAssetInteraction,
+        onRename: (displayName) =>
+            session.updateAsset(asset.copyWith(displayName: displayName)),
+        onRemove: () {
+          if (audioPlayback?.activeAssetId == asset.id.value) {
+            unawaited(audioPlayback?.stop());
+          }
+          session.removeEmbedAt(embedContext.node.documentOffset);
+        },
       );
     }
     return _FileAssetBlock(
@@ -287,6 +359,276 @@ final class _NoteAssetEmbedBuilder extends quill.EmbedBuilder {
       onRemove: () => session.removeEmbedAt(embedContext.node.documentOffset),
     );
   }
+}
+
+enum _AudioAssetAction { rename, remove }
+
+final class _AudioAssetBlock extends StatelessWidget {
+  const _AudioAssetBlock({
+    required this.asset,
+    required this.filePath,
+    required this.playback,
+    required this.readOnly,
+    required this.onInteraction,
+    required this.onRename,
+    required this.onRemove,
+    super.key,
+  });
+
+  final NoteAsset asset;
+  final String? filePath;
+  final NoteAudioPlaybackDriver? playback;
+  final bool readOnly;
+  final VoidCallback onInteraction;
+  final ValueChanged<String?> onRename;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final driver = playback;
+    final content = (driver == null)
+        ? _buildCard(context, null)
+        : ListenableBuilder(
+            listenable: driver,
+            builder: (context, _) => _buildCard(context, driver),
+          );
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: (_) => onInteraction(),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onInteraction,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: content,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCard(BuildContext context, NoteAudioPlaybackDriver? driver) {
+    final active = driver?.activeAssetId == asset.id.value;
+    final status = active ? driver!.status : NoteAudioPlaybackStatus.idle;
+    final loading = status == NoteAudioPlaybackStatus.loading;
+    final playing = status == NoteAudioPlaybackStatus.playing;
+    final failed = status == NoteAudioPlaybackStatus.failed;
+    final storedDuration = Duration(milliseconds: asset.durationMs ?? 0);
+    final duration = active && driver!.duration > Duration.zero
+        ? driver.duration
+        : storedDuration;
+    final position = active ? driver!.position : Duration.zero;
+    final maximum = duration.inMilliseconds <= 0
+        ? 1.0
+        : duration.inMilliseconds.toDouble();
+    final value = position.inMilliseconds.clamp(0, maximum.toInt()).toDouble();
+
+    return Semantics(
+      label: '${context.l10n.record}：${asset.displayTitle}',
+      child: Material(
+        color: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.medium),
+          side: const BorderSide(color: AppColors.line),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 10, 6, 10),
+          child: Row(
+            children: [
+              IconButton(
+                key: ValueKey('play-note-audio-${asset.id.value}'),
+                tooltip: playing
+                    ? context.l10n.pauseRecording
+                    : context.l10n.playRecording,
+                onPressed: driver == null || filePath == null
+                    ? null
+                    : () {
+                        onInteraction();
+                        unawaited(
+                          driver.toggle(
+                            assetId: asset.id.value,
+                            filePath: filePath!,
+                          ),
+                        );
+                      },
+                style: IconButton.styleFrom(
+                  backgroundColor: AppColors.accentSoft,
+                  foregroundColor: AppColors.accent,
+                  disabledBackgroundColor: AppColors.surfaceMuted,
+                  fixedSize: const Size.square(44),
+                ),
+                icon: loading
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(
+                        playing
+                            ? Icons.pause_rounded
+                            : failed
+                            ? Icons.refresh_rounded
+                            : Icons.play_arrow_rounded,
+                      ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      asset.displayTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.ink,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Text(
+                          failed
+                              ? context.l10n.recordingPlaybackFailed
+                              : _formatAudioDuration(position),
+                          style: TextStyle(
+                            color: failed ? AppColors.danger : AppColors.muted,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: SliderTheme(
+                            data: SliderTheme.of(context).copyWith(
+                              trackHeight: 2,
+                              thumbShape: const RoundSliderThumbShape(
+                                enabledThumbRadius: 5,
+                                disabledThumbRadius: 4,
+                              ),
+                              overlayShape: const RoundSliderOverlayShape(
+                                overlayRadius: 12,
+                              ),
+                            ),
+                            child: Slider(
+                              key: ValueKey(
+                                'note-audio-progress-${asset.id.value}',
+                              ),
+                              value: value,
+                              max: maximum,
+                              onChanged:
+                                  !active ||
+                                      driver == null ||
+                                      duration <= Duration.zero
+                                  ? null
+                                  : (next) {
+                                      onInteraction();
+                                      unawaited(
+                                        driver.seek(
+                                          assetId: asset.id.value,
+                                          position: Duration(
+                                            milliseconds: next.round(),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _formatAudioDuration(duration),
+                          style: const TextStyle(
+                            color: AppColors.muted,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              if (!readOnly)
+                AppAnchoredMenuButton<_AudioAssetAction>(
+                  key: ValueKey('note-audio-actions-${asset.id.value}'),
+                  tooltip: context.l10n.recordingActions,
+                  icon: const Icon(Icons.more_vert_rounded, size: 20),
+                  actions: [
+                    AppMenuAction(
+                      value: _AudioAssetAction.rename,
+                      icon: Icons.edit_outlined,
+                      label: context.l10n.renameAttachment,
+                    ),
+                    AppMenuAction(
+                      value: _AudioAssetAction.remove,
+                      icon: Icons.delete_outline_rounded,
+                      label: context.l10n.remove,
+                      destructive: true,
+                    ),
+                  ],
+                  onSelected: (action) {
+                    onInteraction();
+                    switch (action) {
+                      case _AudioAssetAction.rename:
+                        unawaited(_rename(context));
+                      case _AudioAssetAction.remove:
+                        onRemove();
+                    }
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _rename(BuildContext context) async {
+    var value = asset.displayTitle;
+    final result = await showDialog<_AudioRenameResult>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.l10n.editAttachmentTitle),
+        content: TextFormField(
+          key: const Key('audio-attachment-title'),
+          initialValue: value,
+          onChanged: (next) => value = next,
+          autofocus: true,
+          maxLength: 120,
+          decoration: InputDecoration(
+            labelText: context.l10n.attachmentTitle,
+            hintText: context.l10n.attachmentTitleHint,
+            helperText: context.l10n.attachmentTitleDescription,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(context.l10n.cancel),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, const _AudioRenameResult(null)),
+            child: Text(context.l10n.restoreOriginalFileName),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, _AudioRenameResult(value.trim())),
+            child: Text(context.l10n.save),
+          ),
+        ],
+      ),
+    );
+    if (result != null) onRename(result.displayName);
+  }
+}
+
+final class _AudioRenameResult {
+  const _AudioRenameResult(this.displayName);
+
+  final String? displayName;
 }
 
 final class _NoteDividerEmbedBuilder extends quill.EmbedBuilder {
@@ -322,6 +664,7 @@ final class _ImageAssetBlock extends StatelessWidget {
     required this.asset,
     required this.provider,
     required this.readOnly,
+    required this.onInteraction,
     required this.onOpen,
     required this.onRemove,
     super.key,
@@ -330,52 +673,78 @@ final class _ImageAssetBlock extends StatelessWidget {
   final NoteAsset asset;
   final ImageProvider? provider;
   final bool readOnly;
+  final VoidCallback onInteraction;
   final VoidCallback? onOpen;
   final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
     final imageProvider = provider;
-    return Semantics(
-      label: '图片：${asset.displayTitle}',
-      button: onOpen != null,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(AppRadius.medium),
-          child: Material(
-            color: AppColors.surfaceMuted,
-            child: Stack(
-              alignment: Alignment.topRight,
-              children: [
-                InkWell(
-                  onTap: onOpen,
-                  child: imageProvider == null
-                      ? _AssetFallback(asset: asset, minHeight: 180)
-                      : Image(
-                          key: ValueKey('note-image-${asset.id.value}'),
-                          image: imageProvider,
-                          width: double.infinity,
-                          fit: BoxFit.fitWidth,
-                          errorBuilder: (_, _, _) =>
-                              _AssetFallback(asset: asset, minHeight: 180),
-                        ),
-                ),
-                if (!readOnly)
-                  Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: _RemoveButton(
-                      key: ValueKey('remove-note-asset-${asset.id.value}'),
-                      onPressed: onRemove,
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: (_) => onInteraction(),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onInteraction,
+        child: Semantics(
+          label: '图片：${asset.displayTitle}',
+          button: onOpen != null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.medium),
+              child: Material(
+                color: AppColors.surfaceMuted,
+                child: Stack(
+                  alignment: Alignment.topRight,
+                  children: [
+                    InkWell(
+                      onTap: () {
+                        onInteraction();
+                        onOpen?.call();
+                      },
+                      child: imageProvider == null
+                          ? _AssetFallback(asset: asset, minHeight: 180)
+                          : Image(
+                              key: ValueKey('note-image-${asset.id.value}'),
+                              image: imageProvider,
+                              width: double.infinity,
+                              fit: BoxFit.fitWidth,
+                              errorBuilder: (_, _, _) =>
+                                  _AssetFallback(asset: asset, minHeight: 180),
+                            ),
                     ),
-                  ),
-              ],
+                    if (!readOnly)
+                      Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: _RemoveButton(
+                          key: ValueKey('remove-note-asset-${asset.id.value}'),
+                          onPressed: onRemove,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
       ),
     );
   }
+}
+
+String _formatAudioDuration(Duration value) {
+  final totalSeconds = value.inSeconds;
+  final hours = totalSeconds ~/ 3600;
+  final minutes = (totalSeconds % 3600) ~/ 60;
+  final seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return '${hours.toString().padLeft(2, '0')}:'
+        '${minutes.toString().padLeft(2, '0')}:'
+        '${seconds.toString().padLeft(2, '0')}';
+  }
+  return '${minutes.toString().padLeft(2, '0')}:'
+      '${seconds.toString().padLeft(2, '0')}';
 }
 
 final class _FileAssetBlock extends StatelessWidget {

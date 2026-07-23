@@ -9,6 +9,7 @@ import 'package:fknotes/editor/note_editor_controller.dart';
 import 'package:fknotes/l10n/generated/app_localizations.dart';
 import 'package:fknotes/models/note.dart';
 import 'package:fknotes/models/note_document.dart';
+import 'package:fknotes/services/note_audio_playback_service.dart';
 import 'package:fknotes/widgets/note_quill_editor.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
@@ -66,6 +67,18 @@ void main() {
         expect(snapshot.assets, [asset]);
         expect(snapshot.document.project().plainText, '前文\n\n后文');
         expect(snapshot.document.project().referencedAttachmentIds, [asset.id]);
+        expect(snapshot.document.toDelta().toJson(), [
+          {'insert': '前文\n'},
+          {'insert': NoteEmbed.attachment(asset.id).toDeltaData()},
+          {'insert': '\n后文\n'},
+        ]);
+        expect(
+          controller.quillController.selection,
+          const TextSelection.collapsed(offset: 5),
+        );
+        expect(controller.isAttachmentEmbedAtOffset(3), isTrue);
+        expect(controller.isAttachmentEmbedAtOffset(4), isTrue);
+        expect(controller.isAttachmentEmbedAtOffset(5), isFalse);
       },
     );
 
@@ -355,12 +368,15 @@ void main() {
         document: document,
         assets: [asset],
       );
+      final focusNode = FocusNode();
       addTearDown(controller.dispose);
+      addTearDown(focusNode.dispose);
 
       await tester.pumpWidget(
         _EditorTestApp(
           child: NoteQuillEditor(
             controller: controller,
+            focusNode: focusNode,
             resolveImage: (_) => MemoryImage(_onePixelPng),
           ),
         ),
@@ -375,6 +391,13 @@ void main() {
         closeTo(tester.getSize(editorFinder).width - 48, 1),
       );
 
+      focusNode.requestFocus();
+      await tester.pump();
+      expect(focusNode.hasFocus, isTrue);
+      await tester.tapAt(tester.getTopLeft(imageFinder) + const Offset(8, 0.5));
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(focusNode.hasFocus, isFalse);
+
       await tester.tap(
         find.byKey(ValueKey('remove-note-asset-${asset.id.value}')),
       );
@@ -384,6 +407,67 @@ void main() {
       expect(controller.snapshot().document.project().plainText, '图片之前\n图片之后');
     },
   );
+
+  testWidgets('renders and controls an inline recording card', (tester) async {
+    final asset = _audioAsset();
+    final controller = NoteEditorController(
+      document: NoteDocument.fromDelta(
+        Delta()
+          ..insert(NoteEmbed.attachment(asset.id).toDeltaData())
+          ..insert('\n'),
+      ),
+      assets: [asset],
+    );
+    final playback = _FakeAudioPlaybackDriver();
+    final focusNode = FocusNode();
+    addTearDown(controller.dispose);
+    addTearDown(playback.dispose);
+    addTearDown(focusNode.dispose);
+
+    await tester.pumpWidget(
+      _EditorTestApp(
+        child: NoteQuillEditor(
+          controller: controller,
+          focusNode: focusNode,
+          audioPlayback: playback,
+          resolveAssetPath: (_) => '/managed/recording.m4a',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(ValueKey('note-asset-${asset.id.value}')),
+      findsOneWidget,
+    );
+    expect(find.text('产品讨论'), findsOneWidget);
+    expect(find.text('01:32'), findsOneWidget);
+
+    focusNode.requestFocus();
+    await tester.pump();
+    expect(focusNode.hasFocus, isTrue);
+    await tester.tap(find.byKey(ValueKey('play-note-audio-${asset.id.value}')));
+    await tester.pump();
+    expect(focusNode.hasFocus, isFalse);
+    expect(playback.activeAssetId, asset.id.value);
+    expect(playback.lastPath, '/managed/recording.m4a');
+    expect(find.byIcon(Icons.pause_rounded), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(ValueKey('note-audio-actions-${asset.id.value}')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('修改标题'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('audio-attachment-title')),
+      '周会录音',
+    );
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(controller.assets.single.displayTitle, '周会录音');
+  });
 
   testWidgets('accepts multiline text through the native input connection', (
     tester,
@@ -426,6 +510,7 @@ void main() {
             controller: controller,
             onOpenAssistant: () {},
             onInsertImage: () {},
+            onRecordAudio: () {},
           ),
         ),
       ),
@@ -438,6 +523,7 @@ void main() {
     expect(actions.children.map((child) => child.key).toList(), const [
       Key('quill-open-inline-assistant'),
       Key('quill-insert-image'),
+      Key('quill-record-audio'),
       Key('quill-toolbar-undo'),
       Key('quill-toolbar-redo'),
       Key('quill-toolbar-bold'),
@@ -454,7 +540,8 @@ void main() {
     ]);
     expect(find.byType(quill.QuillSimpleToolbar), findsNothing);
     expect(find.byIcon(Icons.format_bold), findsOneWidget);
-    expect(find.byIcon(Icons.add_photo_alternate_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.image_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.graphic_eq_rounded), findsOneWidget);
     expect(find.byIcon(Icons.code), findsNothing);
     expect(find.byIcon(Icons.format_strikethrough), findsNothing);
     expect(find.byIcon(Icons.format_indent_increase), findsNothing);
@@ -472,8 +559,15 @@ void main() {
         matching: find.byType(IconButton),
       ),
     );
+    final recordingButton = tester.widget<IconButton>(
+      find.descendant(
+        of: find.byKey(const Key('quill-record-audio')),
+        matching: find.byType(IconButton),
+      ),
+    );
     expect(assistantButton.style, isNull);
     expect(imageButton.style, isNull);
+    expect(recordingButton.style, isNull);
     expect(tester.getSize(find.byType(NoteQuillToolbar)).height, lessThan(90));
   });
 }
@@ -494,6 +588,73 @@ NoteAsset _imageAsset() {
     createdAt: now,
     updatedAt: now,
   );
+}
+
+NoteAsset _audioAsset() {
+  final now = DateTime.utc(2026, 7, 23, 12);
+  return NoteAsset(
+    id: NoteAttachmentId.parse('94ee8ed8-4637-40e1-8c91-ff6df6593605'),
+    kind: NoteAssetKind.audio,
+    storageKey: 'notes/audio/94ee8ed8.m4a',
+    originalName: 'recording.m4a',
+    displayName: '产品讨论',
+    byteLength: 4096,
+    mimeType: 'audio/mp4',
+    durationMs: 92340,
+    createdAt: now,
+    updatedAt: now,
+  );
+}
+
+final class _FakeAudioPlaybackDriver extends ChangeNotifier
+    implements NoteAudioPlaybackDriver {
+  String? lastPath;
+
+  @override
+  String? activeAssetId;
+
+  @override
+  Duration duration = Duration.zero;
+
+  @override
+  String? errorMessage;
+
+  @override
+  Duration position = Duration.zero;
+
+  @override
+  NoteAudioPlaybackStatus status = NoteAudioPlaybackStatus.idle;
+
+  @override
+  Future<void> seek({
+    required String assetId,
+    required Duration position,
+  }) async {
+    if (activeAssetId != assetId) return;
+    this.position = position;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> stop() async {
+    activeAssetId = null;
+    status = NoteAudioPlaybackStatus.idle;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> toggle({
+    required String assetId,
+    required String filePath,
+  }) async {
+    activeAssetId = assetId;
+    lastPath = filePath;
+    duration = const Duration(milliseconds: 92340);
+    status = status == NoteAudioPlaybackStatus.playing
+        ? NoteAudioPlaybackStatus.paused
+        : NoteAudioPlaybackStatus.playing;
+    notifyListeners();
+  }
 }
 
 final class _EditorTestApp extends StatelessWidget {
