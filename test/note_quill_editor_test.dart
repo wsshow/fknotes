@@ -261,6 +261,31 @@ void main() {
       ]);
     });
 
+    test('streamed AI insertion can be undone as one complete action', () {
+      final controller = NoteEditorController(
+        document: NoteDocument.fromPlainText('保留 需要改写 结尾'),
+        assets: const [],
+      );
+      addTearDown(controller.dispose);
+      controller.quillController.updateSelection(
+        const TextSelection(baseOffset: 3, extentOffset: 7),
+        quill.ChangeSource.local,
+      );
+
+      final session = controller.beginAssistantInsertion();
+      expect(controller.updateAssistantInsertion(session, '**草稿**'), isTrue);
+      expect(controller.updateAssistantInsertion(session, '**最终稿**'), isTrue);
+      controller.finishAssistantInsertion(session);
+
+      expect(controller.snapshot().document.project().plainText, '保留 最终稿 结尾');
+      expect(controller.revertAssistantInsertion(session), isTrue);
+      expect(controller.snapshot().document.project().plainText, '保留 需要改写 结尾');
+      expect(
+        controller.quillController.selection,
+        const TextSelection(baseOffset: 3, extentOffset: 7),
+      );
+    });
+
     test('AI refuses stale anchors after the user keeps editing', () {
       final controller = NoteEditorController(
         document: NoteDocument.fromPlainText('原文'),

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:fknotes/l10n/generated/app_localizations.dart';
+import 'package:fknotes/models/local_llm.dart';
 import 'package:fknotes/models/note.dart';
 import 'package:fknotes/models/note_document.dart';
 import 'package:fknotes/pages/note_quill_editor_page.dart';
@@ -340,6 +341,57 @@ void main() {
     );
   });
 
+  testWidgets(
+    'bottom AI composer streams into the caret and undoes atomically',
+    (tester) async {
+      final now = DateTime.utc(2026, 7, 23, 19, 30);
+      final driver = _FakeInlineAssistantDriver();
+      await tester.pumpWidget(
+        _TestApp(
+          child: NoteQuillEditorPage(
+            initialNote: Note(
+              id: NoteId.generate(),
+              title: '行程',
+              document: NoteDocument.fromPlainText('已有想法'),
+              createdAt: now,
+              updatedAt: now,
+            ),
+            writerLoader: () async => writer,
+            inlineAssistantDriver: driver,
+            autosaveDelay: const Duration(milliseconds: 50),
+          ),
+        ),
+      );
+      await _pumpFor(tester, const Duration(milliseconds: 200));
+
+      await tester.tap(find.byKey(const Key('quill-open-inline-assistant')));
+      await _pumpFor(tester, const Duration(milliseconds: 200));
+      expect(find.byKey(const Key('quill-inline-assistant')), findsOneWidget);
+      expect(find.text('续写当前内容'), findsOneWidget);
+
+      await tester.enterText(
+        find.byKey(const Key('quill-inline-assistant-input')),
+        '整理一份两项清单',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('submit-inline-assistant')));
+      await _pumpFor(tester, const Duration(milliseconds: 700));
+
+      expect(driver.requests, hasLength(1));
+      expect(
+        driver.requests.single.messages.last.content,
+        contains('整理一份两项清单'),
+      );
+      expect(driver.requests.single.messages.last.content, contains('已有想法'));
+      expect(find.text('内容已写入笔记'), findsOneWidget);
+      expect(writer.notes.single.contentProjection.plainText, '第一项\n第二项\n已有想法');
+
+      await tester.tap(find.text('撤销'));
+      await _pumpFor(tester, const Duration(milliseconds: 300));
+      expect(writer.notes.single.contentProjection.plainText, '已有想法');
+    },
+  );
+
   testWidgets('shares the current rich Delta snapshot without Markdown', (
     tester,
   ) async {
@@ -508,6 +560,35 @@ final class _MemoryNoteWriter implements NoteEditorWriter {
   Future<void> deletePermanently(Note note) async {
     deletedNotes.add(note);
     notes.removeWhere((candidate) => candidate.id == note.id);
+  }
+}
+
+final class _FakeInlineAssistantDriver implements NoteInlineAssistantDriver {
+  final List<LocalLlmGenerationRequest> requests = [];
+  var loadCalls = 0;
+  var cancelCalls = 0;
+
+  @override
+  Future<void> load() async {
+    loadCalls++;
+  }
+
+  @override
+  Stream<LocalLlmGenerationEvent> generate(
+    LocalLlmGenerationRequest request,
+  ) async* {
+    requests.add(request);
+    yield const LocalLlmTextDelta('- 第一项');
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    yield const LocalLlmTextDelta('\n- 第二项');
+    yield const LocalLlmGenerationCompleted(
+      reason: LocalLlmFinishReason.completed,
+    );
+  }
+
+  @override
+  Future<void> cancel() async {
+    cancelCalls++;
   }
 }
 

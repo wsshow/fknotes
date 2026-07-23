@@ -10,6 +10,7 @@ import '../editor/note_assistant_editing.dart';
 import '../editor/note_editor_controller.dart';
 import '../l10n/l10n.dart';
 import '../l10n/local_model_l10n.dart';
+import '../models/local_llm.dart';
 import '../models/note.dart';
 import '../models/note_document.dart';
 import '../models/note_share.dart';
@@ -18,6 +19,8 @@ import '../services/file_storage_service.dart';
 import '../services/kokoro_tts_model_service.dart';
 import '../services/language_model_service.dart';
 import '../services/local_model_manager.dart';
+import '../services/local_assistant_service.dart';
+import '../services/local_llm/local_llm_output_filter.dart';
 import '../services/note_asset_import_service.dart';
 import '../services/note_assistant_prompt_builder.dart';
 import '../services/note_database_service.dart';
@@ -26,6 +29,7 @@ import '../services/note_repository.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/app_popup_menu.dart';
 import '../widgets/note_assistant_sheet.dart';
+import '../widgets/note_inline_assistant_composer.dart';
 import '../widgets/note_quill_editor.dart';
 import '../widgets/note_tags_editor_sheet.dart';
 import 'model_management_page.dart';
@@ -92,6 +96,32 @@ typedef NoteAssistantResultPresenter =
       required Set<NoteAssistantPlacement> placements,
     });
 
+abstract interface class NoteInlineAssistantDriver {
+  Future<void> load();
+
+  Stream<LocalLlmGenerationEvent> generate(LocalLlmGenerationRequest request);
+
+  Future<void> cancel();
+}
+
+final class LocalNoteInlineAssistantDriver
+    implements NoteInlineAssistantDriver {
+  LocalNoteInlineAssistantDriver([LocalAssistantService? assistant])
+    : _assistant = assistant ?? LocalAssistantService.instance;
+
+  final LocalAssistantService _assistant;
+
+  @override
+  Future<void> load() => _assistant.loadSelectedModel();
+
+  @override
+  Stream<LocalLlmGenerationEvent> generate(LocalLlmGenerationRequest request) =>
+      _assistant.generate(request);
+
+  @override
+  Future<void> cancel() => _assistant.cancel();
+}
+
 /// The clean-slate Delta editor route.
 ///
 /// The page never converts its document to Markdown. Quill owns selection,
@@ -107,6 +137,7 @@ final class NoteQuillEditorPage extends StatefulWidget {
     this.readAloud,
     this.readAloudAvailabilityChecker,
     this.assistantResultPresenter,
+    this.inlineAssistantDriver,
     this.now,
     this.autosaveDelay = const Duration(milliseconds: 700),
     super.key,
@@ -120,6 +151,7 @@ final class NoteQuillEditorPage extends StatefulWidget {
   final NoteReadAloudDriver? readAloud;
   final NoteReadAloudAvailabilityChecker? readAloudAvailabilityChecker;
   final NoteAssistantResultPresenter? assistantResultPresenter;
+  final NoteInlineAssistantDriver? inlineAssistantDriver;
   final DateTime Function()? now;
   final Duration autosaveDelay;
 
@@ -138,6 +170,9 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
   late final NoteEditorWriterLoader _writerLoader;
   late final NoteImagePicker _pickImage;
   late final NoteReadAloudDriver _readAloud;
+  late final NoteInlineAssistantDriver _inlineAssistant;
+  late final TextEditingController _inlineAssistantController;
+  late final FocusNode _inlineAssistantFocusNode;
   late List<String> _tags;
 
   Timer? _autosaveTimer;
@@ -151,6 +186,13 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
   var _actionPending = false;
   var _closing = false;
   var _allowPop = false;
+  var _inlineAssistantOpen = false;
+  var _inlineAssistantLoading = false;
+  var _inlineAssistantGenerating = false;
+  var _inlineAssistantRunId = 0;
+  String _inlineAssistantOutput = '';
+  String? _inlineAssistantError;
+  NoteAssistantInsertionSession? _inlineAssistantSession;
 
   DateTime get _now => (widget.now ?? DateTime.now)().toUtc();
 
@@ -169,6 +211,10 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
         );
     _pickImage = widget.pickImage ?? _pickImageFromDevice;
     _readAloud = widget.readAloud ?? NoteReadAloudService.instance;
+    _inlineAssistant =
+        widget.inlineAssistantDriver ?? LocalNoteInlineAssistantDriver();
+    _inlineAssistantController = TextEditingController();
+    _inlineAssistantFocusNode = FocusNode();
     _readAloud.addListener(_onReadAloudChanged);
     _observedTitle = _note.title;
     _titleController = TextEditingController(text: _note.title)
@@ -335,6 +381,225 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
       );
     }
     return false;
+  }
+
+  bool get _inlineAssistantBusy =>
+      _inlineAssistantLoading || _inlineAssistantGenerating;
+
+  bool get _inlineAssistantReplacesSelection {
+    final selection = _editor.quillController.selection;
+    return selection.isValid && !selection.isCollapsed;
+  }
+
+  void _toggleInlineAssistant() {
+    if (_inlineAssistantBusy) return;
+    if (_inlineAssistantOpen) {
+      _closeInlineAssistant();
+      return;
+    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _inlineAssistantOpen = true;
+      _inlineAssistantError = null;
+      _inlineAssistantOutput = '';
+      _inlineAssistantSession = null;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _inlineAssistantFocusNode.requestFocus();
+    });
+  }
+
+  void _closeInlineAssistant() {
+    if (_inlineAssistantBusy) return;
+    _inlineAssistantRunId++;
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _inlineAssistantOpen = false;
+      _inlineAssistantError = null;
+      _inlineAssistantOutput = '';
+      _inlineAssistantSession = null;
+    });
+    _editorFocusNode.requestFocus();
+  }
+
+  Future<void> _submitInlineAssistant(String rawInstruction) async {
+    final instruction = rawInstruction.trim();
+    if (instruction.isEmpty || _inlineAssistantBusy) return;
+    _inlineAssistantController.text = instruction;
+    FocusManager.instance.primaryFocus?.unfocus();
+    final runId = ++_inlineAssistantRunId;
+    setState(() {
+      _inlineAssistantLoading = true;
+      _inlineAssistantGenerating = false;
+      _inlineAssistantError = null;
+      _inlineAssistantOutput = '';
+    });
+
+    if (widget.inlineAssistantDriver == null &&
+        !await _ensureLanguageModelAvailable()) {
+      if (mounted && runId == _inlineAssistantRunId) {
+        setState(() => _inlineAssistantLoading = false);
+      }
+      return;
+    }
+
+    try {
+      await _inlineAssistant.load();
+      if (!mounted || runId != _inlineAssistantRunId) return;
+
+      final anchor = _editor.captureAssistantAnchor();
+      final session = _editor.beginAssistantInsertion();
+      _inlineAssistantSession = session;
+      final languageCode = Localizations.localeOf(context).languageCode;
+      final projection = NoteSemanticProjection.fromNote(_currentSnapshot());
+      final scope = anchor.hasSelection
+          ? NoteAssistantScope.selection
+          : NoteAssistantScope.fullNote;
+      final request = NoteAssistantPromptBuilder.build(
+        action: NoteAssistantAction.custom(instruction),
+        title: _titleController.text.trim(),
+        content: anchor.hasSelection
+            ? anchor.selectedText
+            : projection.assistantSource(languageCode: languageCode),
+        scope: scope,
+        languageCode: languageCode,
+      );
+      setState(() {
+        _inlineAssistantLoading = false;
+        _inlineAssistantGenerating = true;
+      });
+
+      final rawOutput = StringBuffer();
+      var appliedOutput = '';
+      var lastPaint = DateTime.fromMillisecondsSinceEpoch(0);
+      await for (final event in _inlineAssistant.generate(request)) {
+        if (!mounted || runId != _inlineAssistantRunId) return;
+        switch (event) {
+          case LocalLlmTextDelta():
+            rawOutput.write(event.text);
+            final now = DateTime.now();
+            if (now.difference(lastPaint) < const Duration(milliseconds: 70)) {
+              continue;
+            }
+            final visible = LocalLlmOutputFilter.visibleText(
+              rawOutput.toString(),
+            );
+            if (visible.trim().isEmpty || visible == appliedOutput) continue;
+            if (!_editor.updateAssistantInsertion(session, visible)) {
+              throw StateError(context.l10n.noteChangedRetryAssistant);
+            }
+            appliedOutput = visible;
+            lastPaint = now;
+            setState(() => _inlineAssistantOutput = visible);
+          case LocalLlmGenerationCompleted():
+            final visible = LocalLlmOutputFilter.visibleText(
+              rawOutput.toString(),
+            ).trim();
+            if (visible.isNotEmpty && visible != appliedOutput) {
+              if (!_editor.updateAssistantInsertion(session, visible)) {
+                throw StateError(context.l10n.noteChangedRetryAssistant);
+              }
+              appliedOutput = visible;
+            }
+            _editor.finishAssistantInsertion(session);
+            setState(() {
+              _inlineAssistantOutput = visible;
+              _inlineAssistantLoading = false;
+              _inlineAssistantGenerating = false;
+              if (visible.isEmpty) {
+                _inlineAssistantError = context.l10n.assistantNoOutput;
+              }
+            });
+        }
+      }
+      if (mounted &&
+          runId == _inlineAssistantRunId &&
+          _inlineAssistantGenerating) {
+        _editor.finishAssistantInsertion(session);
+        setState(() {
+          _inlineAssistantLoading = false;
+          _inlineAssistantGenerating = false;
+          _inlineAssistantError = context.l10n.generationIncomplete;
+        });
+      }
+    } catch (error) {
+      if (!mounted || runId != _inlineAssistantRunId) return;
+      final session = _inlineAssistantSession;
+      if (session != null && _inlineAssistantOutput.trim().isEmpty) {
+        _editor.revertAssistantInsertion(session);
+        _inlineAssistantSession = null;
+      } else if (session != null) {
+        _editor.finishAssistantInsertion(session);
+      }
+      setState(() {
+        _inlineAssistantLoading = false;
+        _inlineAssistantGenerating = false;
+        _inlineAssistantError = error.toString().replaceFirst(
+          'Bad state: ',
+          '',
+        );
+      });
+    }
+  }
+
+  Future<void> _stopInlineAssistant() async {
+    _inlineAssistantRunId++;
+    try {
+      await _inlineAssistant.cancel();
+    } catch (_) {
+      // The generation stream may already have reached its terminal event.
+    }
+    if (!mounted) return;
+    final session = _inlineAssistantSession;
+    if (session != null) _editor.finishAssistantInsertion(session);
+    setState(() {
+      _inlineAssistantLoading = false;
+      _inlineAssistantGenerating = false;
+      if (_inlineAssistantOutput.trim().isEmpty) {
+        _inlineAssistantSession = null;
+        _inlineAssistantOpen = false;
+      }
+    });
+  }
+
+  void _undoInlineAssistant() {
+    final session = _inlineAssistantSession;
+    if (session != null && !_editor.revertAssistantInsertion(session)) {
+      AppFeedback.show(context, context.l10n.noteChangedRetryAssistant);
+      return;
+    }
+    setState(() {
+      _inlineAssistantSession = null;
+      _inlineAssistantOutput = '';
+      _inlineAssistantError = null;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _inlineAssistantFocusNode.requestFocus();
+    });
+  }
+
+  void _continueInlineAssistant() {
+    setState(() {
+      _inlineAssistantSession = null;
+      _inlineAssistantOutput = '';
+      _inlineAssistantError = null;
+      _inlineAssistantController.clear();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _inlineAssistantFocusNode.requestFocus();
+    });
+  }
+
+  void _retryInlineAssistant() {
+    final instruction = _inlineAssistantController.text;
+    final session = _inlineAssistantSession;
+    if (session != null) _editor.revertAssistantInsertion(session);
+    setState(() {
+      _inlineAssistantSession = null;
+      _inlineAssistantOutput = '';
+      _inlineAssistantError = null;
+    });
+    unawaited(_submitInlineAssistant(instruction));
   }
 
   Future<void> _openLocalAssistant() async {
@@ -781,6 +1046,8 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
   Future<void> _requestClose() async {
     if (_closing) return;
     setState(() => _closing = true);
+    if (_inlineAssistantBusy) await _stopInlineAssistant();
+    if (!mounted) return;
     await _imageImport;
     var saved = await _persistLatest();
     if (!mounted) return;
@@ -907,6 +1174,8 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
                   focusNode: _editorFocusNode,
                   resolveImage: widget.resolveImage ?? _resolveManagedImage,
                   placeholder: context.l10n.noteStartHint,
+                  readOnly:
+                      _inlineAssistantBusy || _inlineAssistantSession != null,
                 ),
               ),
               if (_importingImage)
@@ -915,11 +1184,32 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
                   color: AppColors.accent,
                   backgroundColor: AppColors.accentSoft,
                 ),
-              NoteQuillToolbar(
-                controller: _editor,
-                onInsertImage: _showImageSourceSheet,
-                imageTooltip: context.l10n.image,
-              ),
+              if (_inlineAssistantOpen)
+                NoteInlineAssistantComposer(
+                  controller: _inlineAssistantController,
+                  focusNode: _inlineAssistantFocusNode,
+                  loading: _inlineAssistantLoading,
+                  generating: _inlineAssistantGenerating,
+                  hasResult:
+                      _inlineAssistantSession != null &&
+                      _inlineAssistantOutput.trim().isNotEmpty,
+                  replacesSelection: _inlineAssistantReplacesSelection,
+                  error: _inlineAssistantError,
+                  onSubmit: (value) => unawaited(_submitInlineAssistant(value)),
+                  onStop: () => unawaited(_stopInlineAssistant()),
+                  onRetry: _retryInlineAssistant,
+                  onUndo: _undoInlineAssistant,
+                  onContinue: _continueInlineAssistant,
+                  onClose: _closeInlineAssistant,
+                )
+              else
+                NoteQuillToolbar(
+                  controller: _editor,
+                  onOpenAssistant: _toggleInlineAssistant,
+                  onInsertImage: _showImageSourceSheet,
+                  assistantTooltip: context.l10n.writeWithAi,
+                  imageTooltip: context.l10n.image,
+                ),
             ],
           ),
         ),
@@ -1021,7 +1311,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
           IconButton(
             key: const Key('quill-local-assistant'),
             tooltip: context.l10n.localAssistant,
-            onPressed: _openLocalAssistant,
+            onPressed: _inlineAssistantOpen ? null : _openLocalAssistant,
             style: IconButton.styleFrom(fixedSize: const Size.square(40)),
             icon: const Icon(Icons.auto_awesome_outlined, size: 21),
           ),
@@ -1097,12 +1387,16 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _inlineAssistantRunId++;
+    if (_inlineAssistantBusy) unawaited(_inlineAssistant.cancel());
     _autosaveTimer?.cancel();
     _readAloud.removeListener(_onReadAloudChanged);
     if (_readAloud.isActive) unawaited(_readAloud.stop());
     _titleController.dispose();
     _titleFocusNode.dispose();
     _editorFocusNode.dispose();
+    _inlineAssistantController.dispose();
+    _inlineAssistantFocusNode.dispose();
     _editor.dispose();
     super.dispose();
   }

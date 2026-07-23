@@ -25,6 +25,28 @@ final class NoteEditorSnapshot {
   final List<NoteAsset> assets;
 }
 
+/// Tracks one streamed AI insertion as an atomic editor interaction.
+///
+/// The document is read-only while the session is active, so every streamed
+/// replacement can be validated against the previous frame. The original
+/// Delta remains available for a one-tap undo after generation completes.
+final class NoteAssistantInsertionSession {
+  NoteAssistantInsertionSession._({
+    required this.originalDocument,
+    required this.originalSelection,
+    required this.offset,
+    required this.replacementLength,
+    required this.expectedDocument,
+  });
+
+  final Delta originalDocument;
+  final TextSelection originalSelection;
+  final int offset;
+  int replacementLength;
+  String expectedDocument;
+  bool acceptingUpdates = true;
+}
+
 /// Owns one Quill editing session without projecting the whole document on
 /// every key stroke.
 ///
@@ -116,6 +138,93 @@ final class NoteEditorController extends ChangeNotifier {
     );
   }
 
+  NoteAssistantInsertionSession beginAssistantInsertion() {
+    final document = quillController.document.toDelta();
+    final documentEnd = (quillController.document.length - 1).clamp(
+      0,
+      quillController.document.length,
+    );
+    final rawSelection = quillController.selection;
+    final start = rawSelection.start.clamp(0, documentEnd);
+    final end = rawSelection.end.clamp(start, documentEnd);
+    return NoteAssistantInsertionSession._(
+      originalDocument: Delta.fromJson(document.toJson()),
+      originalSelection: TextSelection(baseOffset: start, extentOffset: end),
+      offset: start,
+      replacementLength: end - start,
+      expectedDocument: encodeAssistantExpectedDocument(document),
+    );
+  }
+
+  bool updateAssistantInsertion(
+    NoteAssistantInsertionSession session,
+    String markdown,
+  ) {
+    if (!session.acceptingUpdates ||
+        markdown.trim().isEmpty ||
+        encodeAssistantExpectedDocument(quillController.document.toDelta()) !=
+            session.expectedDocument) {
+      return false;
+    }
+    final generated = NoteAssistantMarkdownCodec.decode(markdown);
+    final replacement = _isSinglePlainParagraph(generated)
+        ? _deltaWithoutTerminalNewline(generated)
+        : generated;
+    quillController.replaceText(
+      session.offset,
+      session.replacementLength,
+      replacement,
+      null,
+    );
+    final replacementContentLength = _contentLength(replacement);
+    session.replacementLength = replacementContentLength;
+    session.expectedDocument = encodeAssistantExpectedDocument(
+      quillController.document.toDelta(),
+    );
+    final caret = (session.offset + replacementContentLength).clamp(
+      0,
+      quillController.document.length - 1,
+    );
+    quillController.updateSelection(
+      TextSelection.collapsed(offset: caret),
+      ChangeSource.local,
+    );
+    return true;
+  }
+
+  void finishAssistantInsertion(NoteAssistantInsertionSession session) {
+    session.acceptingUpdates = false;
+  }
+
+  bool revertAssistantInsertion(NoteAssistantInsertionSession session) {
+    if (encodeAssistantExpectedDocument(quillController.document.toDelta()) !=
+        session.expectedDocument) {
+      return false;
+    }
+    quillController.replaceText(
+      0,
+      quillController.document.length,
+      Delta.fromJson(session.originalDocument.toJson()),
+      null,
+    );
+    final documentEnd = (quillController.document.length - 1).clamp(
+      0,
+      quillController.document.length,
+    );
+    quillController.updateSelection(
+      TextSelection(
+        baseOffset: session.originalSelection.baseOffset.clamp(0, documentEnd),
+        extentOffset: session.originalSelection.extentOffset.clamp(
+          0,
+          documentEnd,
+        ),
+      ),
+      ChangeSource.local,
+    );
+    session.acceptingUpdates = false;
+    return true;
+  }
+
   bool applyAssistantMarkdown({
     required NoteAssistantAnchor anchor,
     required NoteAssistantEditScope scope,
@@ -166,7 +275,7 @@ final class NoteEditorController extends ChangeNotifier {
     }
 
     quillController.replaceText(offset, length, replacement, null);
-    final caret = (offset + replacement.length).clamp(
+    final caret = (offset + _contentLength(replacement)).clamp(
       0,
       quillController.document.length - 1,
     );
@@ -204,6 +313,11 @@ final class NoteEditorController extends ChangeNotifier {
     }
     return Delta.fromJson(json);
   }
+
+  static int _contentLength(Delta delta) => delta.operations.fold(
+    0,
+    (length, operation) => length + (operation.length ?? 0),
+  );
 
   Future<bool> importImageBytes(Uint8List bytes) async {
     final importer = _importImage;

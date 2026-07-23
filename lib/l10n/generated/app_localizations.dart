@@ -2960,6 +2960,72 @@ abstract class AppLocalizations {
   /// **'例如：把这些想法整理成一封简洁的英文邮件…'**
   String get assistantCustomHint;
 
+  /// No description provided for @writeWithAi.
+  ///
+  /// In zh, this message translates to:
+  /// **'AI 创作'**
+  String get writeWithAi;
+
+  /// No description provided for @inlineAssistantHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'描述你希望 AI 写入的内容…'**
+  String get inlineAssistantHint;
+
+  /// No description provided for @inlineAssistantInsertAtCursor.
+  ///
+  /// In zh, this message translates to:
+  /// **'从光标处写入'**
+  String get inlineAssistantInsertAtCursor;
+
+  /// No description provided for @inlineAssistantReplaceSelection.
+  ///
+  /// In zh, this message translates to:
+  /// **'替换选中内容'**
+  String get inlineAssistantReplaceSelection;
+
+  /// No description provided for @inlineAssistantWriting.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在写入笔记…'**
+  String get inlineAssistantWriting;
+
+  /// No description provided for @inlineAssistantLoading.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在准备本地模型…'**
+  String get inlineAssistantLoading;
+
+  /// No description provided for @inlineAssistantWritten.
+  ///
+  /// In zh, this message translates to:
+  /// **'内容已写入笔记'**
+  String get inlineAssistantWritten;
+
+  /// No description provided for @inlineAssistantContinue.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续创作'**
+  String get inlineAssistantContinue;
+
+  /// No description provided for @inlineAssistantContinueWriting.
+  ///
+  /// In zh, this message translates to:
+  /// **'续写当前内容'**
+  String get inlineAssistantContinueWriting;
+
+  /// No description provided for @inlineAssistantMakeList.
+  ///
+  /// In zh, this message translates to:
+  /// **'整理成清单'**
+  String get inlineAssistantMakeList;
+
+  /// No description provided for @inlineAssistantExpandIdea.
+  ///
+  /// In zh, this message translates to:
+  /// **'展开这个想法'**
+  String get inlineAssistantExpandIdea;
+
   /// No description provided for @startGenerating.
   ///
   /// In zh, this message translates to:

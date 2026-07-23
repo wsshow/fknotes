@@ -1708,6 +1708,39 @@ class AppLocalizationsEn extends AppLocalizations {
       'For example: Turn these ideas into a concise email…';
 
   @override
+  String get writeWithAi => 'Write with AI';
+
+  @override
+  String get inlineAssistantHint => 'Describe what you want AI to write…';
+
+  @override
+  String get inlineAssistantInsertAtCursor => 'Insert at cursor';
+
+  @override
+  String get inlineAssistantReplaceSelection => 'Replace selection';
+
+  @override
+  String get inlineAssistantWriting => 'Writing into your note…';
+
+  @override
+  String get inlineAssistantLoading => 'Preparing the local model…';
+
+  @override
+  String get inlineAssistantWritten => 'Content added to your note';
+
+  @override
+  String get inlineAssistantContinue => 'Keep creating';
+
+  @override
+  String get inlineAssistantContinueWriting => 'Continue this passage';
+
+  @override
+  String get inlineAssistantMakeList => 'Organize as a list';
+
+  @override
+  String get inlineAssistantExpandIdea => 'Expand this idea';
+
+  @override
   String get startGenerating => 'Generate';
 
   @override

@@ -1566,6 +1566,39 @@ class AppLocalizationsZh extends AppLocalizations {
   String get assistantCustomHint => '例如：把这些想法整理成一封简洁的英文邮件…';
 
   @override
+  String get writeWithAi => 'AI 创作';
+
+  @override
+  String get inlineAssistantHint => '描述你希望 AI 写入的内容…';
+
+  @override
+  String get inlineAssistantInsertAtCursor => '从光标处写入';
+
+  @override
+  String get inlineAssistantReplaceSelection => '替换选中内容';
+
+  @override
+  String get inlineAssistantWriting => '正在写入笔记…';
+
+  @override
+  String get inlineAssistantLoading => '正在准备本地模型…';
+
+  @override
+  String get inlineAssistantWritten => '内容已写入笔记';
+
+  @override
+  String get inlineAssistantContinue => '继续创作';
+
+  @override
+  String get inlineAssistantContinueWriting => '续写当前内容';
+
+  @override
+  String get inlineAssistantMakeList => '整理成清单';
+
+  @override
+  String get inlineAssistantExpandIdea => '展开这个想法';
+
+  @override
   String get startGenerating => '开始生成';
 
   @override

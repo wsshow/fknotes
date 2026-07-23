@@ -60,14 +60,20 @@ final class NoteQuillEditor extends StatelessWidget {
 final class NoteQuillToolbar extends StatelessWidget {
   const NoteQuillToolbar({
     required this.controller,
+    this.onOpenAssistant,
     this.onInsertImage,
+    this.assistantActive = false,
+    this.assistantTooltip = 'AI 创作',
     this.imageTooltip = '插入图片',
     this.dividerTooltip = '插入分隔线',
     super.key,
   });
 
   final NoteEditorController controller;
+  final VoidCallback? onOpenAssistant;
   final VoidCallback? onInsertImage;
+  final bool assistantActive;
+  final String assistantTooltip;
   final String imageTooltip;
   final String dividerTooltip;
 
@@ -90,15 +96,31 @@ final class NoteQuillToolbar extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
         child: Row(
           children: [
+            if (onOpenAssistant != null) ...[
+              Material(
+                color: assistantActive
+                    ? AppColors.accent
+                    : AppColors.accentSoft,
+                borderRadius: BorderRadius.circular(AppRadius.small),
+                child: IconButton(
+                  key: const Key('quill-open-inline-assistant'),
+                  tooltip: assistantTooltip,
+                  onPressed: onOpenAssistant,
+                  color: assistantActive ? AppColors.surface : AppColors.accent,
+                  icon: const Icon(Icons.auto_awesome_rounded, size: 20),
+                ),
+              ),
+              const SizedBox(width: 4),
+            ],
             if (onInsertImage != null) ...[
               Material(
-                color: AppColors.accentSoft,
+                color: AppColors.surfaceMuted,
                 borderRadius: BorderRadius.circular(AppRadius.small),
                 child: IconButton(
                   key: const Key('quill-insert-image'),
                   tooltip: imageTooltip,
                   onPressed: onInsertImage,
-                  color: AppColors.accent,
+                  color: AppColors.muted,
                   icon: const Icon(
                     Icons.add_photo_alternate_outlined,
                     size: 21,
