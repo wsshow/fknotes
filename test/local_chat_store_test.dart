@@ -49,6 +49,12 @@ void main() {
     );
     await store.saveSession(session);
     await LocalChatDatabaseService.instance.validate();
+    expect(
+      (await (await LocalChatDatabaseService.instance.database).rawQuery(
+        'PRAGMA journal_mode',
+      )).single.values.single,
+      'wal',
+    );
 
     final restored = await store.loadSessions();
     expect(restored, hasLength(1));

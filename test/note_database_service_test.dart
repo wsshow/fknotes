@@ -51,6 +51,12 @@ void main() {
       await File(p.join(directory.path, 'fknotes-quill.db')).exists(),
       isFalse,
     );
+    expect(
+      (await (await service.database).rawQuery(
+        'PRAGMA journal_mode',
+      )).single.values.single,
+      'wal',
+    );
   });
 
   test(

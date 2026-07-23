@@ -41,7 +41,9 @@ final class NoteDatabaseService {
       version: schemaVersion,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
-        await database.execute('PRAGMA journal_mode = WAL');
+        // journal_mode returns the mode selected by SQLite. Android's
+        // sqflite driver therefore requires a query API for this PRAGMA.
+        await database.rawQuery('PRAGMA journal_mode = WAL');
       },
       onCreate: (database, _) => NoteRepository(database).initialize(),
     );

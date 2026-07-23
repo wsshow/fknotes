@@ -29,7 +29,9 @@ final class LocalChatDatabaseService {
       version: schemaVersion,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
-        await database.execute('PRAGMA journal_mode = WAL');
+        // journal_mode returns a row and cannot be issued through `execute`
+        // on Android's SQLite driver.
+        await database.rawQuery('PRAGMA journal_mode = WAL');
       },
       onCreate: (database, _) async {
         await database.execute('''
