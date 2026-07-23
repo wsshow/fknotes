@@ -1148,8 +1148,15 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
   final FocusNode _unifiedParagraphFocusNode = FocusNode();
   String? _unifiedRangeCacheText;
   List<TextRange> _unifiedRangeCache = const [];
+  double _unifiedEditorWidth = 360;
 
-  static const _paragraphSeparator = '\n\n';
+  /// Internal document boundary: the newline controls visual flow while the
+  /// object-replacement character owns exactly one structural block slot.
+  /// Unlike Markdown's blank-line syntax, adjacent empty or embedded blocks
+  /// remain unambiguous while the platform input connection edits the text.
+  static const _blockObjectReplacement = '\uFFFC';
+  static const _blockSeparator = '\n$_blockObjectReplacement';
+  static const _clipboardBlockSeparator = '\n\n';
 
   @override
   void initState() {
@@ -1189,12 +1196,16 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     var offset = 0;
     for (var index = 0; index < blocks.length; index++) {
       if (index > 0) {
-        text.write(_paragraphSeparator);
-        offset += _paragraphSeparator.length;
+        text.write(_blockSeparator);
+        offset += _blockSeparator.length;
       }
       final block = blocks[index];
       if (!_isUnifiedEmbedType(block.type)) {
-        text.write(block.text);
+        final visibleText = block.text.replaceAll(
+          _blockObjectReplacement,
+          '\uFFFD',
+        );
+        text.write(visibleText);
         for (final range in block.styles) {
           styles.add(
             NoteTextStyleRange(
@@ -1204,7 +1215,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
             ),
           );
         }
-        offset += block.text.length;
+        offset += visibleText.length;
       }
     }
     return (text: text.toString(), styles: styles);
@@ -1223,13 +1234,13 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     final ranges = <TextRange>[];
     var start = 0;
     while (start <= text.length) {
-      final separator = text.indexOf(_paragraphSeparator, start);
+      final separator = text.indexOf(_blockSeparator, start);
       if (separator < 0) {
         ranges.add(TextRange(start: start, end: text.length));
         break;
       }
       ranges.add(TextRange(start: start, end: separator));
-      start = separator + _paragraphSeparator.length;
+      start = separator + _blockSeparator.length;
     }
     _unifiedRangeCacheText = rawText;
     _unifiedRangeCache = ranges;
@@ -1298,11 +1309,10 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
     }
     final metadata = _unifiedBlockMetadata[index];
     if (_isUnifiedEmbedType(metadata.type)) {
-      final screenWidth = MediaQuery.sizeOf(context).width;
       return WidgetSpan(
         alignment: PlaceholderAlignment.top,
         child: SizedBox(
-          width: (screenWidth - 48).clamp(180, 680).toDouble(),
+          width: _unifiedEditorWidth,
           child: Container(
             margin: EdgeInsets.only(
               left: metadata.quoteDepth > 0
@@ -1593,48 +1603,61 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
       final file = File(
         FileStorageService.instance.absolutePath(resolved!.filePath),
       );
+      final previewCacheWidth =
+          (MediaQuery.sizeOf(context).width *
+                  MediaQuery.devicePixelRatioOf(context))
+              .round();
       return Padding(
         key: ValueKey('unified-image-$index'),
         padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Stack(
-          children: [
-            Material(
-              color: AppColors.softBlue,
-              borderRadius: BorderRadius.circular(16),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: () => widget.onOpenAttachment?.call(resolved),
-                child: SizedBox(
-                  height: 240,
+        child: SizedBox(
+          key: ValueKey('unified-image-preview-$index'),
+          width: double.infinity,
+          child: Material(
+            color: AppColors.softBlue,
+            borderRadius: BorderRadius.circular(16),
+            clipBehavior: Clip.antiAlias,
+            child: Stack(
+              children: [
+                InkWell(
+                  onTap: () => widget.onOpenAttachment?.call(resolved),
                   child: Image.file(
                     file,
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, _, _) => const Center(
-                      child: Icon(
-                        Icons.broken_image_outlined,
-                        color: AppColors.muted,
-                        size: 30,
+                    width: double.infinity,
+                    fit: BoxFit.fitWidth,
+                    cacheWidth: previewCacheWidth,
+                    filterQuality: FilterQuality.medium,
+                    errorBuilder: (_, _, _) => const SizedBox(
+                      height: 180,
+                      child: Center(
+                        child: Icon(
+                          Icons.broken_image_outlined,
+                          color: AppColors.muted,
+                          size: 30,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ),
-            Positioned(
-              top: 7,
-              right: 7,
-              child: Material(
-                color: AppColors.surface.withValues(alpha: .88),
-                shape: const CircleBorder(),
-                child: IconButton(
-                  tooltip: context.l10n.removeReference,
-                  onPressed: () => _removeUnifiedEmbed(index),
-                  icon: const Icon(Icons.close_rounded, size: 18),
-                  color: AppColors.ink,
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Material(
+                    color: AppColors.surface.withValues(alpha: .92),
+                    elevation: 1,
+                    shadowColor: Colors.black26,
+                    shape: const CircleBorder(),
+                    child: IconButton(
+                      tooltip: context.l10n.removeReference,
+                      onPressed: () => _removeUnifiedEmbed(index),
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                      color: AppColors.ink,
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       );
     }
@@ -1787,7 +1810,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
       if (!_isUnifiedEmbedType(document[current].type)) {
         offset += document[current].text.length;
       }
-      offset += _paragraphSeparator.length;
+      offset += _blockSeparator.length;
     }
     return offset;
   }
@@ -2202,7 +2225,7 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
       final end = selection.end.clamp(ranges[index].start, ranges[index].end);
       if (start < end) pieces.add(text.substring(start, end));
     }
-    return pieces.join(_paragraphSeparator);
+    return pieces.join(_clipboardBlockSeparator);
   }
 
   Future<void> _copyUnifiedSelection() async {
@@ -3374,89 +3397,98 @@ class NoteBlockEditorState extends State<NoteBlockEditor> {
   @override
   Widget build(BuildContext context) => _buildUnifiedParagraphEditor();
 
-  Widget _buildUnifiedParagraphEditor() => ConstrainedBox(
-    constraints: BoxConstraints(minHeight: widget.minLines * 27),
-    child: Stack(
-      children: [
-        Focus(
-          onKeyEvent: _handleUnifiedKeyEvent,
-          child: TextField(
-            key: const ValueKey('unified-note-editor'),
-            controller: _unifiedParagraphController,
-            focusNode: _unifiedParagraphFocusNode,
-            contextMenuBuilder: _buildUnifiedParagraphContextMenu,
-            contentInsertionConfiguration: widget.onInsertImageContent == null
-                ? null
-                : ContentInsertionConfiguration(
-                    allowedMimeTypes: const [
-                      'image/png',
-                      'image/jpeg',
-                      'image/gif',
-                      'image/webp',
-                    ],
-                    onContentInserted: (content) {
-                      unawaited(_insertKeyboardImage(content));
-                    },
-                  ),
-            inputFormatters: [
-              _ParagraphSeparatorFormatter(
-                shouldRemoveBlockFormatting: _canRemoveUnifiedBlockFormattingAt,
-                onRemoveBlockFormatting: _removeUnifiedBlockFormattingAt,
-                hasEmbedBefore: _hasUnifiedEmbedBefore,
-                onRemoveEmbedBefore: _removeUnifiedEmbedBefore,
-                hasStructuralSelection: _hasUnifiedStructuralSelection,
-                onDeleteStructuralSelection: _deleteUnifiedRange,
-                shouldExitEmptyBlock: _canExitEmptyUnifiedBlockAt,
-                onExitEmptyBlock: _exitEmptyUnifiedBlockAt,
-                onMultilinePaste: (source, selection) =>
-                    _pasteMarkdownIntoUnifiedParagraphs(
-                      source,
-                      replacedSelection: selection,
-                    ),
-              ),
-            ],
-            minLines: widget.minLines,
-            maxLines: null,
-            keyboardType: TextInputType.multiline,
-            textInputAction: TextInputAction.newline,
-            textCapitalization: TextCapitalization.sentences,
-            cursorColor: AppColors.coral,
-            style: const TextStyle(
-              fontSize: 17,
-              height: 1.62,
-              color: AppColors.ink,
-            ),
-            decoration: const InputDecoration(
-              isDense: true,
-              filled: false,
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(vertical: 7),
-            ),
-          ),
-        ),
-        Positioned(
-          left: 0,
-          top: 7,
-          child: ValueListenableBuilder<TextEditingValue>(
-            valueListenable: _unifiedParagraphController,
-            builder: (context, value, child) => IgnorePointer(
-              child: _unifiedParagraphController.visibleTextValue.isEmpty
-                  ? Text(
-                      widget.hintText,
-                      style: const TextStyle(
-                        color: AppColors.muted,
-                        fontSize: 17,
-                        height: 1.62,
+  Widget _buildUnifiedParagraphEditor() => LayoutBuilder(
+    builder: (context, constraints) {
+      if (constraints.hasBoundedWidth) {
+        _unifiedEditorWidth = constraints.maxWidth;
+      }
+      return ConstrainedBox(
+        constraints: BoxConstraints(minHeight: widget.minLines * 27),
+        child: Stack(
+          children: [
+            Focus(
+              onKeyEvent: _handleUnifiedKeyEvent,
+              child: TextField(
+                key: const ValueKey('unified-note-editor'),
+                controller: _unifiedParagraphController,
+                focusNode: _unifiedParagraphFocusNode,
+                contextMenuBuilder: _buildUnifiedParagraphContextMenu,
+                contentInsertionConfiguration:
+                    widget.onInsertImageContent == null
+                    ? null
+                    : ContentInsertionConfiguration(
+                        allowedMimeTypes: const [
+                          'image/png',
+                          'image/jpeg',
+                          'image/gif',
+                          'image/webp',
+                        ],
+                        onContentInserted: (content) {
+                          unawaited(_insertKeyboardImage(content));
+                        },
                       ),
-                    )
-                  : const SizedBox.shrink(),
+                inputFormatters: [
+                  _ParagraphSeparatorFormatter(
+                    shouldRemoveBlockFormatting:
+                        _canRemoveUnifiedBlockFormattingAt,
+                    onRemoveBlockFormatting: _removeUnifiedBlockFormattingAt,
+                    hasEmbedBefore: _hasUnifiedEmbedBefore,
+                    onRemoveEmbedBefore: _removeUnifiedEmbedBefore,
+                    hasStructuralSelection: _hasUnifiedStructuralSelection,
+                    onDeleteStructuralSelection: _deleteUnifiedRange,
+                    shouldExitEmptyBlock: _canExitEmptyUnifiedBlockAt,
+                    onExitEmptyBlock: _exitEmptyUnifiedBlockAt,
+                    onMultilinePaste: (source, selection) =>
+                        _pasteMarkdownIntoUnifiedParagraphs(
+                          source,
+                          replacedSelection: selection,
+                        ),
+                  ),
+                ],
+                minLines: widget.minLines,
+                maxLines: null,
+                keyboardType: TextInputType.multiline,
+                textInputAction: TextInputAction.newline,
+                textCapitalization: TextCapitalization.sentences,
+                cursorColor: AppColors.coral,
+                style: const TextStyle(
+                  fontSize: 17,
+                  height: 1.62,
+                  color: AppColors.ink,
+                ),
+                decoration: const InputDecoration(
+                  isDense: true,
+                  filled: false,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(vertical: 7),
+                ),
+              ),
             ),
-          ),
+            Positioned(
+              left: 0,
+              top: 7,
+              child: ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _unifiedParagraphController,
+                builder: (context, value, child) => IgnorePointer(
+                  child: _unifiedParagraphController.visibleTextValue.isEmpty
+                      ? Text(
+                          widget.hintText,
+                          style: const TextStyle(
+                            color: AppColors.muted,
+                            fontSize: 17,
+                            height: 1.62,
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ),
+            ),
+          ],
         ),
-      ],
-    ),
+      );
+    },
   );
 
   static String _formatSize(int bytes) => bytes < 1024
@@ -4361,6 +4393,13 @@ class _ParagraphSeparatorFormatter extends TextInputFormatter {
       scheduleMicrotask(() => onDeleteStructuralSelection(oldSelection));
       return oldValue;
     }
+    if (inserted.isNotEmpty &&
+        oldSelection.isValid &&
+        !oldSelection.isCollapsed &&
+        hasStructuralSelection(oldSelection)) {
+      scheduleMicrotask(() => onMultilinePaste(inserted, oldSelection));
+      return oldValue;
+    }
     if (inserted == '\n' &&
         oldSelection.isValid &&
         oldSelection.isCollapsed &&
@@ -4400,54 +4439,89 @@ class _ParagraphSeparatorFormatter extends TextInputFormatter {
       );
       return oldValue;
     }
-    final deleting = newText.length < oldText.length;
-
-    String normalize(String value) {
-      final output = StringBuffer();
-      var index = 0;
-      while (index < value.length) {
-        if (value.codeUnitAt(index) != 10) {
-          output.writeCharCode(value.codeUnitAt(index));
-          index++;
-          continue;
-        }
-        var end = index + 1;
-        while (end < value.length && value.codeUnitAt(end) == 10) {
-          end++;
-        }
-        final runLength = end - index;
-        if (!deleting || runLength > 1) {
-          output.write(NoteBlockEditorState._paragraphSeparator);
-        }
-        index = end;
-      }
-      return output.toString();
+    if (inserted == '\n') {
+      final insertionStart = oldSelection.isValid
+          ? oldSelection.start
+          : replacement.start;
+      final insertionEnd = oldSelection.isValid
+          ? oldSelection.end
+          : replacement.oldEnd;
+      final visibleText = oldText.replaceRange(
+        insertionStart,
+        insertionEnd,
+        NoteBlockEditorState._blockSeparator,
+      );
+      return _BlockTextEditingController.withBoundary(
+        TextEditingValue(
+          text: visibleText,
+          selection: TextSelection.collapsed(
+            offset:
+                insertionStart + NoteBlockEditorState._blockSeparator.length,
+          ),
+        ),
+      );
     }
-
-    final normalizedText = normalize(normalizedValue.text.replaceAll('\r', ''));
-    if (normalizedText == normalizedValue.text) return normalizedValue;
-
-    int mapOffset(int offset) {
-      if (offset < 0) return offset;
-      final end = offset.clamp(0, normalizedValue.text.length);
-      return normalize(normalizedValue.text.substring(0, end)).length;
-    }
-
-    return TextEditingValue(
-      text: normalizedText,
-      selection: normalizedValue.selection.isValid
-          ? normalizedValue.selection.copyWith(
-              baseOffset: mapOffset(normalizedValue.selection.baseOffset),
-              extentOffset: mapOffset(normalizedValue.selection.extentOffset),
-            )
-          : normalizedValue.selection,
-      composing: normalizedValue.composing.isValid
-          ? TextRange(
-              start: mapOffset(normalizedValue.composing.start),
-              end: mapOffset(normalizedValue.composing.end),
-            )
-          : TextRange.empty,
+    final newSelection = _BlockTextEditingController.visibleSelection(
+      normalizedValue.selection,
     );
+    final deletedIndex = _singleCharacterDeletionIndex(
+      oldText: oldText,
+      newText: newText,
+      oldSelection: oldSelection,
+      newSelection: newSelection,
+    );
+    final boundary = deletedIndex == null
+        ? null
+        : _blockBoundaryContaining(oldText, deletedIndex);
+    if (boundary != null) {
+      scheduleMicrotask(
+        () => onDeleteStructuralSelection(
+          TextSelection(baseOffset: boundary.start, extentOffset: boundary.end),
+        ),
+      );
+      return oldValue;
+    }
+    return normalizedValue;
+  }
+
+  static int? _singleCharacterDeletionIndex({
+    required String oldText,
+    required String newText,
+    required TextSelection oldSelection,
+    required TextSelection newSelection,
+  }) {
+    if (oldText.length != newText.length + 1 ||
+        !oldSelection.isValid ||
+        !oldSelection.isCollapsed ||
+        !newSelection.isValid ||
+        !newSelection.isCollapsed) {
+      return null;
+    }
+    if (newSelection.extentOffset == oldSelection.extentOffset - 1) {
+      return oldSelection.extentOffset - 1;
+    }
+    if (newSelection.extentOffset == oldSelection.extentOffset) {
+      return oldSelection.extentOffset;
+    }
+    return null;
+  }
+
+  static TextRange? _blockBoundaryContaining(String text, int offset) {
+    if (offset < 0 || offset >= text.length) return null;
+    var searchStart = 0;
+    while (searchStart < text.length) {
+      final start = text.indexOf(
+        NoteBlockEditorState._blockSeparator,
+        searchStart,
+      );
+      if (start < 0) return null;
+      final end = start + NoteBlockEditorState._blockSeparator.length;
+      if (offset >= start && offset < end) {
+        return TextRange(start: start, end: end);
+      }
+      searchStart = end;
+    }
+    return null;
   }
 
   static ({int start, int oldEnd, String inserted}) _replacementBetween(

@@ -13,6 +13,26 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   late Directory editorStorageDirectory;
 
+  Future<NoteAttachment> createImageAttachment(String name) async {
+    final relativePath = 'images/$name';
+    final imageFile = File(
+      FileStorageService.instance.absolutePath(relativePath),
+    );
+    await imageFile.writeAsBytes(
+      base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL7WQAAAABJRU5ErkJggg==',
+      ),
+    );
+    return NoteAttachment(
+      type: NoteType.image,
+      filePath: relativePath,
+      fileName: name,
+      fileSize: await imageFile.length(),
+      mimeType: 'image/png',
+      createdAt: DateTime(2026, 7, 23),
+    );
+  }
+
   setUpAll(() async {
     editorStorageDirectory = await Directory.systemTemp.createTemp(
       'fknotes-block-editor-test-',
@@ -930,25 +950,9 @@ print('ok');
   testWidgets('keyboard image content becomes an inline image node', (
     tester,
   ) async {
-    final imageFile = File(
-      FileStorageService.instance.absolutePath('images/pasted.png'),
-    );
-    final fileSize = await tester.runAsync(() async {
-      await imageFile.writeAsBytes(
-        base64Decode(
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL7WQAAAABJRU5ErkJggg==',
-        ),
-      );
-      return imageFile.length();
-    });
-    final attachment = NoteAttachment(
-      type: NoteType.image,
-      filePath: 'images/pasted.png',
-      fileName: 'pasted.png',
-      fileSize: fileSize ?? 0,
-      mimeType: 'image/png',
-      createdAt: DateTime(2026, 7, 22),
-    );
+    final attachment = (await tester.runAsync(
+      () => createImageAttachment('pasted.png'),
+    ))!;
     final controller = TextEditingController();
     await tester.pumpWidget(
       MaterialApp(
@@ -981,6 +985,124 @@ print('ok');
     expect(find.byType(TextField), findsOneWidget);
     expect(controller.text, contains('[[附件:images/pasted.png]]'));
     expect(find.text('pasted.png'), findsNothing);
+  });
+
+  testWidgets('typing and enter before an image keep the inline image node', (
+    tester,
+  ) async {
+    final attachment = (await tester.runAsync(
+      () => createImageAttachment('persistent.png'),
+    ))!;
+    const blocks = [
+      NoteBlockData(NoteBlockType.paragraph, '图片前'),
+      NoteBlockData(
+        NoteBlockType.attachment,
+        '',
+        attachmentPath: 'images/persistent.png',
+      ),
+      NoteBlockData(NoteBlockType.paragraph, ''),
+    ];
+    final controller = TextEditingController(
+      text: NoteBlockCodec.encode(blocks),
+    );
+    String? richContent = NoteRichDocumentCodec.encode(blocks);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            controller: controller,
+            initialRichContent: richContent,
+            hintText: '开始记录',
+            attachments: [attachment],
+            onRichContentChanged: (value) => richContent = value,
+          ),
+        ),
+      ),
+    );
+
+    final field = find.byKey(const ValueKey('unified-note-editor'));
+    await tester.showKeyboard(field);
+    final fieldController = tester.widget<TextField>(field).controller!;
+    var rawText = fieldController.text;
+    final beforeImage = editorBlockBoundary.length + '图片前'.length;
+    tester.testTextInput.updateEditingValue(
+      TextEditingValue(
+        text: rawText.replaceRange(beforeImage, beforeImage, '继续'),
+        selection: TextSelection.collapsed(offset: beforeImage + 2),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('unified-image-1')), findsOneWidget);
+    expect(controller.text, contains('[[附件:images/persistent.png]]'));
+
+    rawText = fieldController.text;
+    final lineBreakOffset = editorBlockBoundary.length + '图片前继续'.length;
+    tester.testTextInput.updateEditingValue(
+      TextEditingValue(
+        text: rawText.replaceRange(lineBreakOffset, lineBreakOffset, '\n'),
+        selection: TextSelection.collapsed(offset: lineBreakOffset + 1),
+      ),
+    );
+    await tester.pump();
+
+    final document = NoteRichDocumentCodec.tryDecode(richContent)!;
+    expect(document.map((block) => block.type), [
+      NoteBlockType.paragraph,
+      NoteBlockType.paragraph,
+      NoteBlockType.attachment,
+      NoteBlockType.paragraph,
+    ]);
+    expect(document.first.text, '图片前继续');
+    expect(document[1].text, isEmpty);
+    expect(document[2].attachmentPath, 'images/persistent.png');
+    expect(find.byKey(const ValueKey('unified-image-2')), findsOneWidget);
+  });
+
+  testWidgets('inline image preview uses the full editor width', (
+    tester,
+  ) async {
+    final attachment = (await tester.runAsync(
+      () => createImageAttachment('full-width.png'),
+    ))!;
+    const blocks = [
+      NoteBlockData(
+        NoteBlockType.attachment,
+        '',
+        attachmentPath: 'images/full-width.png',
+      ),
+    ];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NoteBlockEditor(
+            controller: TextEditingController(
+              text: NoteBlockCodec.encode(blocks),
+            ),
+            initialRichContent: NoteRichDocumentCodec.encode(blocks),
+            hintText: '开始记录',
+            attachments: [attachment],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final preview = find.byKey(const ValueKey('unified-image-preview-0'));
+    final image = find.descendant(of: preview, matching: find.byType(Image));
+    expect(preview, findsOneWidget);
+    expect(image, findsOneWidget);
+    expect(
+      tester.getSize(image).width,
+      closeTo(tester.getSize(preview).width, 1),
+    );
+    expect(
+      tester.getSize(preview).width,
+      closeTo(
+        tester.getSize(find.byKey(const ValueKey('unified-note-editor'))).width,
+        3,
+      ),
+    );
   });
 
   testWidgets('table block offers structured row and cell editing', (
@@ -1550,15 +1672,18 @@ print('ok');
     await tester.showKeyboard(field);
     final fieldController = tester.widget<TextField>(field).controller!;
     final rawText = fieldController.text;
-    final emptyParagraphStart = rawText.indexOf('\n\n') + 2;
+    final emptyParagraphStart = rawText.indexOf('\uFFFC') + 1;
+    fieldController.selection = TextSelection.collapsed(
+      offset: emptyParagraphStart,
+    );
     tester.testTextInput.updateEditingValue(
       TextEditingValue(
         text: rawText.replaceRange(
+          emptyParagraphStart - 1,
           emptyParagraphStart,
-          emptyParagraphStart + 1,
           '',
         ),
-        selection: TextSelection.collapsed(offset: emptyParagraphStart),
+        selection: TextSelection.collapsed(offset: emptyParagraphStart - 1),
       ),
     );
     await tester.pump();
