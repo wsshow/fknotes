@@ -129,8 +129,6 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
         : FloatingActionButton.extended(
             key: const Key('delta-library-new-note'),
             onPressed: _openEditor,
-            backgroundColor: AppColors.coral,
-            foregroundColor: Colors.white,
             icon: const Icon(Icons.add_rounded),
             label: Text(context.l10n.newNote),
           ),
@@ -140,7 +138,7 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
         children: [
           _buildHeader(context),
           _buildScopeSelector(context),
-          const SizedBox(height: 10),
+          const SizedBox(height: 14),
           Expanded(child: _buildContent(context)),
         ],
       ),
@@ -148,7 +146,7 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
   );
 
   Widget _buildHeader(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+    padding: const EdgeInsets.fromLTRB(20, 22, 20, 12),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -167,27 +165,47 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
                     context.l10n.itemCount(_controller.notes.length),
                     style: const TextStyle(
                       color: AppColors.muted,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
               ),
             ),
-            IconButton.filledTonal(
+            IconButton(
               tooltip: context.l10n.retry,
               onPressed: _controller.isLoading
                   ? null
                   : () => unawaited(_controller.refresh()),
-              icon: const Icon(Icons.refresh_rounded),
+              style: IconButton.styleFrom(
+                backgroundColor: AppColors.surface,
+                fixedSize: const Size.square(44),
+              ),
+              icon: const Icon(Icons.refresh_rounded, size: 20),
             ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         SearchBar(
           key: const Key('delta-library-search'),
           controller: _searchController,
           hintText: context.l10n.searchNotes,
-          leading: const Icon(Icons.search_rounded),
+          elevation: const WidgetStatePropertyAll(0),
+          backgroundColor: const WidgetStatePropertyAll(AppColors.surfaceMuted),
+          surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.medium),
+            ),
+          ),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 15),
+          ),
+          leading: const Icon(
+            Icons.search_rounded,
+            size: 21,
+            color: AppColors.muted,
+          ),
           trailing: [
             if (_searchController.text.isNotEmpty)
               IconButton(
@@ -210,33 +228,41 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
     ),
   );
 
-  Widget _buildScopeSelector(BuildContext context) => SizedBox(
-    height: 42,
-    child: ListView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      children: [
-        _ScopeChip(
-          label: context.l10n.all,
-          selected: _controller.scope == NoteLibraryScope.active,
-          onTap: () => _selectScope(NoteLibraryScope.active),
+  Widget _buildScopeSelector(BuildContext context) => SingleChildScrollView(
+    scrollDirection: Axis.horizontal,
+    padding: const EdgeInsets.symmetric(horizontal: 20),
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceMuted,
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: Row(
+          children: [
+            _ScopeChip(
+              label: context.l10n.all,
+              selected: _controller.scope == NoteLibraryScope.active,
+              onTap: () => _selectScope(NoteLibraryScope.active),
+            ),
+            _ScopeChip(
+              label: context.l10n.favorites,
+              selected: _controller.scope == NoteLibraryScope.favorites,
+              onTap: () => _selectScope(NoteLibraryScope.favorites),
+            ),
+            _ScopeChip(
+              label: context.l10n.archive,
+              selected: _controller.scope == NoteLibraryScope.archived,
+              onTap: () => _selectScope(NoteLibraryScope.archived),
+            ),
+            _ScopeChip(
+              label: context.l10n.trash,
+              selected: _controller.scope == NoteLibraryScope.trash,
+              onTap: () => _selectScope(NoteLibraryScope.trash),
+            ),
+          ],
         ),
-        _ScopeChip(
-          label: context.l10n.favorites,
-          selected: _controller.scope == NoteLibraryScope.favorites,
-          onTap: () => _selectScope(NoteLibraryScope.favorites),
-        ),
-        _ScopeChip(
-          label: context.l10n.archive,
-          selected: _controller.scope == NoteLibraryScope.archived,
-          onTap: () => _selectScope(NoteLibraryScope.archived),
-        ),
-        _ScopeChip(
-          label: context.l10n.trash,
-          selected: _controller.scope == NoteLibraryScope.trash,
-          onTap: () => _selectScope(NoteLibraryScope.trash),
-        ),
-      ],
+      ),
     ),
   );
 
@@ -265,9 +291,9 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
     return RefreshIndicator(
       onRefresh: _controller.refresh,
       child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(20, 4, 20, 120),
+        padding: const EdgeInsets.fromLTRB(20, 2, 20, 132),
         itemCount: _controller.notes.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 12),
+        separatorBuilder: (_, _) => const SizedBox(height: 10),
         itemBuilder: (context, index) {
           final note = _controller.notes[index];
           return _DeltaNoteCard(
@@ -352,14 +378,13 @@ final class _DeltaNoteCard extends StatelessWidget {
     return Material(
       color: AppColors.surface,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: const BorderSide(color: AppColors.line),
+        borderRadius: BorderRadius.circular(AppRadius.large),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: busy ? null : onTap,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 16, 10, 16),
+          padding: const EdgeInsets.fromLTRB(18, 17, 8, 16),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -367,11 +392,11 @@ final class _DeltaNoteCard extends StatelessWidget {
               if (provider != null) ...[
                 const SizedBox(width: 14),
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(AppRadius.small),
                   child: Image(
                     image: provider,
-                    width: 82,
-                    height: 82,
+                    width: 78,
+                    height: 78,
                     fit: BoxFit.cover,
                     errorBuilder: (_, _, _) => const SizedBox.shrink(),
                   ),
@@ -443,15 +468,15 @@ final class _DeltaNoteCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: AppColors.softCoral,
+                  color: AppColors.surfaceMuted,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   tag,
                   style: const TextStyle(
-                    color: AppColors.coral,
+                    color: AppColors.muted,
                     fontSize: 11,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ),
@@ -461,7 +486,11 @@ final class _DeltaNoteCard extends StatelessWidget {
       const SizedBox(height: 10),
       Text(
         _friendlyTime(context, note.updatedAt.toLocal()),
-        style: const TextStyle(color: AppColors.muted, fontSize: 12),
+        style: const TextStyle(
+          color: AppColors.subtle,
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+        ),
       ),
     ],
   );
@@ -560,19 +589,30 @@ final class _ScopeChip extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(right: 8),
-    child: ChoiceChip(
-      label: Text(label),
-      selected: selected,
-      onSelected: (_) => onTap(),
-      showCheckmark: false,
-      side: const BorderSide(color: AppColors.line),
-      selectedColor: AppColors.softCoral,
-      backgroundColor: AppColors.surface,
-      labelStyle: TextStyle(
-        color: selected ? AppColors.coral : AppColors.ink,
-        fontWeight: FontWeight.w600,
+  Widget build(BuildContext context) => Material(
+    color: selected ? AppColors.surface : Colors.transparent,
+    borderRadius: BorderRadius.circular(AppRadius.small),
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        constraints: const BoxConstraints(minWidth: 62, minHeight: 38),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppRadius.small),
+          boxShadow: selected ? AppShadows.low : null,
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? AppColors.ink : AppColors.muted,
+            fontSize: 13,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+          ),
+        ),
       ),
     ),
   );
@@ -598,7 +638,16 @@ final class _LibraryMessage extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 42, color: AppColors.muted),
+          DecoratedBox(
+            decoration: const BoxDecoration(
+              color: AppColors.surface,
+              shape: BoxShape.circle,
+            ),
+            child: SizedBox.square(
+              dimension: 64,
+              child: Icon(icon, size: 27, color: AppColors.subtle),
+            ),
+          ),
           const SizedBox(height: 14),
           Text(
             message,
