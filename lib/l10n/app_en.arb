@@ -1069,5 +1069,6 @@
   "@generatingShareImageProgress": {"placeholders": {"current": {"type": "int"}, "total": {"type": "int"}}},
   "shareNoteImageTitle": "Share note: {title}",
   "@shareNoteImageTitle": {"placeholders": {"title": {"type": "String"}}},
-  "shareImageGenerationFailed": "Couldn't create the share images. Try another canvas or quality setting."
+  "shareImageGenerationFailed": "Couldn't create the share images. Try another canvas or quality setting.",
+  "moveAttachmentHint": "Long press and drag to reposition"
 }

@@ -51,14 +51,29 @@ final class NoteQuillEditor extends StatefulWidget {
 }
 
 final class _NoteQuillEditorState extends State<NoteQuillEditor> {
+  final _quillEditorKey = GlobalKey<quill.QuillEditorState>();
+  final _editorStackKey = GlobalKey();
+  late final ScrollController _fallbackScrollController;
   NoteAttachmentId? _activeImageId;
   ({NoteEmbedKind kind, int offset})? _activeBlock;
+  _NoteAssetDragData? _draggingAsset;
+  int? _dropOffset;
+  double? _dropIndicatorY;
+
+  ScrollController get _effectiveScrollController =>
+      widget.scrollController ?? _fallbackScrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    _fallbackScrollController = ScrollController();
+  }
 
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
     final focusNode = widget.focusNode;
-    final scrollController = widget.scrollController;
+    final scrollController = _effectiveScrollController;
     final resolveImage = widget.resolveImage;
     final resolveAssetPath = widget.resolveAssetPath;
     final audioPlayback = widget.audioPlayback;
@@ -102,6 +117,7 @@ final class _NoteQuillEditorState extends State<NoteQuillEditor> {
     final activeBlock = _activeBlock;
     final showsContextActions = activeImage != null || activeBlock != null;
     final editor = quill.QuillEditor.basic(
+      key: _quillEditorKey,
       controller: controller.quillController,
       focusNode: focusNode,
       scrollController: scrollController,
@@ -135,6 +151,9 @@ final class _NoteQuillEditorState extends State<NoteQuillEditor> {
               _activeBlock = null;
               _activeImageId = _activeImageId == id ? null : id;
             }),
+            onAssetDragStarted: _startAssetDrag,
+            onAssetDragUpdate: _updateDropLocation,
+            onAssetDragEnded: _finishAssetDrag,
           ),
           _NoteDividerEmbedBuilder(
             onInteraction: dismissEditorFocus,
@@ -149,53 +168,77 @@ final class _NoteQuillEditorState extends State<NoteQuillEditor> {
         ],
       ),
     );
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        editor,
-        if (!readOnly &&
-            activeImage != null &&
-            activeImage.kind == NoteAssetKind.image)
-          Positioned(
-            left: 24,
-            right: 24,
-            bottom: 12,
-            child: _ImageActionBar(
-              key: ValueKey('note-image-actions-${activeImage.id.value}'),
-              asset: activeImage,
-              onCopy: onCopyImage == null
-                  ? null
-                  : () => onCopyImage(activeImage),
-              onEdit: onEditImage == null
-                  ? null
-                  : () => onEditImage(activeImage),
-              onShowDetails: onShowImageDetails == null
-                  ? null
-                  : () => onShowImageDetails(activeImage),
-              onRemove: () {
-                controller.removeAsset(activeImage.id);
-                setState(() => _activeImageId = null);
-              },
+    return DragTarget<_NoteAssetDragData>(
+      onWillAcceptWithDetails: (_) => !readOnly,
+      onLeave: (_) => _clearDropLocation(),
+      onAcceptWithDetails: (details) {
+        final targetOffset = _dropOffset;
+        if (targetOffset != null) {
+          controller.moveAssetEmbed(
+            attachmentId: details.data.attachmentId,
+            sourceOffset: details.data.sourceOffset,
+            targetOffset: targetOffset,
+          );
+        }
+        _finishAssetDrag();
+      },
+      builder: (context, _, _) => Stack(
+        key: _editorStackKey,
+        fit: StackFit.expand,
+        children: [
+          editor,
+          if (_draggingAsset != null && _dropIndicatorY != null)
+            Positioned(
+              key: const Key('note-asset-drop-indicator'),
+              top: _dropIndicatorY! - 2,
+              left: 24,
+              right: 24,
+              child: const IgnorePointer(child: _AssetDropIndicator()),
             ),
-          ),
-        if (!readOnly && activeBlock != null)
-          Positioned(
-            left: 24,
-            right: 24,
-            bottom: 12,
-            child: _BlockActionBar(
-              key: ValueKey(
-                'note-block-actions-${activeBlock.kind.name}-'
-                '${activeBlock.offset}',
+          if (!readOnly &&
+              activeImage != null &&
+              activeImage.kind == NoteAssetKind.image)
+            Positioned(
+              left: 24,
+              right: 24,
+              bottom: 12,
+              child: _ImageActionBar(
+                key: ValueKey('note-image-actions-${activeImage.id.value}'),
+                asset: activeImage,
+                onCopy: onCopyImage == null
+                    ? null
+                    : () => onCopyImage(activeImage),
+                onEdit: onEditImage == null
+                    ? null
+                    : () => onEditImage(activeImage),
+                onShowDetails: onShowImageDetails == null
+                    ? null
+                    : () => onShowImageDetails(activeImage),
+                onRemove: () {
+                  controller.removeAsset(activeImage.id);
+                  setState(() => _activeImageId = null);
+                },
               ),
-              kind: activeBlock.kind,
-              onRemove: () {
-                controller.removeEmbedAt(activeBlock.offset);
-                setState(() => _activeBlock = null);
-              },
             ),
-          ),
-      ],
+          if (!readOnly && activeBlock != null)
+            Positioned(
+              left: 24,
+              right: 24,
+              bottom: 12,
+              child: _BlockActionBar(
+                key: ValueKey(
+                  'note-block-actions-${activeBlock.kind.name}-'
+                  '${activeBlock.offset}',
+                ),
+                kind: activeBlock.kind,
+                onRemove: () {
+                  controller.removeEmbedAt(activeBlock.offset);
+                  setState(() => _activeBlock = null);
+                },
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -207,6 +250,104 @@ final class _NoteQuillEditorState extends State<NoteQuillEditor> {
           ? null
           : (kind: kind, offset: offset);
     });
+  }
+
+  void _startAssetDrag(_NoteAssetDragData data) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _activeImageId = null;
+      _activeBlock = null;
+      _draggingAsset = data;
+      _dropOffset = null;
+      _dropIndicatorY = null;
+    });
+  }
+
+  void _finishAssetDrag() {
+    if (!mounted ||
+        (_draggingAsset == null &&
+            _dropOffset == null &&
+            _dropIndicatorY == null)) {
+      return;
+    }
+    setState(() {
+      _draggingAsset = null;
+      _dropOffset = null;
+      _dropIndicatorY = null;
+    });
+  }
+
+  void _clearDropLocation() {
+    if (!mounted || (_dropOffset == null && _dropIndicatorY == null)) return;
+    setState(() {
+      _dropOffset = null;
+      _dropIndicatorY = null;
+    });
+  }
+
+  void _updateDropLocation(Offset globalOffset) {
+    final editorState = _quillEditorKey.currentState;
+    final rawEditorState = editorState?.editableTextKey.currentState;
+    final stackBox =
+        _editorStackKey.currentContext?.findRenderObject() as RenderBox?;
+    if (rawEditorState == null || stackBox == null || !mounted) return;
+    final stackLocal = stackBox.globalToLocal(globalOffset);
+    if (!stackBox.paintBounds.contains(stackLocal)) {
+      _clearDropLocation();
+      return;
+    }
+    final renderEditor = rawEditorState.renderEditor;
+    final position = renderEditor.getPositionForOffset(globalOffset);
+    final caret = renderEditor.getLocalRectForCaret(position);
+    final localDrag = renderEditor.globalToLocal(globalOffset);
+    final afterLine = localDrag.dy >= caret.center.dy;
+    final targetOffset = widget.controller.blockDropOffsetFor(
+      position.offset,
+      afterLine: afterLine,
+    );
+    final indicatorGlobal = renderEditor.localToGlobal(
+      Offset(caret.left, afterLine ? caret.bottom : caret.top),
+    );
+    final indicatorY = stackBox
+        .globalToLocal(indicatorGlobal)
+        .dy
+        .clamp(6.0, stackBox.size.height - 6.0);
+    _autoScrollForDrag(globalOffset, stackBox);
+    if (_dropOffset == targetOffset &&
+        _dropIndicatorY != null &&
+        (_dropIndicatorY! - indicatorY).abs() < .5) {
+      return;
+    }
+    setState(() {
+      _dropOffset = targetOffset;
+      _dropIndicatorY = indicatorY;
+    });
+  }
+
+  void _autoScrollForDrag(Offset globalOffset, RenderBox stackBox) {
+    final scrollController = _effectiveScrollController;
+    if (!scrollController.hasClients) return;
+    final local = stackBox.globalToLocal(globalOffset);
+    const edge = 72.0;
+    final delta = local.dy < edge
+        ? -18.0
+        : local.dy > stackBox.size.height - edge
+        ? 18.0
+        : 0.0;
+    if (delta == 0) return;
+    final position = scrollController.position;
+    scrollController.jumpTo(
+      (scrollController.offset + delta).clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _fallbackScrollController.dispose();
+    super.dispose();
   }
 }
 
@@ -405,6 +546,16 @@ final class _NoteToolbarActionButton extends StatelessWidget {
   );
 }
 
+final class _NoteAssetDragData {
+  const _NoteAssetDragData({
+    required this.attachmentId,
+    required this.sourceOffset,
+  });
+
+  final NoteAttachmentId attachmentId;
+  final int sourceOffset;
+}
+
 final class _NoteAssetEmbedBuilder extends quill.EmbedBuilder {
   const _NoteAssetEmbedBuilder({
     required this.session,
@@ -414,6 +565,9 @@ final class _NoteAssetEmbedBuilder extends quill.EmbedBuilder {
     required this.onOpenAsset,
     required this.onAssetInteraction,
     required this.onToggleImageActions,
+    required this.onAssetDragStarted,
+    required this.onAssetDragUpdate,
+    required this.onAssetDragEnded,
   });
 
   final NoteEditorController session;
@@ -423,6 +577,9 @@ final class _NoteAssetEmbedBuilder extends quill.EmbedBuilder {
   final ValueChanged<NoteAsset>? onOpenAsset;
   final VoidCallback onAssetInteraction;
   final ValueChanged<NoteAttachmentId> onToggleImageActions;
+  final ValueChanged<_NoteAssetDragData> onAssetDragStarted;
+  final ValueChanged<Offset> onAssetDragUpdate;
+  final VoidCallback onAssetDragEnded;
 
   @override
   String get key => NoteEmbed.attachmentType;
@@ -441,19 +598,22 @@ final class _NoteAssetEmbedBuilder extends quill.EmbedBuilder {
     if (asset == null) {
       return const _MissingAssetCard();
     }
+    final imageProvider = asset.kind == NoteAssetKind.image
+        ? resolveImage?.call(asset)
+        : null;
+    final Widget block;
     if (asset.kind == NoteAssetKind.image) {
-      return _ImageAssetBlock(
+      block = _ImageAssetBlock(
         key: ValueKey('note-asset-${asset.id.value}'),
         asset: asset,
-        provider: resolveImage?.call(asset),
+        provider: imageProvider,
         readOnly: embedContext.readOnly,
         onInteraction: onAssetInteraction,
         onToggleActions: () => onToggleImageActions(asset.id),
         onOpen: onOpenAsset == null ? null : () => onOpenAsset!(asset),
       );
-    }
-    if (asset.kind == NoteAssetKind.audio) {
-      return _AudioAssetBlock(
+    } else if (asset.kind == NoteAssetKind.audio) {
+      block = _AudioAssetBlock(
         key: ValueKey('note-asset-${asset.id.value}'),
         asset: asset,
         filePath: resolveAssetPath?.call(asset),
@@ -469,15 +629,170 @@ final class _NoteAssetEmbedBuilder extends quill.EmbedBuilder {
           session.removeEmbedAt(embedContext.node.documentOffset);
         },
       );
+    } else {
+      return _FileAssetBlock(
+        key: ValueKey('note-asset-${asset.id.value}'),
+        asset: asset,
+        readOnly: embedContext.readOnly,
+        onOpen: onOpenAsset == null ? null : () => onOpenAsset!(asset),
+        onRemove: () => session.removeEmbedAt(embedContext.node.documentOffset),
+      );
     }
-    return _FileAssetBlock(
-      key: ValueKey('note-asset-${asset.id.value}'),
+
+    if (embedContext.readOnly) return block;
+    return _MovableNoteAsset(
+      key: ValueKey('move-note-asset-${asset.id.value}'),
       asset: asset,
-      readOnly: embedContext.readOnly,
-      onOpen: onOpenAsset == null ? null : () => onOpenAsset!(asset),
-      onRemove: () => session.removeEmbedAt(embedContext.node.documentOffset),
+      imageProvider: imageProvider,
+      data: _NoteAssetDragData(
+        attachmentId: asset.id,
+        sourceOffset: embedContext.node.documentOffset,
+      ),
+      onDragStarted: onAssetDragStarted,
+      onDragUpdate: onAssetDragUpdate,
+      onDragEnded: onAssetDragEnded,
+      child: block,
     );
   }
+}
+
+final class _MovableNoteAsset extends StatelessWidget {
+  const _MovableNoteAsset({
+    required this.asset,
+    required this.imageProvider,
+    required this.data,
+    required this.onDragStarted,
+    required this.onDragUpdate,
+    required this.onDragEnded,
+    required this.child,
+    super.key,
+  });
+
+  final NoteAsset asset;
+  final ImageProvider? imageProvider;
+  final _NoteAssetDragData data;
+  final ValueChanged<_NoteAssetDragData> onDragStarted;
+  final ValueChanged<Offset> onDragUpdate;
+  final VoidCallback onDragEnded;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: asset.displayTitle,
+    hint: context.l10n.moveAttachmentHint,
+    child: LongPressDraggable<_NoteAssetDragData>(
+      data: data,
+      delay: const Duration(milliseconds: 360),
+      hapticFeedbackOnStart: true,
+      rootOverlay: true,
+      onDragStarted: () => onDragStarted(data),
+      onDragUpdate: (details) => onDragUpdate(details.globalPosition),
+      onDragEnd: (_) => onDragEnded(),
+      feedback: _AssetDragFeedback(
+        asset: asset,
+        imageProvider: imageProvider,
+        width: math.min(MediaQuery.sizeOf(context).width - 48, 320),
+      ),
+      childWhenDragging: Opacity(opacity: .26, child: child),
+      child: child,
+    ),
+  );
+}
+
+final class _AssetDragFeedback extends StatelessWidget {
+  const _AssetDragFeedback({
+    required this.asset,
+    required this.imageProvider,
+    required this.width,
+  });
+
+  final NoteAsset asset;
+  final ImageProvider? imageProvider;
+  final double width;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Colors.transparent,
+    child: Container(
+      width: width,
+      constraints: const BoxConstraints(maxHeight: 190),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+        border: Border.all(color: AppColors.accent, width: 1.5),
+        boxShadow: AppShadows.floating,
+      ),
+      child: asset.kind == NoteAssetKind.image
+          ? imageProvider == null
+                ? _AssetFallback(asset: asset, minHeight: 130)
+                : Image(
+                    image: imageProvider!,
+                    height: 170,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) =>
+                        _AssetFallback(asset: asset, minHeight: 130),
+                  )
+          : Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.graphic_eq_rounded,
+                    color: AppColors.accent,
+                    size: 27,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      asset.displayTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.ink,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+    ),
+  );
+}
+
+final class _AssetDropIndicator extends StatelessWidget {
+  const _AssetDropIndicator();
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      const DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.accent,
+          shape: BoxShape.circle,
+        ),
+        child: SizedBox.square(dimension: 8),
+      ),
+      Expanded(
+        child: Container(
+          height: 3,
+          decoration: BoxDecoration(
+            color: AppColors.accent,
+            borderRadius: BorderRadius.circular(3),
+          ),
+        ),
+      ),
+      const DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.accent,
+          shape: BoxShape.circle,
+        ),
+        child: SizedBox.square(dimension: 8),
+      ),
+    ],
+  );
 }
 
 enum _AudioAssetAction { rename, remove }

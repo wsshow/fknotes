@@ -3126,4 +3126,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get shareImageGenerationFailed => '无法生成分享图片，请调整画幅或清晰度后重试';
+
+  @override
+  String get moveAttachmentHint => '长按并拖动可调整位置';
 }

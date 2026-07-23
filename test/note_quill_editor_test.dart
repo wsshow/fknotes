@@ -83,6 +83,44 @@ void main() {
       },
     );
 
+    test('moves a media block atomically without changing its asset', () {
+      final image = _imageAsset();
+      final audio = _audioAsset();
+      final original = Delta()
+        ..insert(NoteEmbed.attachment(image.id).toDeltaData())
+        ..insert('\n正文\n')
+        ..insert(NoteEmbed.attachment(audio.id).toDeltaData())
+        ..insert('\n');
+      final controller = NoteEditorController(
+        document: NoteDocument.fromDelta(original),
+        assets: [image, audio],
+      );
+      addTearDown(controller.dispose);
+
+      expect(
+        controller.moveAssetEmbed(
+          attachmentId: image.id,
+          sourceOffset: 0,
+          targetOffset: controller.quillController.document.length,
+        ),
+        isTrue,
+      );
+      expect(controller.snapshot().assets, [audio, image]);
+      expect(controller.snapshot().document.toDelta().toJson(), [
+        {'insert': '正文\n'},
+        {'insert': NoteEmbed.attachment(audio.id).toDeltaData()},
+        {'insert': '\n'},
+        {'insert': NoteEmbed.attachment(image.id).toDeltaData()},
+        {'insert': '\n'},
+      ]);
+
+      controller.quillController.undo();
+      expect(
+        controller.snapshot().document.toDelta().toJson(),
+        original.toJson(),
+      );
+    });
+
     test(
       'system image paste imports bytes into a domain asset embed',
       () async {
@@ -666,6 +704,85 @@ final value = 1;
     await tester.pumpAndSettle();
 
     expect(controller.assets.single.displayTitle, '周会录音');
+  });
+
+  testWidgets('long press drag reorders image and recording blocks', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 1600);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final image = _imageAsset();
+    final audio = _audioAsset();
+    final controller = NoteEditorController(
+      document: NoteDocument.fromDelta(
+        Delta()
+          ..insert(NoteEmbed.attachment(image.id).toDeltaData())
+          ..insert('\n中间正文\n')
+          ..insert(NoteEmbed.attachment(audio.id).toDeltaData())
+          ..insert('\n'),
+      ),
+      assets: [image, audio],
+    );
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      _EditorTestApp(
+        child: NoteQuillEditor(
+          controller: controller,
+          resolveImage: (_) => MemoryImage(_onePixelPng),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final imageHandle = find.byKey(
+      ValueKey('move-note-asset-${image.id.value}'),
+    );
+    final audioCard = find.byKey(ValueKey('note-asset-${audio.id.value}'));
+    final gesture = await tester.startGesture(tester.getCenter(imageHandle));
+    await tester.pump(const Duration(milliseconds: 420));
+    await gesture.moveTo(
+      tester.getRect(audioCard).bottomCenter - const Offset(0, 2),
+    );
+    await tester.pump(const Duration(milliseconds: 120));
+
+    expect(find.byKey(const Key('note-asset-drop-indicator')), findsOneWidget);
+
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(controller.snapshot().document.project().referencedAttachmentIds, [
+      audio.id,
+      image.id,
+    ]);
+    controller.quillController.undo();
+    await tester.pumpAndSettle();
+    expect(controller.snapshot().document.project().referencedAttachmentIds, [
+      image.id,
+      audio.id,
+    ]);
+
+    final audioHandle = find.byKey(
+      ValueKey('move-note-asset-${audio.id.value}'),
+    );
+    final imageCard = find.byKey(ValueKey('note-asset-${image.id.value}'));
+    final audioGesture = await tester.startGesture(
+      tester.getCenter(audioHandle),
+    );
+    await tester.pump(const Duration(milliseconds: 420));
+    await audioGesture.moveTo(
+      tester.getRect(imageCard).topCenter + const Offset(0, 2),
+    );
+    await tester.pump(const Duration(milliseconds: 120));
+    await audioGesture.up();
+    await tester.pumpAndSettle();
+
+    expect(controller.snapshot().document.project().referencedAttachmentIds, [
+      audio.id,
+      image.id,
+    ]);
   });
 
   testWidgets('accepts multiline text through the native input connection', (

@@ -5839,6 +5839,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'无法生成分享图片，请调整画幅或清晰度后重试'**
   String get shareImageGenerationFailed;
+
+  /// No description provided for @moveAttachmentHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'长按并拖动可调整位置'**
+  String get moveAttachmentHint;
 }
 
 class _AppLocalizationsDelegate

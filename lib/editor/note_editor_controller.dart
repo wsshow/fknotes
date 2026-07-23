@@ -368,6 +368,91 @@ final class NoteEditorController extends ChangeNotifier {
   bool isAttachmentEmbedAtOffset(int offset) =>
       _noteEmbedAtOffset(offset)?.kind == NoteEmbedKind.attachment;
 
+  int blockDropOffsetFor(int textOffset, {required bool afterLine}) {
+    final plainText = quillController.document.toPlainText();
+    final documentEnd = quillController.document.length - 1;
+    final safeOffset = textOffset.clamp(0, documentEnd);
+    if (!afterLine) {
+      if (safeOffset == 0) return 0;
+      return plainText.lastIndexOf('\n', safeOffset - 1) + 1;
+    }
+    final lineBreak = plainText.indexOf('\n', safeOffset);
+    if (lineBreak < 0) return quillController.document.length;
+    return (lineBreak + 1).clamp(0, quillController.document.length);
+  }
+
+  bool moveAssetEmbed({
+    required NoteAttachmentId attachmentId,
+    required int sourceOffset,
+    required int targetOffset,
+  }) {
+    final embed = _noteEmbedAtExactOffset(sourceOffset);
+    if (embed?.kind != NoteEmbedKind.attachment ||
+        embed?.attachmentId != attachmentId) {
+      return false;
+    }
+    final asset = _assets[attachmentId];
+    if (asset == null ||
+        (asset.kind != NoteAssetKind.image &&
+            asset.kind != NoteAssetKind.audio)) {
+      return false;
+    }
+
+    final safeTarget = targetOffset.clamp(0, quillController.document.length);
+    const blockLength = 2;
+    if (safeTarget >= sourceOffset &&
+        safeTarget <= sourceOffset + blockLength) {
+      return false;
+    }
+
+    final change = Delta();
+    late final int movedOffset;
+    if (safeTarget == quillController.document.length) {
+      change
+        ..retain(sourceOffset)
+        ..delete(blockLength)
+        ..retain(
+          quillController.document.length - sourceOffset - blockLength - 1,
+        )
+        ..delete(1)
+        ..insert('\n')
+        ..insert(embed!.toDeltaData())
+        ..insert('\n');
+      movedOffset = quillController.document.length - blockLength;
+    } else if (safeTarget < sourceOffset) {
+      change
+        ..retain(safeTarget)
+        ..insert(embed!.toDeltaData())
+        ..insert('\n')
+        ..retain(sourceOffset - safeTarget)
+        ..delete(blockLength);
+      movedOffset = safeTarget;
+    } else {
+      change
+        ..retain(sourceOffset)
+        ..delete(blockLength)
+        ..retain(safeTarget - sourceOffset - blockLength)
+        ..insert(embed!.toDeltaData())
+        ..insert('\n');
+      movedOffset = safeTarget - blockLength;
+    }
+    quillController.compose(
+      change,
+      quillController.selection,
+      ChangeSource.local,
+    );
+    quillController.updateSelection(
+      TextSelection.collapsed(
+        offset: (movedOffset + blockLength).clamp(
+          0,
+          quillController.document.length - 1,
+        ),
+      ),
+      ChangeSource.local,
+    );
+    return true;
+  }
+
   NoteEmbed? _noteEmbedAtOffset(int offset) {
     final document = quillController.document;
     final maximum = document.length - 1;
@@ -380,6 +465,23 @@ final class NoteEditorController extends ChangeNotifier {
       } on FormatException {
         // Other Quill embeds keep their normal selection behavior.
       }
+    }
+    return null;
+  }
+
+  NoteEmbed? _noteEmbedAtExactOffset(int offset) {
+    var documentOffset = 0;
+    for (final operation in quillController.document.toDelta().operations) {
+      final data = operation.data;
+      if (documentOffset == offset && data is! String) {
+        try {
+          return NoteEmbed.parse(data);
+        } on FormatException {
+          return null;
+        }
+      }
+      documentOffset += operation.length ?? 0;
+      if (documentOffset > offset) return null;
     }
     return null;
   }

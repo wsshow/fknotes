@@ -1069,5 +1069,6 @@
   "@generatingShareImageProgress": {"placeholders": {"current": {"type": "int"}, "total": {"type": "int"}}},
   "shareNoteImageTitle": "分享笔记：{title}",
   "@shareNoteImageTitle": {"placeholders": {"title": {"type": "String"}}},
-  "shareImageGenerationFailed": "无法生成分享图片，请调整画幅或清晰度后重试"
+  "shareImageGenerationFailed": "无法生成分享图片，请调整画幅或清晰度后重试",
+  "moveAttachmentHint": "长按并拖动可调整位置"
 }

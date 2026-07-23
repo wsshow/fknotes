@@ -3352,4 +3352,7 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get shareImageGenerationFailed =>
       'Couldn\'t create the share images. Try another canvas or quality setting.';
+
+  @override
+  String get moveAttachmentHint => 'Long press and drag to reposition';
 }
