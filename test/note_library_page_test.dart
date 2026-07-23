@@ -108,6 +108,8 @@ void main() {
       find.descendant(of: card, matching: find.byIcon(Icons.more_vert_rounded)),
     );
     await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.delete_outline_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.delete_forever_outlined), findsNothing);
     await tester.tap(find.text('永久删除'));
     await tester.pumpAndSettle();
     expect(find.text('永久删除？'), findsOneWidget);

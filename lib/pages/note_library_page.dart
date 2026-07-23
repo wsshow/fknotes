@@ -463,7 +463,7 @@ final class _DeltaNoteCard extends StatelessWidget {
     ),
     AppMenuAction(
       value: _LibraryNoteAction.delete,
-      icon: Icons.delete_forever_outlined,
+      icon: Icons.delete_outline_rounded,
       label: context.l10n.deletePermanently,
       destructive: true,
     ),

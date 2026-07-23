@@ -422,15 +422,58 @@ void main() {
       _EditorTestApp(
         child: Align(
           alignment: Alignment.bottomCenter,
-          child: NoteQuillToolbar(controller: controller, onInsertImage: () {}),
+          child: NoteQuillToolbar(
+            controller: controller,
+            onOpenAssistant: () {},
+            onInsertImage: () {},
+          ),
         ),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.byType(quill.QuillSimpleToolbar), findsOneWidget);
+    final actions = tester.widget<Row>(
+      find.byKey(const Key('quill-toolbar-actions')),
+    );
+    expect(actions.children.map((child) => child.key).toList(), const [
+      Key('quill-open-inline-assistant'),
+      Key('quill-insert-image'),
+      Key('quill-toolbar-undo'),
+      Key('quill-toolbar-redo'),
+      Key('quill-toolbar-bold'),
+      Key('quill-toolbar-checklist'),
+      Key('quill-toolbar-bullets'),
+      Key('quill-toolbar-numbered-list'),
+      Key('quill-toolbar-quote'),
+      Key('quill-toolbar-italic'),
+      Key('quill-toolbar-underline'),
+      Key('quill-toolbar-heading'),
+      Key('quill-toolbar-link'),
+      Key('quill-toolbar-divider'),
+      Key('quill-toolbar-clear-format'),
+    ]);
+    expect(find.byType(quill.QuillSimpleToolbar), findsNothing);
     expect(find.byIcon(Icons.format_bold), findsOneWidget);
     expect(find.byIcon(Icons.add_photo_alternate_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.code), findsNothing);
+    expect(find.byIcon(Icons.format_strikethrough), findsNothing);
+    expect(find.byIcon(Icons.format_indent_increase), findsNothing);
+    expect(find.byIcon(Icons.format_indent_decrease), findsNothing);
+
+    final assistantButton = tester.widget<IconButton>(
+      find.descendant(
+        of: find.byKey(const Key('quill-open-inline-assistant')),
+        matching: find.byType(IconButton),
+      ),
+    );
+    final imageButton = tester.widget<IconButton>(
+      find.descendant(
+        of: find.byKey(const Key('quill-insert-image')),
+        matching: find.byType(IconButton),
+      ),
+    );
+    expect(assistantButton.style, isNull);
+    expect(imageButton.style, isNull);
     expect(tester.getSize(find.byType(NoteQuillToolbar)).height, lessThan(90));
   });
 }

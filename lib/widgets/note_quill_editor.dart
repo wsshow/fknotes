@@ -62,7 +62,6 @@ final class NoteQuillToolbar extends StatelessWidget {
     required this.controller,
     this.onOpenAssistant,
     this.onInsertImage,
-    this.assistantActive = false,
     this.assistantTooltip = 'AI 创作',
     this.imageTooltip = '插入图片',
     this.dividerTooltip = '插入分隔线',
@@ -72,115 +71,173 @@ final class NoteQuillToolbar extends StatelessWidget {
   final NoteEditorController controller;
   final VoidCallback? onOpenAssistant;
   final VoidCallback? onInsertImage;
-  final bool assistantActive;
   final String assistantTooltip;
   final String imageTooltip;
   final String dividerTooltip;
 
   @override
-  Widget build(BuildContext context) => DecoratedBox(
-    decoration: const BoxDecoration(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      boxShadow: [
-        BoxShadow(
-          color: Color(0x0F202124),
-          blurRadius: 18,
-          offset: Offset(0, -4),
+  Widget build(BuildContext context) {
+    final quillController = controller.quillController;
+    const baseOptions = quill.QuillToolbarBaseButtonOptions(
+      iconTheme: quill.QuillIconTheme(
+        iconButtonUnselectedData: quill.IconButtonData(
+          color: AppColors.muted,
+          iconSize: 21,
+          padding: EdgeInsets.all(10),
+          constraints: BoxConstraints(minWidth: 44, minHeight: 44),
         ),
-      ],
-    ),
-    child: SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
-        child: Row(
-          children: [
-            if (onOpenAssistant != null) ...[
-              Material(
-                color: assistantActive
-                    ? AppColors.accent
-                    : AppColors.accentSoft,
-                borderRadius: BorderRadius.circular(AppRadius.small),
-                child: IconButton(
-                  key: const Key('quill-open-inline-assistant'),
-                  tooltip: assistantTooltip,
-                  onPressed: onOpenAssistant,
-                  color: assistantActive ? AppColors.surface : AppColors.accent,
-                  icon: const Icon(Icons.auto_awesome_rounded, size: 20),
-                ),
-              ),
-              const SizedBox(width: 4),
-            ],
-            if (onInsertImage != null) ...[
-              Material(
-                color: AppColors.surfaceMuted,
-                borderRadius: BorderRadius.circular(AppRadius.small),
-                child: IconButton(
-                  key: const Key('quill-insert-image'),
-                  tooltip: imageTooltip,
-                  onPressed: onInsertImage,
-                  color: AppColors.muted,
-                  icon: const Icon(
-                    Icons.add_photo_alternate_outlined,
-                    size: 21,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4),
-            ],
-            Expanded(
-              child: quill.QuillSimpleToolbar(
-                controller: controller.quillController,
-                config: quill.QuillSimpleToolbarConfig(
-                  multiRowsDisplay: false,
-                  toolbarSize: 44,
-                  showDividers: false,
-                  color: AppColors.surface,
-                  sectionDividerColor: AppColors.line,
-                  showFontFamily: false,
-                  showFontSize: false,
-                  showSmallButton: false,
-                  showLineHeightButton: false,
-                  showColorButton: false,
-                  showBackgroundColorButton: false,
-                  showClearFormat: true,
-                  showAlignmentButtons: false,
-                  showDirection: false,
-                  showSearchButton: false,
-                  showSubscript: false,
-                  showSuperscript: false,
-                  showIndent: true,
-                  showCodeBlock: true,
-                  showInlineCode: true,
-                  customButtons: [
-                    quill.QuillToolbarCustomButtonOptions(
-                      tooltip: dividerTooltip,
-                      icon: const Icon(Icons.horizontal_rule_rounded),
-                      onPressed: controller.insertDivider,
-                    ),
-                  ],
-                  iconTheme: const quill.QuillIconTheme(
-                    iconButtonUnselectedData: quill.IconButtonData(
-                      color: AppColors.muted,
-                      iconSize: 21,
-                      padding: EdgeInsets.all(10),
-                      constraints: BoxConstraints(minWidth: 44, minHeight: 44),
-                    ),
-                    iconButtonSelectedData: quill.IconButtonData(
-                      color: AppColors.accent,
-                      iconSize: 21,
-                      padding: EdgeInsets.all(10),
-                      constraints: BoxConstraints(minWidth: 44, minHeight: 44),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
+        iconButtonSelectedData: quill.IconButtonData(
+          color: AppColors.accent,
+          iconSize: 21,
+          padding: EdgeInsets.all(10),
+          constraints: BoxConstraints(minWidth: 44, minHeight: 44),
+          style: ButtonStyle(
+            backgroundColor: WidgetStatePropertyAll(AppColors.accentSoft),
+          ),
         ),
       ),
-    ),
+    );
+
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x0F202124),
+            blurRadius: 18,
+            offset: Offset(0, -4),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
+          child: SingleChildScrollView(
+            key: const Key('quill-toolbar-scroll-view'),
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              key: const Key('quill-toolbar-actions'),
+              children: [
+                if (onOpenAssistant != null)
+                  _NoteToolbarActionButton(
+                    key: const Key('quill-open-inline-assistant'),
+                    tooltip: assistantTooltip,
+                    onPressed: onOpenAssistant!,
+                    icon: Icons.auto_awesome_rounded,
+                  ),
+                if (onInsertImage != null)
+                  _NoteToolbarActionButton(
+                    key: const Key('quill-insert-image'),
+                    tooltip: imageTooltip,
+                    onPressed: onInsertImage!,
+                    icon: Icons.add_photo_alternate_outlined,
+                  ),
+                quill.QuillToolbarHistoryButton(
+                  key: const Key('quill-toolbar-undo'),
+                  controller: quillController,
+                  isUndo: true,
+                  baseOptions: baseOptions,
+                ),
+                quill.QuillToolbarHistoryButton(
+                  key: const Key('quill-toolbar-redo'),
+                  controller: quillController,
+                  isUndo: false,
+                  baseOptions: baseOptions,
+                ),
+                quill.QuillToolbarToggleStyleButton(
+                  key: const Key('quill-toolbar-bold'),
+                  controller: quillController,
+                  attribute: quill.Attribute.bold,
+                  baseOptions: baseOptions,
+                ),
+                quill.QuillToolbarToggleCheckListButton(
+                  key: const Key('quill-toolbar-checklist'),
+                  controller: quillController,
+                  baseOptions: baseOptions,
+                ),
+                quill.QuillToolbarToggleStyleButton(
+                  key: const Key('quill-toolbar-bullets'),
+                  controller: quillController,
+                  attribute: quill.Attribute.ul,
+                  baseOptions: baseOptions,
+                ),
+                quill.QuillToolbarToggleStyleButton(
+                  key: const Key('quill-toolbar-numbered-list'),
+                  controller: quillController,
+                  attribute: quill.Attribute.ol,
+                  baseOptions: baseOptions,
+                ),
+                quill.QuillToolbarToggleStyleButton(
+                  key: const Key('quill-toolbar-quote'),
+                  controller: quillController,
+                  attribute: quill.Attribute.blockQuote,
+                  baseOptions: baseOptions,
+                ),
+                quill.QuillToolbarToggleStyleButton(
+                  key: const Key('quill-toolbar-italic'),
+                  controller: quillController,
+                  attribute: quill.Attribute.italic,
+                  baseOptions: baseOptions,
+                ),
+                quill.QuillToolbarToggleStyleButton(
+                  key: const Key('quill-toolbar-underline'),
+                  controller: quillController,
+                  attribute: quill.Attribute.underline,
+                  baseOptions: baseOptions,
+                ),
+                quill.QuillToolbarSelectHeaderStyleDropdownButton(
+                  key: const Key('quill-toolbar-heading'),
+                  controller: quillController,
+                  baseOptions: baseOptions,
+                ),
+                quill.QuillToolbarLinkStyleButton(
+                  key: const Key('quill-toolbar-link'),
+                  controller: quillController,
+                  baseOptions: baseOptions,
+                ),
+                _NoteToolbarActionButton(
+                  key: const Key('quill-toolbar-divider'),
+                  tooltip: dividerTooltip,
+                  onPressed: controller.insertDivider,
+                  icon: Icons.horizontal_rule_rounded,
+                ),
+                quill.QuillToolbarClearFormatButton(
+                  key: const Key('quill-toolbar-clear-format'),
+                  controller: quillController,
+                  baseOptions: baseOptions,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+final class _NoteToolbarActionButton extends StatelessWidget {
+  const _NoteToolbarActionButton({
+    required this.tooltip,
+    required this.onPressed,
+    required this.icon,
+    super.key,
+  });
+
+  final String tooltip;
+  final VoidCallback onPressed;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    tooltip: tooltip,
+    onPressed: onPressed,
+    color: AppColors.muted,
+    iconSize: 21,
+    padding: const EdgeInsets.all(10),
+    constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+    icon: Icon(icon),
   );
 }
 

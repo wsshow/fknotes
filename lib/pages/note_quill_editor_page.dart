@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../app.dart';
-import '../editor/note_assistant_editing.dart';
 import '../editor/note_editor_controller.dart';
 import '../l10n/l10n.dart';
 import '../l10n/local_model_l10n.dart';
@@ -28,7 +27,6 @@ import '../services/note_read_aloud_service.dart';
 import '../services/note_repository.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/app_popup_menu.dart';
-import '../widgets/note_assistant_sheet.dart';
 import '../widgets/note_inline_assistant_composer.dart';
 import '../widgets/note_quill_editor.dart';
 import '../widgets/note_tags_editor_sheet.dart';
@@ -86,16 +84,6 @@ typedef NoteImageAssetImporter =
     Future<NoteAsset> Function(Uint8List bytes, {required String originalName});
 typedef NoteReadAloudAvailabilityChecker = Future<bool> Function();
 typedef NoteLanguageModelAvailabilityChecker = Future<bool> Function();
-typedef NoteAssistantResultPresenter =
-    Future<NoteAssistantResult?> Function(
-      BuildContext context, {
-      required NoteAssistantAction action,
-      required NoteAssistantScope scope,
-      required String title,
-      required String content,
-      required String languageCode,
-      required Set<NoteAssistantPlacement> placements,
-    });
 
 abstract interface class NoteInlineAssistantDriver {
   Future<void> load();
@@ -137,7 +125,6 @@ final class NoteQuillEditorPage extends StatefulWidget {
     this.resolveImage,
     this.readAloud,
     this.readAloudAvailabilityChecker,
-    this.assistantResultPresenter,
     this.inlineAssistantDriver,
     this.languageModelAvailabilityChecker,
     this.now,
@@ -152,7 +139,6 @@ final class NoteQuillEditorPage extends StatefulWidget {
   final NoteAssetImageProvider? resolveImage;
   final NoteReadAloudDriver? readAloud;
   final NoteReadAloudAvailabilityChecker? readAloudAvailabilityChecker;
-  final NoteAssistantResultPresenter? assistantResultPresenter;
   final NoteInlineAssistantDriver? inlineAssistantDriver;
   final NoteLanguageModelAvailabilityChecker? languageModelAvailabilityChecker;
   final DateTime Function()? now;
@@ -621,121 +607,6 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     unawaited(_submitInlineAssistant(instruction));
   }
 
-  Future<void> _openLocalAssistant() async {
-    try {
-      final anchor = _editor.captureAssistantAnchor();
-      final scopes = <NoteAssistantScope>{NoteAssistantScope.fullNote};
-      if (anchor.hasCurrentLine) scopes.add(NoteAssistantScope.currentBlock);
-      if (anchor.hasSelection) scopes.add(NoteAssistantScope.selection);
-      final initialScope = anchor.hasSelection
-          ? NoteAssistantScope.selection
-          : anchor.hasCurrentLine
-          ? NoteAssistantScope.currentBlock
-          : NoteAssistantScope.fullNote;
-      final invocation = await showNoteAssistantTaskSheet(
-        context,
-        availableScopes: scopes,
-        initialScope: initialScope,
-        allowChat: false,
-      );
-      if (invocation == null || !mounted || invocation.opensChat) return;
-
-      final languageCode = Localizations.localeOf(context).languageCode;
-      final projection = NoteSemanticProjection.fromNote(_currentSnapshot());
-      final sourceContent = switch (invocation.scope) {
-        NoteAssistantScope.selection => anchor.selectedText,
-        NoteAssistantScope.currentBlock => anchor.currentLineText,
-        NoteAssistantScope.fullNote => projection.assistantSource(
-          languageCode: languageCode,
-        ),
-      };
-      final placements = invocation.scope == NoteAssistantScope.fullNote
-          ? const {
-              NoteAssistantPlacement.replace,
-              NoteAssistantPlacement.append,
-            }
-          : NoteAssistantPlacement.values.toSet();
-      final presenter = widget.assistantResultPresenter ?? _presentAssistant;
-      final generated = await presenter(
-        context,
-        action: invocation.action,
-        scope: invocation.scope,
-        title: invocation.scope == NoteAssistantScope.fullNote
-            ? ''
-            : _titleController.text.trim(),
-        content: sourceContent,
-        languageCode: languageCode,
-        placements: placements,
-      );
-      if (generated == null || !mounted) return;
-
-      final markdown = generated.placement == NoteAssistantPlacement.append
-          ? '## ${_assistantResultHeading(invocation.action)}\n\n${generated.text}'
-          : generated.text;
-      final applied = _editor.applyAssistantMarkdown(
-        anchor: anchor,
-        scope: switch (invocation.scope) {
-          NoteAssistantScope.selection => NoteAssistantEditScope.selection,
-          NoteAssistantScope.currentBlock => NoteAssistantEditScope.currentLine,
-          NoteAssistantScope.fullNote => NoteAssistantEditScope.document,
-        },
-        placement: switch (generated.placement) {
-          NoteAssistantPlacement.replace => NoteAssistantEditPlacement.replace,
-          NoteAssistantPlacement.insertBelow =>
-            NoteAssistantEditPlacement.insertBelow,
-          NoteAssistantPlacement.append => NoteAssistantEditPlacement.append,
-        },
-        markdown: markdown,
-      );
-      if (!applied) {
-        AppFeedback.show(context, context.l10n.noteChangedRetryAssistant);
-        return;
-      }
-      _editorFocusNode.requestFocus();
-      AppFeedback.success(context, switch (generated.placement) {
-        NoteAssistantPlacement.replace => context.l10n.assistantReplacedContent,
-        NoteAssistantPlacement.insertBelow =>
-          context.l10n.assistantInsertedBelow,
-        NoteAssistantPlacement.append => context.l10n.assistantAppended,
-      });
-    } catch (error) {
-      if (mounted) {
-        AppFeedback.error(
-          context,
-          context.l10n.assistantLaunchFailed(error.toString()),
-        );
-      }
-    }
-  }
-
-  Future<NoteAssistantResult?> _presentAssistant(
-    BuildContext hostContext, {
-    required NoteAssistantAction action,
-    required NoteAssistantScope scope,
-    required String title,
-    required String content,
-    required String languageCode,
-    required Set<NoteAssistantPlacement> placements,
-  }) async {
-    if (!await _ensureLanguageModelAvailable() ||
-        !mounted ||
-        !hostContext.mounted) {
-      return null;
-    }
-    return showModalBottomSheet<NoteAssistantResult>(
-      context: hostContext,
-      isScrollControlled: true,
-      builder: (sheetContext) => NoteAssistantResultSheet(
-        action: action,
-        scope: scope,
-        title: title,
-        content: content,
-        languageCode: languageCode,
-        placements: placements,
-      ),
-    );
-  }
-
   Future<bool> _ensureLanguageModelAvailable() async {
     final models = LanguageModelService.instance;
     final selectedId = await models.selectedModelId();
@@ -780,14 +651,6 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     final currentId = await models.selectedModelId();
     return (await models.inspect(currentId)).installed;
   }
-
-  String _assistantResultHeading(NoteAssistantAction action) =>
-      switch (action.task) {
-        NoteAssistantTask.summarize => context.l10n.assistantSummaryHeading,
-        NoteAssistantTask.extractTodos => context.l10n.assistantTodosHeading,
-        NoteAssistantTask.polish => context.l10n.assistantPolishedHeading,
-        null => context.l10n.assistantGeneratedHeading,
-      };
 
   Future<void> _openShareComposer() async {
     await _imageImport;
@@ -1327,13 +1190,6 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
             child: CircularProgressIndicator(strokeWidth: 2),
           )
         else ...[
-          IconButton(
-            key: const Key('quill-local-assistant'),
-            tooltip: context.l10n.localAssistant,
-            onPressed: _inlineAssistantOpen ? null : _openLocalAssistant,
-            style: IconButton.styleFrom(fixedSize: const Size.square(40)),
-            icon: const Icon(Icons.auto_awesome_outlined, size: 21),
-          ),
           IconButton(
             key: const Key('quill-read-aloud'),
             tooltip: _readAloud.isActive
