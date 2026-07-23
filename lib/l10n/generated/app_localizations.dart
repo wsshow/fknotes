@@ -224,6 +224,12 @@ abstract class AppLocalizations {
   /// **'关闭'**
   String get close;
 
+  /// No description provided for @delete.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除'**
+  String get delete;
+
   /// No description provided for @deletePermanently.
   ///
   /// In zh, this message translates to:
@@ -241,6 +247,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'笔记和关联文件将无法恢复。'**
   String get deletePermanentlyDescription;
+
+  /// No description provided for @deleteSelectedNotesQuestion.
+  ///
+  /// In zh, this message translates to:
+  /// **'永久删除这 {count} 篇笔记？'**
+  String deleteSelectedNotesQuestion(int count);
 
   /// No description provided for @discardNote.
   ///
@@ -2605,6 +2617,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'复制'**
   String get copy;
+
+  /// No description provided for @details.
+  ///
+  /// In zh, this message translates to:
+  /// **'详情'**
+  String get details;
 
   /// No description provided for @paste.
   ///
@@ -5293,6 +5311,60 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'大小'**
   String get size;
+
+  /// No description provided for @imageCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片已复制'**
+  String get imageCopied;
+
+  /// No description provided for @imageCopyUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前系统不支持复制图片'**
+  String get imageCopyUnavailable;
+
+  /// No description provided for @imageCopyFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制图片失败'**
+  String get imageCopyFailed;
+
+  /// No description provided for @editImage.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑图片'**
+  String get editImage;
+
+  /// No description provided for @replaceFromGallery.
+  ///
+  /// In zh, this message translates to:
+  /// **'从相册替换'**
+  String get replaceFromGallery;
+
+  /// No description provided for @replaceWithCamera.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新拍摄'**
+  String get replaceWithCamera;
+
+  /// No description provided for @imageDetails.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片详情'**
+  String get imageDetails;
+
+  /// No description provided for @imageReplaced.
+  ///
+  /// In zh, this message translates to:
+  /// **'图片已替换'**
+  String get imageReplaced;
+
+  /// No description provided for @imageReplaceFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'替换图片失败'**
+  String get imageReplaceFailed;
 
   /// No description provided for @duration.
   ///

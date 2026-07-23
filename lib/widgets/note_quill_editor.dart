@@ -13,8 +13,9 @@ import 'app_popup_menu.dart';
 
 typedef NoteAssetImageProvider = ImageProvider? Function(NoteAsset asset);
 typedef NoteAssetPathResolver = String? Function(NoteAsset asset);
+typedef NoteImageAssetAction = Future<void> Function(NoteAsset asset);
 
-final class NoteQuillEditor extends StatelessWidget {
+final class NoteQuillEditor extends StatefulWidget {
   const NoteQuillEditor({
     required this.controller,
     this.focusNode,
@@ -23,6 +24,9 @@ final class NoteQuillEditor extends StatelessWidget {
     this.resolveAssetPath,
     this.audioPlayback,
     this.onOpenAsset,
+    this.onCopyImage,
+    this.onEditImage,
+    this.onShowImageDetails,
     this.readOnly = false,
     this.placeholder = '开始记录…',
     super.key,
@@ -35,11 +39,33 @@ final class NoteQuillEditor extends StatelessWidget {
   final NoteAssetPathResolver? resolveAssetPath;
   final NoteAudioPlaybackDriver? audioPlayback;
   final ValueChanged<NoteAsset>? onOpenAsset;
+  final NoteImageAssetAction? onCopyImage;
+  final NoteImageAssetAction? onEditImage;
+  final NoteImageAssetAction? onShowImageDetails;
   final bool readOnly;
   final String placeholder;
 
   @override
+  State<NoteQuillEditor> createState() => _NoteQuillEditorState();
+}
+
+final class _NoteQuillEditorState extends State<NoteQuillEditor> {
+  NoteAttachmentId? _activeImageId;
+
+  @override
   Widget build(BuildContext context) {
+    final controller = widget.controller;
+    final focusNode = widget.focusNode;
+    final scrollController = widget.scrollController;
+    final resolveImage = widget.resolveImage;
+    final resolveAssetPath = widget.resolveAssetPath;
+    final audioPlayback = widget.audioPlayback;
+    final onOpenAsset = widget.onOpenAsset;
+    final onCopyImage = widget.onCopyImage;
+    final onEditImage = widget.onEditImage;
+    final onShowImageDetails = widget.onShowImageDetails;
+    final readOnly = widget.readOnly;
+    final placeholder = widget.placeholder;
     controller.quillController.readOnly = readOnly;
     void dismissEditorFocus() {
       final editorFocus = focusNode;
@@ -55,12 +81,20 @@ final class NoteQuillEditor extends StatelessWidget {
       TextPosition Function(Offset offset) getPosition,
     ) {
       final position = getPosition(globalPosition);
-      if (!controller.isAttachmentEmbedAtOffset(position.offset)) return false;
+      if (!controller.isAttachmentEmbedAtOffset(position.offset)) {
+        if (_activeImageId != null) {
+          setState(() => _activeImageId = null);
+        }
+        return false;
+      }
       dismissEditorFocus();
       return true;
     }
 
-    return quill.QuillEditor.basic(
+    final activeImage = _activeImageId == null
+        ? null
+        : controller.asset(_activeImageId!);
+    final editor = quill.QuillEditor.basic(
       controller: controller.quillController,
       focusNode: focusNode,
       scrollController: scrollController,
@@ -68,7 +102,12 @@ final class NoteQuillEditor extends StatelessWidget {
         expands: true,
         scrollable: true,
         readOnlyMouseCursor: SystemMouseCursors.text,
-        padding: const EdgeInsets.fromLTRB(24, 18, 24, 48),
+        padding: EdgeInsets.fromLTRB(
+          24,
+          18,
+          24,
+          activeImage == null ? 48 : 104,
+        ),
         placeholder: placeholder,
         enableInteractiveSelection: true,
         enableSelectionToolbar: true,
@@ -85,10 +124,44 @@ final class NoteQuillEditor extends StatelessWidget {
             audioPlayback: audioPlayback,
             onOpenAsset: onOpenAsset,
             onAssetInteraction: dismissEditorFocus,
+            onToggleImageActions: (id) => setState(
+              () => _activeImageId = _activeImageId == id ? null : id,
+            ),
           ),
           _NoteDividerEmbedBuilder(session: controller),
         ],
       ),
+    );
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        editor,
+        if (!readOnly &&
+            activeImage != null &&
+            activeImage.kind == NoteAssetKind.image)
+          Positioned(
+            left: 24,
+            right: 24,
+            bottom: 12,
+            child: _ImageActionBar(
+              key: ValueKey('note-image-actions-${activeImage.id.value}'),
+              asset: activeImage,
+              onCopy: onCopyImage == null
+                  ? null
+                  : () => onCopyImage(activeImage),
+              onEdit: onEditImage == null
+                  ? null
+                  : () => onEditImage(activeImage),
+              onShowDetails: onShowImageDetails == null
+                  ? null
+                  : () => onShowImageDetails(activeImage),
+              onRemove: () {
+                controller.removeAsset(activeImage.id);
+                setState(() => _activeImageId = null);
+              },
+            ),
+          ),
+      ],
     );
   }
 }
@@ -296,6 +369,7 @@ final class _NoteAssetEmbedBuilder extends quill.EmbedBuilder {
     required this.audioPlayback,
     required this.onOpenAsset,
     required this.onAssetInteraction,
+    required this.onToggleImageActions,
   });
 
   final NoteEditorController session;
@@ -304,6 +378,7 @@ final class _NoteAssetEmbedBuilder extends quill.EmbedBuilder {
   final NoteAudioPlaybackDriver? audioPlayback;
   final ValueChanged<NoteAsset>? onOpenAsset;
   final VoidCallback onAssetInteraction;
+  final ValueChanged<NoteAttachmentId> onToggleImageActions;
 
   @override
   String get key => NoteEmbed.attachmentType;
@@ -329,8 +404,8 @@ final class _NoteAssetEmbedBuilder extends quill.EmbedBuilder {
         provider: resolveImage?.call(asset),
         readOnly: embedContext.readOnly,
         onInteraction: onAssetInteraction,
+        onToggleActions: () => onToggleImageActions(asset.id),
         onOpen: onOpenAsset == null ? null : () => onOpenAsset!(asset),
-        onRemove: () => session.removeEmbedAt(embedContext.node.documentOffset),
       );
     }
     if (asset.kind == NoteAssetKind.audio) {
@@ -659,14 +734,14 @@ final class _NoteDividerEmbedBuilder extends quill.EmbedBuilder {
   );
 }
 
-final class _ImageAssetBlock extends StatelessWidget {
+final class _ImageAssetBlock extends StatefulWidget {
   const _ImageAssetBlock({
     required this.asset,
     required this.provider,
     required this.readOnly,
     required this.onInteraction,
+    required this.onToggleActions,
     required this.onOpen,
-    required this.onRemove,
     super.key,
   });
 
@@ -674,63 +749,170 @@ final class _ImageAssetBlock extends StatelessWidget {
   final ImageProvider? provider;
   final bool readOnly;
   final VoidCallback onInteraction;
+  final VoidCallback onToggleActions;
   final VoidCallback? onOpen;
-  final VoidCallback onRemove;
+
+  @override
+  State<_ImageAssetBlock> createState() => _ImageAssetBlockState();
+}
+
+final class _ImageAssetBlockState extends State<_ImageAssetBlock> {
+  void _handleImageTap() {
+    widget.onInteraction();
+    if (widget.readOnly) {
+      widget.onOpen?.call();
+      return;
+    }
+    widget.onToggleActions();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final imageProvider = provider;
-    return Listener(
-      behavior: HitTestBehavior.opaque,
-      onPointerDown: (_) => onInteraction(),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onInteraction,
-        child: Semantics(
-          label: '图片：${asset.displayTitle}',
-          button: onOpen != null,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(AppRadius.medium),
-              child: Material(
-                color: AppColors.surfaceMuted,
-                child: Stack(
-                  alignment: Alignment.topRight,
-                  children: [
-                    InkWell(
-                      onTap: () {
-                        onInteraction();
-                        onOpen?.call();
-                      },
-                      child: imageProvider == null
-                          ? _AssetFallback(asset: asset, minHeight: 180)
-                          : Image(
-                              key: ValueKey('note-image-${asset.id.value}'),
-                              image: imageProvider,
-                              width: double.infinity,
-                              fit: BoxFit.fitWidth,
-                              errorBuilder: (_, _, _) =>
-                                  _AssetFallback(asset: asset, minHeight: 180),
-                            ),
-                    ),
-                    if (!readOnly)
-                      Padding(
-                        padding: const EdgeInsets.all(10),
-                        child: _RemoveButton(
-                          key: ValueKey('remove-note-asset-${asset.id.value}'),
-                          onPressed: onRemove,
-                        ),
+    final asset = widget.asset;
+    final imageProvider = widget.provider;
+    return Semantics(
+      label: '图片：${asset.displayTitle}',
+      button: true,
+      onTap: _handleImageTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Listener(
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: (_) => _handleImageTap(),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.medium),
+            child: Material(
+              color: AppColors.surfaceMuted,
+              child: imageProvider == null
+                  ? _AssetFallback(asset: asset, minHeight: 180)
+                  : ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 120),
+                      child: Image(
+                        key: ValueKey('note-image-${asset.id.value}'),
+                        image: imageProvider,
+                        width: double.infinity,
+                        fit: BoxFit.fitWidth,
+                        errorBuilder: (_, _, _) =>
+                            _AssetFallback(asset: asset, minHeight: 180),
                       ),
-                  ],
-                ),
-              ),
+                    ),
             ),
           ),
         ),
       ),
     );
   }
+}
+
+final class _ImageActionBar extends StatelessWidget {
+  const _ImageActionBar({
+    required this.asset,
+    required this.onCopy,
+    required this.onEdit,
+    required this.onShowDetails,
+    required this.onRemove,
+    super.key,
+  });
+
+  final NoteAsset asset;
+  final Future<void> Function()? onCopy;
+  final Future<void> Function()? onEdit;
+  final Future<void> Function()? onShowDetails;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: '图片操作：${asset.displayTitle}',
+    container: true,
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+        border: Border.all(color: AppColors.line),
+        boxShadow: AppShadows.floating,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+        child: Row(
+          children: [
+            _ImageActionButton(
+              key: ValueKey('copy-note-image-${asset.id.value}'),
+              icon: Icons.copy_rounded,
+              label: context.l10n.copy,
+              onPressed: onCopy == null ? null : () => unawaited(onCopy!()),
+            ),
+            _ImageActionButton(
+              key: ValueKey('edit-note-image-${asset.id.value}'),
+              icon: Icons.edit_outlined,
+              label: context.l10n.edit,
+              onPressed: onEdit == null ? null : () => unawaited(onEdit!()),
+            ),
+            _ImageActionButton(
+              key: ValueKey('details-note-image-${asset.id.value}'),
+              icon: Icons.info_outline_rounded,
+              label: context.l10n.details,
+              onPressed: onShowDetails == null
+                  ? null
+                  : () => unawaited(onShowDetails!()),
+            ),
+            _ImageActionButton(
+              key: ValueKey('remove-note-asset-${asset.id.value}'),
+              icon: Icons.delete_outline_rounded,
+              label: context.l10n.delete,
+              destructive: true,
+              onPressed: onRemove,
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+final class _ImageActionButton extends StatelessWidget {
+  const _ImageActionButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    this.destructive = false,
+    super.key,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+  final bool destructive;
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: InkWell(
+      onTap: onPressed,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 2),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 19,
+              color: destructive ? AppColors.danger : AppColors.muted,
+            ),
+            const SizedBox(height: 3),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: destructive ? AppColors.danger : AppColors.muted,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 String _formatAudioDuration(Duration value) {
@@ -834,7 +1016,7 @@ final class _FileAssetBlock extends StatelessWidget {
 }
 
 final class _RemoveButton extends StatelessWidget {
-  const _RemoveButton({required this.onPressed, super.key});
+  const _RemoveButton({required this.onPressed});
 
   final VoidCallback onPressed;
 

@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:fknotes/l10n/generated/app_localizations.dart';
 import 'package:fknotes/models/note.dart';
 import 'package:fknotes/models/note_document.dart';
@@ -119,6 +122,92 @@ void main() {
     expect(find.text('格式笔记'), findsNothing);
     expect(store.notes, hasLength(1));
   });
+
+  testWidgets(
+    'image notes hide attachment names and vertically center their cover',
+    (tester) async {
+      final asset = _imageAsset('61.png');
+      store.notes
+        ..clear()
+        ..add(
+          _note(
+            '图片笔记',
+            document: Delta()
+              ..insert(NoteEmbed.attachment(asset.id).toDeltaData())
+              ..insert('\n')
+              ..insert('正文预览\n'),
+            assets: [asset],
+          ),
+        );
+
+      await tester.pumpWidget(
+        _TestApp(
+          child: NoteLibraryPage(
+            controller: controller,
+            resolveImage: (_) => MemoryImage(_onePixelPng),
+          ),
+        ),
+      );
+      await _pump(tester);
+
+      expect(find.textContaining('61.png'), findsNothing);
+      expect(find.text('正文预览'), findsOneWidget);
+      final card = find.byKey(
+        ValueKey('delta-note-${store.notes.single.id.value}'),
+      );
+      final cover = find.byKey(
+        ValueKey('delta-note-cover-${store.notes.single.id.value}'),
+      );
+      expect(
+        tester.getRect(cover).center.dy,
+        closeTo(tester.getRect(card).center.dy, 1),
+      );
+    },
+  );
+
+  testWidgets('long press selects notes for bulk pinning and deletion', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _TestApp(child: NoteLibraryPage(controller: controller)),
+    );
+    await _pump(tester);
+
+    final first = find.byKey(
+      ValueKey('delta-note-${store.notes.first.id.value}'),
+    );
+    await tester.longPress(first);
+    await tester.pump();
+    expect(
+      find.byKey(const Key('delta-library-selection-header')),
+      findsOneWidget,
+    );
+    expect(find.text('已选择 1 篇'), findsOneWidget);
+
+    final second = find.byKey(
+      ValueKey('delta-note-${store.notes.last.id.value}'),
+    );
+    await tester.tap(second);
+    await tester.pump();
+    expect(find.text('已选择 2 篇'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('delta-library-pin-selected')));
+    await _pump(tester);
+    expect(store.notes.every((note) => note.isPinned), isTrue);
+    expect(find.text('已选择 2 篇'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('delta-library-delete-selected')));
+    await tester.pumpAndSettle();
+    expect(find.text('永久删除这 2 篇笔记？'), findsOneWidget);
+    await tester.tap(find.text('永久删除').last);
+    await _pump(tester);
+
+    expect(store.notes, isEmpty);
+    expect(
+      find.byKey(const Key('delta-library-selection-header')),
+      findsNothing,
+    );
+  });
 }
 
 Future<void> _pump(WidgetTester tester) async {
@@ -154,17 +243,40 @@ final class _PageLibraryStore implements NoteLibraryStore {
   }
 }
 
-Note _note(String title, {required Delta document}) {
+Note _note(
+  String title, {
+  required Delta document,
+  List<NoteAsset> assets = const [],
+}) {
   final now = DateTime.utc(2026, 7, 23, 12);
   return Note(
     id: NoteId.generate(),
     title: title,
     document: NoteDocument.fromDelta(document),
+    assets: assets,
     revision: 1,
     createdAt: now,
     updatedAt: now,
   );
 }
+
+NoteAsset _imageAsset(String originalName) {
+  final now = DateTime.utc(2026, 7, 23, 12);
+  return NoteAsset(
+    id: NoteAttachmentId.generate(),
+    kind: NoteAssetKind.image,
+    storageKey: 'notes/images/${NoteAttachmentId.generate().value}.png',
+    originalName: originalName,
+    byteLength: _onePixelPng.length,
+    mimeType: 'image/png',
+    createdAt: now,
+    updatedAt: now,
+  );
+}
+
+final Uint8List _onePixelPng = base64Decode(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+);
 
 final class _TestApp extends StatelessWidget {
   const _TestApp({required this.child});

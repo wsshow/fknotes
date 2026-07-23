@@ -16,6 +16,7 @@ final class NoteDeltaPreview extends StatelessWidget {
     this.maxLines = 3,
     this.style,
     this.embedLabel,
+    this.includeAttachmentLabels = true,
     super.key,
   });
 
@@ -23,6 +24,7 @@ final class NoteDeltaPreview extends StatelessWidget {
   final int maxLines;
   final TextStyle? style;
   final NotePreviewEmbedLabel? embedLabel;
+  final bool includeAttachmentLabels;
 
   @override
   Widget build(BuildContext context) {
@@ -35,11 +37,16 @@ final class NoteDeltaPreview extends StatelessWidget {
     final assets = note.assetsById;
     final spans = <InlineSpan>[];
     final operations = note.document.toDelta().operations;
+    var removeNextAttachmentLineBreak = false;
     for (var index = 0; index < operations.length; index++) {
       final operation = operations[index];
       final data = operation.data;
       if (data is String) {
         var value = data;
+        if (removeNextAttachmentLineBreak && value.startsWith('\n')) {
+          value = value.substring(1);
+        }
+        removeNextAttachmentLineBreak = false;
         if (index == operations.length - 1 && value.endsWith('\n')) {
           value = value.substring(0, value.length - 1);
         }
@@ -54,6 +61,10 @@ final class NoteDeltaPreview extends StatelessWidget {
       }
       final embed = NoteEmbed.parse(data);
       final asset = assets[embed.attachmentId];
+      if (!includeAttachmentLabels && embed.kind == NoteEmbedKind.attachment) {
+        removeNextAttachmentLineBreak = true;
+        continue;
+      }
       final label =
           embedLabel?.call(embed, asset) ??
           switch (embed.kind) {

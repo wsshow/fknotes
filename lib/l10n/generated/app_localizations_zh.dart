@@ -72,6 +72,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get close => '关闭';
 
   @override
+  String get delete => '删除';
+
+  @override
   String get deletePermanently => '永久删除';
 
   @override
@@ -79,6 +82,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deletePermanentlyDescription => '笔记和关联文件将无法恢复。';
+
+  @override
+  String deleteSelectedNotesQuestion(int count) {
+    return '永久删除这 $count 篇笔记？';
+  }
 
   @override
   String get discardNote => '放弃笔记';
@@ -1369,6 +1377,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get copy => '复制';
+
+  @override
+  String get details => '详情';
 
   @override
   String get paste => '粘贴';
@@ -2843,6 +2854,33 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get size => '大小';
+
+  @override
+  String get imageCopied => '图片已复制';
+
+  @override
+  String get imageCopyUnavailable => '当前系统不支持复制图片';
+
+  @override
+  String get imageCopyFailed => '复制图片失败';
+
+  @override
+  String get editImage => '编辑图片';
+
+  @override
+  String get replaceFromGallery => '从相册替换';
+
+  @override
+  String get replaceWithCamera => '重新拍摄';
+
+  @override
+  String get imageDetails => '图片详情';
+
+  @override
+  String get imageReplaced => '图片已替换';
+
+  @override
+  String get imageReplaceFailed => '替换图片失败';
 
   @override
   String get duration => '时长';

@@ -119,6 +119,36 @@ final class NoteLibraryController extends ChangeNotifier {
   Future<void> togglePinned(Note note) =>
       _mutate(note, (value) => value.copyWith(isPinned: !value.isPinned));
 
+  Future<void> setPinned(Iterable<Note> notes, {required bool pinned}) async {
+    final selected = notes.toList(growable: false);
+    if (selected.isEmpty ||
+        selected.any((note) => _busyNoteIds.contains(note.id))) {
+      return;
+    }
+    _busyNoteIds.addAll(selected.map((note) => note.id));
+    _error = null;
+    notifyListeners();
+    try {
+      final timestamp = _now().toUtc();
+      final store = await _storeLoader();
+      for (final note in selected) {
+        if (note.isPinned == pinned) continue;
+        await store.update(
+          note.copyWith(isPinned: pinned, updatedAt: timestamp),
+        );
+      }
+      await refresh();
+    } catch (error) {
+      await refresh();
+      _error = error;
+      notifyListeners();
+      rethrow;
+    } finally {
+      _busyNoteIds.removeAll(selected.map((note) => note.id));
+      notifyListeners();
+    }
+  }
+
   Future<void> _mutate(Note note, Note Function(Note value) change) async {
     if (!_busyNoteIds.add(note.id)) return;
     _error = null;
@@ -154,6 +184,34 @@ final class NoteLibraryController extends ChangeNotifier {
       rethrow;
     } finally {
       _busyNoteIds.remove(note.id);
+      notifyListeners();
+    }
+  }
+
+  Future<void> deletePermanentlyAll(Iterable<Note> notes) async {
+    final selected = notes.toList(growable: false);
+    if (selected.isEmpty ||
+        selected.any((note) => _busyNoteIds.contains(note.id))) {
+      return;
+    }
+    _busyNoteIds.addAll(selected.map((note) => note.id));
+    _error = null;
+    notifyListeners();
+    try {
+      final store = await _storeLoader();
+      for (final note in selected) {
+        await store.deletePermanently(note);
+      }
+      final ids = selected.map((note) => note.id).toSet();
+      _notes = List.unmodifiable(
+        _notes.where((candidate) => !ids.contains(candidate.id)),
+      );
+    } catch (error) {
+      await refresh();
+      _error = error;
+      rethrow;
+    } finally {
+      _busyNoteIds.removeAll(selected.map((note) => note.id));
       notifyListeners();
     }
   }

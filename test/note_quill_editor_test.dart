@@ -354,7 +354,7 @@ void main() {
   });
 
   testWidgets(
-    'renders an inline image at editor width with its remove action',
+    'reveals copy edit details and delete actions only after tapping an image',
     (tester) async {
       final asset = _imageAsset();
       final document = NoteDocument.fromDelta(
@@ -369,6 +369,9 @@ void main() {
         assets: [asset],
       );
       final focusNode = FocusNode();
+      var copyCalls = 0;
+      var editCalls = 0;
+      var detailsCalls = 0;
       addTearDown(controller.dispose);
       addTearDown(focusNode.dispose);
 
@@ -378,6 +381,9 @@ void main() {
             controller: controller,
             focusNode: focusNode,
             resolveImage: (_) => MemoryImage(_onePixelPng),
+            onCopyImage: (_) async => copyCalls++,
+            onEditImage: (_) async => editCalls++,
+            onShowImageDetails: (_) async => detailsCalls++,
           ),
         ),
       );
@@ -390,18 +396,50 @@ void main() {
         tester.getSize(imageFinder).width,
         closeTo(tester.getSize(editorFinder).width - 48, 1),
       );
+      expect(tester.getSize(imageFinder).height, greaterThan(10));
+      expect(
+        find.byKey(ValueKey('note-image-actions-${asset.id.value}')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(ValueKey('remove-note-asset-${asset.id.value}')),
+        findsNothing,
+      );
 
       focusNode.requestFocus();
       await tester.pump();
       expect(focusNode.hasFocus, isTrue);
-      await tester.tapAt(tester.getTopLeft(imageFinder) + const Offset(8, 0.5));
+      await tester.tap(
+        find.byKey(ValueKey('note-asset-${asset.id.value}')),
+        warnIfMissed: false,
+      );
       await tester.pump(const Duration(milliseconds: 350));
       expect(focusNode.hasFocus, isFalse);
+      expect(
+        find.byKey(ValueKey('note-image-actions-${asset.id.value}')),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.byKey(ValueKey('copy-note-image-${asset.id.value}')),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.byKey(ValueKey('edit-note-image-${asset.id.value}')),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.byKey(ValueKey('details-note-image-${asset.id.value}')),
+      );
+      await tester.pump();
+      expect(copyCalls, 1);
+      expect(editCalls, 1);
+      expect(detailsCalls, 1);
 
       await tester.tap(
         find.byKey(ValueKey('remove-note-asset-${asset.id.value}')),
       );
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
 
       expect(controller.snapshot().assets, isEmpty);
       expect(controller.snapshot().document.project().plainText, '图片之前\n图片之后');

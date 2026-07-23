@@ -4,7 +4,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart' as permissions;
+import 'package:quill_native_bridge/quill_native_bridge.dart';
 
 import '../app.dart';
 import '../editor/note_editor_controller.dart';
@@ -314,6 +316,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     if (mounted) setState(() => _saveState = _EditorSaveState.saving);
     try {
       final candidate = _currentSnapshot(updatedAt: _now);
+      final previous = _note;
 
       if (candidate.revision == 0 && candidate.isMeaningfullyEmpty) {
         _savedVersion = targetVersion;
@@ -323,6 +326,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
             ? await writer.create(candidate)
             : await writer.update(candidate);
         _savedVersion = targetVersion;
+        await _discardRemovedAssetFiles(previous, _note);
       }
       if (mounted) {
         setState(() {
@@ -335,6 +339,18 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     } catch (_) {
       if (mounted) setState(() => _saveState = _EditorSaveState.failed);
       return false;
+    }
+  }
+
+  Future<void> _discardRemovedAssetFiles(Note previous, Note current) async {
+    final retained = current.assetsById;
+    for (final asset in previous.assets) {
+      final replacement = retained[asset.id];
+      if (replacement == null ||
+          replacement.storageKey != asset.storageKey ||
+          replacement.previewStorageKey != asset.previewStorageKey) {
+        await _deleteAssetFilesBestEffort(asset);
+      }
     }
   }
 
@@ -971,6 +987,248 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     await FileStorageService.instance.deleteFile(asset.previewStorageKey);
   }
 
+  Future<void> _copyImage(NoteAsset asset) async {
+    try {
+      final bridge = QuillNativeBridge();
+      if (!await bridge.isSupported(
+        QuillNativeBridgeFeature.copyImageToClipboard,
+      )) {
+        if (mounted) {
+          AppFeedback.show(context, context.l10n.imageCopyUnavailable);
+        }
+        return;
+      }
+      final path = FileStorageService.instance.absolutePath(asset.storageKey);
+      await bridge.copyImageToClipboard(await File(path).readAsBytes());
+      if (mounted) AppFeedback.success(context, context.l10n.imageCopied);
+    } catch (_) {
+      if (mounted) AppFeedback.error(context, context.l10n.imageCopyFailed);
+    }
+  }
+
+  Future<void> _editImage(NoteAsset requestedAsset) async {
+    final current = _editor.asset(requestedAsset.id);
+    if (current == null || !mounted) return;
+    final action = await showModalBottomSheet<_ImageEditAction>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: Text(context.l10n.renameAttachment),
+              onTap: () => Navigator.pop(sheetContext, _ImageEditAction.rename),
+            ),
+            ListTile(
+              key: const Key('replace-image-from-gallery'),
+              leading: const Icon(Icons.photo_library_outlined),
+              title: Text(context.l10n.replaceFromGallery),
+              onTap: () =>
+                  Navigator.pop(sheetContext, _ImageEditAction.gallery),
+            ),
+            ListTile(
+              key: const Key('replace-image-from-camera'),
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: Text(context.l10n.replaceWithCamera),
+              onTap: () => Navigator.pop(sheetContext, _ImageEditAction.camera),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+    switch (action) {
+      case _ImageEditAction.rename:
+        await _renameImage(current);
+      case _ImageEditAction.gallery:
+        await _replaceImage(current, ImageSource.gallery);
+      case _ImageEditAction.camera:
+        await _replaceImage(current, ImageSource.camera);
+    }
+  }
+
+  Future<void> _renameImage(NoteAsset requestedAsset) async {
+    var value = requestedAsset.displayTitle;
+    final result = await showDialog<_ImageRenameResult>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.l10n.editAttachmentTitle),
+        content: TextFormField(
+          key: const Key('image-attachment-title'),
+          initialValue: value,
+          onChanged: (next) => value = next,
+          autofocus: true,
+          maxLength: 120,
+          decoration: InputDecoration(
+            labelText: context.l10n.attachmentTitle,
+            hintText: context.l10n.attachmentTitleHint,
+            helperText: context.l10n.attachmentTitleDescription,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(context.l10n.cancel),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, const _ImageRenameResult(null)),
+            child: Text(context.l10n.restoreOriginalFileName),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, _ImageRenameResult(value.trim())),
+            child: Text(context.l10n.save),
+          ),
+        ],
+      ),
+    );
+    if (result == null || !mounted) return;
+    final current = _editor.asset(requestedAsset.id);
+    if (current == null) return;
+    _editor.updateAsset(
+      current.copyWith(displayName: result.displayName, updatedAt: _now),
+    );
+  }
+
+  Future<void> _replaceImage(
+    NoteAsset requestedAsset,
+    ImageSource source,
+  ) async {
+    if (_importingImage) return;
+    final operation = _replaceImageFiles(requestedAsset, source);
+    _imageImport = operation;
+    await operation;
+    if (identical(_imageImport, operation)) _imageImport = null;
+  }
+
+  Future<void> _replaceImageFiles(
+    NoteAsset requestedAsset,
+    ImageSource source,
+  ) async {
+    setState(() => _importingImage = true);
+    NoteAsset? imported;
+    try {
+      final selected = await _pickImage(source);
+      if (selected == null || !mounted) return;
+      imported = await _importImage(
+        selected.bytes,
+        originalName: selected.originalName,
+      );
+      if (!mounted) {
+        await _deleteAssetFiles(imported);
+        return;
+      }
+      final current = _editor.asset(requestedAsset.id);
+      if (current == null) {
+        await _deleteAssetFiles(imported);
+        return;
+      }
+      final replacement = NoteAsset(
+        id: current.id,
+        kind: NoteAssetKind.image,
+        storageKey: imported.storageKey,
+        originalName: imported.originalName,
+        displayName: current.displayName,
+        byteLength: imported.byteLength,
+        mimeType: imported.mimeType,
+        previewStorageKey: imported.previewStorageKey,
+        createdAt: current.createdAt,
+        updatedAt: _now,
+      );
+      _editor.updateAsset(replacement);
+      if (!await _persistLatest()) {
+        _editor.updateAsset(current);
+        await _deleteAssetFilesBestEffort(imported);
+        if (mounted) {
+          AppFeedback.error(context, context.l10n.imageReplaceFailed);
+        }
+        return;
+      }
+      if (mounted) AppFeedback.success(context, context.l10n.imageReplaced);
+    } catch (_) {
+      if (imported != null) await _deleteAssetFilesBestEffort(imported);
+      if (mounted) {
+        AppFeedback.error(context, context.l10n.imageReplaceFailed);
+      }
+    } finally {
+      if (mounted) setState(() => _importingImage = false);
+    }
+  }
+
+  Future<void> _showImageDetails(NoteAsset requestedAsset) async {
+    final asset = _editor.asset(requestedAsset.id);
+    if (asset == null || !mounted) return;
+    final imageProvider = (widget.resolveImage ?? _resolveManagedImage)(asset);
+    final formatter = DateFormat.yMMMd(context.l10n.localeName).add_Hm();
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => SizedBox(
+        height: (MediaQuery.sizeOf(sheetContext).height * .78).clamp(
+          420.0,
+          680.0,
+        ),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 28),
+          children: [
+            Text(
+              context.l10n.imageDetails,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 18),
+            if (imageProvider != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.medium),
+                child: ColoredBox(
+                  color: AppColors.surfaceMuted,
+                  child: Image(
+                    image: imageProvider,
+                    width: double.infinity,
+                    height: 200,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+            if (imageProvider != null) const SizedBox(height: 18),
+            _ImageDetailRow(
+              label: context.l10n.fileName,
+              value: asset.originalName,
+            ),
+            _ImageDetailRow(label: context.l10n.type, value: asset.mimeType),
+            _ImageDetailRow(
+              label: context.l10n.size,
+              value: _formatBytes(asset.byteLength),
+            ),
+            _ImageDetailRow(
+              label: context.l10n.created,
+              value: formatter.format(asset.createdAt.toLocal()),
+            ),
+            _ImageDetailRow(
+              label: context.l10n.updated,
+              value: formatter.format(asset.updatedAt.toLocal()),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteAssetFilesBestEffort(NoteAsset asset) async {
+    try {
+      await _deleteAssetFiles(asset);
+    } catch (_) {
+      // Persistence is authoritative; abandoned files can be reclaimed by a
+      // later storage cleanup if the platform still has an open handle.
+    }
+  }
+
   void _onRecordingAmplitude(double amplitude) {
     if (!mounted || _recordingState != _NoteRecordingState.recording) return;
     setState(() {
@@ -1321,6 +1579,9 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
                   resolveAssetPath:
                       widget.resolveAssetPath ?? _resolveManagedAssetPath,
                   audioPlayback: _audioPlayback,
+                  onCopyImage: _copyImage,
+                  onEditImage: _editImage,
+                  onShowImageDetails: _showImageDetails,
                   placeholder: context.l10n.noteStartHint,
                   readOnly:
                       _inlineAssistantBusy ||
@@ -1589,12 +1850,67 @@ enum _FailedSaveAction { keepEditing, retry, discard }
 
 enum _QuillEditorMenuAction { share, tags, pin, save, delete }
 
+enum _ImageEditAction { rename, gallery, camera }
+
+final class _ImageRenameResult {
+  const _ImageRenameResult(this.displayName);
+
+  final String? displayName;
+}
+
 bool _sameTags(List<String> left, List<String> right) {
   if (left.length != right.length) return false;
   for (var index = 0; index < left.length; index++) {
     if (left[index] != right[index]) return false;
   }
   return true;
+}
+
+String _formatBytes(int bytes) {
+  if (bytes < 1024) return '$bytes B';
+  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+  if (bytes < 1024 * 1024 * 1024) {
+    return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
+  }
+  return '${(bytes / 1024 / 1024 / 1024).toStringAsFixed(1)} GB';
+}
+
+final class _ImageDetailRow extends StatelessWidget {
+  const _ImageDetailRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 8),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 84,
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.muted,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: const TextStyle(
+              color: AppColors.ink,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 final class _ImageSourceAction extends StatelessWidget {

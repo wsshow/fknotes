@@ -387,6 +387,25 @@ final class NoteEditorController extends ChangeNotifier {
     );
   }
 
+  bool removeAsset(NoteAttachmentId id) {
+    var offset = 0;
+    for (final operation in quillController.document.toDelta().operations) {
+      final data = operation.data;
+      if (data is! String) {
+        try {
+          if (NoteEmbed.parse(data).attachmentId == id) {
+            removeEmbedAt(offset);
+            return true;
+          }
+        } on FormatException {
+          // Unknown embeds are ignored by the canonical attachment graph.
+        }
+      }
+      offset += operation.length ?? 0;
+    }
+    return false;
+  }
+
   void _insertBlockEmbed(NoteEmbed embed) {
     final selection = quillController.selection;
     final start = selection.start < 0 ? 0 : selection.start;

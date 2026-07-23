@@ -75,6 +75,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get close => 'Close';
 
   @override
+  String get delete => 'Delete';
+
+  @override
   String get deletePermanently => 'Delete permanently';
 
   @override
@@ -83,6 +86,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get deletePermanentlyDescription =>
       'The note and its files cannot be recovered.';
+
+  @override
+  String deleteSelectedNotesQuestion(int count) {
+    return 'Permanently delete these $count notes?';
+  }
 
   @override
   String get discardNote => 'Discard note';
@@ -1499,6 +1507,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get copy => 'Copy';
+
+  @override
+  String get details => 'Details';
 
   @override
   String get paste => 'Paste';
@@ -3059,6 +3070,34 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get size => 'Size';
+
+  @override
+  String get imageCopied => 'Image copied';
+
+  @override
+  String get imageCopyUnavailable =>
+      'Copying images is unavailable on this device';
+
+  @override
+  String get imageCopyFailed => 'Could not copy the image';
+
+  @override
+  String get editImage => 'Edit image';
+
+  @override
+  String get replaceFromGallery => 'Replace from gallery';
+
+  @override
+  String get replaceWithCamera => 'Retake photo';
+
+  @override
+  String get imageDetails => 'Image details';
+
+  @override
+  String get imageReplaced => 'Image replaced';
+
+  @override
+  String get imageReplaceFailed => 'Could not replace the image';
 
   @override
   String get duration => 'Duration';
