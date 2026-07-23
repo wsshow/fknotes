@@ -128,7 +128,7 @@ final class NoteDocument {
   }
 
   factory NoteDocument.fromDelta(Delta source) {
-    final delta = Delta.from(source);
+    final delta = _canonicalize(source);
     _validateDocumentDelta(delta);
     final envelope = <String, Object>{
       'schemaVersion': schemaVersion,
@@ -199,6 +199,21 @@ final class NoteDocument {
   static String _withoutTerminalNewline(String value) =>
       value.endsWith('\n') ? value.substring(0, value.length - 1) : value;
 
+  static Delta _canonicalize(Delta source) {
+    final canonical = Delta();
+    for (final operation in source.operations) {
+      if (operation.isInsert && operation.data is! String) {
+        // Quill can apply a selected inline style to an embed while formatting
+        // across the whole document. It has no visual meaning for our block
+        // nodes, so do not persist that incidental editor state.
+        canonical.insert(operation.data);
+      } else {
+        canonical.push(operation);
+      }
+    }
+    return canonical;
+  }
+
   static void _validateDocumentDelta(Delta delta) {
     if (delta.isEmpty) {
       throw const FormatException('A note document cannot be empty.');
@@ -248,9 +263,6 @@ final class NoteDocument {
         continue;
       }
 
-      if (operation.attributes?.isNotEmpty == true) {
-        throw const FormatException('Block embeds cannot have text styles.');
-      }
       if (lineHasText || expectsNewlineAfterEmbed) {
         throw const FormatException('A block embed must occupy its own line.');
       }

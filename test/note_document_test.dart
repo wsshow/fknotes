@@ -73,6 +73,20 @@ void main() {
       expect(document.project().isVisuallyEmpty, isFalse);
     });
 
+    test('removes incidental inline styles from block embeds', () {
+      final id = NoteAttachmentId.parse('3d2be3d5-00c8-4f5c-8e69-e90085dc2873');
+      final document = NoteDocument.fromDelta(
+        Delta()
+          ..insert(NoteEmbed.attachment(id).toDeltaData(), {'bold': true})
+          ..insert('\n'),
+      );
+
+      expect(document.toDelta().toJson(), [
+        {'insert': NoteEmbed.attachment(id).toDeltaData()},
+        {'insert': '\n'},
+      ]);
+    });
+
     test('rejects file paths and non-canonical attachment IDs', () {
       final delta = Delta()
         ..insert({

@@ -55,6 +55,7 @@ dependencies:
   # Delta JSON is the canonical note document. Flutter Quill owns editing,
   # selection, IME composition, undo/redo, and clipboard behavior.
   flutter_quill: 11.5.1
+  quill_native_bridge: 11.2.0
   local_auth: ^3.0.2
   local_auth_android: ^2.0.9
   local_auth_darwin: ^2.0.3

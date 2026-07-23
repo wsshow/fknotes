@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 import 'package:provider/provider.dart';
 
 import 'pages/home_page.dart';
@@ -98,7 +99,10 @@ class FkNotesApp extends StatelessWidget {
           onGenerateTitle: (context) => context.l10n.appTitle,
           locale: localeController.locale,
           supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: const [
+            ...AppLocalizations.localizationsDelegates,
+            FlutterQuillLocalizations.delegate,
+          ],
           debugShowCheckedModeBanner: false,
           navigatorObservers: [
             AppFeedbackNavigatorObserver(),

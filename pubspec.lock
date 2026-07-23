@@ -926,7 +926,7 @@ packages:
     source: hosted
     version: "2.2.0"
   quill_native_bridge:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: quill_native_bridge
       sha256: "53c7ee4e900ce63fcf566391c5c20a939890cfcf000486d325f451869d23a281"
