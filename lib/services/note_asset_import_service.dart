@@ -25,7 +25,7 @@ final class NoteAssetImportService {
     final stored = await _storage.importNoteImageBytes(bytes);
     String? previewStorageKey;
     try {
-      final generated = await _storage.generateThumbnailInBackground(
+      final generated = await _storage.generateNoteThumbnailInBackground(
         stored.storageKey,
       );
       previewStorageKey = generated.isEmpty ? null : generated;

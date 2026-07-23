@@ -32,27 +32,24 @@ void main() {
     await directory.delete(recursive: true);
   });
 
-  test(
-    'creates a clean Delta database without opening the legacy file',
-    () async {
-      final legacy = File(p.join(directory.path, 'fknotes.db'));
-      await legacy.writeAsString('legacy-database-sentinel');
+  test('creates the single canonical Delta database', () async {
+    final repository = await service.repository;
+    final created = await repository.create(
+      Note.newDraft(now: DateTime.utc(2026, 7, 23)),
+    );
 
-      final repository = await service.repository;
-      final created = await repository.create(
-        Note.newDraft(now: DateTime.utc(2026, 7, 23)),
-      );
-
-      expect((await repository.get(created.id))?.document, created.document);
-      expect(await legacy.readAsString(), 'legacy-database-sentinel');
-      expect(
-        await File(
-          p.join(directory.path, NoteDatabaseService.databaseFileName),
-        ).exists(),
-        isTrue,
-      );
-    },
-  );
+    expect((await repository.get(created.id))?.document, created.document);
+    expect(
+      await File(
+        p.join(directory.path, NoteDatabaseService.databaseFileName),
+      ).exists(),
+      isTrue,
+    );
+    expect(
+      await File(p.join(directory.path, 'fknotes-quill.db')).exists(),
+      isFalse,
+    );
+  });
 
   test(
     'has only the canonical note body and stable attachment schema',

@@ -9,14 +9,13 @@ import 'note_repository.dart';
 
 /// Owns the clean-slate Delta note database.
 ///
-/// The previous `fknotes.db` is intentionally neither opened nor migrated.
-/// Keeping a distinct file makes the cut-over explicit and recoverable without
-/// carrying a legacy schema into the new application model.
+/// This database starts from a clean installation. A file with this name from
+/// a pre-Delta release is intentionally neither detected nor migrated.
 final class NoteDatabaseService {
   NoteDatabaseService({this.databasePath});
 
   static final NoteDatabaseService instance = NoteDatabaseService();
-  static const String databaseFileName = 'fknotes-quill.db';
+  static const String databaseFileName = 'fknotes.db';
 
   final String? databasePath;
   Database? _database;

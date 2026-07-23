@@ -116,16 +116,16 @@ void main() {
         Uint8List.fromList(img.encodePng(source)),
       );
       final thumbnail = await FileStorageService.instance
-          .generateThumbnailInBackground(stored.storageKey);
+          .generateNoteThumbnailInBackground(stored.storageKey);
 
-      expect(stored.storageKey, startsWith('images/'));
+      expect(stored.storageKey, startsWith('notes/images/'));
       expect(stored.mimeType, 'image/png');
       expect(stored.byteLength, greaterThan(0));
       expect(
         await FileStorageService.instance.fileExists(stored.storageKey),
         isTrue,
       );
-      expect(thumbnail, startsWith('thumbnails/'));
+      expect(thumbnail, startsWith('notes/thumbnails/'));
       expect(await FileStorageService.instance.fileExists(thumbnail), isTrue);
     },
   );

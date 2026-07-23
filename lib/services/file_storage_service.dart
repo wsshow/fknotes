@@ -29,6 +29,8 @@ class FileStorageService {
     _baseDir = appDir.path;
 
     final dirs = [
+      p.join(_baseDir, 'notes', 'images'),
+      p.join(_baseDir, 'notes', 'thumbnails'),
       p.join(_baseDir, 'images'),
       p.join(_baseDir, 'audio'),
       p.join(_baseDir, 'video'),
@@ -44,7 +46,13 @@ class FileStorageService {
     for (final dir in dirs) {
       await Directory(dir).create(recursive: true);
     }
-    for (final folder in ['images', 'audio', 'video', 'documents']) {
+    for (final folder in [
+      p.join('notes', 'images'),
+      'images',
+      'audio',
+      'video',
+      'documents',
+    ]) {
       await for (final entity in Directory(
         p.join(_baseDir, folder),
       ).list(followLinks: false)) {
@@ -134,7 +142,7 @@ class FileStorageService {
     final normalized = await Isolate.run(() => _normalizeNoteImageBytes(bytes));
     final storageKey = await writeBytes(
       normalized.bytes,
-      'images',
+      p.join('notes', 'images'),
       extension: normalized.extension,
     );
     return StoredNoteImage(
@@ -202,10 +210,25 @@ class FileStorageService {
   /// Keep image decoding and JPEG encoding away from the UI isolate on
   /// platforms that do not provide the native sampled thumbnail path.
   Future<String> generateThumbnailInBackground(String imagePath) async {
+    return _generateThumbnailInBackground(imagePath, 'thumbnails');
+  }
+
+  /// Generates a preview inside the isolated Delta-note storage tree.
+  Future<String> generateNoteThumbnailInBackground(String imagePath) async {
+    return _generateThumbnailInBackground(
+      imagePath,
+      p.join('notes', 'thumbnails'),
+    );
+  }
+
+  Future<String> _generateThumbnailInBackground(
+    String imagePath,
+    String subDirectory,
+  ) async {
     final sourcePath = absolutePath(imagePath);
     if (!await File(sourcePath).exists()) return '';
     final thumbFilename = '${_uuid.v4()}_thumb_v2.jpg';
-    final relativePath = 'thumbnails/$thumbFilename';
+    final relativePath = p.join(subDirectory, thumbFilename);
     final outputPath = absolutePath(relativePath);
     final generated = await Isolate.run(
       () => _generateThumbnailFile(sourcePath, outputPath),
