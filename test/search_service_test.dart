@@ -5,6 +5,7 @@ import 'package:fknotes/models/note_entry.dart';
 import 'package:fknotes/services/database_service.dart';
 import 'package:fknotes/services/file_storage_service.dart';
 import 'package:fknotes/services/local_chat_store.dart';
+import 'package:fknotes/services/local_chat_database_service.dart';
 import 'package:fknotes/services/note_service.dart';
 import 'package:fknotes/services/search_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -76,6 +77,7 @@ void main() {
 
   tearDownAll(() async {
     await DatabaseService.instance.close();
+    await LocalChatDatabaseService.instance.close();
     await root.delete(recursive: true);
   });
 

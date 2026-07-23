@@ -6,8 +6,8 @@ import 'package:uuid/uuid.dart';
 
 import '../debug/app_diagnostics.dart';
 import '../models/local_chat.dart';
-import 'database_service.dart';
 import 'file_storage_service.dart';
+import 'local_chat_database_service.dart';
 
 class LocalChatStore {
   LocalChatStore._();
@@ -91,7 +91,7 @@ class LocalChatStore {
   }
 
   Future<List<LocalChatPersona>> loadPersonas() async {
-    final database = await DatabaseService.instance.database;
+    final database = await LocalChatDatabaseService.instance.database;
     final rows = await database.query(
       'chat_personas',
       orderBy: 'built_in DESC, updated_at DESC',
@@ -115,7 +115,7 @@ class LocalChatStore {
     if (persona.name.trim().isEmpty || persona.systemPrompt.trim().isEmpty) {
       throw const FormatException('角色名称和系统提示词不能为空');
     }
-    final database = await DatabaseService.instance.database;
+    final database = await LocalChatDatabaseService.instance.database;
     await database.insert('chat_personas', {
       'id': persona.id,
       'name': persona.name.trim(),
@@ -131,7 +131,7 @@ class LocalChatStore {
     if (id == LocalChatPersona.defaultId) {
       throw const FormatException('内置角色不能删除');
     }
-    final database = await DatabaseService.instance.database;
+    final database = await LocalChatDatabaseService.instance.database;
     await database.transaction((transaction) async {
       await transaction.update(
         'chat_sessions',
@@ -152,7 +152,7 @@ class LocalChatStore {
   }
 
   Future<List<LocalChatSession>> loadSessions() async {
-    final database = await DatabaseService.instance.database;
+    final database = await LocalChatDatabaseService.instance.database;
     final sessionRows = await database.query(
       'chat_sessions',
       orderBy: 'updated_at DESC',
@@ -219,7 +219,7 @@ class LocalChatStore {
 
   Future<void> saveSession(LocalChatSession session) {
     final result = _writeQueue.then((_) async {
-      final database = await DatabaseService.instance.database;
+      final database = await LocalChatDatabaseService.instance.database;
       await database.transaction((transaction) async {
         await transaction.insert('chat_sessions', {
           'id': session.id,
@@ -319,7 +319,7 @@ class LocalChatStore {
 
   Future<void> deleteSession(String id) {
     final result = _writeQueue.then((_) async {
-      final database = await DatabaseService.instance.database;
+      final database = await LocalChatDatabaseService.instance.database;
       final rows = await database.query(
         'chat_messages',
         columns: ['attachments_json'],

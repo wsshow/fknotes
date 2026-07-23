@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:fknotes/models/local_chat.dart';
 import 'package:fknotes/services/file_storage_service.dart';
+import 'package:fknotes/services/local_chat_database_service.dart';
 import 'package:fknotes/services/local_chat_store.dart';
-import 'package:fknotes/services/database_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -17,13 +17,13 @@ void main() {
   });
 
   setUp(() async {
-    await DatabaseService.instance.close();
+    await LocalChatDatabaseService.instance.close();
     root = await Directory.systemTemp.createTemp('fknotes_chat_store_test_');
     await FileStorageService.instance.init(baseDir: root.path);
   });
 
   tearDown(() async {
-    await DatabaseService.instance.close();
+    await LocalChatDatabaseService.instance.close();
     await root.delete(recursive: true);
   });
 
@@ -47,6 +47,7 @@ void main() {
       updatedAt: DateTime.now(),
     );
     await store.saveSession(session);
+    await LocalChatDatabaseService.instance.validate();
 
     final restored = await store.loadSessions();
     expect(restored, hasLength(1));
@@ -54,6 +55,13 @@ void main() {
     expect(restored.single.personaId, persona.id);
     expect(restored.single.messages.last.content, '可以从西湖开始。');
     expect(restored.single.title, '帮我规划杭州的周末旅行');
+    expect(
+      await File(
+        '${root.path}/${LocalChatDatabaseService.databaseFileName}',
+      ).exists(),
+      isTrue,
+    );
+    expect(await File('${root.path}/fknotes.db').exists(), isFalse);
 
     // Chat UI owns and reorders this collection after every saved turn.
     // Loading must never expose a fixed-length outer list.
@@ -131,11 +139,8 @@ void main() {
     await store.deleteSession(first.id);
 
     expect((await store.loadSessions()).map((item) => item.id), [second.id]);
-    final orphaned = await (await DatabaseService.instance.database).query(
-      'chat_messages',
-      where: 'session_id = ?',
-      whereArgs: [first.id],
-    );
+    final orphaned = await (await LocalChatDatabaseService.instance.database)
+        .query('chat_messages', where: 'session_id = ?', whereArgs: [first.id]);
     expect(orphaned, isEmpty);
   });
 

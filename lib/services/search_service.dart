@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../models/note_entry.dart';
 import 'database_service.dart';
+import 'local_chat_database_service.dart';
 import 'note_service.dart';
 
 enum LocalSearchFilter { all, notes, attachments, conversations }
@@ -87,7 +88,13 @@ class SearchService {
       }
     }
     if (rows.isEmpty) rows = await _fallbackSearch(database, query);
-    return _hydrateResults(database, rows);
+    final results = await _hydrateNoteResults(rows);
+    results.addAll(await _searchConversations(query));
+    results.sort((left, right) {
+      final rank = left.rank.compareTo(right.rank);
+      return rank != 0 ? rank : right.updatedAt.compareTo(left.updatedAt);
+    });
+    return results;
   }
 
   Future<bool> _usesTrigramIndex(Database database) async {
@@ -125,28 +132,16 @@ class SearchService {
       WHERE e.is_deleted = 0 AND (
         a.file_name LIKE ? OR a.ocr_text LIKE ? OR a.transcript LIKE ?
       )
-      UNION ALL
-      SELECT 'chat_session', s.id, '', s.title, s.system_prompt, '',
-        COALESCE(NULLIF(s.system_prompt, ''), s.title), 0.0
-      FROM chat_sessions s
-      WHERE s.title LIKE ? OR s.system_prompt LIKE ?
-      UNION ALL
-      SELECT 'chat_message', m.id, m.session_id, '', m.content, m.role,
-        m.content, 0.0
-      FROM chat_messages m
-      WHERE m.content LIKE ?
       LIMIT 160
       ''',
-      [like, like, like, like, like, like, like, like, like, like, like],
+      [like, like, like, like, like, like, like, like],
     );
   }
 
-  Future<List<LocalSearchResult>> _hydrateResults(
-    Database database,
+  Future<List<LocalSearchResult>> _hydrateNoteResults(
     List<Map<String, Object?>> rows,
   ) async {
     final notes = <int, _SearchGroup>{};
-    final chats = <String, _SearchGroup>{};
     for (final row in rows) {
       final kind = row['kind'] as String? ?? '';
       final rank = (row['rank'] as num?)?.toDouble() ?? 0;
@@ -163,14 +158,6 @@ class SearchService {
               note: kind == 'note',
               attachment: kind == 'attachment',
             );
-      } else if (kind == 'chat_session' || kind == 'chat_message') {
-        final sessionId =
-            (kind == 'chat_session' ? row['source_id'] : row['parent_id'])
-                ?.toString();
-        if (sessionId == null || sessionId.isEmpty) continue;
-        chats
-            .putIfAbsent(sessionId, _SearchGroup.new)
-            .add(rank: rank, snippet: snippet);
       }
     }
 
@@ -193,37 +180,48 @@ class SearchService {
         ),
       );
     }
-    for (final item in chats.entries) {
-      final sessionRows = await database.query(
-        'chat_sessions',
-        columns: ['title', 'updated_at'],
-        where: 'id = ?',
-        whereArgs: [item.key],
-        limit: 1,
-      );
-      if (sessionRows.isEmpty) continue;
-      final row = sessionRows.single;
-      results.add(
+    return results;
+  }
+
+  Future<List<LocalSearchResult>> _searchConversations(String query) async {
+    final database = await LocalChatDatabaseService.instance.database;
+    final like = '%$query%';
+    final rows = await database.rawQuery(
+      '''
+      SELECT s.id, s.title, s.updated_at,
+        COALESCE(NULLIF(s.system_prompt, ''), s.title) AS snippet
+      FROM chat_sessions s
+      WHERE s.title LIKE ? OR s.system_prompt LIKE ?
+      UNION ALL
+      SELECT s.id, s.title, s.updated_at, m.content
+      FROM chat_messages m
+      JOIN chat_sessions s ON s.id = m.session_id
+      WHERE m.content LIKE ?
+      LIMIT 80
+      ''',
+      [like, like, like],
+    );
+    final grouped = <String, Map<String, Object?>>{};
+    for (final row in rows) {
+      final id = row['id'] as String;
+      grouped.putIfAbsent(id, () => row);
+    }
+    return [
+      for (final row in grouped.values)
         LocalSearchResult(
-          id: 'chat:${item.key}',
+          id: 'chat:${row['id']}',
           note: null,
-          chatSessionId: item.key,
+          chatSessionId: row['id']! as String,
           title: row['title'] as String? ?? '本地对话',
-          snippet: item.value.snippet,
+          snippet: _bestSnippet(row),
           matchedNote: false,
           matchedAttachment: false,
-          rank: item.value.rank,
+          rank: 0,
           updatedAt:
               DateTime.tryParse(row['updated_at'] as String? ?? '') ??
               DateTime.fromMillisecondsSinceEpoch(0),
         ),
-      );
-    }
-    results.sort((left, right) {
-      final rank = left.rank.compareTo(right.rank);
-      return rank != 0 ? rank : right.updatedAt.compareTo(left.updatedAt);
-    });
-    return results;
+    ];
   }
 
   String _bestSnippet(Map<String, Object?> row) {
