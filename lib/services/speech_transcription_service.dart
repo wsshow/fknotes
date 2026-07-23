@@ -9,10 +9,12 @@ import 'package:path/path.dart' as p;
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 
 import '../debug/app_diagnostics.dart';
-import '../models/note_entry.dart';
+import '../models/note.dart';
+import '../models/note_document.dart';
 import 'file_storage_service.dart';
 import 'local_inference_coordinator.dart';
-import 'note_service.dart';
+import 'note_database_service.dart';
+import 'note_repository.dart';
 import 'speech_model_service.dart';
 import 'speaker_diarization_model_service.dart';
 import 'voice_activity_model_service.dart';
@@ -30,7 +32,8 @@ enum TranscriptionStatus {
 
 class TranscriptionJob {
   final String key;
-  final int noteId;
+  final NoteId noteId;
+  final NoteAttachmentId assetId;
   final String filePath;
   TranscriptionStatus status;
   double progress;
@@ -44,6 +47,7 @@ class TranscriptionJob {
   TranscriptionJob({
     required this.key,
     required this.noteId,
+    required this.assetId,
     required this.filePath,
     this.status = TranscriptionStatus.preparing,
     this.progress = 0,
@@ -61,6 +65,64 @@ class TranscriptionJob {
   };
 }
 
+typedef NoteTranscriptRepositoryLoader = Future<NoteRepository> Function();
+
+/// Persists recognition output onto the latest Delta note revision.
+///
+/// Recognition can take minutes, so the note is loaded only when the result
+/// is ready. A single optimistic-lock retry preserves edits made at the same
+/// moment without ever falling back to an integer-ID database.
+final class NoteTranscriptWriter {
+  NoteTranscriptWriter({NoteTranscriptRepositoryLoader? repositoryLoader})
+    : _repositoryLoader =
+          repositoryLoader ?? (() => NoteDatabaseService.instance.repository);
+
+  final NoteTranscriptRepositoryLoader _repositoryLoader;
+
+  Future<Note> write({
+    required NoteId noteId,
+    required NoteAttachmentId assetId,
+    required String storageKey,
+    required String transcript,
+    required String engine,
+    DateTime? now,
+  }) async {
+    final normalized = transcript.trim();
+    if (normalized.isEmpty) {
+      throw ArgumentError.value(transcript, 'transcript', '转写不能为空');
+    }
+    final timestamp = (now ?? DateTime.now()).toUtc();
+    final repository = await _repositoryLoader();
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final note = await repository.get(noteId);
+      if (note == null || note.status == NoteStatus.trashed) {
+        throw StateError('目标笔记不存在或已移入废纸篓');
+      }
+      final assetIndex = note.assets.indexWhere((asset) => asset.id == assetId);
+      if (assetIndex < 0) throw StateError('目标音频附件已被移除');
+      final asset = note.assets[assetIndex];
+      if (asset.kind != NoteAssetKind.audio || asset.storageKey != storageKey) {
+        throw StateError('目标音频附件已发生变化');
+      }
+      final assets = [...note.assets];
+      assets[assetIndex] = asset.copyWith(
+        transcript: normalized,
+        transcriptionEngine: engine,
+        transcribedAt: timestamp,
+        updatedAt: timestamp,
+      );
+      try {
+        return await repository.update(
+          note.copyWith(assets: assets, updatedAt: timestamp),
+        );
+      } on NoteWriteConflict {
+        if (attempt == 1) rethrow;
+      }
+    }
+    throw StateError('无法保存转写');
+  }
+}
+
 /// Owns transcription jobs so recognition continues when the detail page is
 /// closed. The worker isolate performs all model inference and reports real
 /// progress based on the number of decoded audio samples processed.
@@ -74,7 +136,7 @@ class SpeechTranscriptionService extends ChangeNotifier {
   final _models = SpeechModelService.instance;
   final _voiceActivityModels = VoiceActivityModelService.instance;
   final _speakerDiarizationModels = SpeakerDiarizationModelService.instance;
-  final _notes = NoteService.instance;
+  final _transcripts = NoteTranscriptWriter();
   final _inference = LocalInferenceCoordinator.instance;
   final Map<String, TranscriptionJob> _jobs = {};
 
@@ -85,11 +147,11 @@ class SpeechTranscriptionService extends ChangeNotifier {
       (await _models.inspect()).installed;
 
   Future<void> start({
-    required int noteId,
-    required NoteAttachment attachment,
+    required NoteId noteId,
+    required NoteAsset attachment,
     int? speakerCount,
   }) async {
-    if (attachment.type != NoteType.audio) {
+    if (attachment.kind != NoteAssetKind.audio) {
       throw ArgumentError('只有音频附件可以转写');
     }
     if (speakerCount != null &&
@@ -97,25 +159,26 @@ class SpeechTranscriptionService extends ChangeNotifier {
         (speakerCount < 2 || speakerCount > 8)) {
       throw ArgumentError.value(speakerCount, 'speakerCount', '必须为自动或 2–8 人');
     }
-    final existing = _jobs[attachment.filePath];
+    final existing = _jobs[attachment.storageKey];
     if (existing?.isRunning == true) return;
     final job = TranscriptionJob(
-      key: '${attachment.filePath}:${DateTime.now().microsecondsSinceEpoch}',
+      key: '${attachment.storageKey}:${DateTime.now().microsecondsSinceEpoch}',
       noteId: noteId,
-      filePath: attachment.filePath,
+      assetId: attachment.id,
+      filePath: attachment.storageKey,
       speakerCount: speakerCount,
     );
-    _jobs[attachment.filePath] = job;
+    _jobs[attachment.storageKey] = job;
     notifyListeners();
     if (kDebugMode) {
       AppDiagnostics.info(
         AppLogCategory.speech,
         'audio_transcription_started',
         data: {
-          'noteId': noteId,
+          'noteId': noteId.value,
           'speakerMode': speakerCount != null,
           'speakerCount': speakerCount,
-          'fileSizeBytes': attachment.fileSize,
+          'fileSizeBytes': attachment.byteLength,
           'durationMs': attachment.durationMs,
         },
         traceId: job.key,
@@ -165,14 +228,15 @@ class SpeechTranscriptionService extends ChangeNotifier {
       if (normalized.isEmpty) throw StateError('没有识别到清晰语音');
       _update(job, status: TranscriptionStatus.saving, progress: .96);
       final now = DateTime.now();
-      await _notes.updateAttachmentTranscript(
+      await _transcripts.write(
         noteId: job.noteId,
-        filePath: job.filePath,
+        assetId: job.assetId,
+        storageKey: job.filePath,
         transcript: normalized,
-        model: job.speakerCount == null
+        engine: job.speakerCount == null
             ? SpeechModelService.modelId
             : '${SpeechModelService.modelId}+${SpeakerDiarizationModelService.modelId}',
-        transcribedAt: now,
+        now: now,
       );
       job.partialText = normalized;
       _update(job, status: TranscriptionStatus.completed, progress: 1);
