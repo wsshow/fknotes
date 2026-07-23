@@ -73,7 +73,7 @@ void main() {
     expect(find.textContaining('**'), findsNothing);
   });
 
-  testWidgets('opens new and existing notes through one editor boundary', (
+  testWidgets('keeps creation on home and opens existing notes', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -94,11 +94,7 @@ void main() {
     );
     await _pump(tester);
 
-    await tester.tap(find.byKey(const Key('delta-library-new-note')));
-    await tester.pumpAndSettle();
-    expect(find.text('新建编辑器'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('close-test-editor')));
-    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('delta-library-new-note')), findsNothing);
 
     await tester.tap(find.text('格式笔记'));
     await tester.pumpAndSettle();

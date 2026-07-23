@@ -451,20 +451,21 @@ class _InfoCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(17),
     decoration: BoxDecoration(
-      color: AppColors.accentSoft,
+      color: AppColors.surface,
       borderRadius: BorderRadius.circular(AppRadius.large),
+      border: Border.all(color: AppColors.line),
     ),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const DecoratedBox(
           decoration: BoxDecoration(
-            color: AppColors.surface,
+            color: AppColors.surfaceMuted,
             borderRadius: BorderRadius.all(Radius.circular(AppRadius.small)),
           ),
           child: Padding(
             padding: EdgeInsets.all(9),
-            child: Icon(Icons.cloud_sync_outlined, color: AppColors.accent),
+            child: Icon(Icons.cloud_sync_outlined, color: AppColors.muted),
           ),
         ),
         const SizedBox(width: 13),
@@ -502,7 +503,7 @@ class _InfoCard extends StatelessWidget {
                     ).add_Hm().format(settings.lastSyncedAt!.toLocal()),
                   ),
                   style: const TextStyle(
-                    color: AppColors.accent,
+                    color: AppColors.muted,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),

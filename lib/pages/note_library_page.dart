@@ -124,18 +124,6 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: AppColors.canvas,
-    floatingActionButton: _controller.scope == NoteLibraryScope.trash
-        ? null
-        : Padding(
-            padding: const EdgeInsets.only(bottom: 76),
-            child: FloatingActionButton(
-              key: const Key('delta-library-new-note'),
-              tooltip: context.l10n.newNote,
-              heroTag: null,
-              onPressed: _openEditor,
-              child: const Icon(Icons.add_rounded),
-            ),
-          ),
     body: SafeArea(
       bottom: false,
       child: Column(
@@ -440,13 +428,17 @@ final class _DeltaNoteCard extends StatelessWidget {
               child: Icon(
                 Icons.push_pin_rounded,
                 size: 15,
-                color: AppColors.coral,
+                color: AppColors.accent,
               ),
             ),
           if (note.isFavorite)
             const Padding(
               padding: EdgeInsets.only(right: 6),
-              child: Icon(Icons.star_rounded, size: 16, color: AppColors.coral),
+              child: Icon(
+                Icons.star_rounded,
+                size: 16,
+                color: AppColors.accent,
+              ),
             ),
           Expanded(
             child: Text(

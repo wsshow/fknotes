@@ -227,12 +227,12 @@ class _PersonaCard extends StatelessWidget {
           width: 42,
           height: 42,
           decoration: const BoxDecoration(
-            color: AppColors.softCoral,
+            color: AppColors.surfaceMuted,
             shape: BoxShape.circle,
           ),
           child: const Icon(
             Icons.psychology_alt_outlined,
-            color: AppColors.coral,
+            color: AppColors.muted,
           ),
         ),
         const SizedBox(width: 12),

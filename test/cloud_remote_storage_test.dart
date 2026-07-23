@@ -92,65 +92,62 @@ void main() {
     },
   );
 
-  test(
-    'S3 connection test signs path-style object requests',
-    () async {
-      server.listen((request) async {
-        requests.add(request);
-        final body = await request.fold<List<int>>(
-          <int>[],
-          (bytes, chunk) => bytes..addAll(chunk),
-        );
-        switch (request.method) {
-          case 'PUT':
-            objects[request.uri.path] = body;
-          case 'GET':
-            final value = objects[request.uri.path];
-            if (value == null) {
-              request.response.statusCode = 404;
-            } else {
-              request.response.add(value);
-            }
-          case 'DELETE':
-            objects.remove(request.uri.path);
-            request.response.statusCode = 204;
-        }
-        await request.response.close();
-      });
-      final storage = S3RemoteStorage(
-        S3SyncConfig(
-          endpoint: 'http://${server.address.host}:${server.port}',
-          region: 'us-east-1',
-          bucket: 'notes',
-          accessKeyId: 'AKID',
-          secretAccessKey: 'SECRET',
-          prefix: 'FKNotes',
-        ),
-        clock: () => DateTime.utc(2026, 7, 12, 8, 30),
+  test('S3 connection test signs path-style object requests', () async {
+    server.listen((request) async {
+      requests.add(request);
+      final body = await request.fold<List<int>>(
+        <int>[],
+        (bytes, chunk) => bytes..addAll(chunk),
       );
-
-      try {
-        await storage.testConnection();
-      } finally {
-        storage.close();
+      switch (request.method) {
+        case 'PUT':
+          objects[request.uri.path] = body;
+        case 'GET':
+          final value = objects[request.uri.path];
+          if (value == null) {
+            request.response.statusCode = 404;
+          } else {
+            request.response.add(value);
+          }
+        case 'DELETE':
+          objects.remove(request.uri.path);
+          request.response.statusCode = 204;
       }
+      await request.response.close();
+    });
+    final storage = S3RemoteStorage(
+      S3SyncConfig(
+        endpoint: 'http://${server.address.host}:${server.port}',
+        region: 'us-east-1',
+        bucket: 'notes',
+        accessKeyId: 'AKID',
+        secretAccessKey: 'SECRET',
+        prefix: 'FKNotes',
+      ),
+      clock: () => DateTime.utc(2026, 7, 12, 8, 30),
+    );
 
-      expect(objects, isEmpty);
+    try {
+      await storage.testConnection();
+    } finally {
+      storage.close();
+    }
+
+    expect(objects, isEmpty);
+    expect(
+      requests.first.uri.path,
+      startsWith('/notes/FKNotes/.fknotes-connection-test-'),
+    );
+    for (final request in requests) {
       expect(
-        requests.first.uri.path,
-        startsWith('/notes/FKNotes/.fknotes-connection-test-'),
+        request.headers.value(HttpHeaders.authorizationHeader),
+        startsWith('AWS4-HMAC-SHA256 Credential=AKID/20260712/us-east-1/s3/'),
       );
-      for (final request in requests) {
-        expect(
-          request.headers.value(HttpHeaders.authorizationHeader),
-          startsWith('AWS4-HMAC-SHA256 Credential=AKID/20260712/us-east-1/s3/'),
-        );
-        expect(request.headers.value('x-amz-date'), '20260712T083000Z');
-      }
-      expect(
-        requests.map((request) => request.uri.path),
-        contains(startsWith('/notes/FKNotes/.fknotes-connection-test-')),
-      );
-    },
-  );
+      expect(request.headers.value('x-amz-date'), '20260712T083000Z');
+    }
+    expect(
+      requests.map((request) => request.uri.path),
+      contains(startsWith('/notes/FKNotes/.fknotes-connection-test-')),
+    );
+  });
 }

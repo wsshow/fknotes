@@ -136,15 +136,15 @@ class _FeedbackColors {
       icon: Icons.info_outline_rounded,
     ),
     AppFeedbackTone.success => const _FeedbackColors(
-      background: AppColors.softGreen,
-      foreground: AppColors.moss,
+      background: AppColors.successSoft,
+      foreground: AppColors.success,
       border: AppColors.line,
       icon: Icons.check_circle_outline_rounded,
     ),
     AppFeedbackTone.error => const _FeedbackColors(
-      background: AppColors.softCoral,
-      foreground: AppColors.coral,
-      border: AppColors.coral,
+      background: AppColors.dangerSoft,
+      foreground: AppColors.danger,
+      border: AppColors.danger,
       icon: Icons.error_outline_rounded,
     ),
   };

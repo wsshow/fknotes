@@ -34,15 +34,16 @@ class _AppLockSettingsPageState extends State<AppLockSettingsPage> {
           Container(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
-              color: AppColors.accentSoft,
+              color: AppColors.surface,
               borderRadius: BorderRadius.circular(AppRadius.large),
+              border: Border.all(color: AppColors.line),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const DecoratedBox(
                   decoration: BoxDecoration(
-                    color: AppColors.surface,
+                    color: AppColors.surfaceMuted,
                     borderRadius: BorderRadius.all(
                       Radius.circular(AppRadius.small),
                     ),
@@ -51,7 +52,7 @@ class _AppLockSettingsPageState extends State<AppLockSettingsPage> {
                     padding: EdgeInsets.all(10),
                     child: Icon(
                       Icons.fingerprint_rounded,
-                      color: AppColors.accent,
+                      color: AppColors.muted,
                       size: 24,
                     ),
                   ),

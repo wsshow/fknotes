@@ -2317,7 +2317,7 @@ class LocalChatComposer extends StatelessWidget {
                               child: Text(
                                 context.l10n.modelDoesNotSupportImages,
                                 style: const TextStyle(
-                                  color: AppColors.coral,
+                                  color: AppColors.warning,
                                   fontSize: 10,
                                 ),
                               ),
@@ -2466,7 +2466,7 @@ class LocalChatComposer extends StatelessWidget {
                           ? context.l10n.preparingOfflineSpeech
                           : context.l10n.dictationTapMicToFinish,
                       style: const TextStyle(
-                        color: AppColors.coral,
+                        color: AppColors.accent,
                         fontSize: 10,
                       ),
                     ),
@@ -3111,9 +3111,9 @@ class _PersonaPickerSheet extends StatelessWidget {
                   selected: selected,
                   leading: CircleAvatar(
                     backgroundColor: selected
-                        ? AppColors.moss
-                        : AppColors.softCoral,
-                    foregroundColor: selected ? Colors.white : AppColors.coral,
+                        ? AppColors.accent
+                        : AppColors.surfaceMuted,
+                    foregroundColor: selected ? Colors.white : AppColors.muted,
                     child: const Icon(Icons.psychology_alt_outlined),
                   ),
                   title: Text(_localizedPersonaName(context, persona)),

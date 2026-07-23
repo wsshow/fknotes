@@ -290,13 +290,14 @@ class _BackupScopeCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: AppColors.accentSoft,
+      color: AppColors.surface,
       borderRadius: BorderRadius.circular(AppRadius.large),
+      border: Border.all(color: AppColors.line),
     ),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Icon(Icons.shield_outlined, color: AppColors.accent),
+        const Icon(Icons.shield_outlined, color: AppColors.muted),
         const SizedBox(width: 12),
         Expanded(
           child: Text(

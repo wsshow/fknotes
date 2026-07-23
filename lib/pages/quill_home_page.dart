@@ -446,7 +446,7 @@ final class _RecentDeltaNoteCard extends StatelessWidget {
                     child: Icon(
                       Icons.push_pin_rounded,
                       size: 15,
-                      color: AppColors.coral,
+                      color: AppColors.accent,
                     ),
                   ),
                 Expanded(
@@ -724,41 +724,60 @@ final class _DataSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(20),
+    padding: const EdgeInsets.all(18),
     decoration: BoxDecoration(
-      color: AppColors.accentSoft,
+      color: AppColors.surface,
       borderRadius: BorderRadius.circular(AppRadius.large),
+      border: Border.all(color: AppColors.line),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            const Icon(
-              Icons.shield_outlined,
-              color: AppColors.accent,
-              size: 21,
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                color: AppColors.surfaceMuted,
+                borderRadius: BorderRadius.all(
+                  Radius.circular(AppRadius.small),
+                ),
+              ),
+              child: SizedBox.square(
+                dimension: 38,
+                child: Icon(
+                  Icons.shield_outlined,
+                  color: AppColors.muted,
+                  size: 20,
+                ),
+              ),
             ),
-            const SizedBox(width: 9),
+            const SizedBox(width: 12),
             Expanded(
               child: Text(
                 context.l10n.localFirst,
                 style: Theme.of(context).textTheme.titleMedium,
               ),
             ),
-            Text(
-              context.l10n.offlineSecure,
-              style: const TextStyle(
-                color: AppColors.accent,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceMuted,
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+              ),
+              child: Text(
+                context.l10n.offlineSecure,
+                style: const TextStyle(
+                  color: AppColors.muted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        Divider(height: 1, color: AppColors.accent.withValues(alpha: .12)),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
+        const Divider(height: 1),
+        const SizedBox(height: 16),
         Row(
           children: [
             _DataMetric('$noteCount', context.l10n.totalItems),

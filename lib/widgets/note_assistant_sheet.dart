@@ -146,12 +146,12 @@ class _NoteAssistantTaskSheetState extends State<_NoteAssistantTaskSheet> {
                     width: 42,
                     height: 42,
                     decoration: BoxDecoration(
-                      color: AppColors.softCoral,
+                      color: AppColors.accentSoft,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(
                       Icons.forum_outlined,
-                      color: AppColors.coral,
+                      color: AppColors.accent,
                     ),
                   ),
                   title: Text(

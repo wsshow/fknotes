@@ -27,9 +27,11 @@ class LocalChatToolActionCard extends StatelessWidget {
       margin: const EdgeInsets.only(top: 9),
       padding: const EdgeInsets.all(11),
       decoration: BoxDecoration(
-        color: completed ? AppColors.softGreen : AppColors.softAmber,
+        color: completed ? AppColors.successSoft : AppColors.warningSoft,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: completed ? AppColors.moss : AppColors.line),
+        border: Border.all(
+          color: completed ? AppColors.success : AppColors.line,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -41,7 +43,7 @@ class LocalChatToolActionCard extends StatelessWidget {
                     ? Icons.check_circle_outline
                     : Icons.edit_note_rounded,
                 size: 18,
-                color: completed ? AppColors.moss : AppColors.coral,
+                color: completed ? AppColors.success : AppColors.warning,
               ),
               const SizedBox(width: 7),
               Expanded(
@@ -69,7 +71,7 @@ class LocalChatToolActionCard extends StatelessWidget {
                 ? Text(
                     context.l10n.toolActionCompleted,
                     style: const TextStyle(
-                      color: AppColors.moss,
+                      color: AppColors.success,
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
                     ),
@@ -137,7 +139,7 @@ class _LocalChatToolActionSheet extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.softAmber,
+                    color: AppColors.warningSoft,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
@@ -146,7 +148,7 @@ class _LocalChatToolActionSheet extends StatelessWidget {
                       const Icon(
                         Icons.verified_user_outlined,
                         size: 19,
-                        color: AppColors.coral,
+                        color: AppColors.warning,
                       ),
                       const SizedBox(width: 8),
                       Expanded(

@@ -15,23 +15,23 @@ import 'widgets/app_feedback_navigator_observer.dart';
 import 'debug/debug_navigation.dart';
 
 class AppColors {
-  static const ink = Color(0xFF202124);
-  static const muted = Color(0xFF74777D);
-  static const subtle = Color(0xFFA7A9AE);
-  static const canvas = Color(0xFFF7F7F6);
+  static const ink = Color(0xFF20272F);
+  static const muted = Color(0xFF69737E);
+  static const subtle = Color(0xFF9AA2AA);
+  static const canvas = Color(0xFFF6F7F8);
   static const surface = Color(0xFFFFFFFF);
-  static const surfaceMuted = Color(0xFFF1F2F2);
-  static const line = Color(0xFFE7E7E5);
-  static const accent = Color(0xFFD85C3B);
-  static const accentPressed = Color(0xFFBC492C);
-  static const accentSoft = Color(0xFFFBEDE8);
-  static const success = Color(0xFF39735C);
-  static const successSoft = Color(0xFFEAF4EF);
-  static const warning = Color(0xFFA56A22);
-  static const warningSoft = Color(0xFFF8F0E4);
-  static const danger = Color(0xFFC7473E);
-  static const dangerSoft = Color(0xFFFBEAE8);
-  static const scrim = Color(0x52202124);
+  static const surfaceMuted = Color(0xFFF0F2F4);
+  static const line = Color(0xFFE3E6E9);
+  static const accent = Color(0xFF627486);
+  static const accentPressed = Color(0xFF4C5E70);
+  static const accentSoft = Color(0xFFEDF2F5);
+  static const success = Color(0xFF60766A);
+  static const successSoft = Color(0xFFEDF3F0);
+  static const warning = Color(0xFF806F5A);
+  static const warningSoft = Color(0xFFF4F1EC);
+  static const danger = Color(0xFFA45D59);
+  static const dangerSoft = Color(0xFFF7EEEE);
+  static const scrim = Color(0x5220272F);
 
   // Compatibility names used by feature surfaces while they migrate to the
   // semantic palette above.
@@ -277,11 +277,8 @@ class FkNotesApp extends StatelessWidget {
               elevation: 0,
               backgroundColor: AppColors.surface,
               surfaceTintColor: Colors.transparent,
-              indicatorColor: AppColors.accentSoft,
+              indicatorColor: Colors.transparent,
               overlayColor: const WidgetStatePropertyAll(Colors.transparent),
-              indicatorShape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppRadius.small),
-              ),
               iconTheme: WidgetStateProperty.resolveWith(
                 (states) => IconThemeData(
                   size: 22,
@@ -315,6 +312,8 @@ class FkNotesApp extends StatelessWidget {
             ),
             filledButtonTheme: FilledButtonThemeData(
               style: FilledButton.styleFrom(
+                backgroundColor: AppColors.accent,
+                foregroundColor: AppColors.surface,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 18,
                   vertical: 14,
@@ -327,6 +326,7 @@ class FkNotesApp extends StatelessWidget {
             ),
             outlinedButtonTheme: OutlinedButtonThemeData(
               style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.accent,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 18,
                   vertical: 14,
@@ -340,6 +340,7 @@ class FkNotesApp extends StatelessWidget {
             ),
             textButtonTheme: TextButtonThemeData(
               style: TextButton.styleFrom(
+                foregroundColor: AppColors.accent,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppRadius.small),
                 ),
@@ -352,7 +353,7 @@ class FkNotesApp extends StatelessWidget {
               selectedColor: AppColors.softGreen,
               secondarySelectedColor: AppColors.softGreen,
               surfaceTintColor: Colors.transparent,
-              checkmarkColor: AppColors.coral,
+              checkmarkColor: AppColors.accent,
               deleteIconColor: AppColors.muted,
               iconTheme: const IconThemeData(color: AppColors.muted, size: 18),
               side: const BorderSide(color: AppColors.line),
@@ -491,9 +492,9 @@ class FkNotesApp extends StatelessWidget {
               ),
             ),
             textSelectionTheme: TextSelectionThemeData(
-              cursorColor: AppColors.coral,
+              cursorColor: AppColors.accent,
               selectionColor: AppColors.moss.withValues(alpha: .18),
-              selectionHandleColor: AppColors.coral,
+              selectionHandleColor: AppColors.accent,
             ),
             snackBarTheme: SnackBarThemeData(
               behavior: SnackBarBehavior.floating,
