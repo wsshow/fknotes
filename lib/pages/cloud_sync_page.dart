@@ -3,12 +3,10 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
 
 import '../app.dart';
 import '../l10n/l10n.dart';
 import '../models/cloud_sync.dart';
-import '../providers/note_provider.dart';
 import '../services/cloud_sync_service.dart';
 import '../widgets/app_feedback.dart';
 
@@ -394,7 +392,6 @@ class _CloudSyncPageState extends State<CloudSyncPage> {
 
   Future<void> _handleResult(CloudSyncResult result) async {
     if (result.type == CloudSyncResultType.downloaded) {
-      await context.read<NoteProvider>().loadEntries();
       _restoredData = true;
     }
     final refreshed = await _service.loadSettings();

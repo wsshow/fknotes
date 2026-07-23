@@ -100,6 +100,7 @@ void main() {
       expect(find.text('2.0 KB'), findsOneWidget);
       expect(find.text('导出完整备份'), findsOneWidget);
       expect(find.text('从备份恢复'), findsOneWidget);
+      expect(find.text('云同步'), findsOneWidget);
     },
   );
 }

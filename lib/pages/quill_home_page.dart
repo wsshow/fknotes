@@ -25,6 +25,7 @@ import '../widgets/note_delta_preview.dart';
 import 'app_lock_settings_page.dart';
 import 'backup_export_page.dart';
 import 'backup_restore_page.dart';
+import 'cloud_sync_page.dart';
 import 'language_settings_page.dart';
 import 'local_chat_page.dart';
 import 'model_management_page.dart';
@@ -600,6 +601,13 @@ final class _QuillDataTabState extends State<_QuillDataTab> {
                 subtitle: context.l10n.restoreFromBackupSubtitle,
                 onTap: _openBackupRestore,
               ),
+              const Divider(height: 1),
+              _SettingsRow(
+                icon: Icons.cloud_sync_outlined,
+                title: context.l10n.cloudSync,
+                subtitle: context.l10n.cloudSyncSubtitle,
+                onTap: _openCloudSync,
+              ),
             ],
           ),
           const SizedBox(height: 22),
@@ -701,6 +709,16 @@ final class _QuillDataTabState extends State<_QuillDataTab> {
     if (mounted) {
       AppFeedback.success(context, context.l10n.backupRestored);
     }
+  }
+
+  Future<void> _openCloudSync() async {
+    final restored = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => const CloudSyncPage()),
+    );
+    if (restored != true) return;
+    await widget.onRestoreCompleted();
+    await _loadDataSize();
   }
 }
 

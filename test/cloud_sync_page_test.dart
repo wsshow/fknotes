@@ -2,13 +2,11 @@ import 'dart:io';
 
 import 'package:fknotes/pages/cloud_sync_page.dart';
 import 'package:fknotes/models/cloud_sync.dart';
-import 'package:fknotes/providers/note_provider.dart';
 import 'package:fknotes/services/file_storage_service.dart';
 import 'package:fknotes/services/cloud_sync_settings_service.dart';
 import 'package:fknotes/services/cloud_sync_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
 
 void main() {
   late Directory root;
@@ -30,13 +28,10 @@ void main() {
     );
     final service = CloudSyncService(settingsService: settings);
     await tester.pumpWidget(
-      ChangeNotifierProvider(
-        create: (_) => NoteProvider(),
-        child: MaterialApp(
-          home: CloudSyncPage(
-            service: service,
-            initialSettings: const CloudSyncSettings(deviceId: 'test-device'),
-          ),
+      MaterialApp(
+        home: CloudSyncPage(
+          service: service,
+          initialSettings: const CloudSyncSettings(deviceId: 'test-device'),
         ),
       ),
     );
