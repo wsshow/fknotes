@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:fknotes/services/file_storage_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -101,6 +102,39 @@ void main() {
 
     await expectLater(
       FileStorageService.instance.importAssistantImage(source),
+      throwsFormatException,
+    );
+  });
+
+  test(
+    'normalizes note image bytes into managed content and a thumbnail',
+    () async {
+      final source = img.Image(width: 120, height: 80, numChannels: 4);
+      img.fill(source, color: img.ColorRgba8(230, 80, 40, 180));
+
+      final stored = await FileStorageService.instance.importNoteImageBytes(
+        Uint8List.fromList(img.encodePng(source)),
+      );
+      final thumbnail = await FileStorageService.instance
+          .generateThumbnailInBackground(stored.storageKey);
+
+      expect(stored.storageKey, startsWith('images/'));
+      expect(stored.mimeType, 'image/png');
+      expect(stored.byteLength, greaterThan(0));
+      expect(
+        await FileStorageService.instance.fileExists(stored.storageKey),
+        isTrue,
+      );
+      expect(thumbnail, startsWith('thumbnails/'));
+      expect(await FileStorageService.instance.fileExists(thumbnail), isTrue);
+    },
+  );
+
+  test('rejects undecodable note clipboard image bytes', () async {
+    await expectLater(
+      FileStorageService.instance.importNoteImageBytes(
+        Uint8List.fromList([1, 2, 3, 4]),
+      ),
       throwsFormatException,
     );
   });

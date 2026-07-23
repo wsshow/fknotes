@@ -120,6 +120,27 @@ class FileStorageService {
     return relativePath;
   }
 
+  /// Validates and normalizes an image before it becomes note content.
+  ///
+  /// Decoding and encoding happen outside the UI isolate. Screenshots with an
+  /// alpha channel stay PNG; photos use a high-quality bounded JPEG.
+  Future<StoredNoteImage> importNoteImageBytes(Uint8List bytes) async {
+    if (bytes.isEmpty || bytes.length > 20 * 1024 * 1024) {
+      throw const FormatException('图片文件为空或超过 20 MB');
+    }
+    final normalized = await Isolate.run(() => _normalizeNoteImageBytes(bytes));
+    final storageKey = await writeBytes(
+      normalized.bytes,
+      'images',
+      extension: normalized.extension,
+    );
+    return StoredNoteImage(
+      storageKey: storageKey,
+      mimeType: normalized.mimeType,
+      byteLength: normalized.bytes.length,
+    );
+  }
+
   /// Move an app-owned temporary file into managed storage. This is normally
   /// an atomic rename and falls back to copy-and-delete across file systems.
   Future<String> moveTemporaryFile(File sourceFile, String subDir) async {
@@ -360,6 +381,18 @@ class OrphanCleanupResult {
   });
 }
 
+class StoredNoteImage {
+  const StoredNoteImage({
+    required this.storageKey,
+    required this.mimeType,
+    required this.byteLength,
+  });
+
+  final String storageKey;
+  final String mimeType;
+  final int byteLength;
+}
+
 bool _generateThumbnailFile(String sourcePath, String outputPath) {
   try {
     final decoded = img.decodeImage(File(sourcePath).readAsBytesSync());
@@ -401,8 +434,7 @@ bool _generateThumbnailFile(String sourcePath, String outputPath) {
 
 void _normalizeAssistantImageFile(String sourcePath, String outputPath) {
   final bytes = File(sourcePath).readAsBytesSync();
-  final decoder = img.findDecoderForData(bytes);
-  final info = decoder?.startDecode(bytes);
+  final (decoder, info) = _inspectImage(bytes);
   if (decoder == null || info == null || info.width <= 0 || info.height <= 0) {
     throw const FormatException('暂不支持这种图片格式');
   }
@@ -430,4 +462,53 @@ void _normalizeAssistantImageFile(String sourcePath, String outputPath) {
     normalized = img.compositeImage(background, normalized);
   }
   File(outputPath).writeAsBytesSync(img.encodeJpg(normalized, quality: 88));
+}
+
+({Uint8List bytes, String extension, String mimeType}) _normalizeNoteImageBytes(
+  Uint8List bytes,
+) {
+  final (decoder, info) = _inspectImage(bytes);
+  if (decoder == null || info == null || info.width <= 0 || info.height <= 0) {
+    throw const FormatException('暂不支持这种图片格式');
+  }
+  const maxPixels = 40 * 1000 * 1000;
+  if (info.width * info.height > maxPixels ||
+      info.width > 16384 ||
+      info.height > 16384) {
+    throw const FormatException('图片分辨率过高，请选择不超过 4000 万像素的图片');
+  }
+  final decoded = decoder.decodeFrame(0);
+  if (decoded == null) throw const FormatException('图片解码失败');
+  var normalized = img.bakeOrientation(decoded);
+  const maxLongEdge = 4096;
+  if (normalized.width > maxLongEdge || normalized.height > maxLongEdge) {
+    normalized = normalized.width >= normalized.height
+        ? img.copyResize(normalized, width: maxLongEdge)
+        : img.copyResize(normalized, height: maxLongEdge);
+  }
+  if (normalized.hasAlpha) {
+    return (
+      bytes: Uint8List.fromList(img.encodePng(normalized, level: 6)),
+      extension: 'png',
+      mimeType: 'image/png',
+    );
+  }
+  return (
+    bytes: Uint8List.fromList(img.encodeJpg(normalized, quality: 92)),
+    extension: 'jpg',
+    mimeType: 'image/jpeg',
+  );
+}
+
+(img.Decoder?, img.DecodeInfo?) _inspectImage(Uint8List bytes) {
+  try {
+    final decoder = img.findDecoderForData(bytes);
+    return (decoder, decoder?.startDecode(bytes));
+  } on FormatException {
+    rethrow;
+  } catch (_) {
+    // Some decoders throw implementation-specific range/state errors for
+    // truncated headers. Do not leak those details through the editor API.
+    throw const FormatException('暂不支持这种图片格式');
+  }
 }
