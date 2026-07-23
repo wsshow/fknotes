@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:fknotes/editor/note_assistant_editing.dart';
 import 'package:fknotes/editor/note_editor_controller.dart';
+import 'package:fknotes/editor/note_markdown_codec.dart';
 import 'package:fknotes/l10n/generated/app_localizations.dart';
 import 'package:fknotes/models/note.dart';
 import 'package:fknotes/models/note_document.dart';
@@ -104,6 +105,126 @@ void main() {
         expect(controller.snapshot().assets, [asset]);
       },
     );
+
+    test('plain-text Markdown paste becomes native Quill formatting', () async {
+      final controller = NoteEditorController(
+        document: NoteDocument.empty(),
+        assets: const [],
+        readClipboardText: () async => '''
+# 标题
+
+正文 **加粗** 和 *斜体*
+
+- 项目
+
+1. 步骤
+
+> 引用
+
+```dart
+final value = 1;
+```
+''',
+      );
+      addTearDown(controller.dispose);
+
+      expect(await controller.quillController.clipboardPaste(), isTrue);
+
+      final snapshot = controller.snapshot();
+      final delta = snapshot.document.toDelta();
+      expect(
+        snapshot.document.project().plainText,
+        '标题\n正文 加粗 和 斜体\n项目\n步骤\n引用\nfinal value = 1;',
+      );
+      expect(snapshot.document.project().plainText, isNot(contains('**')));
+      expect(
+        delta.operations,
+        contains(
+          isA<Operation>()
+              .having((operation) => operation.data, 'text', '加粗')
+              .having(
+                (operation) => operation.attributes?['bold'],
+                'bold',
+                isTrue,
+              ),
+        ),
+      );
+      expect(
+        delta.operations
+            .where((operation) => operation.data == '\n')
+            .map((operation) => operation.attributes)
+            .whereType<Map<String, dynamic>>(),
+        containsAll([
+          containsPair('header', 1),
+          containsPair('list', 'bullet'),
+          containsPair('list', 'ordered'),
+          containsPair('blockquote', true),
+          containsPair('code-block', true),
+        ]),
+      );
+    });
+
+    test('ordinary plain-text paste stays on Quill native path', () async {
+      final controller = NoteEditorController(
+        document: NoteDocument.fromPlainText('原文'),
+        assets: const [],
+        readClipboardText: () async => '普通文本，没有 Markdown 语义。',
+      );
+      addTearDown(controller.dispose);
+      final paste =
+          controller.quillController.config.clipboardConfig!.onClipboardPaste!;
+
+      expect(await paste(), isFalse);
+      expect(controller.snapshot().document.project().plainText, '原文');
+    });
+
+    test('inline Markdown paste keeps the surrounding paragraph', () async {
+      final controller = NoteEditorController(
+        document: NoteDocument.fromPlainText('前后'),
+        assets: const [],
+        readClipboardText: () async => '**重点**',
+      );
+      addTearDown(controller.dispose);
+      controller.quillController.updateSelection(
+        const TextSelection.collapsed(offset: 1),
+        quill.ChangeSource.local,
+      );
+
+      expect(await controller.quillController.clipboardPaste(), isTrue);
+      expect(controller.snapshot().document.project().plainText, '前重点后');
+      expect(controller.snapshot().document.toDelta().toJson(), [
+        {'insert': '前'},
+        {
+          'insert': '重点',
+          'attributes': {'bold': true},
+        },
+        {'insert': '后\n'},
+      ]);
+    });
+
+    test('block Markdown paste starts on a clean line', () async {
+      final controller = NoteEditorController(
+        document: NoteDocument.fromPlainText('前后'),
+        assets: const [],
+        readClipboardText: () async => '# 标题',
+      );
+      addTearDown(controller.dispose);
+      controller.quillController.updateSelection(
+        const TextSelection.collapsed(offset: 1),
+        quill.ChangeSource.local,
+      );
+
+      expect(await controller.quillController.clipboardPaste(), isTrue);
+      expect(controller.snapshot().document.project().plainText, '前\n标题\n后');
+      expect(controller.snapshot().document.toDelta().toJson(), [
+        {'insert': '前\n标题'},
+        {
+          'insert': '\n',
+          'attributes': {'header': 1},
+        },
+        {'insert': '后\n'},
+      ]);
+    });
 
     test('discards imported files when an embed cannot be inserted', () async {
       final asset = _imageAsset();
@@ -209,7 +330,7 @@ void main() {
     );
 
     test('AI Markdown becomes native Delta formatting and list blocks', () {
-      final delta = NoteAssistantMarkdownCodec.decode(
+      final delta = NoteMarkdownCodec.decode(
         '## 摘要\n\n**重点**与 [链接](https://example.com)\n\n- 一\n- 二',
       );
       final document = NoteDocument.fromDelta(delta);

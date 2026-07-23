@@ -3,8 +3,8 @@
 // ignore_for_file: experimental_member_use
 
 import 'dart:async';
-import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_quill/quill_delta.dart';
@@ -13,9 +13,11 @@ import 'package:quill_native_bridge/quill_native_bridge.dart';
 import '../models/note.dart';
 import '../models/note_document.dart';
 import 'note_assistant_editing.dart';
+import 'note_markdown_codec.dart';
 
 typedef NoteImageImporter = Future<NoteAsset?> Function(Uint8List bytes);
 typedef NoteClipboardImageReader = Future<Uint8List?> Function();
+typedef NoteClipboardTextReader = Future<String?> Function();
 typedef NoteAssetDisposer = Future<void> Function(NoteAsset asset);
 
 final class NoteEditorSnapshot {
@@ -59,17 +61,19 @@ final class NoteEditorController extends ChangeNotifier {
     NoteImageImporter? importImage,
     this.discardImportedAsset,
     NoteClipboardImageReader? readClipboardImage,
+    NoteClipboardTextReader? readClipboardText,
   }) : _assets = {for (final asset in assets) asset.id: asset},
        _importImage = importImage,
        _readClipboardImage =
            readClipboardImage ??
-           (importImage == null ? null : _readSystemClipboardImage) {
+           (importImage == null ? null : _readSystemClipboardImage),
+       _readClipboardText = readClipboardText ?? _readSystemClipboardText {
     quillController = QuillController(
       document: document.toQuillDocument(),
       selection: const TextSelection.collapsed(offset: 0),
       config: QuillControllerConfig(
         clipboardConfig: QuillClipboardConfig(
-          onClipboardPaste: _pasteClipboardImage,
+          onClipboardPaste: _handleClipboardPaste,
           onRichTextPaste: _sanitizeRichTextPaste,
           enableExternalRichPaste: true,
         ),
@@ -87,6 +91,7 @@ final class NoteEditorController extends ChangeNotifier {
   final NoteImageImporter? _importImage;
   final NoteAssetDisposer? discardImportedAsset;
   final NoteClipboardImageReader? _readClipboardImage;
+  final NoteClipboardTextReader _readClipboardText;
 
   int contentRevision = 0;
 
@@ -166,7 +171,7 @@ final class NoteEditorController extends ChangeNotifier {
             session.expectedDocument) {
       return false;
     }
-    final generated = NoteAssistantMarkdownCodec.decode(markdown);
+    final generated = NoteMarkdownCodec.decode(markdown);
     final replacement = _isSinglePlainParagraph(generated)
         ? _deltaWithoutTerminalNewline(generated)
         : generated;
@@ -236,7 +241,7 @@ final class NoteEditorController extends ChangeNotifier {
             anchor.expectedDocument) {
       return false;
     }
-    final generated = NoteAssistantMarkdownCodec.decode(markdown);
+    final generated = NoteMarkdownCodec.decode(markdown);
     final documentLength = quillController.document.length;
     late final int offset;
     late final int length;
@@ -437,6 +442,63 @@ final class NoteEditorController extends ChangeNotifier {
     return true;
   }
 
+  Future<bool> _handleClipboardPaste() async {
+    if (await _pasteClipboardImage()) return true;
+    final source = await _readClipboardText();
+    if (source == null) return false;
+    final markdown = NoteMarkdownCodec.decodeIfRich(source);
+    if (markdown == null) return false;
+    _pasteMarkdown(markdown);
+    return true;
+  }
+
+  void _pasteMarkdown(Delta markdown) {
+    final selection = quillController.selection;
+    final documentEnd = quillController.document.length - 1;
+    final start = selection.start.clamp(0, documentEnd);
+    final end = selection.end.clamp(start, documentEnd);
+
+    if (_isSinglePlainParagraph(markdown)) {
+      final insertion = _deltaWithoutTerminalNewline(markdown);
+      quillController.replaceText(start, end - start, insertion, null);
+      _moveCaretAfter(start, insertion);
+      return;
+    }
+
+    final plainText = quillController.document.toPlainText();
+    final startsAtLineBoundary =
+        start == 0 || plainText.codeUnitAt(start - 1) == 10;
+    final insertion = Delta();
+    if (!startsAtLineBoundary) insertion.insert('\n');
+    for (final operation in markdown.operations) {
+      insertion.push(operation);
+    }
+
+    // A block Delta already owns its final newline. Consume the existing line
+    // break at the insertion boundary so paste never creates a phantom empty
+    // paragraph.
+    final consumesBoundaryNewline =
+        end < plainText.length && plainText.codeUnitAt(end) == 10;
+    quillController.replaceText(
+      start,
+      end - start + (consumesBoundaryNewline ? 1 : 0),
+      insertion,
+      null,
+    );
+    _moveCaretAfter(start, insertion);
+  }
+
+  void _moveCaretAfter(int offset, Delta insertion) {
+    final caret = (offset + _contentLength(insertion)).clamp(
+      0,
+      quillController.document.length - 1,
+    );
+    quillController.updateSelection(
+      TextSelection.collapsed(offset: caret),
+      ChangeSource.local,
+    );
+  }
+
   static Future<Uint8List?> _readSystemClipboardImage() async {
     final bridge = QuillNativeBridge();
     if (!await bridge.isSupported(QuillNativeBridgeFeature.getClipboardImage)) {
@@ -444,6 +506,9 @@ final class NoteEditorController extends ChangeNotifier {
     }
     return bridge.getClipboardImage();
   }
+
+  static Future<String?> _readSystemClipboardText() async =>
+      (await Clipboard.getData(Clipboard.kTextPlain))?.text;
 
   Future<Delta?> _sanitizeRichTextPaste(Delta pasted, bool isExternal) async {
     final clean = Delta();

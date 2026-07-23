@@ -61,8 +61,8 @@ dependencies:
   # the same Dart API and Android build fixes while using ORT 1.24.3.
   sherpa_onnx: 1.13.3
   crypto: ^3.0.7
-  # Markdown remains an import/export and model-output boundary format only.
-  # Pin parser and renderer together so boundary behavior changes only through
+  # Markdown remains a boundary format for paste, import/export, and model
+  # output. Pin parser and renderer together so behavior changes only through
   # an intentional, tested upgrade.
   markdown: 7.3.1
   flutter_markdown_plus: 1.0.12
