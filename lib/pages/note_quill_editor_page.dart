@@ -11,6 +11,7 @@ import '../editor/note_editor_controller.dart';
 import '../l10n/l10n.dart';
 import '../l10n/local_model_l10n.dart';
 import '../models/note.dart';
+import '../models/note_share.dart';
 import '../models/note_semantic_projection.dart';
 import '../services/file_storage_service.dart';
 import '../services/kokoro_tts_model_service.dart';
@@ -22,9 +23,11 @@ import '../services/note_database_service.dart';
 import '../services/note_read_aloud_service.dart';
 import '../services/note_repository.dart';
 import '../widgets/app_feedback.dart';
+import '../widgets/app_popup_menu.dart';
 import '../widgets/note_assistant_sheet.dart';
 import '../widgets/note_quill_editor.dart';
 import 'model_management_page.dart';
+import 'note_share_composer_page.dart';
 
 abstract interface class NoteEditorWriter {
   Future<Note> create(Note note);
@@ -477,6 +480,30 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
         null => context.l10n.assistantGeneratedHeading,
       };
 
+  Future<void> _openShareComposer() async {
+    await _imageImport;
+    if (!mounted) return;
+    final draft = NoteShareDraft.fromNote(_currentSnapshot());
+    if (!draft.hasContent) {
+      AppFeedback.show(context, context.l10n.noteHasNoShareableContent);
+      return;
+    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(builder: (_) => NoteShareComposerPage(draft: draft)),
+    );
+  }
+
+  void _handleMenuAction(_QuillEditorMenuAction action) {
+    switch (action) {
+      case _QuillEditorMenuAction.share:
+        unawaited(_openShareComposer());
+      case _QuillEditorMenuAction.save:
+        unawaited(_persistLatest());
+    }
+  }
+
   Future<NoteAsset?> _importClipboardImage(Uint8List bytes) async {
     try {
       return await _importImage(bytes, originalName: context.l10n.image);
@@ -814,11 +841,23 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
                         : Icons.volume_up_outlined,
                   ),
           ),
-          IconButton(
-            key: const Key('quill-save-now'),
-            tooltip: context.l10n.save,
-            onPressed: () => unawaited(_persistLatest()),
-            icon: const Icon(Icons.check_rounded, color: AppColors.coral),
+          AppAnchoredMenuButton<_QuillEditorMenuAction>(
+            key: const Key('quill-editor-more'),
+            tooltip: context.l10n.moreNoteActions,
+            icon: const Icon(Icons.more_vert_rounded),
+            onSelected: _handleMenuAction,
+            actions: [
+              AppMenuAction(
+                value: _QuillEditorMenuAction.share,
+                icon: Icons.ios_share_rounded,
+                label: context.l10n.shareNoteAsImage,
+              ),
+              AppMenuAction(
+                value: _QuillEditorMenuAction.save,
+                icon: Icons.save_outlined,
+                label: context.l10n.save,
+              ),
+            ],
           ),
         ],
       ],
@@ -846,6 +885,8 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
 enum _EditorSaveState { enabled, pending, saving, saved, failed }
 
 enum _FailedSaveAction { keepEditing, retry, discard }
+
+enum _QuillEditorMenuAction { share, save }
 
 final class _ImageSourceAction extends StatelessWidget {
   const _ImageSourceAction({

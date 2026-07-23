@@ -10,7 +10,7 @@ import 'package:share_plus/share_plus.dart';
 import '../app.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../l10n/l10n.dart';
-import '../models/note_entry.dart';
+import '../models/note.dart';
 import '../models/note_share.dart';
 import '../services/file_storage_service.dart';
 import '../services/note_share_image_service.dart';
@@ -470,6 +470,7 @@ class _NoteShareComposerPageState extends State<NoteShareComposerPage> {
       DropdownButtonFormField<NoteShareCanvasPreset>(
         key: ValueKey(_options.canvas.preset),
         initialValue: _options.canvas.preset,
+        isExpanded: true,
         decoration: InputDecoration(
           labelText: l10n.shareImageRatio,
           prefixIcon: const Icon(Icons.aspect_ratio_rounded),
@@ -546,6 +547,7 @@ class _NoteShareComposerPageState extends State<NoteShareComposerPage> {
       DropdownButtonFormField<NoteShareQuality>(
         key: ValueKey('${_options.canvas.quality}-${_options.canvas.isCustom}'),
         initialValue: _options.canvas.quality,
+        isExpanded: true,
         decoration: InputDecoration(
           labelText: l10n.shareImageQuality,
           prefixIcon: const Icon(Icons.high_quality_outlined),
@@ -604,7 +606,7 @@ class _NoteShareComposerPageState extends State<NoteShareComposerPage> {
           value: _options.includeImages,
           onChanged:
               widget.draft.attachments.any(
-                (item) => item.type == NoteType.image,
+                (item) => item.kind == NoteAssetKind.image,
               )
               ? (value) =>
                     _updateOptions(_options.copyWith(includeImages: value))
@@ -786,10 +788,10 @@ class _NoteShareComposerPageState extends State<NoteShareComposerPage> {
   Future<void> _precacheImages() async {
     if (!_options.includeAttachments || !_options.includeImages) return;
     for (final attachment in widget.draft.attachments) {
-      if (attachment.type != NoteType.image) continue;
+      if (attachment.kind != NoteAssetKind.image) continue;
       try {
         final path = FileStorageService.instance.absolutePath(
-          attachment.filePath,
+          attachment.storageKey,
         );
         await precacheImage(FileImage(File(path)), context);
       } catch (_) {

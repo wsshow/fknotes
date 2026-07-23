@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 
-import 'note_entry.dart';
+import 'note.dart';
+import 'note_document.dart';
+import 'note_semantic_projection.dart';
 
 enum NoteShareTemplateId {
   letter,
@@ -260,33 +262,208 @@ class NoteShareOptions {
       );
 }
 
-class NoteShareDraft {
+enum NoteShareBlockType {
+  paragraph,
+  heading,
+  bullet,
+  ordered,
+  todo,
+  quote,
+  code,
+  divider,
+  attachment,
+}
+
+final class NoteShareTextStyle {
+  const NoteShareTextStyle({
+    this.bold = false,
+    this.italic = false,
+    this.underline = false,
+    this.strikeThrough = false,
+    this.inlineCode = false,
+    this.link,
+  });
+
+  factory NoteShareTextStyle.fromSemantic(NoteSemanticStyle style) =>
+      NoteShareTextStyle(
+        bold: style.bold,
+        italic: style.italic,
+        underline: style.underline,
+        strikeThrough: style.strikeThrough,
+        inlineCode: style.inlineCode,
+        link: style.link,
+      );
+
+  final bool bold;
+  final bool italic;
+  final bool underline;
+  final bool strikeThrough;
+  final bool inlineCode;
+  final String? link;
+}
+
+final class NoteShareTextRange {
+  const NoteShareTextRange(this.start, this.end, this.style)
+    : assert(start >= 0),
+      assert(end >= start);
+
+  final int start;
+  final int end;
+  final NoteShareTextStyle style;
+}
+
+final class NoteShareBlock {
+  NoteShareBlock({
+    required this.type,
+    this.text = '',
+    this.checked = false,
+    this.indent = 0,
+    this.headingLevel = 0,
+    this.asset,
+    Iterable<NoteShareTextRange> styles = const [],
+  }) : styles = List.unmodifiable(styles) {
+    if (type == NoteShareBlockType.attachment && asset == null) {
+      throw ArgumentError('An attachment share block requires its asset.');
+    }
+    if (type != NoteShareBlockType.attachment && asset != null) {
+      throw ArgumentError('Only attachment share blocks may own an asset.');
+    }
+    for (final range in this.styles) {
+      if (range.end > text.length) {
+        throw ArgumentError('A share text style exceeds its block.');
+      }
+    }
+  }
+
+  factory NoteShareBlock.fromSemantic(NoteSemanticBlock block) {
+    if (block.kind == NoteSemanticBlockKind.attachment) {
+      return NoteShareBlock(
+        type: NoteShareBlockType.attachment,
+        asset: block.asset,
+      );
+    }
+    if (block.kind == NoteSemanticBlockKind.divider) {
+      return NoteShareBlock(type: NoteShareBlockType.divider);
+    }
+    final text = StringBuffer();
+    final styles = <NoteShareTextRange>[];
+    for (final run in block.runs) {
+      final start = text.length;
+      text.write(run.text);
+      final end = text.length;
+      final style = NoteShareTextStyle.fromSemantic(run.style);
+      if (_hasPortableStyle(style) && end > start) {
+        styles.add(NoteShareTextRange(start, end, style));
+      }
+    }
+    return NoteShareBlock(
+      type: switch (block.kind) {
+        NoteSemanticBlockKind.paragraph => NoteShareBlockType.paragraph,
+        NoteSemanticBlockKind.heading => NoteShareBlockType.heading,
+        NoteSemanticBlockKind.bulletList => NoteShareBlockType.bullet,
+        NoteSemanticBlockKind.orderedList => NoteShareBlockType.ordered,
+        NoteSemanticBlockKind.checkedList => NoteShareBlockType.todo,
+        NoteSemanticBlockKind.uncheckedList => NoteShareBlockType.todo,
+        NoteSemanticBlockKind.blockQuote => NoteShareBlockType.quote,
+        NoteSemanticBlockKind.codeBlock => NoteShareBlockType.code,
+        NoteSemanticBlockKind.attachment ||
+        NoteSemanticBlockKind.divider => throw StateError('Handled above.'),
+      },
+      text: text.toString(),
+      checked: block.kind == NoteSemanticBlockKind.checkedList,
+      indent: block.indent,
+      headingLevel: block.headingLevel ?? 0,
+      styles: styles,
+    );
+  }
+
+  final NoteShareBlockType type;
+  final String text;
+  final bool checked;
+  final int indent;
+  final int headingLevel;
+  final NoteAsset? asset;
+  final List<NoteShareTextRange> styles;
+
+  NoteShareBlock slice(int start, int end) {
+    final slicedStyles = <NoteShareTextRange>[];
+    for (final range in styles) {
+      final overlapStart = math.max(start, range.start);
+      final overlapEnd = math.min(end, range.end);
+      if (overlapStart < overlapEnd) {
+        slicedStyles.add(
+          NoteShareTextRange(
+            overlapStart - start,
+            overlapEnd - start,
+            range.style,
+          ),
+        );
+      }
+    }
+    return NoteShareBlock(
+      type: type,
+      text: text.substring(start, end),
+      checked: checked,
+      indent: indent,
+      headingLevel: headingLevel,
+      asset: asset,
+      styles: slicedStyles,
+    );
+  }
+
+  static bool _hasPortableStyle(NoteShareTextStyle style) =>
+      style.bold ||
+      style.italic ||
+      style.underline ||
+      style.strikeThrough ||
+      style.inlineCode ||
+      style.link != null;
+}
+
+final class NoteShareDraft {
+  NoteShareDraft({
+    required this.title,
+    required Iterable<NoteShareBlock> blocks,
+    required Iterable<String> tags,
+    required this.createdAt,
+    required this.updatedAt,
+  }) : blocks = List.unmodifiable(blocks),
+       tags = List.unmodifiable(tags);
+
+  factory NoteShareDraft.fromNote(Note note) {
+    final projection = NoteSemanticProjection.fromNote(note);
+    return NoteShareDraft(
+      title: projection.title,
+      blocks: projection.blocks.map(NoteShareBlock.fromSemantic),
+      tags: projection.tags,
+      createdAt: projection.createdAt,
+      updatedAt: projection.updatedAt,
+    );
+  }
+
   final String title;
-  final String content;
-  final String? richContent;
+  final List<NoteShareBlock> blocks;
   final List<String> tags;
-  final List<NoteAttachment> attachments;
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  const NoteShareDraft({
-    required this.title,
-    required this.content,
-    this.richContent,
-    required this.tags,
-    required this.attachments,
-    required this.createdAt,
-    required this.updatedAt,
-  });
+  List<NoteAsset> get attachments {
+    final seen = <NoteAttachmentId>{};
+    return List.unmodifiable(
+      blocks
+          .map((block) => block.asset)
+          .whereType<NoteAsset>()
+          .where((asset) => seen.add(asset.id)),
+    );
+  }
 
   bool get hasContent =>
       title.trim().isNotEmpty ||
-      content.trim().isNotEmpty ||
-      attachments.isNotEmpty;
-
-  Map<String, NoteAttachment> get attachmentsByPath => {
-    for (final attachment in attachments) attachment.filePath: attachment,
-  };
+      blocks.any(
+        (block) =>
+            block.text.trim().isNotEmpty ||
+            block.type == NoteShareBlockType.attachment,
+      );
 }
 
 T _enumByName<T extends Enum>(List<T> values, Object? raw, T fallback) {

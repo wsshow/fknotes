@@ -4,12 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../app.dart';
-import '../models/note_entry.dart';
+import '../models/note.dart';
 import '../models/note_share.dart';
 import '../models/note_share_theme.dart';
 import '../services/file_storage_service.dart';
 import '../services/note_share_layout_engine.dart';
-import 'note_block_editor.dart';
 
 class NoteSharePageCanvas extends StatelessWidget {
   final NoteShareDraft draft;
@@ -442,7 +441,7 @@ class _ShareBlockView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final block = item.block;
-    if (block.type == NoteBlockType.divider) {
+    if (block.type == NoteShareBlockType.divider) {
       return Padding(
         padding: const EdgeInsets.symmetric(
           vertical: NoteShareLayoutEngine.dividerVerticalPadding,
@@ -450,9 +449,9 @@ class _ShareBlockView extends StatelessWidget {
         child: Divider(height: 1, color: palette.line),
       );
     }
-    if (block.type == NoteBlockType.attachment) {
+    if (block.type == NoteShareBlockType.attachment) {
       return _ShareAttachment(
-        attachment: draft.attachmentsByPath[block.attachmentPath],
+        attachment: block.asset,
         includeImages: options.includeImages,
         palette: palette,
         landscape: landscape,
@@ -483,18 +482,18 @@ class _ShareBlockView extends StatelessWidget {
     return Padding(
       padding: margin,
       child: switch (block.type) {
-        NoteBlockType.bullet ||
-        NoteBlockType.ordered ||
-        NoteBlockType.todo => Row(
+        NoteShareBlockType.bullet ||
+        NoteShareBlockType.ordered ||
+        NoteShareBlockType.todo => Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SizedBox(
               width: 26,
               child: Text(
                 item.showMarker
-                    ? block.type == NoteBlockType.bullet
+                    ? block.type == NoteShareBlockType.bullet
                           ? '•'
-                          : block.type == NoteBlockType.ordered
+                          : block.type == NoteShareBlockType.ordered
                           ? '${item.orderedNumber ?? 1}.'
                           : block.checked
                           ? '☑'
@@ -508,7 +507,7 @@ class _ShareBlockView extends StatelessWidget {
             Expanded(child: richText),
           ],
         ),
-        NoteBlockType.quote => Container(
+        NoteShareBlockType.quote => Container(
           padding: const EdgeInsets.fromLTRB(11, 7, 8, 7),
           decoration: BoxDecoration(
             color: palette.quote,
@@ -521,7 +520,7 @@ class _ShareBlockView extends StatelessWidget {
           ),
           child: richText,
         ),
-        NoteBlockType.code || NoteBlockType.rawMarkdown => Container(
+        NoteShareBlockType.code => Container(
           padding: const EdgeInsets.all(NoteShareLayoutEngine.codePadding),
           decoration: BoxDecoration(
             color: palette.code,
@@ -536,7 +535,7 @@ class _ShareBlockView extends StatelessWidget {
 }
 
 class _ShareAttachment extends StatelessWidget {
-  final NoteAttachment? attachment;
+  final NoteAsset? attachment;
   final bool includeImages;
   final _SharePalette palette;
   final bool landscape;
@@ -551,7 +550,7 @@ class _ShareAttachment extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final item = attachment;
-    if (item != null && item.type == NoteType.image && includeImages) {
+    if (item != null && item.kind == NoteAssetKind.image && includeImages) {
       return Container(
         height: landscape
             ? NoteShareLayoutEngine.landscapeImageHeight
@@ -583,7 +582,7 @@ class _ShareAttachment extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(_attachmentIcon(item?.type), size: 18, color: palette.accent),
+          Icon(_attachmentIcon(item?.kind), size: 18, color: palette.accent),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -603,9 +602,9 @@ class _ShareAttachment extends StatelessWidget {
     );
   }
 
-  Widget _attachmentImage(NoteAttachment item) {
+  Widget _attachmentImage(NoteAsset item) {
     try {
-      final path = FileStorageService.instance.absolutePath(item.filePath);
+      final path = FileStorageService.instance.absolutePath(item.storageKey);
       return Image.file(
         File(path),
         fit: BoxFit.cover,
@@ -621,12 +620,11 @@ class _ShareAttachment extends StatelessWidget {
     child: Icon(Icons.broken_image_outlined, color: palette.muted, size: 26),
   );
 
-  IconData _attachmentIcon(NoteType? type) => switch (type) {
-    NoteType.image => Icons.image_outlined,
-    NoteType.audio => Icons.graphic_eq_rounded,
-    NoteType.video => Icons.videocam_outlined,
-    NoteType.document => Icons.description_outlined,
-    NoteType.text || null => Icons.attach_file_rounded,
+  IconData _attachmentIcon(NoteAssetKind? type) => switch (type) {
+    NoteAssetKind.image => Icons.image_outlined,
+    NoteAssetKind.audio => Icons.graphic_eq_rounded,
+    NoteAssetKind.video => Icons.videocam_outlined,
+    NoteAssetKind.file || null => Icons.attach_file_rounded,
   };
 }
 

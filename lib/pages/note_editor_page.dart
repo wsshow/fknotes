@@ -12,6 +12,8 @@ import '../debug/app_diagnostics.dart';
 import '../l10n/l10n.dart';
 import '../l10n/local_model_l10n.dart';
 import '../models/local_chat.dart';
+import '../models/note.dart';
+import '../models/note_document.dart';
 import '../models/note_entry.dart';
 import '../models/note_share.dart';
 import '../providers/note_provider.dart';
@@ -1287,12 +1289,46 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     _richContent =
         _blockEditorKey.currentState?.flushPendingChanges() ?? _richContent;
     final now = DateTime.now();
+    final legacyBlocks = NoteRichDocumentCodec.tryDecode(_richContent);
+    final decoded =
+        legacyBlocks != null &&
+            NoteBlockCodec.structurallyMatches(legacyBlocks, _content.text)
+        ? legacyBlocks
+        : NoteBlockCodec.decode(_content.text);
+    final assetsByPath = {
+      for (final attachment in _attachments)
+        attachment.filePath: _legacyShareAsset(attachment, now),
+    };
+    final referencedPaths = <String>{};
+    final shareBlocks = <NoteShareBlock>[];
+    for (final block in decoded) {
+      if (block.type == NoteBlockType.attachment) {
+        final path = block.attachmentPath;
+        final asset = path == null ? null : assetsByPath[path];
+        if (asset != null) {
+          referencedPaths.add(path!);
+          shareBlocks.add(
+            NoteShareBlock(type: NoteShareBlockType.attachment, asset: asset),
+          );
+        }
+      } else {
+        shareBlocks.add(_legacyShareTextBlock(block));
+      }
+    }
+    for (final entry in assetsByPath.entries) {
+      if (!referencedPaths.contains(entry.key)) {
+        shareBlocks.add(
+          NoteShareBlock(
+            type: NoteShareBlockType.attachment,
+            asset: entry.value,
+          ),
+        );
+      }
+    }
     final draft = NoteShareDraft(
       title: _title.text,
-      content: _content.text,
-      richContent: _richContent,
+      blocks: shareBlocks,
       tags: List.unmodifiable(_tags),
-      attachments: List.unmodifiable(_attachments),
       createdAt: _entry?.createdAt ?? now,
       updatedAt: now,
     );
@@ -3835,3 +3871,60 @@ String _assistantResultHeading(
   NoteAssistantTask.polish => context.l10n.assistantPolishedHeading,
   null => context.l10n.assistantGeneratedHeading,
 };
+
+NoteAsset _legacyShareAsset(NoteAttachment attachment, DateTime now) =>
+    NoteAsset(
+      id: NoteAttachmentId.generate(),
+      kind: switch (attachment.type) {
+        NoteType.image => NoteAssetKind.image,
+        NoteType.audio => NoteAssetKind.audio,
+        NoteType.video => NoteAssetKind.video,
+        NoteType.document || NoteType.text => NoteAssetKind.file,
+      },
+      storageKey: attachment.filePath,
+      originalName: attachment.fileName,
+      displayName: attachment.displayName,
+      byteLength: attachment.fileSize,
+      mimeType: attachment.mimeType,
+      previewStorageKey: attachment.thumbnailPath,
+      durationMs: attachment.durationMs,
+      ocrText: attachment.ocrText,
+      transcript: attachment.transcript,
+      transcriptionEngine: attachment.transcriptionModel,
+      transcribedAt: attachment.transcribedAt,
+      createdAt: attachment.createdAt,
+      updatedAt: now,
+    );
+
+NoteShareBlock _legacyShareTextBlock(NoteBlockData block) => NoteShareBlock(
+  type: switch (block.type) {
+    NoteBlockType.paragraph => NoteShareBlockType.paragraph,
+    NoteBlockType.heading => NoteShareBlockType.heading,
+    NoteBlockType.bullet => NoteShareBlockType.bullet,
+    NoteBlockType.ordered => NoteShareBlockType.ordered,
+    NoteBlockType.todo => NoteShareBlockType.todo,
+    NoteBlockType.quote => NoteShareBlockType.quote,
+    NoteBlockType.code || NoteBlockType.rawMarkdown => NoteShareBlockType.code,
+    NoteBlockType.divider => NoteShareBlockType.divider,
+    NoteBlockType.attachment => throw ArgumentError('Handled separately.'),
+  },
+  text: block.text,
+  checked: block.checked,
+  indent: block.indent,
+  headingLevel: block.headingLevel,
+  styles: [
+    for (final range in block.styles)
+      NoteShareTextRange(
+        range.start,
+        range.end,
+        NoteShareTextStyle(
+          bold: range.attributes.bold,
+          italic: range.attributes.italic,
+          underline: range.attributes.underline,
+          strikeThrough: range.attributes.strikethrough,
+          inlineCode: range.attributes.inlineCode,
+          link: range.attributes.link,
+        ),
+      ),
+  ],
+);

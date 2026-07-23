@@ -609,12 +609,10 @@ void main() {
       find.byType(NoteShareComposerPage),
     );
     expect(composer.draft.title, '刚刚写下的标题');
-    expect(composer.draft.content, isNot(contains('**qq，，，**aaa')));
-    final sharedBlocks = NoteRichDocumentCodec.tryDecode(
-      composer.draft.richContent,
-    )!;
-    expect(sharedBlocks.single.text, 'qq，，，aaa');
-    expect(sharedBlocks.single.styles.single.attributes.bold, isTrue);
+    final sharedBlock = composer.draft.blocks.single;
+    expect(sharedBlock.text, 'qq，，，aaa');
+    expect(sharedBlock.text, isNot(contains('**')));
+    expect(sharedBlock.styles.single.style.bold, isTrue);
   });
 
   testWidgets('unsaved note asks before discarding meaningful content', (

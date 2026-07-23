@@ -2,12 +2,13 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:fknotes/l10n/generated/app_localizations.dart';
+import 'package:fknotes/models/note.dart';
+import 'package:fknotes/models/note_document.dart';
 import 'package:fknotes/models/note_share.dart';
 import 'package:fknotes/pages/note_share_composer_page.dart';
 import 'package:fknotes/services/file_storage_service.dart';
 import 'package:fknotes/services/note_share_image_service.dart';
 import 'package:fknotes/services/note_share_layout_engine.dart';
-import 'package:fknotes/widgets/note_block_editor.dart';
 import 'package:fknotes/widgets/note_share_page_canvas.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -83,6 +84,40 @@ void main() {
     expect(restored.includeImages, isFalse);
   });
 
+  test('share draft keeps repeated embeds but deduplicates asset loading', () {
+    final now = DateTime.utc(2026, 7, 23);
+    final asset = NoteAsset(
+      id: NoteAttachmentId.generate(),
+      kind: NoteAssetKind.image,
+      storageKey: 'images/repeated.png',
+      originalName: 'repeated.png',
+      byteLength: 12,
+      mimeType: 'image/png',
+      createdAt: now,
+      updatedAt: now,
+    );
+    final blocks = [
+      NoteShareBlock(type: NoteShareBlockType.attachment, asset: asset),
+      NoteShareBlock(type: NoteShareBlockType.paragraph, text: '图片说明'),
+      NoteShareBlock(type: NoteShareBlockType.attachment, asset: asset),
+    ];
+    final draft = NoteShareDraft(
+      title: '重复图片',
+      blocks: blocks,
+      tags: const [],
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    expect(
+      draft.blocks.where(
+        (block) => block.type == NoteShareBlockType.attachment,
+      ),
+      hasLength(2),
+    );
+    expect(draft.attachments, [same(asset)]);
+  });
+
   test('layout paginates long content without dropping text', () {
     final content = List.generate(
       24,
@@ -100,9 +135,7 @@ void main() {
         .expand((page) => page.blocks)
         .map((item) => item.block.text)
         .join();
-    final source = NoteBlockCodec.decode(
-      content,
-    ).map((block) => block.text).join();
+    final source = draft.blocks.map((block) => block.text).join();
     expect(output, source);
 
     final story = const NoteShareLayoutEngine().paginate(
@@ -138,20 +171,17 @@ void main() {
   });
 
   test('share layout preserves lossless inline formatting from the editor', () {
-    const blocks = [
-      NoteBlockData(
-        NoteBlockType.paragraph,
-        'qq，，，aaa 与斜体',
+    final blocks = [
+      NoteShareBlock(
+        type: NoteShareBlockType.paragraph,
+        text: 'qq，，，aaa 与斜体',
         styles: [
-          NoteTextStyleRange(0, 5, NoteTextAttributes(bold: true)),
-          NoteTextStyleRange(10, 12, NoteTextAttributes(italic: true)),
+          NoteShareTextRange(0, 5, NoteShareTextStyle(bold: true)),
+          NoteShareTextRange(10, 12, NoteShareTextStyle(italic: true)),
         ],
       ),
     ];
-    final draft = _draft(
-      content: '**qq，，，**aaa 与*斜体*',
-      richContent: NoteRichDocumentCodec.encode(blocks),
-    );
+    final draft = _draft(blocks: blocks);
 
     final layout = const NoteShareLayoutEngine().paginate(
       draft: draft,
@@ -163,27 +193,24 @@ void main() {
 
     expect(shared.text, blocks.single.text);
     expect(shared.styles, hasLength(2));
-    expect(shared.styles.first.attributes.bold, isTrue);
-    expect(shared.styles.last.attributes.italic, isTrue);
+    expect(shared.styles.first.style.bold, isTrue);
+    expect(shared.styles.last.style.italic, isTrue);
   });
 
   testWidgets('share canvas renders bold and italic spans instead of markers', (
     tester,
   ) async {
-    const blocks = [
-      NoteBlockData(
-        NoteBlockType.paragraph,
-        'qq，，，aaa 与斜体',
+    final blocks = [
+      NoteShareBlock(
+        type: NoteShareBlockType.paragraph,
+        text: 'qq，，，aaa 与斜体',
         styles: [
-          NoteTextStyleRange(0, 5, NoteTextAttributes(bold: true)),
-          NoteTextStyleRange(10, 12, NoteTextAttributes(italic: true)),
+          NoteShareTextRange(0, 5, NoteShareTextStyle(bold: true)),
+          NoteShareTextRange(10, 12, NoteShareTextStyle(italic: true)),
         ],
       ),
     ];
-    final draft = _draft(
-      content: '**qq，，，**aaa 与*斜体*',
-      richContent: NoteRichDocumentCodec.encode(blocks),
-    );
+    final draft = _draft(blocks: blocks);
     const options = NoteShareOptions();
     final layout = const NoteShareLayoutEngine().paginate(
       draft: draft,
@@ -247,9 +274,7 @@ void main() {
         .expand((page) => page.blocks)
         .map((item) => item.block.text)
         .join();
-    final source = NoteBlockCodec.decode(
-      draft.content,
-    ).map((block) => block.text).join();
+    final source = draft.blocks.map((block) => block.text).join();
     expect(output, source);
   });
 
@@ -429,20 +454,20 @@ void main() {
   testWidgets('long image body height includes compact decorated blocks', (
     tester,
   ) async {
-    final blocks = <NoteBlockData>[
+    final blocks = <NoteShareBlock>[
       for (var index = 0; index < 18; index++)
-        NoteBlockData(
-          NoteBlockType.code,
-          'final section$index = "这一段需要完整显示";\n'
-          'print(section$index);',
-          codeLanguage: 'dart',
+        NoteShareBlock(
+          type: NoteShareBlockType.code,
+          text:
+              'final section$index = "这一段需要完整显示";\n'
+              'print(section$index);',
         ),
-      const NoteBlockData(NoteBlockType.paragraph, '这是长图最末尾的正文，不能被底部署名区域截断。'),
+      NoteShareBlock(
+        type: NoteShareBlockType.paragraph,
+        text: '这是长图最末尾的正文，不能被底部署名区域截断。',
+      ),
     ];
-    final draft = _draft(
-      content: NoteBlockCodec.encode(blocks),
-      richContent: NoteRichDocumentCodec.encode(blocks),
-    );
+    final draft = _draft(blocks: blocks);
     const options = NoteShareOptions(
       canvas: NoteShareCanvasSpec(preset: NoteShareCanvasPreset.long),
       density: NoteShareDensity.compact,
@@ -638,15 +663,25 @@ Iterable<TextSpan> _textSpans(TextSpan root) sync* {
 
 NoteShareDraft _draft({
   String content = '有些念头不必立刻成为答案。先把它们写下来，等待未来的某一天重新打开。\n\n> 认真记录过的生活，不会真正消失。',
-  String? richContent,
+  List<NoteShareBlock>? blocks,
 }) {
   final now = DateTime(2026, 7, 22, 10, 30);
   return NoteShareDraft(
     title: '把今天写成一封信',
-    content: content,
-    richContent: richContent,
+    blocks:
+        blocks ??
+        [
+          for (final paragraph in content.split('\n\n'))
+            NoteShareBlock(
+              type: paragraph.startsWith('> ')
+                  ? NoteShareBlockType.quote
+                  : NoteShareBlockType.paragraph,
+              text: paragraph.startsWith('> ')
+                  ? paragraph.substring(2)
+                  : paragraph,
+            ),
+        ],
     tags: const ['生活记录', '今日随想'],
-    attachments: const [],
     createdAt: now,
     updatedAt: now,
   );
@@ -656,12 +691,15 @@ NoteShareDraft _poemDraft() {
   final now = DateTime(2026, 7, 22, 10, 30);
   return NoteShareDraft(
     title: '早春呈水部张十八员外',
-    content: [
-      '韩愈〔唐代〕',
-      ...List.filled(5, '天街小雨润如酥，草色遥看近却无。\n最是一年春好处，绝胜烟柳满皇都。'),
-    ].join('\n\n'),
+    blocks: [
+      NoteShareBlock(type: NoteShareBlockType.paragraph, text: '韩愈〔唐代〕'),
+      for (var index = 0; index < 5; index++)
+        NoteShareBlock(
+          type: NoteShareBlockType.paragraph,
+          text: '天街小雨润如酥，草色遥看近却无。\n最是一年春好处，绝胜烟柳满皇都。',
+        ),
+    ],
     tags: const ['唐诗', '早春'],
-    attachments: const [],
     createdAt: now,
     updatedAt: now,
   );

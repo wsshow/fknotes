@@ -15,8 +15,10 @@ class FileStorageService {
 
   final _uuid = const Uuid();
   late String _baseDir;
+  var _initialized = false;
 
   String get baseDir => _baseDir;
+  String? get baseDirOrNull => _initialized ? _baseDir : null;
 
   /// Initialize storage directories
   Future<void> init({String? baseDir}) async {
@@ -61,6 +63,7 @@ class FileStorageService {
         }
       }
     }
+    _initialized = true;
     if (kDebugMode) {
       AppDiagnostics.info(
         AppLogCategory.storage,

@@ -6,6 +6,7 @@ import 'package:fknotes/l10n/generated/app_localizations.dart';
 import 'package:fknotes/models/note.dart';
 import 'package:fknotes/models/note_document.dart';
 import 'package:fknotes/pages/note_quill_editor_page.dart';
+import 'package:fknotes/pages/note_share_composer_page.dart';
 import 'package:fknotes/services/note_assistant_prompt_builder.dart';
 import 'package:fknotes/services/note_read_aloud_service.dart';
 import 'package:flutter/material.dart';
@@ -337,6 +338,45 @@ void main() {
       ),
       isTrue,
     );
+  });
+
+  testWidgets('shares the current rich Delta snapshot without Markdown', (
+    tester,
+  ) async {
+    final now = DateTime.utc(2026, 7, 23, 20);
+    final initial = Note(
+      id: NoteId.generate(),
+      title: '分享测试',
+      document: NoteDocument.fromDelta(
+        Delta()
+          ..insert('加粗', {'bold': true})
+          ..insert('与正文\n'),
+      ),
+      createdAt: now,
+      updatedAt: now,
+    );
+    await tester.pumpWidget(
+      _TestApp(
+        child: NoteQuillEditorPage(
+          initialNote: initial,
+          writerLoader: () async => writer,
+        ),
+      ),
+    );
+    await _pumpFor(tester, const Duration(milliseconds: 200));
+
+    await tester.tap(find.byKey(const Key('quill-editor-more')));
+    await _pumpFor(tester, const Duration(milliseconds: 150));
+    await tester.tap(find.text('分享为图片'));
+    await _pumpFor(tester, const Duration(milliseconds: 500));
+
+    final composer = tester.widget<NoteShareComposerPage>(
+      find.byType(NoteShareComposerPage),
+    );
+    expect(composer.draft.title, '分享测试');
+    expect(composer.draft.blocks.single.text, '加粗与正文');
+    expect(composer.draft.blocks.single.text, isNot(contains('**')));
+    expect(composer.draft.blocks.single.styles.single.style.bold, isTrue);
   });
 }
 

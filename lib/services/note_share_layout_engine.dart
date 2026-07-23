@@ -2,14 +2,12 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../models/note_entry.dart';
+import '../models/note.dart';
 import '../models/note_share.dart';
 import '../models/note_share_theme.dart';
-import '../utils/markdown_text.dart';
-import '../widgets/note_block_editor.dart';
 
 class NoteSharePageBlock {
-  final NoteBlockData block;
+  final NoteShareBlock block;
   final int? orderedNumber;
   final bool showMarker;
 
@@ -54,49 +52,42 @@ class NoteShareLayoutResult {
 class NoteShareTextPresentation {
   const NoteShareTextPresentation._();
 
-  static String displayText(NoteBlockData block) =>
-      block.type == NoteBlockType.rawMarkdown
-      ? MarkdownText.toPlainText(block.text)
-      : block.text;
+  static String displayText(NoteShareBlock block) => block.text;
 
   static TextStyle baseStyle(
-    NoteBlockData block,
+    NoteShareBlock block,
     double densityScale, {
     Color? color,
   }) {
     final fontSize = switch (block.type) {
-      NoteBlockType.heading => switch (block.headingLevel.clamp(1, 6)) {
+      NoteShareBlockType.heading => switch (block.headingLevel.clamp(1, 6)) {
         1 => 21.0,
         2 => 19.0,
         _ => 17.0,
       },
-      NoteBlockType.code || NoteBlockType.rawMarkdown => 12.5,
+      NoteShareBlockType.code => 12.5,
       _ => 15.0,
     };
     return TextStyle(
       color: color,
-      fontFamily:
-          block.type == NoteBlockType.code ||
-              block.type == NoteBlockType.rawMarkdown
-          ? 'monospace'
-          : null,
+      fontFamily: block.type == NoteShareBlockType.code ? 'monospace' : null,
       fontSize: fontSize * densityScale,
-      height: block.type == NoteBlockType.heading ? 1.28 : 1.48,
-      fontWeight: block.type == NoteBlockType.heading
+      height: block.type == NoteShareBlockType.heading ? 1.28 : 1.48,
+      fontWeight: block.type == NoteShareBlockType.heading
           ? FontWeight.w700
           : FontWeight.w400,
     );
   }
 
   static TextSpan inlineSpan(
-    NoteBlockData block,
+    NoteShareBlock block,
     TextStyle base, {
     required double densityScale,
     Color? linkColor,
     Color? inlineCodeBackground,
   }) {
     final text = displayText(block);
-    if (block.type == NoteBlockType.rawMarkdown || block.styles.isEmpty) {
+    if (block.styles.isEmpty) {
       return TextSpan(text: text, style: base);
     }
     final ranges = [...block.styles]
@@ -109,9 +100,9 @@ class NoteShareTextPresentation {
       if (start > cursor) {
         children.add(TextSpan(text: text.substring(cursor, start)));
       }
-      final attributes = range.attributes;
+      final attributes = range.style;
       final decorations = <TextDecoration>[
-        if (attributes.strikethrough) TextDecoration.lineThrough,
+        if (attributes.strikeThrough) TextDecoration.lineThrough,
         if (attributes.underline || attributes.link != null)
           TextDecoration.underline,
       ];
@@ -122,9 +113,6 @@ class NoteShareTextPresentation {
             fontWeight: attributes.bold ? FontWeight.w700 : null,
             fontStyle: attributes.italic ? FontStyle.italic : null,
             fontFamily: attributes.inlineCode ? 'monospace' : null,
-            fontSize: attributes.fontSize == NoteTextAttributes.defaultFontSize
-                ? null
-                : attributes.fontSize * densityScale,
             backgroundColor: attributes.inlineCode
                 ? inlineCodeBackground
                 : null,
@@ -183,7 +171,7 @@ class NoteShareLayoutEngine {
     final pageBlocks = <List<NoteSharePageBlock>>[[]];
     final usedHeights = <double>[0];
     var orderedNumber = 0;
-    NoteBlockType? previousType;
+    NoteShareBlockType? previousType;
 
     double capacity(int pageIndex) => _bodyCapacity(
       logicalHeight: logicalHeight,
@@ -199,12 +187,12 @@ class NoteShareLayoutEngine {
       usedHeights.add(0);
     }
 
-    void addBlock(NoteBlockData block, {bool showMarker = true}) {
-      if (block.type == NoteBlockType.ordered && showMarker) {
-        orderedNumber = previousType == NoteBlockType.ordered
+    void addBlock(NoteShareBlock block, {bool showMarker = true}) {
+      if (block.type == NoteShareBlockType.ordered && showMarker) {
+        orderedNumber = previousType == NoteShareBlockType.ordered
             ? orderedNumber + 1
             : 1;
-      } else if (block.type != NoteBlockType.ordered) {
+      } else if (block.type != NoteShareBlockType.ordered) {
         orderedNumber = 0;
       }
 
@@ -224,7 +212,7 @@ class NoteShareLayoutEngine {
           pageBlocks[pageIndex].add(
             NoteSharePageBlock(
               block: remainingBlock,
-              orderedNumber: remainingBlock.type == NoteBlockType.ordered
+              orderedNumber: remainingBlock.type == NoteShareBlockType.ordered
                   ? orderedNumber
                   : null,
               showMarker: marker,
@@ -255,7 +243,8 @@ class NoteShareLayoutEngine {
               pageBlocks[pageIndex].add(
                 NoteSharePageBlock(
                   block: split.$1,
-                  orderedNumber: remainingBlock.type == NoteBlockType.ordered
+                  orderedNumber:
+                      remainingBlock.type == NoteShareBlockType.ordered
                       ? orderedNumber
                       : null,
                   showMarker: marker,
@@ -283,7 +272,7 @@ class NoteShareLayoutEngine {
           pageBlocks[pageIndex].add(
             NoteSharePageBlock(
               block: remainingBlock,
-              orderedNumber: remainingBlock.type == NoteBlockType.ordered
+              orderedNumber: remainingBlock.type == NoteShareBlockType.ordered
                   ? orderedNumber
                   : null,
               showMarker: marker,
@@ -295,7 +284,7 @@ class NoteShareLayoutEngine {
         pageBlocks[pageIndex].add(
           NoteSharePageBlock(
             block: split.$1,
-            orderedNumber: remainingBlock.type == NoteBlockType.ordered
+            orderedNumber: remainingBlock.type == NoteShareBlockType.ordered
                 ? orderedNumber
                 : null,
             showMarker: marker,
@@ -349,11 +338,11 @@ class NoteShareLayoutEngine {
     final blocks = _shareableBlocks(draft, options);
     final pageBlocks = <NoteSharePageBlock>[];
     var orderedNumber = 0;
-    NoteBlockType? previousType;
+    NoteShareBlockType? previousType;
     var bodyHeight = 0.0;
     for (final block in blocks) {
-      if (block.type == NoteBlockType.ordered) {
-        orderedNumber = previousType == NoteBlockType.ordered
+      if (block.type == NoteShareBlockType.ordered) {
+        orderedNumber = previousType == NoteShareBlockType.ordered
             ? orderedNumber + 1
             : 1;
       } else {
@@ -362,7 +351,7 @@ class NoteShareLayoutEngine {
       pageBlocks.add(
         NoteSharePageBlock(
           block: block,
-          orderedNumber: block.type == NoteBlockType.ordered
+          orderedNumber: block.type == NoteShareBlockType.ordered
               ? orderedNumber
               : null,
         ),
@@ -425,42 +414,21 @@ class NoteShareLayoutEngine {
     return NoteSharePixelSize(width.round(), height.round());
   }
 
-  List<NoteBlockData> _shareableBlocks(
+  List<NoteShareBlock> _shareableBlocks(
     NoteShareDraft draft,
     NoteShareOptions options,
   ) {
-    final richBlocks = NoteRichDocumentCodec.tryDecode(draft.richContent);
-    final decoded =
-        richBlocks != null &&
-            NoteBlockCodec.structurallyMatches(richBlocks, draft.content)
-        ? richBlocks
-        : NoteBlockCodec.decode(draft.content);
-    final result = <NoteBlockData>[];
-    final referencedPaths = <String>{};
-    for (final block in decoded) {
-      if (block.type == NoteBlockType.attachment) {
-        final path = block.attachmentPath;
-        if (path != null) referencedPaths.add(path);
+    final result = <NoteShareBlock>[];
+    for (final block in draft.blocks) {
+      if (block.type == NoteShareBlockType.attachment) {
         if (!options.includeAttachments) continue;
       }
       if (block.text.trim().isEmpty &&
-          block.type != NoteBlockType.divider &&
-          block.type != NoteBlockType.attachment) {
+          block.type != NoteShareBlockType.divider &&
+          block.type != NoteShareBlockType.attachment) {
         continue;
       }
       result.add(block);
-    }
-    if (options.includeAttachments) {
-      for (final attachment in draft.attachments) {
-        if (referencedPaths.contains(attachment.filePath)) continue;
-        result.add(
-          NoteBlockData(
-            NoteBlockType.attachment,
-            '',
-            attachmentPath: attachment.filePath,
-          ),
-        );
-      }
     }
     return result;
   }
@@ -525,7 +493,7 @@ class NoteShareLayoutEngine {
   }
 
   double _blockHeight(
-    NoteBlockData block, {
+    NoteShareBlock block, {
     required NoteShareDraft draft,
     required NoteShareOptions options,
     required TextDirection textDirection,
@@ -533,12 +501,11 @@ class NoteShareLayoutEngine {
     final landscape = options.canvas.pixelSize.aspectRatio > 1;
     final width = _contentWidth(options, landscape) - block.indent * 14;
     final scale = options.density.scale;
-    if (block.type == NoteBlockType.divider) {
+    if (block.type == NoteShareBlockType.divider) {
       return dividerVerticalPadding * 2 + 1;
     }
-    if (block.type == NoteBlockType.attachment) {
-      final attachment = draft.attachmentsByPath[block.attachmentPath];
-      final image = attachment?.type == NoteType.image;
+    if (block.type == NoteShareBlockType.attachment) {
+      final image = block.asset?.kind == NoteAssetKind.image;
       if (image && options.includeImages) {
         return (landscape ? landscapeImageHeight : portraitImageHeight) +
             attachmentBottomGap;
@@ -547,14 +514,14 @@ class NoteShareLayoutEngine {
     }
     final style = NoteShareTextPresentation.baseStyle(block, scale);
     final prefixWidth = switch (block.type) {
-      NoteBlockType.bullet ||
-      NoteBlockType.ordered ||
-      NoteBlockType.todo => 26.0,
+      NoteShareBlockType.bullet ||
+      NoteShareBlockType.ordered ||
+      NoteShareBlockType.todo => 26.0,
       _ => 0.0,
     };
     final horizontalDecoration = switch (block.type) {
-      NoteBlockType.quote => quoteHorizontalPadding,
-      NoteBlockType.code || NoteBlockType.rawMarkdown => codePadding * 2,
+      NoteShareBlockType.quote => quoteHorizontalPadding,
+      NoteShareBlockType.code => codePadding * 2,
       _ => 0.0,
     };
     final textHeight = _measureSpan(
@@ -563,8 +530,8 @@ class NoteShareLayoutEngine {
       textDirection,
     );
     final decoration = switch (block.type) {
-      NoteBlockType.quote => quoteVerticalPadding,
-      NoteBlockType.code || NoteBlockType.rawMarkdown => codePadding * 2,
+      NoteShareBlockType.quote => quoteVerticalPadding,
+      NoteShareBlockType.code => codePadding * 2,
       _ => 0.0,
     };
     // RichText can round individual line metrics slightly above TextPainter's
@@ -576,15 +543,15 @@ class NoteShareLayoutEngine {
   }
 
   double _minimumSplitHeight(
-    NoteBlockData block, {
+    NoteShareBlock block, {
     required NoteShareOptions options,
   }) {
     final scale = options.density.scale;
     final style = NoteShareTextPresentation.baseStyle(block, scale);
     final lineHeight = (style.fontSize ?? 15) * (style.height ?? 1.48);
     final decoration = switch (block.type) {
-      NoteBlockType.quote => quoteVerticalPadding,
-      NoteBlockType.code || NoteBlockType.rawMarkdown => codePadding * 2,
+      NoteShareBlockType.quote => quoteVerticalPadding,
+      NoteShareBlockType.code => codePadding * 2,
       _ => 0.0,
     };
     return lineHeight +
@@ -619,14 +586,14 @@ class NoteShareLayoutEngine {
     return painter.height;
   }
 
-  bool _canSplit(NoteBlockData block) =>
+  bool _canSplit(NoteShareBlock block) =>
       block.text.length > 1 &&
-      block.type != NoteBlockType.heading &&
-      block.type != NoteBlockType.divider &&
-      block.type != NoteBlockType.attachment;
+      block.type != NoteShareBlockType.heading &&
+      block.type != NoteShareBlockType.divider &&
+      block.type != NoteShareBlockType.attachment;
 
-  (NoteBlockData, NoteBlockData)? _splitToFit(
-    NoteBlockData block, {
+  (NoteShareBlock, NoteShareBlock)? _splitToFit(
+    NoteShareBlock block, {
     required double maxHeight,
     required NoteShareDraft draft,
     required NoteShareOptions options,
@@ -656,7 +623,9 @@ class NoteShareLayoutEngine {
     if (best <= 0 || best >= block.text.length) return null;
     var splitAt = best;
     final preferred = block.text.lastIndexOf(
-      RegExp(block.type == NoteBlockType.code ? r'\n' : r'[\n\s，。！？；、,.!?;]'),
+      RegExp(
+        block.type == NoteShareBlockType.code ? r'\n' : r'[\n\s，。！？；、,.!?;]',
+      ),
       best,
     );
     if (preferred > best * .55) splitAt = preferred + 1;
@@ -685,30 +654,6 @@ class NoteShareLayoutEngine {
     return result.clamp(1, text.length - 1);
   }
 
-  NoteBlockData _sliceBlock(NoteBlockData block, int start, int end) {
-    final styles = <NoteTextStyleRange>[];
-    for (final range in block.styles) {
-      final overlapStart = math.max(start, range.start);
-      final overlapEnd = math.min(end, range.end);
-      if (overlapStart >= overlapEnd) continue;
-      styles.add(
-        NoteTextStyleRange(
-          overlapStart - start,
-          overlapEnd - start,
-          range.attributes,
-        ),
-      );
-    }
-    return NoteBlockData(
-      block.type,
-      block.text.substring(start, end),
-      checked: block.checked,
-      attachmentPath: block.attachmentPath,
-      indent: block.indent,
-      quoteDepth: block.quoteDepth,
-      headingLevel: block.headingLevel,
-      codeLanguage: block.codeLanguage,
-      styles: styles,
-    );
-  }
+  NoteShareBlock _sliceBlock(NoteShareBlock block, int start, int end) =>
+      block.slice(start, end);
 }
