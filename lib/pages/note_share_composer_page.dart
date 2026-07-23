@@ -178,7 +178,11 @@ class _NoteShareComposerPageState extends State<NoteShareComposerPage> {
 
     return Scaffold(
       backgroundColor: AppColors.canvas,
-      appBar: AppBar(title: Text(l10n.createShareImage)),
+      appBar: AppBar(
+        title: Text(l10n.createShareImage),
+        toolbarHeight: 64,
+        titleTextStyle: Theme.of(context).textTheme.titleLarge,
+      ),
       body: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -208,7 +212,7 @@ class _NoteShareComposerPageState extends State<NoteShareComposerPage> {
                 );
               }
               return ListView(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 120),
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 128),
                 children: [
                   _previewPane(
                     context,
@@ -262,8 +266,8 @@ class _NoteShareComposerPageState extends State<NoteShareComposerPage> {
                     padding: const EdgeInsets.all(22),
                     decoration: BoxDecoration(
                       color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: AppColors.line),
+                      borderRadius: BorderRadius.circular(AppRadius.large),
+                      boxShadow: AppShadows.floating,
                     ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -292,13 +296,22 @@ class _NoteShareComposerPageState extends State<NoteShareComposerPage> {
           padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
           decoration: const BoxDecoration(
             color: AppColors.surface,
-            border: Border(top: BorderSide(color: AppColors.line)),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x0D202124),
+                blurRadius: 18,
+                offset: Offset(0, -4),
+              ),
+            ],
           ),
-          child: FilledButton.icon(
-            key: _shareButtonKey,
-            onPressed: _rendering ? null : _generateAndShare,
-            icon: const Icon(Icons.ios_share_rounded),
-            label: Text(l10n.generateAndShare),
+          child: SizedBox(
+            height: 52,
+            child: FilledButton.icon(
+              key: _shareButtonKey,
+              onPressed: _rendering ? null : _generateAndShare,
+              icon: const Icon(Icons.ios_share_rounded, size: 20),
+              label: Text(l10n.generateAndShare),
+            ),
           ),
         ),
       ),
@@ -320,12 +333,20 @@ class _NoteShareComposerPageState extends State<NoteShareComposerPage> {
           children: [
             Text(
               '${pixelSize.width} × ${pixelSize.height}',
-              style: const TextStyle(fontSize: 12, color: AppColors.muted),
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.muted,
+                fontWeight: FontWeight.w500,
+              ),
             ),
             const Spacer(),
             Text(
               l10n.shareImagePageIndicator(pageIndex + 1, layout.pages.length),
-              style: const TextStyle(fontSize: 12, color: AppColors.muted),
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.muted,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ],
         ),
@@ -354,8 +375,7 @@ class _NoteShareComposerPageState extends State<NoteShareComposerPage> {
                 clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
                   color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.line),
+                  borderRadius: BorderRadius.circular(AppRadius.medium),
                 ),
                 child: SingleChildScrollView(
                   primary: false,
@@ -667,18 +687,21 @@ class _NoteShareComposerPageState extends State<NoteShareComposerPage> {
   }
 
   Widget _sectionTitle(String title) => Padding(
-    padding: const EdgeInsets.only(bottom: 10),
+    padding: const EdgeInsets.only(bottom: 12),
     child: Text(
       title,
-      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+      style: const TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -.1,
+      ),
     ),
   );
 
   Widget _settingsCard(List<Widget> children) => Material(
     color: AppColors.surface,
     shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(16),
-      side: const BorderSide(color: AppColors.line),
+      borderRadius: BorderRadius.circular(AppRadius.large),
     ),
     clipBehavior: Clip.antiAlias,
     child: Column(
@@ -698,8 +721,21 @@ class _NoteShareComposerPageState extends State<NoteShareComposerPage> {
     required bool value,
     required ValueChanged<bool>? onChanged,
   }) => SwitchListTile(
-    secondary: Icon(icon),
-    title: Text(label),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+    secondary: DecoratedBox(
+      decoration: const BoxDecoration(
+        color: AppColors.surfaceMuted,
+        borderRadius: BorderRadius.all(Radius.circular(AppRadius.small)),
+      ),
+      child: SizedBox.square(
+        dimension: 38,
+        child: Icon(icon, size: 20, color: AppColors.ink),
+      ),
+    ),
+    title: Text(
+      label,
+      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+    ),
     value: value,
     onChanged: _rendering ? null : onChanged,
   );
