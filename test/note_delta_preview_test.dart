@@ -1,0 +1,89 @@
+import 'package:fknotes/l10n/generated/app_localizations.dart';
+import 'package:fknotes/models/note.dart';
+import 'package:fknotes/models/note_document.dart';
+import 'package:fknotes/widgets/note_delta_preview.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_quill/quill_delta.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  testWidgets('renders Delta emphasis as styles instead of syntax markers', (
+    tester,
+  ) async {
+    final note = _noteWithDocument(
+      Delta()
+        ..insert('加粗', {'bold': true})
+        ..insert('与')
+        ..insert('倾斜', {'italic': true})
+        ..insert('\n'),
+    );
+
+    await tester.pumpWidget(_TestApp(child: NoteDeltaPreview(note: note)));
+
+    final text = tester.widget<Text>(
+      find.byKey(const Key('note-delta-preview-text')),
+    );
+    final root = text.textSpan! as TextSpan;
+    final spans = root.children!.cast<TextSpan>();
+    expect(spans.map((span) => span.text).join(), '加粗与倾斜');
+    expect(spans[0].style?.fontWeight, FontWeight.w700);
+    expect(spans[2].style?.fontStyle, FontStyle.italic);
+  });
+
+  testWidgets('projects attachment IDs through note metadata', (tester) async {
+    final id = NoteAttachmentId.generate();
+    final now = DateTime.utc(2026, 7, 23);
+    final asset = NoteAsset(
+      id: id,
+      kind: NoteAssetKind.image,
+      storageKey: 'images/preview.png',
+      originalName: '设计稿.png',
+      byteLength: 20,
+      mimeType: 'image/png',
+      createdAt: now,
+      updatedAt: now,
+    );
+    final note = Note(
+      id: NoteId.generate(),
+      title: '图片',
+      document: NoteDocument.fromDelta(
+        Delta()
+          ..insert('正文\n')
+          ..insert(NoteEmbed.attachment(id).toDeltaData())
+          ..insert('\n'),
+      ),
+      assets: [asset],
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    await tester.pumpWidget(_TestApp(child: NoteDeltaPreview(note: note)));
+
+    expect(find.textContaining('【设计稿.png】'), findsOneWidget);
+  });
+}
+
+Note _noteWithDocument(Delta delta) {
+  final now = DateTime.utc(2026, 7, 23);
+  return Note(
+    id: NoteId.generate(),
+    title: '格式预览',
+    document: NoteDocument.fromDelta(delta),
+    createdAt: now,
+    updatedAt: now,
+  );
+}
+
+final class _TestApp extends StatelessWidget {
+  const _TestApp({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    locale: const Locale('zh'),
+    supportedLocales: AppLocalizations.supportedLocales,
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    home: Scaffold(body: child),
+  );
+}
