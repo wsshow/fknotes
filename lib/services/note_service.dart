@@ -224,7 +224,7 @@ class NoteService {
       FROM entries e
       LEFT JOIN attachments a ON a.note_id = e.id
       WHERE e.is_deleted = 0 AND (
-        e.title LIKE ? OR e.content LIKE ? OR e.ocr_text LIKE ? OR
+        e.title LIKE ? OR e.search_text LIKE ? OR e.ocr_text LIKE ? OR
         e.file_name LIKE ? OR e.tags LIKE ? OR a.ocr_text LIKE ? OR
         a.transcript LIKE ? OR a.file_name LIKE ? OR a.display_name LIKE ?
       )

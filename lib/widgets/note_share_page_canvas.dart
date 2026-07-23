@@ -9,7 +9,6 @@ import '../models/note_share.dart';
 import '../models/note_share_theme.dart';
 import '../services/file_storage_service.dart';
 import '../services/note_share_layout_engine.dart';
-import '../utils/markdown_text.dart';
 import 'note_block_editor.dart';
 
 class NoteSharePageCanvas extends StatelessWidget {
@@ -144,14 +143,22 @@ class NoteSharePageCanvas extends StatelessWidget {
                               ],
                               Expanded(
                                 child: ClipRect(
+                                  key: const ValueKey(
+                                    'note-share-body-viewport',
+                                  ),
                                   child: Align(
                                     alignment: Alignment.topLeft,
-                                    child: _ShareBlocks(
-                                      blocks: page.blocks,
-                                      draft: draft,
-                                      options: options,
-                                      palette: palette,
-                                      landscape: landscape,
+                                    child: KeyedSubtree(
+                                      key: const ValueKey(
+                                        'note-share-body-content',
+                                      ),
+                                      child: _ShareBlocks(
+                                        blocks: page.blocks,
+                                        draft: draft,
+                                        options: options,
+                                        palette: palette,
+                                        landscape: landscape,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -437,7 +444,9 @@ class _ShareBlockView extends StatelessWidget {
     final block = item.block;
     if (block.type == NoteBlockType.divider) {
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
+        padding: const EdgeInsets.symmetric(
+          vertical: NoteShareLayoutEngine.dividerVerticalPadding,
+        ),
         child: Divider(height: 1, color: palette.line),
       );
     }
@@ -451,29 +460,25 @@ class _ShareBlockView extends StatelessWidget {
     }
 
     final scale = options.density.scale;
-    final fontSize = switch (block.type) {
-      NoteBlockType.heading => switch (block.headingLevel.clamp(1, 6)) {
-        1 => 21.0,
-        2 => 19.0,
-        _ => 17.0,
-      },
-      NoteBlockType.code || NoteBlockType.rawMarkdown => 12.5,
-      _ => 15.0,
-    };
-    final baseStyle = TextStyle(
+    final baseStyle = NoteShareTextPresentation.baseStyle(
+      block,
+      scale,
       color: palette.ink,
-      fontFamily: block.type == NoteBlockType.code ? 'monospace' : null,
-      fontSize: fontSize * scale,
-      height: block.type == NoteBlockType.heading ? 1.28 : 1.48,
-      fontWeight: block.type == NoteBlockType.heading
-          ? FontWeight.w700
-          : FontWeight.w400,
     );
     final richText = RichText(
-      text: _inlineSpan(block, baseStyle, palette),
+      text: NoteShareTextPresentation.inlineSpan(
+        block,
+        baseStyle,
+        densityScale: scale,
+        linkColor: palette.accent,
+        inlineCodeBackground: palette.code,
+      ),
       textAlign: TextAlign.start,
     );
-    final margin = EdgeInsets.only(left: block.indent * 14, bottom: 8 * scale);
+    final margin = EdgeInsets.only(
+      left: block.indent * 14,
+      bottom: NoteShareLayoutEngine.blockBottomGap * scale,
+    );
 
     return Padding(
       padding: margin,
@@ -507,70 +512,26 @@ class _ShareBlockView extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(11, 7, 8, 7),
           decoration: BoxDecoration(
             color: palette.quote,
-            border: Border(left: BorderSide(color: palette.accent, width: 2.5)),
+            border: Border(
+              left: BorderSide(
+                color: palette.accent,
+                width: NoteShareLayoutEngine.quoteBorderWidth,
+              ),
+            ),
           ),
           child: richText,
         ),
         NoteBlockType.code || NoteBlockType.rawMarkdown => Container(
-          padding: const EdgeInsets.all(10),
+          padding: const EdgeInsets.all(NoteShareLayoutEngine.codePadding),
           decoration: BoxDecoration(
             color: palette.code,
             borderRadius: BorderRadius.circular(8),
           ),
-          child: RichText(
-            text: TextSpan(
-              text: block.type == NoteBlockType.rawMarkdown
-                  ? MarkdownText.toPlainText(block.text)
-                  : block.text,
-              style: baseStyle.copyWith(fontFamily: 'monospace'),
-            ),
-          ),
+          child: richText,
         ),
         _ => richText,
       },
     );
-  }
-
-  TextSpan _inlineSpan(
-    NoteBlockData block,
-    TextStyle base,
-    _SharePalette palette,
-  ) {
-    if (block.styles.isEmpty) return TextSpan(text: block.text, style: base);
-    final ranges = [...block.styles]
-      ..sort((left, right) => left.start.compareTo(right.start));
-    final children = <InlineSpan>[];
-    var cursor = 0;
-    for (final range in ranges) {
-      final start = range.start.clamp(cursor, block.text.length);
-      final end = range.end.clamp(start, block.text.length);
-      if (start > cursor) {
-        children.add(TextSpan(text: block.text.substring(cursor, start)));
-      }
-      final attributes = range.attributes;
-      children.add(
-        TextSpan(
-          text: block.text.substring(start, end),
-          style: TextStyle(
-            fontWeight: attributes.bold ? FontWeight.w700 : null,
-            fontStyle: attributes.italic ? FontStyle.italic : null,
-            fontFamily: attributes.inlineCode ? 'monospace' : null,
-            backgroundColor: attributes.inlineCode ? palette.code : null,
-            color: attributes.link != null ? palette.accent : null,
-            decoration: TextDecoration.combine([
-              if (attributes.strikethrough) TextDecoration.lineThrough,
-              if (attributes.underline || attributes.link != null)
-                TextDecoration.underline,
-            ]),
-          ),
-        ),
-      );
-      cursor = end;
-    }
-    if (cursor < block.text.length) {
-      children.add(TextSpan(text: block.text.substring(cursor)));
-    }
-    return TextSpan(style: base, children: children);
   }
 }
 
@@ -592,8 +553,12 @@ class _ShareAttachment extends StatelessWidget {
     final item = attachment;
     if (item != null && item.type == NoteType.image && includeImages) {
       return Container(
-        height: landscape ? 82 : 140,
-        margin: const EdgeInsets.only(bottom: 10),
+        height: landscape
+            ? NoteShareLayoutEngine.landscapeImageHeight
+            : NoteShareLayoutEngine.portraitImageHeight,
+        margin: const EdgeInsets.only(
+          bottom: NoteShareLayoutEngine.attachmentBottomGap,
+        ),
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           color: palette.code,
@@ -604,8 +569,12 @@ class _ShareAttachment extends StatelessWidget {
       );
     }
     return Container(
-      constraints: const BoxConstraints(minHeight: 48),
-      margin: const EdgeInsets.only(bottom: 10),
+      constraints: const BoxConstraints(
+        minHeight: NoteShareLayoutEngine.attachmentMinHeight,
+      ),
+      margin: const EdgeInsets.only(
+        bottom: NoteShareLayoutEngine.attachmentBottomGap,
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
       decoration: BoxDecoration(
         color: palette.code,

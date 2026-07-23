@@ -426,6 +426,69 @@ void main() {
     }
   });
 
+  testWidgets('long image body height includes compact decorated blocks', (
+    tester,
+  ) async {
+    final blocks = <NoteBlockData>[
+      for (var index = 0; index < 18; index++)
+        NoteBlockData(
+          NoteBlockType.code,
+          'final section$index = "这一段需要完整显示";\n'
+          'print(section$index);',
+          codeLanguage: 'dart',
+        ),
+      const NoteBlockData(NoteBlockType.paragraph, '这是长图最末尾的正文，不能被底部署名区域截断。'),
+    ];
+    final draft = _draft(
+      content: NoteBlockCodec.encode(blocks),
+      richContent: NoteRichDocumentCodec.encode(blocks),
+    );
+    const options = NoteShareOptions(
+      canvas: NoteShareCanvasSpec(preset: NoteShareCanvasPreset.long),
+      density: NoteShareDensity.compact,
+    );
+    final layout = const NoteShareLayoutEngine().paginate(
+      draft: draft,
+      options: options,
+      textDirection: TextDirection.ltr,
+      untitledTitle: '一则笔记',
+    );
+    tester.view.physicalSize = Size(500, layout.logicalHeight + 100);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: NoteSharePageCanvas(
+            draft: draft,
+            options: options,
+            layout: layout,
+            pageIndex: 0,
+            untitledTitle: '一则笔记',
+            sourceLabel: '来自「非空笔记」',
+            locale: const Locale('zh'),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final viewportHeight = tester
+        .getSize(find.byKey(const ValueKey('note-share-body-viewport')))
+        .height;
+    final contentHeight = tester
+        .getSize(find.byKey(const ValueKey('note-share-body-content')))
+        .height;
+    expect(
+      viewportHeight,
+      greaterThanOrEqualTo(contentHeight),
+      reason: '长图正文的实际排版高度必须完整落在署名上方',
+    );
+  });
+
   testWidgets('composer renders PNG files before invoking system sharing', (
     tester,
   ) async {

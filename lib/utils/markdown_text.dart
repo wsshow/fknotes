@@ -10,8 +10,15 @@ abstract final class MarkdownText {
   /// Uses the editor's lossless document when available, then falls back to
   /// Markdown parsing. This also keeps compact previews clean for notes saved
   /// by older versions with an ambiguous emphasis boundary.
-  static String toPlainTextDocument(String source, {String? richContent}) {
-    final richText = _richDocumentText(richContent);
+  static String toPlainTextDocument(
+    String source, {
+    String? richContent,
+    Map<String, String> attachmentLabelsByPath = const {},
+  }) {
+    final richText = _richDocumentText(
+      richContent,
+      attachmentLabelsByPath: attachmentLabelsByPath,
+    );
     if (richText?.isNotEmpty == true) return richText!;
     return toPlainText(source);
   }
@@ -111,7 +118,10 @@ abstract final class MarkdownText {
     return output.toString();
   }
 
-  static String? _richDocumentText(String? source) {
+  static String? _richDocumentText(
+    String? source, {
+    required Map<String, String> attachmentLabelsByPath,
+  }) {
     if (source?.trim().isEmpty ?? true) return null;
     try {
       final root = jsonDecode(source!) as Map<String, Object?>;
@@ -122,7 +132,13 @@ abstract final class MarkdownText {
       for (final rawBlock in blocks) {
         final block = rawBlock as Map<String, Object?>;
         final type = block['type'] as String? ?? 'paragraph';
-        if (type == 'attachment' || type == 'divider') continue;
+        if (type == 'divider') continue;
+        if (type == 'attachment') {
+          final path = block['attachmentPath'] as String? ?? '';
+          final label = attachmentLabelsByPath[path]?.trim() ?? '';
+          lines.add(label.isEmpty ? '【附件已移除】' : '【附件：$label】');
+          continue;
+        }
         final text = block['text'] as String? ?? '';
         final plain = type == 'rawMarkdown' ? toPlainText(text) : text;
         final normalized = plain.trim();

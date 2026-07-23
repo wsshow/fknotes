@@ -354,6 +354,7 @@ class NoteEntry {
       'title': title,
       'content': content,
       'rich_content': richContent,
+      'search_text': plainTextContent,
       'file_path': primary?.filePath,
       'file_name': primary?.fileName,
       'file_size': primary?.fileSize,
@@ -439,6 +440,10 @@ class NoteEntry {
   String get plainTextContent => MarkdownText.toPlainTextDocument(
     readableContent,
     richContent: richContent,
+    attachmentLabelsByPath: {
+      for (final attachment in allAttachments)
+        attachment.filePath: attachment.displayTitle,
+    },
   );
 
   bool get hasMedia => allAttachments.isNotEmpty;

@@ -120,12 +120,12 @@ void main() {
     () async {
       final now = DateTime(2026, 7, 10, 15);
       const richContent =
-          '{"version":1,"blocks":[{"type":"paragraph","text":"重要内容","styles":[{"start":0,"end":2,"bold":true}]}]}';
+          '{"version":2,"blocks":[{"type":"paragraph","text":"重要内容","styles":[{"start":0,"end":2,"bold":true}]}]}';
       final id = await notes.insertEntry(
         NoteEntry(
           type: NoteType.text,
           title: '富文本测试',
-          content: '重要内容',
+          content: '**重&#35201;**内容',
           richContent: richContent,
           createdAt: now,
           updatedAt: now,
@@ -133,8 +133,9 @@ void main() {
       );
 
       final restored = await notes.getEntry(id);
-      expect(restored?.content, '重要内容');
+      expect(restored?.content, '**重&#35201;**内容');
       expect(restored?.richContent, richContent);
+      expect(restored?.plainTextContent, '重要内容');
       expect(
         (await notes.searchLike('重要')).map((entry) => entry.id),
         contains(id),

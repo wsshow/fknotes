@@ -2,9 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive_io.dart';
+import 'package:fknotes/models/note_entry.dart';
 import 'package:fknotes/services/backup_service.dart';
 import 'package:fknotes/services/database_service.dart';
 import 'package:fknotes/services/file_storage_service.dart';
+import 'package:fknotes/services/note_service.dart';
+import 'package:fknotes/services/search_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -138,5 +141,55 @@ void main() {
       await BackupService.instance.managedBackupFile(first).exists(),
       isFalse,
     );
+  });
+
+  test('backup restores rich editor data and its search projection', () async {
+    final now = DateTime(2026, 7, 22, 18);
+    final image = File(p.join(storage.path, 'images/editor.png'));
+    await image.parent.create(recursive: true);
+    await image.writeAsBytes([1, 2, 3]);
+    const richContent =
+        '{"version":2,"blocks":[{"type":"paragraph","text":"探索记录","styles":[{"start":0,"end":2,"bold":true}]},{"type":"attachment","text":"","attachmentPath":"images/editor.png"}]}';
+    final noteId = await NoteService.instance.insertEntry(
+      NoteEntry(
+        type: NoteType.image,
+        title: '重构数据契约',
+        content: '**探&#32034;**记录\n\n[[附件:images/editor.png]]',
+        richContent: richContent,
+        attachments: [
+          NoteAttachment(
+            type: NoteType.image,
+            filePath: 'images/editor.png',
+            fileName: 'editor.png',
+            displayName: '编辑器截图',
+            fileSize: 3,
+            mimeType: 'image/png',
+            createdAt: now,
+          ),
+        ],
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    final artifact = await BackupService.instance.createBackupArtifact(
+      outputDirectory: exports,
+    );
+    final current = await NoteService.instance.getEntry(noteId);
+    await NoteService.instance.updateEntry(
+      current!.copyWith(
+        content: '已经覆盖的内容',
+        clearRichContent: true,
+        updatedAt: now.add(const Duration(hours: 1)),
+      ),
+    );
+
+    await BackupService.instance.restoreBackupFile(artifact.file);
+
+    final restored = await NoteService.instance.getEntry(noteId);
+    expect(restored?.content, '**探&#32034;**记录\n\n[[附件:images/editor.png]]');
+    expect(restored?.richContent, richContent);
+    expect(restored?.plainTextContent, '探索记录\n【附件：编辑器截图】');
+    final results = await SearchService.instance.search('探索');
+    expect(results.map((result) => result.note?.id), contains(noteId));
   });
 }

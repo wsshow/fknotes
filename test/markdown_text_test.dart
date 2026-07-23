@@ -52,6 +52,31 @@ void main() {
     expect(entry.previewText, isNot(contains('**')));
   });
 
+  test('rich attachment nodes keep readable labels in downstream text', () {
+    final entry = NoteEntry(
+      type: NoteType.image,
+      content: '检查结果\n\n[[附件:images/result.png]]',
+      richContent:
+          '{"version":2,"blocks":[{"type":"paragraph","text":"检查结果"},{"type":"attachment","text":"","attachmentPath":"images/result.png"}]}',
+      attachments: [
+        NoteAttachment(
+          type: NoteType.image,
+          filePath: 'images/result.png',
+          fileName: 'result.png',
+          displayName: '化验结果',
+          fileSize: 1,
+          mimeType: 'image/png',
+          createdAt: DateTime(2026),
+        ),
+      ],
+      createdAt: DateTime(2026),
+      updatedAt: DateTime(2026),
+    );
+
+    expect(entry.plainTextContent, '检查结果\n【附件：化验结果】');
+    expect(entry.toMap()['search_text'], entry.plainTextContent);
+  });
+
   testWidgets('library card displays a clean summary without Markdown syntax', (
     tester,
   ) async {

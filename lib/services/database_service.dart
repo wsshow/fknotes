@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import '../debug/app_diagnostics.dart';
+import '../utils/markdown_text.dart';
 import 'file_storage_service.dart';
 import '../models/local_chat.dart';
 
@@ -23,13 +24,13 @@ class DatabaseService {
       AppDiagnostics.info(
         AppLogCategory.database,
         'database_open_started',
-        data: {'schemaVersion': 12},
+        data: {'schemaVersion': 13},
       );
     }
     try {
       final database = await openDatabase(
         path,
-        version: 12,
+        version: 13,
         onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
@@ -71,6 +72,7 @@ class DatabaseService {
         title TEXT NOT NULL DEFAULT '',
         content TEXT,
         rich_content TEXT,
+        search_text TEXT NOT NULL DEFAULT '',
         file_path TEXT,
         file_name TEXT,
         file_size INTEGER,
@@ -110,6 +112,16 @@ class DatabaseService {
         'database_migration_started',
         data: {'fromVersion': oldVersion, 'toVersion': newVersion},
       );
+    }
+    if (oldVersion < 13) {
+      final columns = (await db.rawQuery(
+        'PRAGMA table_info(entries)',
+      )).map((column) => column['name'] as String).toSet();
+      if (!columns.contains('search_text')) {
+        await db.execute(
+          "ALTER TABLE entries ADD COLUMN search_text TEXT NOT NULL DEFAULT ''",
+        );
+      }
     }
     if (oldVersion < 11) {
       await _createAttachmentsTable(db);
@@ -225,6 +237,10 @@ class DatabaseService {
     if (oldVersion < 11) {
       await _createSearchIndex(db);
     }
+    if (oldVersion < 13) {
+      await _backfillSearchText(db);
+      await _createSearchIndex(db);
+    }
     if (kDebugMode) {
       AppDiagnostics.info(
         AppLogCategory.database,
@@ -336,6 +352,39 @@ class DatabaseService {
     );
   }
 
+  Future<void> _backfillSearchText(Database db) async {
+    final attachmentLabels = <int, Map<String, String>>{};
+    for (final row in await db.query(
+      'attachments',
+      columns: ['note_id', 'file_path', 'file_name', 'display_name'],
+    )) {
+      final noteId = row['note_id'] as int?;
+      final path = row['file_path'] as String? ?? '';
+      if (noteId == null || path.isEmpty) continue;
+      final displayName = row['display_name'] as String? ?? '';
+      final fileName = row['file_name'] as String? ?? '';
+      attachmentLabels.putIfAbsent(noteId, () => {})[path] =
+          displayName.trim().isEmpty ? fileName : displayName;
+    }
+    for (final row in await db.query(
+      'entries',
+      columns: ['id', 'content', 'rich_content'],
+    )) {
+      final id = row['id'] as int;
+      final text = MarkdownText.toPlainTextDocument(
+        row['content'] as String? ?? '',
+        richContent: row['rich_content'] as String?,
+        attachmentLabelsByPath: attachmentLabels[id] ?? const {},
+      );
+      await db.update(
+        'entries',
+        {'search_text': text},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    }
+  }
+
   Future<void> _createSearchIndex(Database db) async {
     try {
       await db.execute('''
@@ -394,7 +443,7 @@ class DatabaseService {
     await db.execute('''
       CREATE TRIGGER entries_search_ai AFTER INSERT ON entries BEGIN
         INSERT INTO search_fts(kind, source_id, parent_id, title, body, metadata)
-        VALUES('note', NEW.id, '', NEW.title, COALESCE(NEW.content, ''),
+        VALUES('note', NEW.id, '', NEW.title, COALESCE(NEW.search_text, ''),
           COALESCE(NEW.tags, '') || ' ' || COALESCE(NEW.ocr_text, '') || ' ' ||
           COALESCE(NEW.file_name, ''));
       END
@@ -403,7 +452,7 @@ class DatabaseService {
       CREATE TRIGGER entries_search_au AFTER UPDATE ON entries BEGIN
         DELETE FROM search_fts WHERE kind = 'note' AND source_id = OLD.id;
         INSERT INTO search_fts(kind, source_id, parent_id, title, body, metadata)
-        VALUES('note', NEW.id, '', NEW.title, COALESCE(NEW.content, ''),
+        VALUES('note', NEW.id, '', NEW.title, COALESCE(NEW.search_text, ''),
           COALESCE(NEW.tags, '') || ' ' || COALESCE(NEW.ocr_text, '') || ' ' ||
           COALESCE(NEW.file_name, ''));
       END
@@ -476,7 +525,7 @@ class DatabaseService {
     await db.delete('search_fts');
     await db.execute('''
       INSERT INTO search_fts(kind, source_id, parent_id, title, body, metadata)
-      SELECT 'note', id, '', title, COALESCE(content, ''),
+      SELECT 'note', id, '', title, COALESCE(search_text, ''),
         COALESCE(tags, '') || ' ' || COALESCE(ocr_text, '') || ' ' ||
         COALESCE(file_name, '')
       FROM entries

@@ -15,6 +15,7 @@ void main() {
   final notes = NoteService.instance;
   final chats = LocalChatStore.instance;
   final search = SearchService.instance;
+  late int richNoteId;
 
   setUpAll(() async {
     sqfliteFfiInit();
@@ -39,6 +40,17 @@ void main() {
             createdAt: now,
           ),
         ],
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    richNoteId = await notes.insertEntry(
+      NoteEntry(
+        type: NoteType.text,
+        title: '富文本搜索契约',
+        content: '**探&#32034;**方案',
+        richContent:
+            '{"version":2,"blocks":[{"type":"paragraph","text":"探索方案","styles":[{"start":0,"end":2,"bold":true}]}]}',
         createdAt: now,
         updatedAt: now,
       ),
@@ -101,4 +113,16 @@ void main() {
 
     expect(results.any((result) => result.title == '项目周会记录'), isTrue);
   });
+
+  test(
+    'search indexes visible rich text and returns a clean snippet',
+    () async {
+      final results = await search.search('探索');
+      final result = results.singleWhere((item) => item.note?.id == richNoteId);
+
+      expect(result.snippet, contains('探索方案'));
+      expect(result.snippet, isNot(contains('**')));
+      expect(result.snippet, isNot(contains('&#')));
+    },
+  );
 }

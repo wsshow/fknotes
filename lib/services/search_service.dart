@@ -106,13 +106,13 @@ class SearchService {
     return database.rawQuery(
       '''
       SELECT 'note' AS kind, CAST(e.id AS TEXT) AS source_id, '' AS parent_id,
-        e.title AS title, COALESCE(e.content, '') AS body,
+        e.title AS title, COALESCE(e.search_text, '') AS body,
         COALESCE(e.tags, '') || ' ' || COALESCE(e.ocr_text, '') || ' ' ||
           COALESCE(e.file_name, '') AS metadata,
-        COALESCE(e.content, e.title) AS snippet, 0.0 AS rank
+        COALESCE(NULLIF(e.search_text, ''), e.title) AS snippet, 0.0 AS rank
       FROM entries e
       WHERE e.is_deleted = 0 AND (
-        e.title LIKE ? OR e.content LIKE ? OR e.tags LIKE ? OR
+        e.title LIKE ? OR e.search_text LIKE ? OR e.tags LIKE ? OR
         e.ocr_text LIKE ? OR e.file_name LIKE ?
       )
       UNION ALL

@@ -286,9 +286,18 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       }
       return;
     }
+    _richContent =
+        _blockEditorKey.currentState?.flushPendingChanges() ?? _richContent;
     final text = [
       _title.text.trim(),
-      MarkdownText.toPlainText(_content.text).trim(),
+      MarkdownText.toPlainTextDocument(
+        _content.text,
+        richContent: _richContent,
+        attachmentLabelsByPath: {
+          for (final attachment in _attachments)
+            attachment.filePath: attachment.displayTitle,
+        },
+      ).trim(),
     ].where((part) => part.isNotEmpty).join('。');
     try {
       await _readAloud.speak(text);
