@@ -378,6 +378,113 @@ void main() {
     expect(composer.draft.blocks.single.text, isNot(contains('**')));
     expect(composer.draft.blocks.single.styles.single.style.bold, isTrue);
   });
+
+  testWidgets('edits tags as canonical note metadata', (tester) async {
+    final now = DateTime.utc(2026, 7, 23, 21);
+    final initial = Note(
+      id: NoteId.generate(),
+      title: '标签测试',
+      document: NoteDocument.fromPlainText('正文'),
+      createdAt: now,
+      updatedAt: now,
+    );
+    await tester.pumpWidget(
+      _TestApp(
+        child: NoteQuillEditorPage(
+          initialNote: initial,
+          writerLoader: () async => writer,
+          autosaveDelay: const Duration(milliseconds: 50),
+        ),
+      ),
+    );
+    await _pumpFor(tester, const Duration(milliseconds: 150));
+
+    await tester.tap(find.byKey(const Key('quill-edit-tags')));
+    await _pumpFor(tester, const Duration(milliseconds: 200));
+    await tester.enterText(
+      find.byKey(const Key('note-tags-field')),
+      '工作, 灵感, 工作',
+    );
+    await tester.tap(find.byKey(const Key('save-note-tags')));
+    await _pumpFor(tester, const Duration(milliseconds: 500));
+
+    expect(writer.notes.single.tags, ['工作', '灵感']);
+    expect(find.byKey(const ValueKey('quill-note-tag-工作')), findsOneWidget);
+    expect(find.byKey(const ValueKey('quill-note-tag-灵感')), findsOneWidget);
+  });
+
+  testWidgets('moves a persisted note to trash from the editor menu', (
+    tester,
+  ) async {
+    final now = DateTime.utc(2026, 7, 23, 22);
+    final persisted = Note(
+      id: NoteId.generate(),
+      title: '待删除笔记',
+      document: NoteDocument.fromPlainText('仍可恢复'),
+      revision: 1,
+      createdAt: now,
+      updatedAt: now,
+    );
+    writer.notes.add(persisted);
+    await tester.pumpWidget(
+      _RouteTestApp(
+        page: NoteQuillEditorPage(
+          initialNote: persisted,
+          writerLoader: () async => writer,
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const Key('open-quill-editor')));
+    await _pumpFor(tester, const Duration(milliseconds: 250));
+
+    await tester.tap(find.byKey(const Key('quill-editor-more')));
+    await _pumpFor(tester, const Duration(milliseconds: 120));
+    await tester.tap(find.text('移到回收站'));
+    await _pumpFor(tester, const Duration(milliseconds: 700));
+
+    expect(find.byKey(const Key('open-quill-editor')), findsOneWidget);
+    expect(writer.notes.single.status, NoteStatus.trashed);
+    expect(writer.notes.single.trashedAt, isNotNull);
+  });
+
+  testWidgets('permanently deletes only from the trash with confirmation', (
+    tester,
+  ) async {
+    final now = DateTime.utc(2026, 7, 23, 23);
+    final trashed = Note(
+      id: NoteId.generate(),
+      title: '回收站笔记',
+      document: NoteDocument.fromPlainText('即将永久删除'),
+      status: NoteStatus.trashed,
+      revision: 3,
+      createdAt: now,
+      updatedAt: now,
+      trashedAt: now,
+    );
+    writer.notes.add(trashed);
+    await tester.pumpWidget(
+      _RouteTestApp(
+        page: NoteQuillEditorPage(
+          initialNote: trashed,
+          writerLoader: () async => writer,
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const Key('open-quill-editor')));
+    await _pumpFor(tester, const Duration(milliseconds: 250));
+
+    await tester.tap(find.byKey(const Key('quill-editor-more')));
+    await _pumpFor(tester, const Duration(milliseconds: 120));
+    await tester.tap(find.text('永久删除'));
+    await _pumpFor(tester, const Duration(milliseconds: 150));
+    expect(find.text('永久删除？'), findsOneWidget);
+    await tester.tap(find.text('永久删除').last);
+    await _pumpFor(tester, const Duration(milliseconds: 700));
+
+    expect(find.byKey(const Key('open-quill-editor')), findsOneWidget);
+    expect(writer.notes, isEmpty);
+    expect(writer.deletedNotes.single.id, trashed.id);
+  });
 }
 
 final class _FakeReadAloudDriver extends ChangeNotifier
@@ -409,6 +516,7 @@ final class _FakeReadAloudDriver extends ChangeNotifier
 
 final class _MemoryNoteWriter implements NoteEditorWriter {
   final List<Note> notes = [];
+  final List<Note> deletedNotes = [];
   Completer<void>? createGate;
   var createCalls = 0;
   var updateCalls = 0;
@@ -430,6 +538,12 @@ final class _MemoryNoteWriter implements NoteEditorWriter {
     if (index < 0) throw StateError('Note was not created.');
     notes[index] = persisted;
     return persisted;
+  }
+
+  @override
+  Future<void> deletePermanently(Note note) async {
+    deletedNotes.add(note);
+    notes.removeWhere((candidate) => candidate.id == note.id);
   }
 }
 

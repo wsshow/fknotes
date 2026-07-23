@@ -11,6 +11,7 @@ import '../editor/note_editor_controller.dart';
 import '../l10n/l10n.dart';
 import '../l10n/local_model_l10n.dart';
 import '../models/note.dart';
+import '../models/note_document.dart';
 import '../models/note_share.dart';
 import '../models/note_semantic_projection.dart';
 import '../services/file_storage_service.dart';
@@ -26,6 +27,7 @@ import '../widgets/app_feedback.dart';
 import '../widgets/app_popup_menu.dart';
 import '../widgets/note_assistant_sheet.dart';
 import '../widgets/note_quill_editor.dart';
+import '../widgets/note_tags_editor_sheet.dart';
 import 'model_management_page.dart';
 import 'note_share_composer_page.dart';
 
@@ -33,18 +35,37 @@ abstract interface class NoteEditorWriter {
   Future<Note> create(Note note);
 
   Future<Note> update(Note note);
+
+  Future<void> deletePermanently(Note note);
 }
 
 final class RepositoryNoteEditorWriter implements NoteEditorWriter {
-  const RepositoryNoteEditorWriter(this.repository);
+  RepositoryNoteEditorWriter(this.repository, {FileStorageService? storage})
+    : storage = storage ?? FileStorageService.instance;
 
   final NoteRepository repository;
+  final FileStorageService storage;
 
   @override
   Future<Note> create(Note note) => repository.create(note);
 
   @override
   Future<Note> update(Note note) => repository.update(note);
+
+  @override
+  Future<void> deletePermanently(Note note) async {
+    await repository.deletePermanently(note.id);
+    for (final asset in note.assets) {
+      for (final key in [asset.storageKey, asset.previewStorageKey]) {
+        try {
+          await storage.deleteFile(key);
+        } on FileSystemException {
+          // The database deletion is authoritative. Orphan cleanup can retry
+          // when a platform file handle is released.
+        }
+      }
+    }
+  }
 }
 
 typedef NoteEditorWriterLoader = Future<NoteEditorWriter> Function();
@@ -117,6 +138,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
   late final NoteEditorWriterLoader _writerLoader;
   late final NoteImagePicker _pickImage;
   late final NoteReadAloudDriver _readAloud;
+  late List<String> _tags;
 
   Timer? _autosaveTimer;
   Future<void> _saveTail = Future<void>.value();
@@ -126,6 +148,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
   var _savedVersion = 0;
   late String _observedTitle;
   var _importingImage = false;
+  var _actionPending = false;
   var _closing = false;
   var _allowPop = false;
 
@@ -136,6 +159,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _note = widget.initialNote ?? Note.newDraft(now: _now);
+    _tags = [..._note.tags];
     _importImage =
         widget.importImage ?? NoteAssetImportService.instance.importImageBytes;
     _writerLoader =
@@ -242,6 +266,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     return _note.copyWith(
       title: _titleController.text.trim(),
       document: snapshot.document,
+      tags: _tags,
       assets: snapshot.assets,
       coverAttachmentId: retainedCover ? coverId : null,
       updatedAt: updatedAt ?? _note.updatedAt,
@@ -495,12 +520,182 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     );
   }
 
+  Future<void> _editTags() async {
+    final tags = await showModalBottomSheet<List<String>>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (_) => NoteTagsEditorSheet(initialTags: _tags),
+    );
+    if (tags == null || !mounted || _sameTags(tags, _tags)) return;
+    _tags = tags;
+    _markDirty();
+  }
+
+  void _removeTag(String tag) {
+    _tags = [..._tags]..remove(tag);
+    _markDirty();
+  }
+
+  Future<bool> _updatePersistedMetadata(Note Function(Note note) change) async {
+    if (_actionPending) return false;
+    setState(() => _actionPending = true);
+    try {
+      await _imageImport;
+      if (!await _persistLatest() || _note.revision == 0) {
+        if (mounted && _saveState == _EditorSaveState.failed) {
+          AppFeedback.error(context, context.l10n.saveFailedStorage);
+        }
+        return false;
+      }
+      final writer = await _writerLoader();
+      _note = await writer.update(change(_note).copyWith(updatedAt: _now));
+      if (mounted) setState(() => _saveState = _EditorSaveState.saved);
+      return true;
+    } catch (_) {
+      if (mounted) {
+        setState(() => _saveState = _EditorSaveState.failed);
+        AppFeedback.error(context, context.l10n.saveFailedStorage);
+      }
+      return false;
+    } finally {
+      if (mounted) setState(() => _actionPending = false);
+    }
+  }
+
+  Future<void> _toggleFavorite() async {
+    await _updatePersistedMetadata(
+      (note) => note.copyWith(isFavorite: !note.isFavorite),
+    );
+  }
+
+  Future<void> _togglePinned() async {
+    await _updatePersistedMetadata(
+      (note) => note.copyWith(isPinned: !note.isPinned),
+    );
+  }
+
+  Future<void> _archiveOrRestore() async {
+    final target = _note.status == NoteStatus.archived
+        ? NoteStatus.active
+        : NoteStatus.archived;
+    final updated = await _updatePersistedMetadata(
+      (note) => note.copyWith(status: target, trashedAt: null),
+    );
+    if (updated) await _leaveEditor(_note);
+  }
+
+  Future<void> _restoreFromTrash() async {
+    final updated = await _updatePersistedMetadata(
+      (note) => note.copyWith(status: NoteStatus.active, trashedAt: null),
+    );
+    if (updated) await _leaveEditor(_note);
+  }
+
+  Future<void> _deleteNote() async {
+    if (_note.revision == 0) {
+      final confirmed = await _confirmDestructiveAction(
+        title: context.l10n.discardNoteQuestion,
+        description: context.l10n.discardNoteDescription,
+        actionLabel: context.l10n.discardNote,
+      );
+      if (!confirmed || !mounted) return;
+      setState(() => _actionPending = true);
+      await _imageImport;
+      await _discardUnsavedAssets();
+      if (mounted) await _leaveEditor(null);
+      return;
+    }
+
+    if (_note.status != NoteStatus.trashed) {
+      final updated = await _updatePersistedMetadata(
+        (note) => note.copyWith(status: NoteStatus.trashed, trashedAt: _now),
+      );
+      if (!updated || !mounted) return;
+      AppFeedback.show(context, context.l10n.movedToTrash);
+      await _leaveEditor(_note);
+      return;
+    }
+
+    final confirmed = await _confirmDestructiveAction(
+      title: context.l10n.deletePermanentlyQuestion,
+      description: context.l10n.deletePermanentlyDescription,
+      actionLabel: context.l10n.deletePermanently,
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _actionPending = true);
+    try {
+      await _imageImport;
+      if (!await _persistLatest()) return;
+      final writer = await _writerLoader();
+      await writer.deletePermanently(_note);
+      if (mounted) await _leaveEditor(null);
+    } catch (_) {
+      if (mounted) {
+        AppFeedback.error(
+          context,
+          context.l10n.toolActionFailed(context.l10n.deletePermanently),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _actionPending = false);
+    }
+  }
+
+  Future<bool> _confirmDestructiveAction({
+    required String title,
+    required String description,
+    required String actionLabel,
+  }) async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(title),
+          content: Text(description),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(context.l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(actionLabel),
+            ),
+          ],
+        ),
+      ) ??
+      false;
+
+  Future<void> _leaveEditor(Note? result) async {
+    if (!mounted) return;
+    _autosaveTimer?.cancel();
+    setState(() {
+      _closing = true;
+      _allowPop = true;
+    });
+    await WidgetsBinding.instance.endOfFrame;
+    if (mounted) Navigator.pop(context, result);
+  }
+
   void _handleMenuAction(_QuillEditorMenuAction action) {
     switch (action) {
       case _QuillEditorMenuAction.share:
         unawaited(_openShareComposer());
+      case _QuillEditorMenuAction.tags:
+        unawaited(_editTags());
+      case _QuillEditorMenuAction.favorite:
+        unawaited(_toggleFavorite());
+      case _QuillEditorMenuAction.pin:
+        unawaited(_togglePinned());
+      case _QuillEditorMenuAction.archiveOrRestore:
+        unawaited(_archiveOrRestore());
+      case _QuillEditorMenuAction.restoreFromTrash:
+        unawaited(_restoreFromTrash());
       case _QuillEditorMenuAction.save:
         unawaited(_persistLatest());
+      case _QuillEditorMenuAction.delete:
+        unawaited(_deleteNote());
     }
   }
 
@@ -675,7 +870,9 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
   }
 
   Future<void> _discardUnsavedAssets() async {
-    final persistedIds = _note.assets.map((asset) => asset.id).toSet();
+    final persistedIds = _note.revision == 0
+        ? <NoteAttachmentId>{}
+        : _note.assets.map((asset) => asset.id).toSet();
     for (final asset in _editor.assets) {
       if (!persistedIds.contains(asset.id)) await _deleteAssetFiles(asset);
     }
@@ -710,53 +907,86 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
       backgroundColor: AppColors.surface,
       body: SafeArea(
         bottom: false,
-        child: Column(
-          children: [
-            _buildHeader(context),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 14, 24, 2),
-              child: TextField(
-                key: const Key('quill-note-title'),
-                controller: _titleController,
-                focusNode: _titleFocusNode,
-                autofocus: _note.revision == 0,
-                maxLines: 1,
-                textInputAction: TextInputAction.next,
-                inputFormatters: [LengthLimitingTextInputFormatter(200)],
-                onSubmitted: (_) => _editorFocusNode.requestFocus(),
-                style: Theme.of(context).textTheme.headlineLarge,
-                decoration: InputDecoration(
-                  hintText: context.l10n.newNote,
-                  filled: false,
-                  contentPadding: EdgeInsets.zero,
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
+        child: AbsorbPointer(
+          absorbing: _actionPending,
+          child: Column(
+            children: [
+              _buildHeader(context),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 14, 24, 2),
+                child: TextField(
+                  key: const Key('quill-note-title'),
+                  controller: _titleController,
+                  focusNode: _titleFocusNode,
+                  autofocus: _note.revision == 0,
+                  maxLines: 1,
+                  textInputAction: TextInputAction.next,
+                  inputFormatters: [LengthLimitingTextInputFormatter(200)],
+                  onSubmitted: (_) => _editorFocusNode.requestFocus(),
+                  style: Theme.of(context).textTheme.headlineLarge,
+                  decoration: InputDecoration(
+                    hintText: context.l10n.newNote,
+                    filled: false,
+                    contentPadding: EdgeInsets.zero,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                  ),
                 ),
               ),
-            ),
-            Expanded(
-              child: NoteQuillEditor(
-                key: const Key('quill-note-body'),
+              _buildTags(context),
+              Expanded(
+                child: NoteQuillEditor(
+                  key: const Key('quill-note-body'),
+                  controller: _editor,
+                  focusNode: _editorFocusNode,
+                  resolveImage: widget.resolveImage ?? _resolveManagedImage,
+                  placeholder: context.l10n.noteStartHint,
+                ),
+              ),
+              if (_importingImage)
+                const LinearProgressIndicator(
+                  minHeight: 2,
+                  color: AppColors.coral,
+                  backgroundColor: AppColors.softCoral,
+                ),
+              NoteQuillToolbar(
                 controller: _editor,
-                focusNode: _editorFocusNode,
-                resolveImage: widget.resolveImage ?? _resolveManagedImage,
-                placeholder: context.l10n.noteStartHint,
+                onInsertImage: _showImageSourceSheet,
+                imageTooltip: context.l10n.image,
               ),
-            ),
-            if (_importingImage)
-              const LinearProgressIndicator(
-                minHeight: 2,
-                color: AppColors.coral,
-                backgroundColor: AppColors.softCoral,
-              ),
-            NoteQuillToolbar(
-              controller: _editor,
-              onInsertImage: _showImageSourceSheet,
-              imageTooltip: context.l10n.image,
-            ),
-          ],
+            ],
+          ),
         ),
+      ),
+    ),
+  );
+
+  Widget _buildTags(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(24, 8, 24, 4),
+    child: Align(
+      alignment: Alignment.centerLeft,
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final tag in _tags)
+            InputChip(
+              key: ValueKey('quill-note-tag-$tag'),
+              label: Text('#$tag'),
+              onDeleted: () => _removeTag(tag),
+              visualDensity: VisualDensity.compact,
+            ),
+          ActionChip(
+            key: const Key('quill-edit-tags'),
+            avatar: const Icon(Icons.add_rounded, size: 17),
+            label: Text(
+              _tags.isEmpty ? context.l10n.addTags : context.l10n.tags,
+            ),
+            onPressed: _editTags,
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
       ),
     ),
   );
@@ -812,7 +1042,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
             ],
           ),
         ),
-        if (_closing || _saveState == _EditorSaveState.saving)
+        if (_closing || _actionPending || _saveState == _EditorSaveState.saving)
           const SizedBox.square(
             dimension: 20,
             child: CircularProgressIndicator(strokeWidth: 2),
@@ -846,23 +1076,76 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
             tooltip: context.l10n.moreNoteActions,
             icon: const Icon(Icons.more_vert_rounded),
             onSelected: _handleMenuAction,
-            actions: [
-              AppMenuAction(
-                value: _QuillEditorMenuAction.share,
-                icon: Icons.ios_share_rounded,
-                label: context.l10n.shareNoteAsImage,
-              ),
-              AppMenuAction(
-                value: _QuillEditorMenuAction.save,
-                icon: Icons.save_outlined,
-                label: context.l10n.save,
-              ),
-            ],
+            actions: _menuActions(context),
           ),
         ],
       ],
     ),
   );
+
+  List<AppMenuAction<_QuillEditorMenuAction>> _menuActions(
+    BuildContext context,
+  ) => [
+    AppMenuAction(
+      value: _QuillEditorMenuAction.share,
+      icon: Icons.ios_share_rounded,
+      label: context.l10n.shareNoteAsImage,
+    ),
+    AppMenuAction(
+      value: _QuillEditorMenuAction.tags,
+      icon: Icons.label_outline_rounded,
+      label: context.l10n.tags,
+    ),
+    if (_note.status != NoteStatus.trashed) ...[
+      AppMenuAction(
+        value: _QuillEditorMenuAction.favorite,
+        icon: _note.isFavorite
+            ? Icons.star_rounded
+            : Icons.star_outline_rounded,
+        label: _note.isFavorite
+            ? context.l10n.removeFavorite
+            : context.l10n.addFavorite,
+        selected: _note.isFavorite,
+      ),
+      AppMenuAction(
+        value: _QuillEditorMenuAction.pin,
+        icon: Icons.push_pin_outlined,
+        label: _note.isPinned ? context.l10n.unpin : context.l10n.pin,
+        selected: _note.isPinned,
+      ),
+      AppMenuAction(
+        value: _QuillEditorMenuAction.archiveOrRestore,
+        icon: _note.status == NoteStatus.archived
+            ? Icons.unarchive_outlined
+            : Icons.archive_outlined,
+        label: _note.status == NoteStatus.archived
+            ? context.l10n.removeFromArchive
+            : context.l10n.archive,
+      ),
+    ] else
+      AppMenuAction(
+        value: _QuillEditorMenuAction.restoreFromTrash,
+        icon: Icons.restore_rounded,
+        label: context.l10n.restore,
+      ),
+    AppMenuAction(
+      value: _QuillEditorMenuAction.save,
+      icon: Icons.save_outlined,
+      label: context.l10n.save,
+    ),
+    AppMenuAction(
+      value: _QuillEditorMenuAction.delete,
+      icon: _note.status == NoteStatus.trashed
+          ? Icons.delete_forever_outlined
+          : Icons.delete_outline_rounded,
+      label: _note.revision == 0
+          ? context.l10n.discardNote
+          : _note.status == NoteStatus.trashed
+          ? context.l10n.deletePermanently
+          : context.l10n.moveToTrash,
+      destructive: true,
+    ),
+  ];
 
   ImageProvider _resolveManagedImage(NoteAsset asset) => FileImage(
     File(FileStorageService.instance.absolutePath(asset.storageKey)),
@@ -886,7 +1169,24 @@ enum _EditorSaveState { enabled, pending, saving, saved, failed }
 
 enum _FailedSaveAction { keepEditing, retry, discard }
 
-enum _QuillEditorMenuAction { share, save }
+enum _QuillEditorMenuAction {
+  share,
+  tags,
+  favorite,
+  pin,
+  archiveOrRestore,
+  restoreFromTrash,
+  save,
+  delete,
+}
+
+bool _sameTags(List<String> left, List<String> right) {
+  if (left.length != right.length) return false;
+  for (var index = 0; index < left.length; index++) {
+    if (left[index] != right[index]) return false;
+  }
+  return true;
+}
 
 final class _ImageSourceAction extends StatelessWidget {
   const _ImageSourceAction({
