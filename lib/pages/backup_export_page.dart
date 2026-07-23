@@ -53,6 +53,8 @@ class _BackupExportPageState extends State<BackupExportPage> {
       canPop: !_busy,
       child: Scaffold(
         appBar: AppBar(
+          toolbarHeight: 64,
+          titleTextStyle: Theme.of(context).textTheme.titleLarge,
           leading: IconButton(
             tooltip: l10n.back,
             onPressed: _busy ? null : () => Navigator.pop(context),
@@ -70,8 +72,7 @@ class _BackupExportPageState extends State<BackupExportPage> {
             Material(
               color: AppColors.surface,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
-                side: const BorderSide(color: AppColors.line),
+                borderRadius: BorderRadius.circular(AppRadius.large),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -289,13 +290,13 @@ class _BackupScopeCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: AppColors.softGreen,
-      borderRadius: BorderRadius.circular(16),
+      color: AppColors.accentSoft,
+      borderRadius: BorderRadius.circular(AppRadius.large),
     ),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Icon(Icons.verified_user_outlined, color: AppColors.moss),
+        const Icon(Icons.shield_outlined, color: AppColors.accent),
         const SizedBox(width: 12),
         Expanded(
           child: Text(

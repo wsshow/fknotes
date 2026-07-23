@@ -38,8 +38,7 @@ class BackupRecordCard extends StatelessWidget {
       color: AppColors.surface,
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: const BorderSide(color: AppColors.line),
+        borderRadius: BorderRadius.circular(AppRadius.large),
       ),
       child: InkWell(
         onTap: enabled ? onDetails : null,
@@ -53,15 +52,17 @@ class BackupRecordCard extends StatelessWidget {
                 children: [
                   const DecoratedBox(
                     decoration: BoxDecoration(
-                      color: AppColors.softGreen,
-                      shape: BoxShape.circle,
+                      color: AppColors.surfaceMuted,
+                      borderRadius: BorderRadius.all(
+                        Radius.circular(AppRadius.small),
+                      ),
                     ),
                     child: Padding(
                       padding: EdgeInsets.all(9),
                       child: Icon(
                         Icons.inventory_2_outlined,
                         size: 20,
-                        color: AppColors.moss,
+                        color: AppColors.accent,
                       ),
                     ),
                   ),

@@ -128,6 +128,8 @@ class _CloudSyncPageState extends State<CloudSyncPage> {
     },
     child: Scaffold(
       appBar: AppBar(
+        toolbarHeight: 64,
+        titleTextStyle: Theme.of(context).textTheme.titleLarge,
         leading: IconButton(
           tooltip: context.l10n.back,
           onPressed: _busy ? null : () => Navigator.pop(context, _restoredData),
@@ -449,21 +451,20 @@ class _InfoCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(17),
     decoration: BoxDecoration(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(18),
-      border: Border.all(color: AppColors.line),
+      color: AppColors.accentSoft,
+      borderRadius: BorderRadius.circular(AppRadius.large),
     ),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const DecoratedBox(
           decoration: BoxDecoration(
-            color: AppColors.softGreen,
-            shape: BoxShape.circle,
+            color: AppColors.surface,
+            borderRadius: BorderRadius.all(Radius.circular(AppRadius.small)),
           ),
           child: Padding(
             padding: EdgeInsets.all(9),
-            child: Icon(Icons.cloud_sync_outlined, color: AppColors.moss),
+            child: Icon(Icons.cloud_sync_outlined, color: AppColors.accent),
           ),
         ),
         const SizedBox(width: 13),
@@ -501,7 +502,7 @@ class _InfoCard extends StatelessWidget {
                     ).add_Hm().format(settings.lastSyncedAt!.toLocal()),
                   ),
                   style: const TextStyle(
-                    color: AppColors.moss,
+                    color: AppColors.accent,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -523,8 +524,7 @@ class _FormCard extends StatelessWidget {
   Widget build(BuildContext context) => Material(
     color: AppColors.surface,
     shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(18),
-      side: const BorderSide(color: AppColors.line),
+      borderRadius: BorderRadius.circular(AppRadius.large),
     ),
     clipBehavior: Clip.antiAlias,
     child: Padding(

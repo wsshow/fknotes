@@ -219,9 +219,17 @@ class FkNotesApp extends StatelessWidget {
             appBarTheme: const AppBarTheme(
               elevation: 0,
               scrolledUnderElevation: 0,
+              toolbarHeight: 64,
               backgroundColor: Colors.transparent,
               surfaceTintColor: Colors.transparent,
               foregroundColor: AppColors.ink,
+              titleTextStyle: TextStyle(
+                color: AppColors.ink,
+                fontSize: 20,
+                height: 1.35,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -.15,
+              ),
               systemOverlayStyle: SystemUiOverlayStyle(
                 statusBarColor: Colors.transparent,
                 statusBarIconBrightness: Brightness.dark,
@@ -367,6 +375,58 @@ class FkNotesApp extends StatelessWidget {
               selectedTileColor: AppColors.softGreen,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            searchBarTheme: SearchBarThemeData(
+              elevation: const WidgetStatePropertyAll(0),
+              backgroundColor: const WidgetStatePropertyAll(
+                AppColors.surfaceMuted,
+              ),
+              surfaceTintColor: const WidgetStatePropertyAll(
+                Colors.transparent,
+              ),
+              hintStyle: const WidgetStatePropertyAll(
+                TextStyle(color: AppColors.muted),
+              ),
+              shape: WidgetStatePropertyAll(
+                RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.medium),
+                ),
+              ),
+            ),
+            switchTheme: SwitchThemeData(
+              thumbColor: WidgetStateProperty.resolveWith(
+                (states) => states.contains(WidgetState.selected)
+                    ? AppColors.surface
+                    : AppColors.muted,
+              ),
+              trackColor: WidgetStateProperty.resolveWith(
+                (states) => states.contains(WidgetState.selected)
+                    ? AppColors.accent
+                    : AppColors.line,
+              ),
+              trackOutlineColor: const WidgetStatePropertyAll(
+                Colors.transparent,
+              ),
+            ),
+            segmentedButtonTheme: SegmentedButtonThemeData(
+              style: ButtonStyle(
+                backgroundColor: WidgetStateProperty.resolveWith(
+                  (states) => states.contains(WidgetState.selected)
+                      ? AppColors.accentSoft
+                      : AppColors.surface,
+                ),
+                foregroundColor: WidgetStateProperty.resolveWith(
+                  (states) => states.contains(WidgetState.selected)
+                      ? AppColors.accent
+                      : AppColors.muted,
+                ),
+                side: const WidgetStatePropertyAll(
+                  BorderSide(color: AppColors.line),
+                ),
+                textStyle: const WidgetStatePropertyAll(
+                  TextStyle(fontWeight: FontWeight.w600),
+                ),
               ),
             ),
             bottomSheetTheme: const BottomSheetThemeData(

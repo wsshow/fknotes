@@ -46,6 +46,8 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
       canPop: !_restoring,
       child: Scaffold(
         appBar: AppBar(
+          toolbarHeight: 64,
+          titleTextStyle: Theme.of(context).textTheme.titleLarge,
           leading: IconButton(
             tooltip: l10n.back,
             onPressed: _restoring ? null : () => Navigator.pop(context),
@@ -59,15 +61,15 @@ class _BackupRestorePageState extends State<BackupRestorePage> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppColors.softAmber,
-                borderRadius: BorderRadius.circular(16),
+                color: AppColors.warningSoft,
+                borderRadius: BorderRadius.circular(AppRadius.large),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Icon(
                     Icons.warning_amber_rounded,
-                    color: AppColors.moss,
+                    color: AppColors.warning,
                   ),
                   const SizedBox(width: 12),
                   Expanded(

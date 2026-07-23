@@ -23,30 +23,35 @@ class _AppLockSettingsPageState extends State<AppLockSettingsPage> {
   Widget build(BuildContext context) {
     final controller = context.watch<AppLockController>();
     return Scaffold(
-      appBar: AppBar(title: Text(context.l10n.appLock)),
+      appBar: AppBar(
+        title: Text(context.l10n.appLock),
+        toolbarHeight: 64,
+        titleTextStyle: Theme.of(context).textTheme.titleLarge,
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
         children: [
           Container(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: AppColors.line),
+              color: AppColors.accentSoft,
+              borderRadius: BorderRadius.circular(AppRadius.large),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const DecoratedBox(
                   decoration: BoxDecoration(
-                    color: AppColors.softGreen,
-                    shape: BoxShape.circle,
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.all(
+                      Radius.circular(AppRadius.small),
+                    ),
                   ),
                   child: Padding(
                     padding: EdgeInsets.all(10),
                     child: Icon(
                       Icons.fingerprint_rounded,
-                      color: AppColors.moss,
+                      color: AppColors.accent,
                       size: 24,
                     ),
                   ),
@@ -192,8 +197,7 @@ class _SettingsCard extends StatelessWidget {
   Widget build(BuildContext context) => Material(
     color: AppColors.surface,
     shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(18),
-      side: const BorderSide(color: AppColors.line),
+      borderRadius: BorderRadius.circular(AppRadius.large),
     ),
     clipBehavior: Clip.antiAlias,
     child: child,
@@ -216,7 +220,7 @@ class _TimeoutTile extends StatelessWidget {
     onTap: onTap,
     title: Text(_timeoutLabel(context.l10n, value)),
     trailing: selected
-        ? const Icon(Icons.check_rounded, color: AppColors.moss)
+        ? const Icon(Icons.check_rounded, color: AppColors.accent)
         : null,
   );
 }

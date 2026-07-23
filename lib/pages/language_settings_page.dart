@@ -22,7 +22,11 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
     final controller = context.watch<AppLocaleController>();
     final l10n = context.l10n;
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.chooseLanguage)),
+      appBar: AppBar(
+        title: Text(l10n.chooseLanguage),
+        toolbarHeight: 64,
+        titleTextStyle: Theme.of(context).textTheme.titleLarge,
+      ),
       body: SafeArea(
         top: false,
         child: ListView(
@@ -37,8 +41,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
               color: AppColors.surface,
               clipBehavior: Clip.antiAlias,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
-                side: const BorderSide(color: AppColors.line),
+                borderRadius: BorderRadius.circular(AppRadius.large),
               ),
               child: Column(
                 children: [
@@ -107,16 +110,16 @@ class _LanguageRow extends StatelessWidget {
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
       enabled: enabled,
       leading: DecoratedBox(
-        decoration: const BoxDecoration(
-          color: AppColors.softGreen,
-          shape: BoxShape.circle,
+        decoration: BoxDecoration(
+          color: selected ? AppColors.accentSoft : AppColors.surfaceMuted,
+          borderRadius: BorderRadius.circular(AppRadius.small),
         ),
         child: Padding(
           padding: const EdgeInsets.all(9),
           child: Icon(
             _appLanguageIcon(language),
             size: 20,
-            color: selected ? AppColors.moss : AppColors.muted,
+            color: selected ? AppColors.accent : AppColors.muted,
           ),
         ),
       ),
@@ -131,8 +134,8 @@ class _LanguageRow extends StatelessWidget {
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           : selected
-          ? const Icon(Icons.check_circle_rounded, color: AppColors.moss)
-          : const Icon(Icons.chevron_right_rounded, color: AppColors.muted),
+          ? const Icon(Icons.check_circle_rounded, color: AppColors.accent)
+          : const Icon(Icons.chevron_right_rounded, color: AppColors.subtle),
       onTap: enabled ? onTap : null,
     );
   }
