@@ -54,6 +54,40 @@ void main() {
     expect(find.text('较早置顶'), findsOneWidget);
   });
 
+  testWidgets('empty state and new-note action sit above the screen bottom', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 1400);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final emptyController = NoteLibraryController(
+      storeLoader: () async => _HomeStore(<Note>[]),
+    );
+    addTearDown(emptyController.dispose);
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: QuillHomePage(
+          controller: emptyController,
+          editorBuilder: _testEditor,
+        ),
+      ),
+    );
+    await _pump(tester);
+
+    final screenHeight = tester.getSize(find.byType(QuillHomePage)).height;
+    final emptyMessage = find.text('还没有笔记');
+    final createAction = find.byKey(const Key('quill-home-new-note'));
+
+    expect(emptyMessage, findsOneWidget);
+    expect(tester.getCenter(emptyMessage).dy, lessThan(screenHeight * 0.5));
+    expect(
+      screenHeight - tester.getRect(createAction).bottom,
+      greaterThanOrEqualTo(40),
+    );
+  });
+
   testWidgets(
     'data settings is a secondary route instead of primary navigation',
     (tester) async {

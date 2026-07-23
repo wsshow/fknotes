@@ -154,12 +154,15 @@ final class _QuillHomePageState extends State<QuillHomePage> {
       onOpenAssistant: _openAssistant,
       onOpenData: _openData,
     ),
-    floatingActionButton: FloatingActionButton(
-      key: const Key('quill-home-new-note'),
-      heroTag: null,
-      tooltip: context.l10n.newNote,
-      onPressed: _openEditor,
-      child: const Icon(Icons.add_rounded),
+    floatingActionButton: Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: FloatingActionButton(
+        key: const Key('quill-home-new-note'),
+        heroTag: null,
+        tooltip: context.l10n.newNote,
+        onPressed: _openEditor,
+        child: const Icon(Icons.add_rounded),
+      ),
     ),
   );
 

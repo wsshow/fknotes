@@ -432,6 +432,7 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
       return _LibraryMessage(
         icon: Icons.notes_rounded,
         message: context.l10n.emptyActive,
+        alignment: const Alignment(0, -0.48),
       );
     }
     return RefreshIndicator(
@@ -735,15 +736,18 @@ final class _LibraryMessage extends StatelessWidget {
     required this.message,
     this.actionLabel,
     this.onAction,
+    this.alignment = Alignment.center,
   });
 
   final IconData icon;
   final String message;
   final String? actionLabel;
   final Future<void> Function()? onAction;
+  final AlignmentGeometry alignment;
 
   @override
-  Widget build(BuildContext context) => Center(
+  Widget build(BuildContext context) => Align(
+    alignment: alignment,
     child: Padding(
       padding: const EdgeInsets.all(32),
       child: Column(
