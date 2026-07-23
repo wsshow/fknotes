@@ -85,6 +85,7 @@ typedef NoteImagePicker = Future<PickedNoteImage?> Function(ImageSource source);
 typedef NoteImageAssetImporter =
     Future<NoteAsset> Function(Uint8List bytes, {required String originalName});
 typedef NoteReadAloudAvailabilityChecker = Future<bool> Function();
+typedef NoteLanguageModelAvailabilityChecker = Future<bool> Function();
 typedef NoteAssistantResultPresenter =
     Future<NoteAssistantResult?> Function(
       BuildContext context, {
@@ -138,6 +139,7 @@ final class NoteQuillEditorPage extends StatefulWidget {
     this.readAloudAvailabilityChecker,
     this.assistantResultPresenter,
     this.inlineAssistantDriver,
+    this.languageModelAvailabilityChecker,
     this.now,
     this.autosaveDelay = const Duration(milliseconds: 700),
     super.key,
@@ -152,6 +154,7 @@ final class NoteQuillEditorPage extends StatefulWidget {
   final NoteReadAloudAvailabilityChecker? readAloudAvailabilityChecker;
   final NoteAssistantResultPresenter? assistantResultPresenter;
   final NoteInlineAssistantDriver? inlineAssistantDriver;
+  final NoteLanguageModelAvailabilityChecker? languageModelAvailabilityChecker;
   final DateTime Function()? now;
   final Duration autosaveDelay;
 
@@ -187,6 +190,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
   var _closing = false;
   var _allowPop = false;
   var _inlineAssistantOpen = false;
+  var _inlineAssistantCheckingModel = false;
   var _inlineAssistantLoading = false;
   var _inlineAssistantGenerating = false;
   var _inlineAssistantRunId = 0;
@@ -384,7 +388,9 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
   }
 
   bool get _inlineAssistantBusy =>
-      _inlineAssistantLoading || _inlineAssistantGenerating;
+      _inlineAssistantCheckingModel ||
+      _inlineAssistantLoading ||
+      _inlineAssistantGenerating;
 
   bool get _inlineAssistantReplacesSelection {
     final selection = _editor.quillController.selection;
@@ -428,22 +434,33 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     _inlineAssistantController.text = instruction;
     FocusManager.instance.primaryFocus?.unfocus();
     final runId = ++_inlineAssistantRunId;
+    final availabilityChecker = widget.languageModelAvailabilityChecker;
+    final shouldCheckAvailability =
+        availabilityChecker != null || widget.inlineAssistantDriver == null;
     setState(() {
-      _inlineAssistantLoading = true;
+      _inlineAssistantCheckingModel = shouldCheckAvailability;
+      _inlineAssistantLoading = !shouldCheckAvailability;
       _inlineAssistantGenerating = false;
       _inlineAssistantError = null;
       _inlineAssistantOutput = '';
     });
 
-    if (widget.inlineAssistantDriver == null &&
-        !await _ensureLanguageModelAvailable()) {
-      if (mounted && runId == _inlineAssistantRunId) {
-        setState(() => _inlineAssistantLoading = false);
-      }
-      return;
-    }
-
     try {
+      if (shouldCheckAvailability) {
+        final available =
+            await (availabilityChecker?.call() ??
+                _ensureLanguageModelAvailable());
+        if (!mounted || runId != _inlineAssistantRunId) return;
+        if (!available) {
+          setState(() => _inlineAssistantCheckingModel = false);
+          return;
+        }
+        setState(() {
+          _inlineAssistantCheckingModel = false;
+          _inlineAssistantLoading = true;
+        });
+      }
+
       await _inlineAssistant.load();
       if (!mounted || runId != _inlineAssistantRunId) return;
 
@@ -532,6 +549,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
         _editor.finishAssistantInsertion(session);
       }
       setState(() {
+        _inlineAssistantCheckingModel = false;
         _inlineAssistantLoading = false;
         _inlineAssistantGenerating = false;
         _inlineAssistantError = error.toString().replaceFirst(
@@ -553,6 +571,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     final session = _inlineAssistantSession;
     if (session != null) _editor.finishAssistantInsertion(session);
     setState(() {
+      _inlineAssistantCheckingModel = false;
       _inlineAssistantLoading = false;
       _inlineAssistantGenerating = false;
       if (_inlineAssistantOutput.trim().isEmpty) {

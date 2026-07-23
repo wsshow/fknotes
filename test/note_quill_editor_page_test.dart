@@ -342,6 +342,46 @@ void main() {
   });
 
   testWidgets(
+    'missing local model keeps the inline composer idle while checking',
+    (tester) async {
+      final availability = Completer<bool>();
+      final driver = _FakeInlineAssistantDriver();
+      await tester.pumpWidget(
+        _TestApp(
+          child: NoteQuillEditorPage(
+            writerLoader: () async => writer,
+            inlineAssistantDriver: driver,
+            languageModelAvailabilityChecker: () => availability.future,
+          ),
+        ),
+      );
+      await _pumpFor(tester, const Duration(milliseconds: 200));
+
+      await tester.tap(find.byKey(const Key('quill-open-inline-assistant')));
+      await _pumpFor(tester, const Duration(milliseconds: 200));
+      await tester.enterText(
+        find.byKey(const Key('quill-inline-assistant-input')),
+        '写一段开场白',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('submit-inline-assistant')));
+      await tester.pump();
+
+      expect(find.text('正在准备本地模型…'), findsNothing);
+      expect(
+        find.byKey(const Key('quill-inline-assistant-input')),
+        findsOneWidget,
+      );
+      expect(driver.loadCalls, 0);
+
+      availability.complete(false);
+      await _pumpFor(tester, const Duration(milliseconds: 200));
+      expect(find.text('正在准备本地模型…'), findsNothing);
+      expect(driver.loadCalls, 0);
+    },
+  );
+
+  testWidgets(
     'bottom AI composer streams into the caret and undoes atomically',
     (tester) async {
       final now = DateTime.utc(2026, 7, 23, 19, 30);
