@@ -405,6 +405,7 @@ final class _EmptyRecent extends StatelessWidget {
       borderRadius: BorderRadius.circular(AppRadius.large),
     ),
     child: Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         const Icon(Icons.note_add_outlined, size: 32, color: AppColors.subtle),
         const SizedBox(height: 10),

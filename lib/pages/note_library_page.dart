@@ -126,11 +126,15 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
     backgroundColor: AppColors.canvas,
     floatingActionButton: _controller.scope == NoteLibraryScope.trash
         ? null
-        : FloatingActionButton.extended(
-            key: const Key('delta-library-new-note'),
-            onPressed: _openEditor,
-            icon: const Icon(Icons.add_rounded),
-            label: Text(context.l10n.newNote),
+        : Padding(
+            padding: const EdgeInsets.only(bottom: 76),
+            child: FloatingActionButton(
+              key: const Key('delta-library-new-note'),
+              tooltip: context.l10n.newNote,
+              heroTag: null,
+              onPressed: _openEditor,
+              child: const Icon(Icons.add_rounded),
+            ),
           ),
     body: SafeArea(
       bottom: false,
@@ -280,7 +284,7 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
     if (_controller.hasError && _controller.notes.isEmpty) {
       return _LibraryMessage(
         icon: Icons.cloud_off_outlined,
-        message: context.l10n.toolActionFailed('${_controller.error}'),
+        message: context.l10n.toolActionFailed(context.l10n.unavailable),
         actionLabel: context.l10n.retry,
         onAction: _controller.refresh,
       );
