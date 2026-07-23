@@ -19,9 +19,6 @@ import '../services/app_lock_preferences_service.dart';
 import '../services/file_storage_service.dart';
 import '../services/note_database_service.dart';
 import '../widgets/app_feedback.dart';
-import '../widgets/brand_mark.dart';
-import '../widgets/navigation_icons.dart';
-import '../widgets/note_delta_preview.dart';
 import 'app_lock_settings_page.dart';
 import 'backup_export_page.dart';
 import 'backup_restore_page.dart';
@@ -68,7 +65,6 @@ final class _QuillHomePageState extends State<QuillHomePage> {
   late final NoteLibraryController _libraryController;
   late final bool _ownsRecentController;
   late final bool _ownsLibraryController;
-  var _tab = 0;
 
   @override
   void initState() {
@@ -85,12 +81,6 @@ final class _QuillHomePageState extends State<QuillHomePage> {
     if (mounted) setState(() {});
   }
 
-  void _selectTab(int value) {
-    if (_tab == value) return;
-    setState(() => _tab = value);
-    if (value == 0) unawaited(_recentController.refresh());
-  }
-
   Future<void> _openEditor([Note? note]) async {
     final builder =
         widget.editorBuilder ??
@@ -99,7 +89,7 @@ final class _QuillHomePageState extends State<QuillHomePage> {
       context,
       MaterialPageRoute(builder: (context) => builder(context, note)),
     );
-    if (mounted) await _recentController.refresh();
+    if (mounted) await _refreshAfterRestore();
   }
 
   Future<void> _openAssistant() async {
@@ -112,7 +102,7 @@ final class _QuillHomePageState extends State<QuillHomePage> {
         builder: (context) => builder(context, _openAssistantSource),
       ),
     );
-    if (mounted) await _recentController.refresh();
+    if (mounted) await _refreshAfterRestore();
   }
 
   Future<void> _openAssistantSource(LocalChatNoteContext source) async {
@@ -135,74 +125,42 @@ final class _QuillHomePageState extends State<QuillHomePage> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    extendBody: true,
-    body: IndexedStack(
-      index: _tab,
-      children: [
-        _QuillOverviewTab(
-          controller: _recentController,
-          onCreate: _openEditor,
-          onOpenNote: _openEditor,
-          onOpenAssistant: _openAssistant,
-          onOpenLibrary: () => _selectTab(1),
-        ),
-        NoteLibraryPage(
-          controller: _libraryController,
-          editorBuilder: widget.editorBuilder,
-        ),
-        _QuillDataTab(
-          controller: _recentController,
-          dataSizeLoader:
-              widget.dataSizeLoader ?? FileStorageService.instance.userDataSize,
-          onRestoreCompleted: _refreshAfterRestore,
-        ),
-      ],
-    ),
-    floatingActionButton: _tab == 0
-        ? FloatingActionButton(
-            key: const Key('quill-home-new-note'),
-            heroTag: null,
-            tooltip: context.l10n.newNote,
-            onPressed: _openEditor,
-            child: const Icon(Icons.add_rounded),
-          )
-        : null,
-    bottomNavigationBar: SafeArea(
-      top: false,
-      minimum: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.all(Radius.circular(22)),
-          boxShadow: AppShadows.floating,
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(22),
-          child: NavigationBar(
-            selectedIndex: _tab,
-            onDestinationSelected: _selectTab,
-            destinations: [
-              NavigationDestination(
-                icon: const Icon(Icons.home_outlined),
-                selectedIcon: const Icon(Icons.home_rounded),
-                label: context.l10n.home,
-              ),
-              NavigationDestination(
-                icon: const LibrarySpinesIcon(),
-                selectedIcon: const LibrarySpinesIcon(),
-                label: context.l10n.library,
-              ),
-              NavigationDestination(
-                icon: const Icon(Icons.pie_chart_outline_rounded),
-                selectedIcon: const Icon(Icons.pie_chart_rounded),
-                label: context.l10n.data,
-              ),
-            ],
+  Future<void> _openData() async {
+    await _recentController.refresh();
+    if (!mounted) return;
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (pageContext) => Scaffold(
+          backgroundColor: AppColors.canvas,
+          body: _QuillDataTab(
+            controller: _recentController,
+            dataSizeLoader:
+                widget.dataSizeLoader ??
+                FileStorageService.instance.userDataSize,
+            onRestoreCompleted: _refreshAfterRestore,
+            onBack: () => Navigator.pop(pageContext),
           ),
         ),
       ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: AppColors.canvas,
+    body: NoteLibraryPage(
+      controller: _libraryController,
+      editorBuilder: widget.editorBuilder,
+      onOpenAssistant: _openAssistant,
+      onOpenData: _openData,
+    ),
+    floatingActionButton: FloatingActionButton(
+      key: const Key('quill-home-new-note'),
+      heroTag: null,
+      tooltip: context.l10n.newNote,
+      onPressed: _openEditor,
+      child: const Icon(Icons.add_rounded),
     ),
   );
 
@@ -215,295 +173,18 @@ final class _QuillHomePageState extends State<QuillHomePage> {
   }
 }
 
-final class _QuillOverviewTab extends StatelessWidget {
-  const _QuillOverviewTab({
-    required this.controller,
-    required this.onCreate,
-    required this.onOpenNote,
-    required this.onOpenAssistant,
-    required this.onOpenLibrary,
-  });
-
-  final NoteLibraryController controller;
-  final VoidCallback onCreate;
-  final ValueChanged<Note> onOpenNote;
-  final VoidCallback onOpenAssistant;
-  final VoidCallback onOpenLibrary;
-
-  @override
-  Widget build(BuildContext context) {
-    final recent = [...controller.notes]
-      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    return SafeArea(
-      bottom: false,
-      child: RefreshIndicator(
-        onRefresh: controller.refresh,
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 22, 20, 132),
-              sliver: SliverList.list(
-                children: [
-                  _QuillBrandHeader(onOpenAssistant: onOpenAssistant),
-                  const SizedBox(height: 26),
-                  _OverviewSearch(onTap: onOpenLibrary),
-                  const SizedBox(height: 30),
-                  _SectionHeader(
-                    title: context.l10n.recentlyUpdated,
-                    actionLabel: context.l10n.library,
-                    onAction: onOpenLibrary,
-                  ),
-                  const SizedBox(height: 12),
-                  if (controller.isLoading && recent.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 48),
-                      child: Center(child: CircularProgressIndicator()),
-                    )
-                  else if (recent.isEmpty)
-                    _EmptyRecent(onCreate: onCreate)
-                  else
-                    for (final note in recent.take(5)) ...[
-                      _RecentDeltaNoteCard(
-                        note: note,
-                        onTap: () => onOpenNote(note),
-                      ),
-                      const SizedBox(height: 10),
-                    ],
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-final class _QuillBrandHeader extends StatelessWidget {
-  const _QuillBrandHeader({required this.onOpenAssistant});
-
-  final VoidCallback onOpenAssistant;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      const BrandMark(size: 36, showSurface: false),
-      const SizedBox(width: 11),
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              context.l10n.appTitle,
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            Text(
-              context.l10n.localFirst,
-              style: const TextStyle(
-                color: AppColors.muted,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
-      IconButton(
-        key: const Key('quill-home-assistant'),
-        tooltip: context.l10n.localAssistant,
-        onPressed: onOpenAssistant,
-        style: IconButton.styleFrom(
-          backgroundColor: AppColors.surface,
-          foregroundColor: AppColors.ink,
-          fixedSize: const Size.square(44),
-        ),
-        icon: const Icon(Icons.auto_awesome_outlined, size: 21),
-      ),
-    ],
-  );
-}
-
-final class _OverviewSearch extends StatelessWidget {
-  const _OverviewSearch({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => Material(
-    color: AppColors.surfaceMuted,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(AppRadius.medium),
-    ),
-    clipBehavior: Clip.antiAlias,
-    child: InkWell(
-      key: const Key('quill-home-search'),
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-        child: Row(
-          children: [
-            const Icon(Icons.search_rounded, color: AppColors.muted, size: 21),
-            const SizedBox(width: 10),
-            Text(
-              context.l10n.searchNotes,
-              style: const TextStyle(color: AppColors.muted),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-final class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({
-    required this.title,
-    required this.actionLabel,
-    required this.onAction,
-  });
-
-  final String title;
-  final String actionLabel;
-  final VoidCallback onAction;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Expanded(
-        child: Text(title, style: Theme.of(context).textTheme.titleLarge),
-      ),
-      TextButton(
-        onPressed: onAction,
-        style: TextButton.styleFrom(
-          foregroundColor: AppColors.muted,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(actionLabel),
-            const SizedBox(width: 2),
-            const Icon(Icons.arrow_forward_rounded, size: 16),
-          ],
-        ),
-      ),
-    ],
-  );
-}
-
-final class _EmptyRecent extends StatelessWidget {
-  const _EmptyRecent({required this.onCreate});
-
-  final VoidCallback onCreate;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(24),
-    decoration: BoxDecoration(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(AppRadius.large),
-    ),
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Icon(Icons.note_add_outlined, size: 32, color: AppColors.subtle),
-        const SizedBox(height: 10),
-        Text(context.l10n.emptyActive, textAlign: TextAlign.center),
-        const SizedBox(height: 12),
-        TextButton(onPressed: onCreate, child: Text(context.l10n.createNew)),
-      ],
-    ),
-  );
-}
-
-final class _RecentDeltaNoteCard extends StatelessWidget {
-  const _RecentDeltaNoteCard({required this.note, required this.onTap});
-
-  final Note note;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => Material(
-    color: AppColors.surface,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(AppRadius.large),
-    ),
-    clipBehavior: Clip.antiAlias,
-    child: InkWell(
-      key: ValueKey('quill-home-note-${note.id.value}'),
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 17, 18, 15),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                if (note.isPinned)
-                  const Padding(
-                    padding: EdgeInsets.only(right: 6),
-                    child: Icon(
-                      Icons.push_pin_rounded,
-                      size: 15,
-                      color: AppColors.accent,
-                    ),
-                  ),
-                Expanded(
-                  child: Text(
-                    note.title.trim().isEmpty
-                        ? context.l10n.untitled
-                        : note.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-              ],
-            ),
-            if (!note.contentProjection.isVisuallyEmpty) ...[
-              const SizedBox(height: 7),
-              NoteDeltaPreview(note: note, maxLines: 2),
-            ],
-            const SizedBox(height: 11),
-            Text(
-              _recentTime(context, note.updatedAt.toLocal()),
-              style: const TextStyle(
-                color: AppColors.subtle,
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-
-  static String _recentTime(BuildContext context, DateTime date) {
-    final now = DateTime.now();
-    if (DateUtils.isSameDay(now, date)) {
-      return context.l10n.todayAt(DateFormat('HH:mm').format(date));
-    }
-    if (DateUtils.isSameDay(now.subtract(const Duration(days: 1)), date)) {
-      return context.l10n.yesterdayAt(DateFormat('HH:mm').format(date));
-    }
-    return DateFormat.MMMd(
-      Localizations.localeOf(context).toLanguageTag(),
-    ).format(date);
-  }
-}
-
 final class _QuillDataTab extends StatefulWidget {
   const _QuillDataTab({
     required this.controller,
     required this.dataSizeLoader,
     required this.onRestoreCompleted,
+    required this.onBack,
   });
 
   final NoteLibraryController controller;
   final NoteHomeDataSizeLoader dataSizeLoader;
   final AsyncCallback onRestoreCompleted;
+  final VoidCallback onBack;
 
   @override
   State<_QuillDataTab> createState() => _QuillDataTabState();
@@ -556,13 +237,30 @@ final class _QuillDataTabState extends State<_QuillDataTab> {
     return SafeArea(
       bottom: false,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 22, 20, 132),
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 48),
         children: [
-          Text(
-            context.l10n.localData,
-            style: Theme.of(context).textTheme.headlineMedium,
+          Row(
+            children: [
+              IconButton(
+                key: const Key('quill-data-back'),
+                tooltip: context.l10n.back,
+                onPressed: widget.onBack,
+                style: IconButton.styleFrom(
+                  backgroundColor: AppColors.surface,
+                  fixedSize: const Size.square(44),
+                ),
+                icon: const Icon(Icons.arrow_back_rounded, size: 21),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  context.l10n.localData,
+                  style: Theme.of(context).textTheme.headlineMedium,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 12),
           Text(
             context.l10n.localDataSubtitle,
             style: const TextStyle(color: AppColors.muted),

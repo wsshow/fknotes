@@ -25,12 +25,16 @@ final class NoteLibraryPage extends StatefulWidget {
     this.controller,
     this.editorBuilder,
     this.resolveImage,
+    this.onOpenAssistant,
+    this.onOpenData,
     super.key,
   });
 
   final NoteLibraryController? controller;
   final NoteLibraryEditorBuilder? editorBuilder;
   final NoteLibraryImageResolver? resolveImage;
+  final VoidCallback? onOpenAssistant;
+  final VoidCallback? onOpenData;
 
   @override
   State<NoteLibraryPage> createState() => _NoteLibraryPageState();
@@ -164,17 +168,42 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
                 ],
               ),
             ),
-            IconButton(
-              tooltip: context.l10n.retry,
-              onPressed: _controller.isLoading
-                  ? null
-                  : () => unawaited(_controller.refresh()),
-              style: IconButton.styleFrom(
-                backgroundColor: AppColors.surface,
-                fixedSize: const Size.square(44),
+            if (widget.onOpenAssistant != null) ...[
+              IconButton(
+                key: const Key('quill-home-assistant'),
+                tooltip: context.l10n.localAssistant,
+                onPressed: widget.onOpenAssistant,
+                style: IconButton.styleFrom(
+                  backgroundColor: AppColors.surface,
+                  fixedSize: const Size.square(44),
+                ),
+                icon: const Icon(Icons.auto_awesome_outlined, size: 20),
               ),
-              icon: const Icon(Icons.refresh_rounded, size: 20),
-            ),
+              const SizedBox(width: 6),
+            ],
+            if (widget.onOpenData != null)
+              IconButton(
+                key: const Key('delta-library-open-data'),
+                tooltip: context.l10n.localData,
+                onPressed: widget.onOpenData,
+                style: IconButton.styleFrom(
+                  backgroundColor: AppColors.surface,
+                  fixedSize: const Size.square(44),
+                ),
+                icon: const Icon(Icons.tune_rounded, size: 20),
+              )
+            else
+              IconButton(
+                tooltip: context.l10n.retry,
+                onPressed: _controller.isLoading
+                    ? null
+                    : () => unawaited(_controller.refresh()),
+                style: IconButton.styleFrom(
+                  backgroundColor: AppColors.surface,
+                  fixedSize: const Size.square(44),
+                ),
+                icon: const Icon(Icons.refresh_rounded, size: 20),
+              ),
           ],
         ),
         const SizedBox(height: 20),
@@ -283,7 +312,12 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
     return RefreshIndicator(
       onRefresh: _controller.refresh,
       child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(20, 2, 20, 132),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          2,
+          20,
+          widget.onOpenData == null ? 40 : 104,
+        ),
         itemCount: _controller.notes.length,
         separatorBuilder: (_, _) => const SizedBox(height: 10),
         itemBuilder: (context, index) {
@@ -303,7 +337,8 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
   }
 
   String _scopeTitle(BuildContext context) => switch (_controller.scope) {
-    NoteLibraryScope.active => context.l10n.library,
+    NoteLibraryScope.active =>
+      widget.onOpenData == null ? context.l10n.library : context.l10n.appTitle,
     NoteLibraryScope.favorites => context.l10n.favorites,
     NoteLibraryScope.archived => context.l10n.archive,
     NoteLibraryScope.trash => context.l10n.trash,

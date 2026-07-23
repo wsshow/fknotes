@@ -28,7 +28,7 @@ void main() {
     addTearDown(libraryController.dispose);
   });
 
-  testWidgets('home reads Delta notes and orders recents by edit time', (
+  testWidgets('single home exposes the complete searchable note library', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -47,12 +47,45 @@ void main() {
     await _pump(tester);
 
     expect(find.byType(QuillHomePage), findsOneWidget);
+    expect(find.byType(NoteLibraryPage), findsOneWidget);
+    expect(find.byKey(const Key('delta-library-search')), findsOneWidget);
+    expect(find.byKey(const Key('quill-home-new-note')), findsOneWidget);
+    expect(find.byKey(const Key('quill-home-assistant')), findsOneWidget);
+    expect(find.byKey(const Key('delta-library-open-data')), findsOneWidget);
+    expect(find.byKey(const Key('quill-floating-navigation')), findsNothing);
     expect(find.textContaining('**'), findsNothing);
-    expect(
-      tester.getTopLeft(find.text('最新笔记')).dy,
-      lessThan(tester.getTopLeft(find.text('较早置顶')).dy),
-    );
+    expect(find.text('最新笔记'), findsOneWidget);
+    expect(find.text('较早置顶'), findsOneWidget);
   });
+
+  testWidgets(
+    'data settings is a secondary route instead of primary navigation',
+    (tester) async {
+      await tester.pumpWidget(
+        _TestApp(
+          child: QuillHomePage(
+            recentController: recentController,
+            libraryController: libraryController,
+            dataSizeLoader: () async => 2048,
+            editorBuilder: _testEditor,
+            noteLoader: store.get,
+          ),
+        ),
+      );
+      await _pump(tester);
+
+      expect(find.byType(NavigationBar), findsNothing);
+      expect(find.byKey(const Key('quill-floating-navigation')), findsNothing);
+      await tester.tap(find.byKey(const Key('delta-library-open-data')));
+      await _pump(tester);
+      expect(find.text('本地数据'), findsOneWidget);
+      expect(find.byKey(const Key('quill-data-back')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('quill-data-back')));
+      await _pump(tester);
+      expect(find.byKey(const Key('delta-library-search')), findsOneWidget);
+    },
+  );
 
   testWidgets(
     'all home entry points converge on the Delta library and editor',
@@ -89,12 +122,10 @@ void main() {
       await tester.tap(find.byKey(const Key('close-test-editor')));
       await _pump(tester);
 
-      await tester.tap(find.byKey(const Key('quill-home-search')));
-      await _pump(tester);
       expect(find.byType(NoteLibraryPage), findsOneWidget);
       expect(find.byKey(const Key('delta-library-search')), findsOneWidget);
 
-      await tester.tap(find.text('数据'));
+      await tester.tap(find.byKey(const Key('delta-library-open-data')));
       await _pump(tester);
       expect(find.text('本地数据'), findsOneWidget);
       expect(find.text('2.0 KB'), findsOneWidget);
