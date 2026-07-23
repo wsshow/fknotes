@@ -1,0 +1,760 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+
+import '../app.dart';
+import '../debug/debug_console_launcher.dart';
+import '../l10n/generated/app_localizations.dart';
+import '../l10n/l10n.dart';
+import '../models/note.dart';
+import '../providers/app_lock_controller.dart';
+import '../providers/app_locale_controller.dart';
+import '../providers/note_library_controller.dart';
+import '../services/app_build_metadata.dart';
+import '../services/app_lock_preferences_service.dart';
+import '../services/file_storage_service.dart';
+import '../widgets/brand_mark.dart';
+import '../widgets/navigation_icons.dart';
+import '../widgets/note_delta_preview.dart';
+import 'app_lock_settings_page.dart';
+import 'language_settings_page.dart';
+import 'model_management_page.dart';
+import 'note_library_page.dart';
+import 'note_quill_editor_page.dart';
+
+typedef NoteHomeDataSizeLoader = Future<int> Function();
+
+/// Primary application shell for the clean Delta note system.
+///
+/// It deliberately owns no [NoteProvider] and never opens the legacy note
+/// database. All note entry points converge on [NoteQuillEditorPage].
+final class QuillHomePage extends StatefulWidget {
+  const QuillHomePage({
+    this.recentController,
+    this.libraryController,
+    this.editorBuilder,
+    this.dataSizeLoader,
+    super.key,
+  });
+
+  final NoteLibraryController? recentController;
+  final NoteLibraryController? libraryController;
+  final NoteLibraryEditorBuilder? editorBuilder;
+  final NoteHomeDataSizeLoader? dataSizeLoader;
+
+  @override
+  State<QuillHomePage> createState() => _QuillHomePageState();
+}
+
+final class _QuillHomePageState extends State<QuillHomePage> {
+  late final NoteLibraryController _recentController;
+  late final bool _ownsRecentController;
+  var _tab = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _ownsRecentController = widget.recentController == null;
+    _recentController = widget.recentController ?? NoteLibraryController();
+    _recentController.addListener(_onRecentChanged);
+    unawaited(_recentController.initialize());
+  }
+
+  void _onRecentChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _selectTab(int value) {
+    if (_tab == value) return;
+    setState(() => _tab = value);
+    if (value == 0) unawaited(_recentController.refresh());
+  }
+
+  Future<void> _openEditor([Note? note]) async {
+    final builder =
+        widget.editorBuilder ??
+        (context, value) => NoteQuillEditorPage(initialNote: value);
+    await Navigator.push<Note?>(
+      context,
+      MaterialPageRoute(builder: (context) => builder(context, note)),
+    );
+    if (mounted) await _recentController.refresh();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    extendBody: true,
+    body: IndexedStack(
+      index: _tab,
+      children: [
+        _QuillOverviewTab(
+          controller: _recentController,
+          onCreate: _openEditor,
+          onOpenNote: _openEditor,
+          onOpenLibrary: () => _selectTab(1),
+        ),
+        NoteLibraryPage(
+          controller: widget.libraryController,
+          editorBuilder: widget.editorBuilder,
+        ),
+        _QuillDataTab(
+          controller: _recentController,
+          dataSizeLoader:
+              widget.dataSizeLoader ?? FileStorageService.instance.userDataSize,
+        ),
+      ],
+    ),
+    floatingActionButton: _tab == 0
+        ? FloatingActionButton.extended(
+            key: const Key('quill-home-new-note'),
+            heroTag: null,
+            onPressed: _openEditor,
+            icon: const Icon(Icons.add_rounded),
+            label: Text(context.l10n.createNew),
+          )
+        : null,
+    bottomNavigationBar: DecoratedBox(
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(top: BorderSide(color: AppColors.line)),
+      ),
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewPaddingOf(context).bottom,
+        ),
+        child: NavigationBar(
+          selectedIndex: _tab,
+          onDestinationSelected: _selectTab,
+          destinations: [
+            NavigationDestination(
+              icon: const Icon(Icons.home_outlined),
+              label: context.l10n.home,
+            ),
+            NavigationDestination(
+              icon: const LibrarySpinesIcon(),
+              label: context.l10n.library,
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.pie_chart_outline_rounded),
+              label: context.l10n.data,
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  @override
+  void dispose() {
+    _recentController.removeListener(_onRecentChanged);
+    if (_ownsRecentController) _recentController.dispose();
+    super.dispose();
+  }
+}
+
+final class _QuillOverviewTab extends StatelessWidget {
+  const _QuillOverviewTab({
+    required this.controller,
+    required this.onCreate,
+    required this.onOpenNote,
+    required this.onOpenLibrary,
+  });
+
+  final NoteLibraryController controller;
+  final VoidCallback onCreate;
+  final ValueChanged<Note> onOpenNote;
+  final VoidCallback onOpenLibrary;
+
+  @override
+  Widget build(BuildContext context) {
+    final recent = [...controller.notes]
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return SafeArea(
+      bottom: false,
+      child: RefreshIndicator(
+        onRefresh: controller.refresh,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 120),
+              sliver: SliverList.list(
+                children: [
+                  const _QuillBrandHeader(),
+                  const SizedBox(height: 24),
+                  _OverviewSearch(onTap: onOpenLibrary),
+                  const SizedBox(height: 22),
+                  _QuickStartCard(onCreate: onCreate),
+                  const SizedBox(height: 28),
+                  _SectionHeader(
+                    title: context.l10n.recentlyUpdated,
+                    actionLabel: context.l10n.library,
+                    onAction: onOpenLibrary,
+                  ),
+                  const SizedBox(height: 12),
+                  if (controller.isLoading && recent.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 48),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (recent.isEmpty)
+                    _EmptyRecent(onCreate: onCreate)
+                  else
+                    for (final note in recent.take(5)) ...[
+                      _RecentDeltaNoteCard(
+                        note: note,
+                        onTap: () => onOpenNote(note),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+final class _QuillBrandHeader extends StatelessWidget {
+  const _QuillBrandHeader();
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      const BrandMark(size: 42),
+      const SizedBox(width: 12),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              context.l10n.appTitle,
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            Text(
+              context.l10n.localFirst,
+              style: const TextStyle(color: AppColors.muted, fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
+}
+
+final class _OverviewSearch extends StatelessWidget {
+  const _OverviewSearch({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: AppColors.surface,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(16),
+      side: const BorderSide(color: AppColors.line),
+    ),
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      key: const Key('quill-home-search'),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            const Icon(Icons.search_rounded, color: AppColors.muted),
+            const SizedBox(width: 10),
+            Text(
+              context.l10n.searchNotes,
+              style: const TextStyle(color: AppColors.muted),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+final class _QuickStartCard extends StatelessWidget {
+  const _QuickStartCard({required this.onCreate});
+
+  final VoidCallback onCreate;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: AppColors.ink,
+    borderRadius: BorderRadius.circular(22),
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      key: const Key('quill-home-quick-note'),
+      onTap: onCreate,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 18, 20),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    context.l10n.newNote,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.titleLarge?.copyWith(color: AppColors.surface),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    context.l10n.noteStartHint,
+                    style: TextStyle(
+                      color: AppColors.surface.withValues(alpha: .7),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                color: AppColors.coral,
+                shape: BoxShape.circle,
+              ),
+              child: Padding(
+                padding: EdgeInsets.all(11),
+                child: Icon(Icons.edit_rounded, color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+final class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({
+    required this.title,
+    required this.actionLabel,
+    required this.onAction,
+  });
+
+  final String title;
+  final String actionLabel;
+  final VoidCallback onAction;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Expanded(
+        child: Text(title, style: Theme.of(context).textTheme.titleLarge),
+      ),
+      TextButton(onPressed: onAction, child: Text(actionLabel)),
+    ],
+  );
+}
+
+final class _EmptyRecent extends StatelessWidget {
+  const _EmptyRecent({required this.onCreate});
+
+  final VoidCallback onCreate;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(24),
+    decoration: BoxDecoration(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: AppColors.line),
+    ),
+    child: Column(
+      children: [
+        const Icon(Icons.note_add_outlined, size: 34, color: AppColors.muted),
+        const SizedBox(height: 10),
+        Text(context.l10n.emptyActive, textAlign: TextAlign.center),
+        const SizedBox(height: 12),
+        TextButton(onPressed: onCreate, child: Text(context.l10n.createNew)),
+      ],
+    ),
+  );
+}
+
+final class _RecentDeltaNoteCard extends StatelessWidget {
+  const _RecentDeltaNoteCard({required this.note, required this.onTap});
+
+  final Note note;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: AppColors.surface,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(18),
+      side: const BorderSide(color: AppColors.line),
+    ),
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      key: ValueKey('quill-home-note-${note.id.value}'),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                if (note.isPinned)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 6),
+                    child: Icon(
+                      Icons.push_pin_rounded,
+                      size: 15,
+                      color: AppColors.coral,
+                    ),
+                  ),
+                Expanded(
+                  child: Text(
+                    note.title.trim().isEmpty
+                        ? context.l10n.untitled
+                        : note.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+              ],
+            ),
+            if (!note.contentProjection.isVisuallyEmpty) ...[
+              const SizedBox(height: 7),
+              NoteDeltaPreview(note: note, maxLines: 2),
+            ],
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+final class _QuillDataTab extends StatefulWidget {
+  const _QuillDataTab({required this.controller, required this.dataSizeLoader});
+
+  final NoteLibraryController controller;
+  final NoteHomeDataSizeLoader dataSizeLoader;
+
+  @override
+  State<_QuillDataTab> createState() => _QuillDataTabState();
+}
+
+final class _QuillDataTabState extends State<_QuillDataTab> {
+  int? _dataSize;
+  AppBuildMetadata? _metadata;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadDataSize());
+    unawaited(_loadMetadata());
+  }
+
+  Future<void> _loadDataSize() async {
+    int? value;
+    try {
+      value = await widget.dataSizeLoader();
+    } catch (_) {
+      value = null;
+    }
+    if (mounted) setState(() => _dataSize = value);
+  }
+
+  Future<void> _loadMetadata() async {
+    AppBuildMetadata metadata;
+    try {
+      metadata = await AppBuildMetadata.load();
+    } catch (_) {
+      metadata = const AppBuildMetadata(
+        version: '',
+        buildNumber: '',
+        buildTime: null,
+      );
+    }
+    if (mounted) setState(() => _metadata = metadata);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final appLock = context.watch<AppLockController>();
+    final locale = context.watch<AppLocaleController>();
+    final notes = widget.controller.notes;
+    final attachmentCount = notes.fold<int>(
+      0,
+      (total, note) => total + note.assets.length,
+    );
+    return SafeArea(
+      bottom: false,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 120),
+        children: [
+          Text(
+            context.l10n.localData,
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            context.l10n.localDataSubtitle,
+            style: const TextStyle(color: AppColors.muted),
+          ),
+          const SizedBox(height: 20),
+          _DataSummary(
+            noteCount: notes.length,
+            attachmentCount: attachmentCount,
+            dataSize: _dataSize,
+          ),
+          const SizedBox(height: 22),
+          _SettingsSection(
+            title: context.l10n.preferences,
+            children: [
+              _SettingsRow(
+                icon: Icons.language_rounded,
+                title: context.l10n.language,
+                subtitle: _languageLabel(context.l10n, locale.language),
+                onTap: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const LanguageSettingsPage(),
+                  ),
+                ),
+              ),
+              const Divider(height: 1),
+              _SettingsRow(
+                icon: Icons.lock_outline_rounded,
+                title: context.l10n.appLock,
+                subtitle: appLock.enabled
+                    ? context.l10n.appLockEnabledSubtitle(
+                        _lockTimeoutLabel(context.l10n, appLock.timeout),
+                      )
+                    : context.l10n.appLockDisabledSubtitle,
+                onTap: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AppLockSettingsPage(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 22),
+          _SettingsSection(
+            title: context.l10n.unifiedStorage,
+            children: [
+              _SettingsRow(
+                icon: Icons.memory_rounded,
+                title: context.l10n.localModels,
+                subtitle: context.l10n.localModelsSubtitle,
+                onTap: () async {
+                  await Navigator.push<void>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ModelManagementPage(),
+                    ),
+                  );
+                  await _loadDataSize();
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 22),
+          _SettingsSection(
+            title: context.l10n.about,
+            children: [
+              _SettingsRow(
+                icon: Icons.info_outline_rounded,
+                title: context.l10n.appTitle,
+                subtitle: _metadata == null
+                    ? context.l10n.loadingVersion
+                    : _buildMetadataSubtitle(context.l10n, _metadata!),
+              ),
+              if (kDebugMode) ...[
+                const Divider(height: 1),
+                _SettingsRow(
+                  icon: Icons.bug_report_outlined,
+                  title: '调试中心 · Debug',
+                  subtitle: '实时日志、异常堆栈与脱敏诊断包',
+                  onTap: () => openDebugConsole(context),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+final class _DataSummary extends StatelessWidget {
+  const _DataSummary({
+    required this.noteCount,
+    required this.attachmentCount,
+    required this.dataSize,
+  });
+
+  final int noteCount;
+  final int attachmentCount;
+  final int? dataSize;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(18),
+    decoration: BoxDecoration(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: AppColors.line),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.verified_user_outlined, color: AppColors.moss),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Text(
+                context.l10n.localFirst,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            Text(
+              context.l10n.offlineSecure,
+              style: const TextStyle(color: AppColors.moss, fontSize: 11),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        const Divider(height: 1),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            _DataMetric('$noteCount', context.l10n.totalItems),
+            _DataMetric('$attachmentCount', context.l10n.attachments),
+            _DataMetric(
+              dataSize == null ? '—' : _formatBytes(dataSize!),
+              context.l10n.userDataUsage,
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
+final class _DataMetric extends StatelessWidget {
+  const _DataMetric(this.value, this.label);
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: Column(
+      children: [
+        Text(value, style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: AppColors.muted, fontSize: 11),
+        ),
+      ],
+    ),
+  );
+}
+
+final class _SettingsSection extends StatelessWidget {
+  const _SettingsSection({required this.title, required this.children});
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(title, style: Theme.of(context).textTheme.titleMedium),
+      const SizedBox(height: 12),
+      Material(
+        color: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: const BorderSide(color: AppColors.line),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(children: children),
+      ),
+    ],
+  );
+}
+
+final class _SettingsRow extends StatelessWidget {
+  const _SettingsRow({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    leading: Icon(icon),
+    title: Text(title),
+    subtitle: Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
+    trailing: onTap == null ? null : const Icon(Icons.chevron_right_rounded),
+    onTap: onTap,
+  );
+}
+
+String _languageLabel(AppLocalizations l10n, AppLanguage language) =>
+    switch (language) {
+      AppLanguage.system => l10n.languageSystem,
+      AppLanguage.simplifiedChinese => l10n.languageSimplifiedChinese,
+      AppLanguage.english => l10n.languageEnglish,
+    };
+
+String _lockTimeoutLabel(AppLocalizations l10n, AppLockTimeout timeout) =>
+    switch (timeout) {
+      AppLockTimeout.immediately => l10n.lockImmediately,
+      AppLockTimeout.oneMinute => l10n.lockAfterOneMinute,
+      AppLockTimeout.fiveMinutes => l10n.lockAfterFiveMinutes,
+      AppLockTimeout.fifteenMinutes => l10n.lockAfterFifteenMinutes,
+    };
+
+String _buildMetadataSubtitle(
+  AppLocalizations l10n,
+  AppBuildMetadata metadata,
+) {
+  if (metadata.version.isEmpty) return l10n.unavailable;
+  final version = metadata.buildNumber.isEmpty
+      ? l10n.versionNumber(metadata.version)
+      : l10n.versionNumberWithBuild(metadata.version, metadata.buildNumber);
+  final time = metadata.buildTime == null
+      ? l10n.buildTimeUnrecorded
+      : l10n.buildTime(
+          DateFormat.yMd(l10n.localeName).add_Hm().format(metadata.buildTime!),
+        );
+  return '$version\n$time';
+}
+
+String _formatBytes(int bytes) {
+  if (bytes < 1024) return '$bytes B';
+  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+  if (bytes < 1024 * 1024 * 1024) {
+    return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
+  }
+  return '${(bytes / 1024 / 1024 / 1024).toStringAsFixed(1)} GB';
+}

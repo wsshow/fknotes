@@ -5,12 +5,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:provider/provider.dart';
 
-import 'pages/home_page.dart';
+import 'pages/quill_home_page.dart';
 import 'l10n/generated/app_localizations.dart';
 import 'l10n/l10n.dart';
 import 'providers/app_lock_controller.dart';
 import 'providers/app_locale_controller.dart';
-import 'providers/note_provider.dart';
 import 'widgets/app_lock_gate.dart';
 import 'widgets/app_feedback_navigator_observer.dart';
 import 'debug/debug_navigation.dart';
@@ -92,7 +91,6 @@ class FkNotesApp extends StatelessWidget {
         ChangeNotifierProvider(
           create: (_) => AppLockController()..initialize(),
         ),
-        ChangeNotifierProvider(create: (_) => NoteProvider()..loadEntries()),
       ],
       child: Consumer<AppLocaleController>(
         builder: (context, localeController, _) => MaterialApp(
@@ -405,7 +403,7 @@ class FkNotesApp extends StatelessWidget {
           ),
           builder: (context, child) =>
               AppLockGate(child: child ?? const SizedBox.shrink()),
-          home: const HomePage(),
+          home: const QuillHomePage(),
         ),
       ),
     );
