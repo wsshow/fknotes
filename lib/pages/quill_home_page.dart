@@ -161,40 +161,46 @@ final class _QuillHomePageState extends State<QuillHomePage> {
       ],
     ),
     floatingActionButton: _tab == 0
-        ? FloatingActionButton.extended(
+        ? FloatingActionButton(
             key: const Key('quill-home-new-note'),
             heroTag: null,
+            tooltip: context.l10n.newNote,
             onPressed: _openEditor,
-            icon: const Icon(Icons.add_rounded),
-            label: Text(context.l10n.createNew),
+            child: const Icon(Icons.add_rounded),
           )
         : null,
-    bottomNavigationBar: DecoratedBox(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.line)),
-      ),
-      child: Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.viewPaddingOf(context).bottom,
+    bottomNavigationBar: SafeArea(
+      top: false,
+      minimum: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.all(Radius.circular(22)),
+          boxShadow: AppShadows.floating,
         ),
-        child: NavigationBar(
-          selectedIndex: _tab,
-          onDestinationSelected: _selectTab,
-          destinations: [
-            NavigationDestination(
-              icon: const Icon(Icons.home_outlined),
-              label: context.l10n.home,
-            ),
-            NavigationDestination(
-              icon: const LibrarySpinesIcon(),
-              label: context.l10n.library,
-            ),
-            NavigationDestination(
-              icon: const Icon(Icons.pie_chart_outline_rounded),
-              label: context.l10n.data,
-            ),
-          ],
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(22),
+          child: NavigationBar(
+            selectedIndex: _tab,
+            onDestinationSelected: _selectTab,
+            destinations: [
+              NavigationDestination(
+                icon: const Icon(Icons.home_outlined),
+                selectedIcon: const Icon(Icons.home_rounded),
+                label: context.l10n.home,
+              ),
+              NavigationDestination(
+                icon: const LibrarySpinesIcon(),
+                selectedIcon: const LibrarySpinesIcon(),
+                label: context.l10n.library,
+              ),
+              NavigationDestination(
+                icon: const Icon(Icons.pie_chart_outline_rounded),
+                selectedIcon: const Icon(Icons.pie_chart_rounded),
+                label: context.l10n.data,
+              ),
+            ],
+          ),
         ),
       ),
     ),
@@ -236,15 +242,13 @@ final class _QuillOverviewTab extends StatelessWidget {
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 120),
+              padding: const EdgeInsets.fromLTRB(20, 22, 20, 132),
               sliver: SliverList.list(
                 children: [
                   _QuillBrandHeader(onOpenAssistant: onOpenAssistant),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 26),
                   _OverviewSearch(onTap: onOpenLibrary),
-                  const SizedBox(height: 22),
-                  _QuickStartCard(onCreate: onCreate),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 30),
                   _SectionHeader(
                     title: context.l10n.recentlyUpdated,
                     actionLabel: context.l10n.library,
@@ -284,8 +288,8 @@ final class _QuillBrandHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Row(
     children: [
-      const BrandMark(size: 42),
-      const SizedBox(width: 12),
+      const BrandMark(size: 36, showSurface: false),
+      const SizedBox(width: 11),
       Expanded(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -296,20 +300,25 @@ final class _QuillBrandHeader extends StatelessWidget {
             ),
             Text(
               context.l10n.localFirst,
-              style: const TextStyle(color: AppColors.muted, fontSize: 12),
+              style: const TextStyle(
+                color: AppColors.muted,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ],
         ),
       ),
-      IconButton.filledTonal(
+      IconButton(
         key: const Key('quill-home-assistant'),
         tooltip: context.l10n.localAssistant,
         onPressed: onOpenAssistant,
         style: IconButton.styleFrom(
-          backgroundColor: AppColors.softGreen,
-          foregroundColor: AppColors.moss,
+          backgroundColor: AppColors.surface,
+          foregroundColor: AppColors.ink,
+          fixedSize: const Size.square(44),
         ),
-        icon: const Icon(Icons.auto_awesome_rounded),
+        icon: const Icon(Icons.auto_awesome_outlined, size: 21),
       ),
     ],
   );
@@ -322,78 +331,23 @@ final class _OverviewSearch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Material(
-    color: AppColors.surface,
+    color: AppColors.surfaceMuted,
     shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(16),
-      side: const BorderSide(color: AppColors.line),
+      borderRadius: BorderRadius.circular(AppRadius.medium),
     ),
     clipBehavior: Clip.antiAlias,
     child: InkWell(
       key: const Key('quill-home-search'),
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
         child: Row(
           children: [
-            const Icon(Icons.search_rounded, color: AppColors.muted),
+            const Icon(Icons.search_rounded, color: AppColors.muted, size: 21),
             const SizedBox(width: 10),
             Text(
               context.l10n.searchNotes,
               style: const TextStyle(color: AppColors.muted),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-final class _QuickStartCard extends StatelessWidget {
-  const _QuickStartCard({required this.onCreate});
-
-  final VoidCallback onCreate;
-
-  @override
-  Widget build(BuildContext context) => Material(
-    color: AppColors.ink,
-    borderRadius: BorderRadius.circular(22),
-    clipBehavior: Clip.antiAlias,
-    child: InkWell(
-      key: const Key('quill-home-quick-note'),
-      onTap: onCreate,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 20, 18, 20),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    context.l10n.newNote,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.titleLarge?.copyWith(color: AppColors.surface),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    context.l10n.noteStartHint,
-                    style: TextStyle(
-                      color: AppColors.surface.withValues(alpha: .7),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                color: AppColors.coral,
-                shape: BoxShape.circle,
-              ),
-              child: Padding(
-                padding: EdgeInsets.all(11),
-                child: Icon(Icons.edit_rounded, color: Colors.white),
-              ),
             ),
           ],
         ),
@@ -419,7 +373,21 @@ final class _SectionHeader extends StatelessWidget {
       Expanded(
         child: Text(title, style: Theme.of(context).textTheme.titleLarge),
       ),
-      TextButton(onPressed: onAction, child: Text(actionLabel)),
+      TextButton(
+        onPressed: onAction,
+        style: TextButton.styleFrom(
+          foregroundColor: AppColors.muted,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(actionLabel),
+            const SizedBox(width: 2),
+            const Icon(Icons.arrow_forward_rounded, size: 16),
+          ],
+        ),
+      ),
     ],
   );
 }
@@ -434,12 +402,11 @@ final class _EmptyRecent extends StatelessWidget {
     padding: const EdgeInsets.all(24),
     decoration: BoxDecoration(
       color: AppColors.surface,
-      borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: AppColors.line),
+      borderRadius: BorderRadius.circular(AppRadius.large),
     ),
     child: Column(
       children: [
-        const Icon(Icons.note_add_outlined, size: 34, color: AppColors.muted),
+        const Icon(Icons.note_add_outlined, size: 32, color: AppColors.subtle),
         const SizedBox(height: 10),
         Text(context.l10n.emptyActive, textAlign: TextAlign.center),
         const SizedBox(height: 12),
@@ -459,15 +426,14 @@ final class _RecentDeltaNoteCard extends StatelessWidget {
   Widget build(BuildContext context) => Material(
     color: AppColors.surface,
     shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(18),
-      side: const BorderSide(color: AppColors.line),
+      borderRadius: BorderRadius.circular(AppRadius.large),
     ),
     clipBehavior: Clip.antiAlias,
     child: InkWell(
       key: ValueKey('quill-home-note-${note.id.value}'),
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(18, 17, 18, 15),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -498,11 +464,33 @@ final class _RecentDeltaNoteCard extends StatelessWidget {
               const SizedBox(height: 7),
               NoteDeltaPreview(note: note, maxLines: 2),
             ],
+            const SizedBox(height: 11),
+            Text(
+              _recentTime(context, note.updatedAt.toLocal()),
+              style: const TextStyle(
+                color: AppColors.subtle,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ],
         ),
       ),
     ),
   );
+
+  static String _recentTime(BuildContext context, DateTime date) {
+    final now = DateTime.now();
+    if (DateUtils.isSameDay(now, date)) {
+      return context.l10n.todayAt(DateFormat('HH:mm').format(date));
+    }
+    if (DateUtils.isSameDay(now.subtract(const Duration(days: 1)), date)) {
+      return context.l10n.yesterdayAt(DateFormat('HH:mm').format(date));
+    }
+    return DateFormat.MMMd(
+      Localizations.localeOf(context).toLanguageTag(),
+    ).format(date);
+  }
 }
 
 final class _QuillDataTab extends StatefulWidget {
@@ -567,7 +555,7 @@ final class _QuillDataTabState extends State<_QuillDataTab> {
     return SafeArea(
       bottom: false,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 120),
+        padding: const EdgeInsets.fromLTRB(20, 22, 20, 132),
         children: [
           Text(
             context.l10n.localData,
@@ -578,7 +566,7 @@ final class _QuillDataTabState extends State<_QuillDataTab> {
             context.l10n.localDataSubtitle,
             style: const TextStyle(color: AppColors.muted),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
           _DataSummary(
             noteCount: notes.length,
             attachmentCount: attachmentCount,
@@ -735,18 +723,21 @@ final class _DataSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(18),
+    padding: const EdgeInsets.all(20),
     decoration: BoxDecoration(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(18),
-      border: Border.all(color: AppColors.line),
+      color: AppColors.accentSoft,
+      borderRadius: BorderRadius.circular(AppRadius.large),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            const Icon(Icons.verified_user_outlined, color: AppColors.moss),
+            const Icon(
+              Icons.shield_outlined,
+              color: AppColors.accent,
+              size: 21,
+            ),
             const SizedBox(width: 9),
             Expanded(
               child: Text(
@@ -756,12 +747,16 @@ final class _DataSummary extends StatelessWidget {
             ),
             Text(
               context.l10n.offlineSecure,
-              style: const TextStyle(color: AppColors.moss, fontSize: 11),
+              style: const TextStyle(
+                color: AppColors.accent,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
         const SizedBox(height: 12),
-        const Divider(height: 1),
+        Divider(height: 1, color: AppColors.accent.withValues(alpha: .12)),
         const SizedBox(height: 12),
         Row(
           children: [
@@ -816,8 +811,7 @@ final class _SettingsSection extends StatelessWidget {
       Material(
         color: AppColors.surface,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: const BorderSide(color: AppColors.line),
+          borderRadius: BorderRadius.circular(AppRadius.large),
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(children: children),
@@ -841,10 +835,39 @@ final class _SettingsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListTile(
-    leading: Icon(icon),
-    title: Text(title),
-    subtitle: Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
-    trailing: onTap == null ? null : const Icon(Icons.chevron_right_rounded),
+    minTileHeight: 68,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
+    leading: DecoratedBox(
+      decoration: const BoxDecoration(
+        color: AppColors.surfaceMuted,
+        borderRadius: BorderRadius.all(Radius.circular(AppRadius.small)),
+      ),
+      child: SizedBox.square(
+        dimension: 38,
+        child: Icon(icon, size: 20, color: AppColors.ink),
+      ),
+    ),
+    title: Text(
+      title,
+      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+    ),
+    subtitle: Text(
+      subtitle,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(
+        color: AppColors.muted,
+        fontSize: 12,
+        height: 1.35,
+      ),
+    ),
+    trailing: onTap == null
+        ? null
+        : const Icon(
+            Icons.chevron_right_rounded,
+            color: AppColors.subtle,
+            size: 21,
+          ),
     onTap: onTap,
   );
 }

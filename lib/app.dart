@@ -15,20 +15,62 @@ import 'widgets/app_feedback_navigator_observer.dart';
 import 'debug/debug_navigation.dart';
 
 class AppColors {
-  static const ink = Color(0xFF28231F);
-  static const muted = Color(0xFF7B726B);
-  static const canvas = Color(0xFFFAF7F2);
-  static const surface = Color(0xFFFFFDFC);
-  static const line = Color(0xFFEAE2DA);
-  static const moss = Color(0xFFB9573D);
-  static const lime = Color(0xFFF1E5D8);
-  static const softGreen = Color(0xFFF8EEE7);
-  static const softBlue = Color(0xFFF1ECE6);
-  static const softAmber = Color(0xFFF5E9DA);
-  static const softLavender = Color(0xFFF2ECE8);
-  static const softCoral = Color(0xFFFBEAE6);
-  static const coral = Color(0xFFC1493F);
-  static const scrim = Color(0x3D28231F);
+  static const ink = Color(0xFF202124);
+  static const muted = Color(0xFF74777D);
+  static const subtle = Color(0xFFA7A9AE);
+  static const canvas = Color(0xFFF7F7F6);
+  static const surface = Color(0xFFFFFFFF);
+  static const surfaceMuted = Color(0xFFF1F2F2);
+  static const line = Color(0xFFE7E7E5);
+  static const accent = Color(0xFFD85C3B);
+  static const accentPressed = Color(0xFFBC492C);
+  static const accentSoft = Color(0xFFFBEDE8);
+  static const success = Color(0xFF39735C);
+  static const successSoft = Color(0xFFEAF4EF);
+  static const warning = Color(0xFFA56A22);
+  static const warningSoft = Color(0xFFF8F0E4);
+  static const danger = Color(0xFFC7473E);
+  static const dangerSoft = Color(0xFFFBEAE8);
+  static const scrim = Color(0x52202124);
+
+  // Compatibility names used by feature surfaces while they migrate to the
+  // semantic palette above.
+  static const moss = accent;
+  static const coral = danger;
+  static const lime = surfaceMuted;
+  static const softGreen = accentSoft;
+  static const softBlue = surfaceMuted;
+  static const softAmber = warningSoft;
+  static const softLavender = surfaceMuted;
+  static const softCoral = dangerSoft;
+}
+
+abstract final class AppSpacing {
+  static const xxs = 4.0;
+  static const xs = 8.0;
+  static const sm = 12.0;
+  static const md = 16.0;
+  static const lg = 20.0;
+  static const xl = 24.0;
+  static const xxl = 32.0;
+}
+
+abstract final class AppRadius {
+  static const small = 12.0;
+  static const medium = 16.0;
+  static const large = 20.0;
+  static const extraLarge = 26.0;
+  static const pill = 999.0;
+}
+
+abstract final class AppShadows {
+  static const low = <BoxShadow>[
+    BoxShadow(color: Color(0x0A202124), blurRadius: 16, offset: Offset(0, 4)),
+  ];
+
+  static const floating = <BoxShadow>[
+    BoxShadow(color: Color(0x12202124), blurRadius: 28, offset: Offset(0, 10)),
+  ];
 }
 
 class FkNotesApp extends StatelessWidget {
@@ -37,42 +79,42 @@ class FkNotesApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const scheme = ColorScheme.light(
-      primary: AppColors.moss,
+      primary: AppColors.accent,
       onPrimary: Colors.white,
-      primaryContainer: AppColors.softGreen,
+      primaryContainer: AppColors.accentSoft,
       onPrimaryContainer: AppColors.ink,
-      primaryFixed: AppColors.softGreen,
-      primaryFixedDim: AppColors.lime,
+      primaryFixed: AppColors.accentSoft,
+      primaryFixedDim: AppColors.surfaceMuted,
       onPrimaryFixed: AppColors.ink,
-      onPrimaryFixedVariant: AppColors.moss,
+      onPrimaryFixedVariant: AppColors.accent,
       secondary: AppColors.muted,
       onSecondary: Colors.white,
-      secondaryContainer: AppColors.lime,
+      secondaryContainer: AppColors.surfaceMuted,
       onSecondaryContainer: AppColors.ink,
-      secondaryFixed: AppColors.lime,
-      secondaryFixedDim: AppColors.softAmber,
+      secondaryFixed: AppColors.surfaceMuted,
+      secondaryFixedDim: AppColors.warningSoft,
       onSecondaryFixed: AppColors.ink,
       onSecondaryFixedVariant: AppColors.muted,
       tertiary: AppColors.muted,
       onTertiary: Colors.white,
-      tertiaryContainer: AppColors.softLavender,
+      tertiaryContainer: AppColors.surfaceMuted,
       onTertiaryContainer: AppColors.ink,
-      tertiaryFixed: AppColors.softLavender,
-      tertiaryFixedDim: AppColors.softBlue,
+      tertiaryFixed: AppColors.surfaceMuted,
+      tertiaryFixedDim: AppColors.surfaceMuted,
       onTertiaryFixed: AppColors.ink,
       onTertiaryFixedVariant: AppColors.muted,
-      error: AppColors.coral,
+      error: AppColors.danger,
       onError: Colors.white,
-      errorContainer: AppColors.softCoral,
-      onErrorContainer: AppColors.coral,
+      errorContainer: AppColors.dangerSoft,
+      onErrorContainer: AppColors.danger,
       surface: AppColors.surface,
       onSurface: AppColors.ink,
-      surfaceDim: AppColors.softBlue,
+      surfaceDim: AppColors.surfaceMuted,
       surfaceBright: AppColors.surface,
       surfaceContainerLowest: AppColors.surface,
       surfaceContainerLow: AppColors.canvas,
       surfaceContainer: AppColors.surface,
-      surfaceContainerHigh: AppColors.softLavender,
+      surfaceContainerHigh: AppColors.surfaceMuted,
       surfaceContainerHighest: AppColors.line,
       onSurfaceVariant: AppColors.muted,
       outline: AppColors.muted,
@@ -129,46 +171,42 @@ class FkNotesApp extends StatelessWidget {
                 .copyWith(
                   headlineLarge: const TextStyle(
                     color: AppColors.ink,
-                    fontFamily: 'serif',
                     fontSize: 30,
-                    height: 1.18,
+                    height: 1.2,
                     fontWeight: FontWeight.w700,
-                    letterSpacing: -.7,
+                    letterSpacing: -.55,
                   ),
                   headlineMedium: const TextStyle(
                     color: AppColors.ink,
-                    fontFamily: 'serif',
                     fontSize: 26,
-                    height: 1.2,
+                    height: 1.24,
                     fontWeight: FontWeight.w700,
-                    letterSpacing: -.5,
+                    letterSpacing: -.4,
                   ),
                   headlineSmall: const TextStyle(
                     color: AppColors.ink,
-                    fontFamily: 'serif',
                     fontSize: 22,
-                    height: 1.25,
+                    height: 1.3,
                     fontWeight: FontWeight.w700,
-                    letterSpacing: -.25,
+                    letterSpacing: -.2,
                   ),
                   titleLarge: const TextStyle(
                     color: AppColors.ink,
-                    fontFamily: 'serif',
-                    fontSize: 19,
-                    height: 1.3,
+                    fontSize: 20,
+                    height: 1.35,
                     fontWeight: FontWeight.w700,
+                    letterSpacing: -.15,
                   ),
                   titleMedium: const TextStyle(
                     color: AppColors.ink,
-                    fontFamily: 'serif',
                     fontSize: 16,
-                    height: 1.35,
+                    height: 1.4,
                     fontWeight: FontWeight.w600,
                   ),
                   bodyLarge: const TextStyle(
                     color: AppColors.ink,
                     fontSize: 16,
-                    height: 1.55,
+                    height: 1.6,
                     fontWeight: FontWeight.w400,
                   ),
                   bodyMedium: const TextStyle(
@@ -199,39 +237,48 @@ class FkNotesApp extends StatelessWidget {
               surfaceTintColor: Colors.transparent,
               margin: EdgeInsets.zero,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
-                side: const BorderSide(color: AppColors.line),
+                borderRadius: BorderRadius.circular(AppRadius.large),
               ),
             ),
             inputDecorationTheme: InputDecorationTheme(
               filled: true,
-              fillColor: AppColors.surface,
+              fillColor: AppColors.surfaceMuted,
               hintStyle: const TextStyle(color: AppColors.muted),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: 15,
+              ),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(15),
+                borderRadius: BorderRadius.circular(AppRadius.medium),
                 borderSide: BorderSide.none,
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(15),
-                borderSide: const BorderSide(color: AppColors.line),
+                borderRadius: BorderRadius.circular(AppRadius.medium),
+                borderSide: BorderSide.none,
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(15),
-                borderSide: const BorderSide(color: AppColors.moss),
+                borderRadius: BorderRadius.circular(AppRadius.medium),
+                borderSide: const BorderSide(
+                  color: AppColors.accent,
+                  width: 1.5,
+                ),
               ),
             ),
             navigationBarTheme: NavigationBarThemeData(
-              height: 66,
+              height: 64,
               elevation: 0,
               backgroundColor: AppColors.surface,
               surfaceTintColor: Colors.transparent,
-              indicatorColor: Colors.transparent,
+              indicatorColor: AppColors.accentSoft,
               overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+              indicatorShape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadius.small),
+              ),
               iconTheme: WidgetStateProperty.resolveWith(
                 (states) => IconThemeData(
-                  size: 23,
+                  size: 22,
                   color: states.contains(WidgetState.selected)
-                      ? AppColors.moss
+                      ? AppColors.accent
                       : AppColors.muted,
                 ),
               ),
@@ -242,20 +289,20 @@ class FkNotesApp extends StatelessWidget {
                       ? FontWeight.w600
                       : FontWeight.w500,
                   color: states.contains(WidgetState.selected)
-                      ? AppColors.moss
+                      ? AppColors.accent
                       : AppColors.muted,
                 ),
               ),
             ),
             floatingActionButtonTheme: FloatingActionButtonThemeData(
-              backgroundColor: AppColors.moss,
+              backgroundColor: AppColors.accent,
               foregroundColor: Colors.white,
-              elevation: 2,
-              focusElevation: 2,
-              hoverElevation: 3,
-              highlightElevation: 1,
+              elevation: 0,
+              focusElevation: 0,
+              hoverElevation: 1,
+              highlightElevation: 0,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(17),
+                borderRadius: BorderRadius.circular(AppRadius.medium),
               ),
             ),
             filledButtonTheme: FilledButtonThemeData(
@@ -265,7 +312,7 @@ class FkNotesApp extends StatelessWidget {
                   vertical: 14,
                 ),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(13),
+                  borderRadius: BorderRadius.circular(AppRadius.small),
                 ),
                 textStyle: const TextStyle(fontWeight: FontWeight.w600),
               ),
@@ -278,7 +325,7 @@ class FkNotesApp extends StatelessWidget {
                 ),
                 side: const BorderSide(color: AppColors.line),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(13),
+                  borderRadius: BorderRadius.circular(AppRadius.small),
                 ),
                 textStyle: const TextStyle(fontWeight: FontWeight.w600),
               ),
@@ -286,7 +333,7 @@ class FkNotesApp extends StatelessWidget {
             textButtonTheme: TextButtonThemeData(
               style: TextButton.styleFrom(
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(AppRadius.small),
                 ),
                 textStyle: const TextStyle(fontWeight: FontWeight.w600),
               ),
