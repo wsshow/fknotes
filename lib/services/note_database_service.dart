@@ -16,7 +16,7 @@ final class NoteDatabaseService {
 
   static final NoteDatabaseService instance = NoteDatabaseService();
   static const String databaseFileName = 'fknotes.db';
-  static const int schemaVersion = 1;
+  static const int schemaVersion = 2;
 
   final String? databasePath;
   Database? _database;
@@ -71,6 +71,7 @@ final class NoteDatabaseService {
         await database.rawQuery('PRAGMA journal_mode = WAL');
       },
       onCreate: (database, _) => NoteRepository(database).initialize(),
+      onUpgrade: NoteRepository.upgrade,
     );
   }
 

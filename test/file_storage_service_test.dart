@@ -86,14 +86,13 @@ void main() {
     final decoded = img.decodeJpg(await output.readAsBytes());
 
     expect(relativePath, startsWith('notes/thumbnails/'));
-    expect(relativePath, endsWith('_thumb_v2.jpg'));
+    expect(relativePath, endsWith('_thumb_v3.jpg'));
     expect(decoded, isNotNull);
-    expect(decoded!.width, 300);
-    expect(decoded.height, 360);
+    expect(decoded!.width, 640);
+    expect(decoded.height, 80);
     final corner = decoded.getPixel(0, 0);
     final center = decoded.getPixel(decoded.width ~/ 2, decoded.height ~/ 2);
-    expect(corner.r, greaterThan(240));
-    expect(corner.g, greaterThan(235));
+    expect(corner.r, greaterThan(corner.g * 2));
     expect(center.r, greaterThan(center.g * 2));
   });
 

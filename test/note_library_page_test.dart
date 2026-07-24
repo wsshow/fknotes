@@ -51,9 +51,13 @@ void main() {
     expect(find.text('收藏'), findsNothing);
     expect(find.text('归档'), findsNothing);
     expect(find.text('回收站'), findsNothing);
-    expect(find.text('下拉搜索'), findsOneWidget);
+    expect(find.text('搜索笔记'), findsOneWidget);
     expect(find.byKey(const Key('delta-library-search-pull')), findsOneWidget);
     expect(find.byKey(const Key('delta-library-search')), findsNothing);
+    expect(
+      tester.getSize(find.byKey(const Key('search-pull-tab-surface'))),
+      const Size(100, 28),
+    );
 
     final paperTab = find.byKey(const Key('brand-spine-paper-tab'));
     final noteSheet = find.byKey(
@@ -108,6 +112,18 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('delta-library-search')), findsOneWidget);
+    expect(find.byType(SearchBar), findsNothing);
+    expect(
+      tester.getSize(find.byKey(const Key('search-pull-handle-surface'))),
+      const Size(320, 48),
+    );
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('delta-library-search')))
+          .decoration
+          ?.filled,
+      isFalse,
+    );
     expect(_searchEditable(tester).focusNode.hasFocus, isFalse);
 
     await tester.enterText(
@@ -125,6 +141,37 @@ void main() {
     expect(find.text('格式笔记'), findsOneWidget);
     expect(find.text('普通笔记'), findsOneWidget);
     expect(controller.query, isEmpty);
+  });
+
+  testWidgets('tapping a blank home area collapses expanded search', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _TestApp(child: NoteLibraryPage(controller: controller)),
+    );
+    await _pump(tester);
+
+    await tester.tap(find.byKey(const Key('delta-library-search-pull')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('delta-library-search')));
+    await tester.enterText(
+      find.byKey(const Key('delta-library-search')),
+      '可搜索',
+    );
+    await tester.pump(const Duration(milliseconds: 281));
+    await _pump(tester);
+
+    expect(find.byKey(const Key('delta-library-search')), findsOneWidget);
+    expect(_searchEditable(tester).focusNode.hasFocus, isTrue);
+    expect(controller.query, '可搜索');
+
+    await tester.tapAt(const Offset(56, 400));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('delta-library-search')), findsNothing);
+    expect(find.byKey(const Key('delta-library-search-pull')), findsOneWidget);
+    expect(controller.query, isEmpty);
+    expect(tester.testTextInput.isVisible, isFalse);
   });
 
   testWidgets('keeps creation on home and opens existing notes', (
@@ -280,6 +327,11 @@ void main() {
   testWidgets(
     'image notes keep images inline with the document instead of a side cover',
     (tester) async {
+      tester.view.physicalSize = const Size(430, 932);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
       final asset = _imageAsset('61.png');
       store.notes
         ..clear()
@@ -291,6 +343,7 @@ void main() {
               ..insert(NoteEmbed.attachment(asset.id).toDeltaData())
               ..insert('\n'),
             assets: [asset],
+            tags: const ['cc'],
           ),
         );
 
@@ -314,6 +367,10 @@ void main() {
       final inlineImage = find.byKey(ValueKey('note-image-${asset.id.value}'));
       expect(inlineImage, findsOneWidget);
       expect(
+        find.byKey(ValueKey('note-image-frame-${asset.id.value}')),
+        findsNothing,
+      );
+      expect(
         tester.getRect(bodyText).bottom,
         lessThanOrEqualTo(tester.getRect(inlineImage).top),
       );
@@ -323,6 +380,14 @@ void main() {
         ),
         findsOneWidget,
       );
+      final noteId = store.notes.single.id.value;
+      final sheetRect = tester.getRect(
+        find.byKey(ValueKey('delta-note-$noteId')),
+      );
+      final timeRect = tester.getRect(
+        find.byKey(ValueKey('delta-note-footer-time-$noteId')),
+      );
+      expect(sheetRect.right - timeRect.right, closeTo(28, 1));
     },
   );
 
@@ -481,6 +546,7 @@ Note _note(
   String title, {
   required Delta document,
   List<NoteAsset> assets = const [],
+  List<String> tags = const [],
 }) {
   final now = DateTime.utc(2026, 7, 23, 12);
   return Note(
@@ -488,6 +554,7 @@ Note _note(
     title: title,
     document: NoteDocument.fromDelta(document),
     assets: assets,
+    tags: tags,
     revision: 1,
     createdAt: now,
     updatedAt: now,

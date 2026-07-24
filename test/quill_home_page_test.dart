@@ -3,6 +3,7 @@ import 'package:fknotes/models/local_chat.dart';
 import 'package:fknotes/models/note.dart';
 import 'package:fknotes/models/note_document.dart';
 import 'package:fknotes/pages/note_library_page.dart';
+import 'package:fknotes/pages/note_quill_editor_page.dart';
 import 'package:fknotes/pages/quill_home_page.dart';
 import 'package:fknotes/providers/app_lock_controller.dart';
 import 'package:fknotes/providers/app_locale_controller.dart';
@@ -214,6 +215,90 @@ void main() {
 
     expect(_searchEditable(tester).focusNode.hasFocus, isFalse);
     expect(tester.testTextInput.isVisible, isFalse);
+  });
+
+  testWidgets('done returns home and reveals the saved note card', (
+    tester,
+  ) async {
+    final created = _note('完成后定位', updatedAt: DateTime.utc(2026, 7, 23, 12));
+    await tester.pumpWidget(
+      _TestApp(
+        child: QuillHomePage(
+          controller: controller,
+          editorBuilder: (context, note) => Scaffold(
+            body: Center(
+              child: TextButton(
+                key: const Key('finish-test-editor'),
+                onPressed: () {
+                  store.notes.add(created);
+                  Navigator.pop(
+                    context,
+                    NoteEditorRouteResult(note: created, completed: true),
+                  );
+                },
+                child: const Text('完成'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await _pump(tester);
+
+    await tester.tap(find.byKey(const Key('quill-home-new-note')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('finish-test-editor')));
+    await _pump(tester);
+
+    expect(find.byType(NoteLibraryPage), findsOneWidget);
+    expect(find.text('完成后定位'), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('index-ticks-current'))).data,
+      '3',
+    );
+  });
+
+  testWidgets('done exits an assistant source editor back to home', (
+    tester,
+  ) async {
+    final sourceNote = store.notes.last;
+    await tester.pumpWidget(
+      _TestApp(
+        child: QuillHomePage(
+          controller: controller,
+          noteLoader: store.get,
+          assistantBuilder: (context, onOpenNote) =>
+              _testAssistant(context, onOpenNote, sourceNote),
+          editorBuilder: (context, note) => Scaffold(
+            body: Center(
+              child: TextButton(
+                key: const Key('finish-assistant-source-editor'),
+                onPressed: () => Navigator.pop(
+                  context,
+                  NoteEditorRouteResult(note: note, completed: true),
+                ),
+                child: const Text('完成'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await _pump(tester);
+
+    await tester.tap(find.byKey(const Key('quill-home-assistant')));
+    await _pump(tester);
+    await tester.tap(find.byKey(const Key('open-assistant-source')));
+    await _pump(tester);
+    await tester.tap(find.byKey(const Key('finish-assistant-source-editor')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('全新 Delta 本地助手'), findsNothing);
+    expect(find.byType(NoteLibraryPage), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('index-ticks-current'))).data,
+      '2',
+    );
   });
 
   testWidgets('bulk selection uses a compact grid and hides note creation', (

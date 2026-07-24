@@ -3380,6 +3380,30 @@ abstract class AppLocalizations {
   /// **'新笔记'**
   String get newNote;
 
+  /// No description provided for @finishEditing.
+  ///
+  /// In zh, this message translates to:
+  /// **'完成'**
+  String get finishEditing;
+
+  /// No description provided for @releaseToInsertImages.
+  ///
+  /// In zh, this message translates to:
+  /// **'松开以插入图片'**
+  String get releaseToInsertImages;
+
+  /// No description provided for @onlyImagesCanBeDropped.
+  ///
+  /// In zh, this message translates to:
+  /// **'这里只能拖入图片'**
+  String get onlyImagesCanBeDropped;
+
+  /// No description provided for @droppedImagesRejected.
+  ///
+  /// In zh, this message translates to:
+  /// **'部分文件不是支持的图片或超过 20 MB'**
+  String get droppedImagesRejected;
+
   /// No description provided for @autosaveEnabled.
   ///
   /// In zh, this message translates to:

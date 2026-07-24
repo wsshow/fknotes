@@ -11,6 +11,8 @@ import '../models/note.dart';
 import '../models/note_document.dart';
 import '../services/note_audio_playback_service.dart';
 import 'app_popup_menu.dart';
+import 'note_attachment_title_sheet.dart';
+import 'note_external_image_drop.dart';
 
 typedef NoteAssetImageProvider = ImageProvider? Function(NoteAsset asset);
 typedef NoteAssetPathResolver = String? Function(NoteAsset asset);
@@ -67,6 +69,7 @@ final class NoteQuillEditor extends StatefulWidget {
     this.onEditImage,
     this.onViewImageOriginal,
     this.onShowImageDetails,
+    this.onDropImages,
     this.readOnly = false,
     this.placeholder = '开始记录…',
     super.key,
@@ -83,6 +86,7 @@ final class NoteQuillEditor extends StatefulWidget {
   final NoteImageAssetAction? onEditImage;
   final NoteImageAssetAction? onViewImageOriginal;
   final NoteImageAssetAction? onShowImageDetails;
+  final NoteExternalImageDropHandler? onDropImages;
   final bool readOnly;
   final String placeholder;
 
@@ -162,8 +166,10 @@ final class _NoteRichDocumentPreviewState
             resolveAssetPath: widget.resolveAssetPath,
             audioPlayback: null,
             onOpenAsset: null,
+            selectedAssetId: null,
             onAssetInteraction: _ignoreInteraction,
-            onToggleImageActions: _ignoreAttachment,
+            onSelectAsset: _ignoreAttachment,
+            onToggleAssetSelection: _ignoreAttachment,
             onAssetDragStarted: _ignoreDragStart,
             onAssetDragUpdate: _ignoreOffset,
             onAssetDragEnded: _ignoreInteraction,
@@ -202,11 +208,12 @@ final class _NoteQuillEditorState extends State<NoteQuillEditor> {
   final _quillEditorKey = GlobalKey<quill.QuillEditorState>();
   final _editorStackKey = GlobalKey();
   late final ScrollController _fallbackScrollController;
-  NoteAttachmentId? _activeImageId;
+  NoteAttachmentId? _activeAssetId;
   ({NoteEmbedKind kind, int offset})? _activeBlock;
   _NoteAssetDragData? _draggingAsset;
   int? _dropOffset;
   double? _dropIndicatorY;
+  var _externalImageDragActive = false;
 
   ScrollController get _effectiveScrollController =>
       widget.scrollController ?? _fallbackScrollController;
@@ -244,25 +251,42 @@ final class _NoteQuillEditorState extends State<NoteQuillEditor> {
 
     bool handleAssetTap(
       Offset globalPosition,
-      TextPosition Function(Offset offset) getPosition,
-    ) {
+      TextPosition Function(Offset offset) getPosition, {
+      required bool toggleImageSelection,
+    }) {
       final position = getPosition(globalPosition);
       if (!controller.isBlockEmbedAtOffset(position.offset)) {
-        if (_activeImageId != null || _activeBlock != null) {
+        if (_activeAssetId != null || _activeBlock != null) {
           setState(() {
-            _activeImageId = null;
+            _activeAssetId = null;
             _activeBlock = null;
           });
         }
         return false;
       }
       dismissEditorFocus();
+      if (toggleImageSelection) {
+        final asset = controller.attachmentAtOffset(position.offset);
+        if (asset?.kind == NoteAssetKind.image) {
+          if (readOnly) {
+            if (asset != null) onOpenAsset?.call(asset);
+          } else {
+            setState(() {
+              _activeBlock = null;
+              _activeAssetId = _activeAssetId == asset!.id ? null : asset.id;
+            });
+          }
+        }
+      }
       return true;
     }
 
-    final activeImage = _activeImageId == null
+    final activeAsset = _activeAssetId == null
         ? null
-        : controller.asset(_activeImageId!);
+        : controller.asset(_activeAssetId!);
+    final activeImage = activeAsset?.kind == NoteAssetKind.image
+        ? activeAsset
+        : null;
     final activeBlock = _activeBlock;
     final showsContextActions = activeImage != null || activeBlock != null;
     final editor = quill.QuillEditor.basic(
@@ -285,10 +309,16 @@ final class _NoteQuillEditorState extends State<NoteQuillEditor> {
         enableInteractiveSelection: true,
         enableSelectionToolbar: true,
         textInputAction: TextInputAction.newline,
-        onTapDown: (details, getPosition) =>
-            handleAssetTap(details.globalPosition, getPosition),
-        onTapUp: (details, getPosition) =>
-            handleAssetTap(details.globalPosition, getPosition),
+        onTapDown: (details, getPosition) => handleAssetTap(
+          details.globalPosition,
+          getPosition,
+          toggleImageSelection: false,
+        ),
+        onTapUp: (details, getPosition) => handleAssetTap(
+          details.globalPosition,
+          getPosition,
+          toggleImageSelection: true,
+        ),
         embedBuilders: [
           _NoteAssetEmbedBuilder(
             session: controller,
@@ -296,10 +326,18 @@ final class _NoteQuillEditorState extends State<NoteQuillEditor> {
             resolveAssetPath: resolveAssetPath,
             audioPlayback: audioPlayback,
             onOpenAsset: onOpenAsset,
+            selectedAssetId: _activeAssetId,
             onAssetInteraction: dismissEditorFocus,
-            onToggleImageActions: (id) => setState(() {
+            onSelectAsset: (id) {
+              if (_activeAssetId == id && _activeBlock == null) return;
+              setState(() {
+                _activeBlock = null;
+                _activeAssetId = id;
+              });
+            },
+            onToggleAssetSelection: (id) => setState(() {
               _activeBlock = null;
-              _activeImageId = _activeImageId == id ? null : id;
+              _activeAssetId = _activeAssetId == id ? null : id;
             }),
             onAssetDragStarted: _startAssetDrag,
             onAssetDragUpdate: _updateDropLocation,
@@ -318,7 +356,7 @@ final class _NoteQuillEditorState extends State<NoteQuillEditor> {
         ],
       ),
     );
-    return DragTarget<_NoteAssetDragData>(
+    final editorDropTarget = DragTarget<_NoteAssetDragData>(
       onWillAcceptWithDetails: (_) => !readOnly,
       onLeave: (_) => _clearDropLocation(),
       onAcceptWithDetails: (details) {
@@ -337,13 +375,55 @@ final class _NoteQuillEditorState extends State<NoteQuillEditor> {
         fit: StackFit.expand,
         children: [
           editor,
-          if (_draggingAsset != null && _dropIndicatorY != null)
+          if ((_draggingAsset != null || _externalImageDragActive) &&
+              _dropIndicatorY != null)
             Positioned(
               key: const Key('note-asset-drop-indicator'),
               top: _dropIndicatorY! - 2,
               left: 24,
               right: 24,
               child: const IgnorePointer(child: _AssetDropIndicator()),
+            ),
+          if (_externalImageDragActive)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  key: const Key('note-external-image-drop-overlay'),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentSoft.withValues(alpha: .16),
+                    border: Border.all(
+                      color: AppColors.mechanicalBlue.withValues(alpha: .62),
+                    ),
+                  ),
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: Container(
+                      margin: const EdgeInsets.only(top: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: const BoxDecoration(
+                        color: AppColors.paperSecondary,
+                        border: Border(
+                          left: BorderSide(color: AppColors.mechanicalBlue),
+                          right: BorderSide(color: AppColors.line),
+                          top: BorderSide(color: AppColors.line),
+                          bottom: BorderSide(color: AppColors.line),
+                        ),
+                      ),
+                      child: Text(
+                        context.l10n.releaseToInsertImages,
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(
+                              color: AppColors.mechanicalBlue,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
           if (!readOnly &&
               activeImage != null &&
@@ -369,7 +449,7 @@ final class _NoteQuillEditorState extends State<NoteQuillEditor> {
                     : () => onShowImageDetails(activeImage),
                 onRemove: () {
                   controller.removeAsset(activeImage.id);
-                  setState(() => _activeImageId = null);
+                  setState(() => _activeAssetId = null);
                 },
               ),
             ),
@@ -393,11 +473,20 @@ final class _NoteQuillEditorState extends State<NoteQuillEditor> {
         ],
       ),
     );
+    final onDropImages = widget.onDropImages;
+    if (readOnly || onDropImages == null) return editorDropTarget;
+    return NoteExternalImageDropRegion(
+      enabled: !readOnly,
+      captureDocumentOffset: _captureExternalDropOffset,
+      onDropImages: onDropImages,
+      onDropActiveChanged: _setExternalImageDragActive,
+      child: editorDropTarget,
+    );
   }
 
   void _toggleBlockActions(NoteEmbedKind kind, int offset) {
     setState(() {
-      _activeImageId = null;
+      _activeAssetId = null;
       final active = _activeBlock;
       _activeBlock = active?.kind == kind && active?.offset == offset
           ? null
@@ -408,7 +497,7 @@ final class _NoteQuillEditorState extends State<NoteQuillEditor> {
   void _startAssetDrag(_NoteAssetDragData data) {
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
-      _activeImageId = null;
+      _activeAssetId = null;
       _activeBlock = null;
       _draggingAsset = data;
       _dropOffset = null;
@@ -435,6 +524,38 @@ final class _NoteQuillEditorState extends State<NoteQuillEditor> {
     setState(() {
       _dropOffset = null;
       _dropIndicatorY = null;
+    });
+  }
+
+  int? _captureExternalDropOffset(Offset globalOffset) {
+    final stackBox =
+        _editorStackKey.currentContext?.findRenderObject() as RenderBox?;
+    if (stackBox == null ||
+        !stackBox.paintBounds.contains(stackBox.globalToLocal(globalOffset))) {
+      _clearDropLocation();
+      return null;
+    }
+    _updateDropLocation(globalOffset);
+    final dropOffset = _dropOffset;
+    if (dropOffset != null) return dropOffset;
+    final selection = widget.controller.quillController.selection;
+    final fallbackOffset = selection.extentOffset < 0
+        ? 0
+        : selection.extentOffset;
+    return widget.controller.blockDropOffsetFor(
+      fallbackOffset,
+      afterLine: true,
+    );
+  }
+
+  void _setExternalImageDragActive(bool active) {
+    if (!mounted || _externalImageDragActive == active) return;
+    setState(() {
+      _externalImageDragActive = active;
+      if (!active && _draggingAsset == null) {
+        _dropOffset = null;
+        _dropIndicatorY = null;
+      }
     });
   }
 
@@ -510,10 +631,12 @@ final class NoteQuillToolbar extends StatelessWidget {
     this.onOpenAssistant,
     this.onInsertImage,
     this.onRecordAudio,
+    this.onDone,
     this.assistantTooltip = 'AI 创作',
     this.imageTooltip = '插入图片',
     this.recordTooltip = '录音',
     this.dividerTooltip = '插入分隔线',
+    this.doneLabel,
     super.key,
   });
 
@@ -521,10 +644,12 @@ final class NoteQuillToolbar extends StatelessWidget {
   final VoidCallback? onOpenAssistant;
   final VoidCallback? onInsertImage;
   final VoidCallback? onRecordAudio;
+  final VoidCallback? onDone;
   final String assistantTooltip;
   final String imageTooltip;
   final String recordTooltip;
   final String dividerTooltip;
+  final String? doneLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -565,119 +690,160 @@ final class NoteQuillToolbar extends StatelessWidget {
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
-          child: Column(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              SingleChildScrollView(
-                key: const Key('quill-toolbar-scroll-view'),
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  key: const Key('quill-toolbar-actions'),
-                  children: [
-                    if (onOpenAssistant != null)
-                      _NoteToolbarActionButton(
-                        key: const Key('quill-open-inline-assistant'),
-                        tooltip: assistantTooltip,
-                        onPressed: onOpenAssistant!,
-                        icon: Icons.auto_awesome_rounded,
+              Expanded(
+                child: SingleChildScrollView(
+                  key: const Key('quill-toolbar-scroll-view'),
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    key: const Key('quill-toolbar-actions'),
+                    children: [
+                      if (onOpenAssistant != null)
+                        _NoteToolbarActionButton(
+                          key: const Key('quill-open-inline-assistant'),
+                          tooltip: assistantTooltip,
+                          onPressed: onOpenAssistant!,
+                          icon: Icons.auto_awesome_rounded,
+                        ),
+                      if (onInsertImage != null)
+                        _NoteToolbarActionButton(
+                          key: const Key('quill-insert-image'),
+                          tooltip: imageTooltip,
+                          onPressed: onInsertImage!,
+                          icon: Icons.image_outlined,
+                        ),
+                      if (onRecordAudio != null)
+                        _NoteToolbarActionButton(
+                          key: const Key('quill-record-audio'),
+                          tooltip: recordTooltip,
+                          onPressed: onRecordAudio!,
+                          icon: Icons.graphic_eq_rounded,
+                        ),
+                      quill.QuillToolbarHistoryButton(
+                        key: const Key('quill-toolbar-undo'),
+                        controller: quillController,
+                        isUndo: true,
+                        baseOptions: baseOptions,
                       ),
-                    if (onInsertImage != null)
-                      _NoteToolbarActionButton(
-                        key: const Key('quill-insert-image'),
-                        tooltip: imageTooltip,
-                        onPressed: onInsertImage!,
-                        icon: Icons.image_outlined,
+                      quill.QuillToolbarHistoryButton(
+                        key: const Key('quill-toolbar-redo'),
+                        controller: quillController,
+                        isUndo: false,
+                        baseOptions: baseOptions,
                       ),
-                    if (onRecordAudio != null)
-                      _NoteToolbarActionButton(
-                        key: const Key('quill-record-audio'),
-                        tooltip: recordTooltip,
-                        onPressed: onRecordAudio!,
-                        icon: Icons.graphic_eq_rounded,
+                      quill.QuillToolbarToggleStyleButton(
+                        key: const Key('quill-toolbar-bold'),
+                        controller: quillController,
+                        attribute: quill.Attribute.bold,
+                        baseOptions: baseOptions,
                       ),
-                    quill.QuillToolbarHistoryButton(
-                      key: const Key('quill-toolbar-undo'),
-                      controller: quillController,
-                      isUndo: true,
-                      baseOptions: baseOptions,
-                    ),
-                    quill.QuillToolbarHistoryButton(
-                      key: const Key('quill-toolbar-redo'),
-                      controller: quillController,
-                      isUndo: false,
-                      baseOptions: baseOptions,
-                    ),
-                    quill.QuillToolbarToggleStyleButton(
-                      key: const Key('quill-toolbar-bold'),
-                      controller: quillController,
-                      attribute: quill.Attribute.bold,
-                      baseOptions: baseOptions,
-                    ),
-                    quill.QuillToolbarToggleCheckListButton(
-                      key: const Key('quill-toolbar-checklist'),
-                      controller: quillController,
-                      baseOptions: baseOptions,
-                    ),
-                    quill.QuillToolbarToggleStyleButton(
-                      key: const Key('quill-toolbar-bullets'),
-                      controller: quillController,
-                      attribute: quill.Attribute.ul,
-                      baseOptions: baseOptions,
-                    ),
-                    quill.QuillToolbarToggleStyleButton(
-                      key: const Key('quill-toolbar-numbered-list'),
-                      controller: quillController,
-                      attribute: quill.Attribute.ol,
-                      baseOptions: baseOptions,
-                    ),
-                    quill.QuillToolbarToggleStyleButton(
-                      key: const Key('quill-toolbar-quote'),
-                      controller: quillController,
-                      attribute: quill.Attribute.blockQuote,
-                      baseOptions: baseOptions,
-                    ),
-                    quill.QuillToolbarToggleStyleButton(
-                      key: const Key('quill-toolbar-italic'),
-                      controller: quillController,
-                      attribute: quill.Attribute.italic,
-                      baseOptions: baseOptions,
-                    ),
-                    quill.QuillToolbarToggleStyleButton(
-                      key: const Key('quill-toolbar-underline'),
-                      controller: quillController,
-                      attribute: quill.Attribute.underline,
-                      baseOptions: baseOptions,
-                    ),
-                    quill.QuillToolbarSelectHeaderStyleDropdownButton(
-                      key: const Key('quill-toolbar-heading'),
-                      controller: quillController,
-                      baseOptions: baseOptions,
-                    ),
-                    quill.QuillToolbarLinkStyleButton(
-                      key: const Key('quill-toolbar-link'),
-                      controller: quillController,
-                      baseOptions: baseOptions,
-                    ),
-                    _NoteToolbarActionButton(
-                      key: const Key('quill-toolbar-divider'),
-                      tooltip: dividerTooltip,
-                      onPressed: controller.insertDivider,
-                      icon: Icons.horizontal_rule_rounded,
-                    ),
-                    quill.QuillToolbarClearFormatButton(
-                      key: const Key('quill-toolbar-clear-format'),
-                      controller: quillController,
-                      baseOptions: baseOptions,
-                    ),
-                  ],
+                      quill.QuillToolbarToggleCheckListButton(
+                        key: const Key('quill-toolbar-checklist'),
+                        controller: quillController,
+                        baseOptions: baseOptions,
+                      ),
+                      quill.QuillToolbarToggleStyleButton(
+                        key: const Key('quill-toolbar-bullets'),
+                        controller: quillController,
+                        attribute: quill.Attribute.ul,
+                        baseOptions: baseOptions,
+                      ),
+                      quill.QuillToolbarToggleStyleButton(
+                        key: const Key('quill-toolbar-numbered-list'),
+                        controller: quillController,
+                        attribute: quill.Attribute.ol,
+                        baseOptions: baseOptions,
+                      ),
+                      quill.QuillToolbarToggleStyleButton(
+                        key: const Key('quill-toolbar-quote'),
+                        controller: quillController,
+                        attribute: quill.Attribute.blockQuote,
+                        baseOptions: baseOptions,
+                      ),
+                      quill.QuillToolbarToggleStyleButton(
+                        key: const Key('quill-toolbar-italic'),
+                        controller: quillController,
+                        attribute: quill.Attribute.italic,
+                        baseOptions: baseOptions,
+                      ),
+                      quill.QuillToolbarToggleStyleButton(
+                        key: const Key('quill-toolbar-underline'),
+                        controller: quillController,
+                        attribute: quill.Attribute.underline,
+                        baseOptions: baseOptions,
+                      ),
+                      quill.QuillToolbarSelectHeaderStyleDropdownButton(
+                        key: const Key('quill-toolbar-heading'),
+                        controller: quillController,
+                        baseOptions: baseOptions,
+                      ),
+                      quill.QuillToolbarLinkStyleButton(
+                        key: const Key('quill-toolbar-link'),
+                        controller: quillController,
+                        baseOptions: baseOptions,
+                      ),
+                      _NoteToolbarActionButton(
+                        key: const Key('quill-toolbar-divider'),
+                        tooltip: dividerTooltip,
+                        onPressed: controller.insertDivider,
+                        icon: Icons.horizontal_rule_rounded,
+                      ),
+                      quill.QuillToolbarClearFormatButton(
+                        key: const Key('quill-toolbar-clear-format'),
+                        controller: quillController,
+                        baseOptions: baseOptions,
+                      ),
+                    ],
+                  ),
                 ),
               ),
+              if (doneLabel case final label?)
+                _NoteToolbarDoneButton(label: label, onPressed: onDone),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+final class _NoteToolbarDoneButton extends StatelessWidget {
+  const _NoteToolbarDoneButton({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      const SizedBox(
+        height: 28,
+        child: VerticalDivider(width: 9, thickness: 1, color: AppColors.line),
+      ),
+      SizedBox(
+        height: 44,
+        child: TextButton(
+          key: const Key('quill-toolbar-done'),
+          onPressed: onPressed,
+          style: TextButton.styleFrom(
+            foregroundColor: AppColors.mechanicalBlue,
+            disabledForegroundColor: AppColors.muted,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            minimumSize: const Size(0, 44),
+            shape: const RoundedRectangleBorder(),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: Text(
+            label,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+        ),
+      ),
+    ],
+  );
 }
 
 final class _NoteToolbarActionButton extends StatelessWidget {
@@ -721,8 +887,10 @@ final class _NoteAssetEmbedBuilder extends quill.EmbedBuilder {
     required this.resolveAssetPath,
     required this.audioPlayback,
     required this.onOpenAsset,
+    required this.selectedAssetId,
     required this.onAssetInteraction,
-    required this.onToggleImageActions,
+    required this.onSelectAsset,
+    required this.onToggleAssetSelection,
     required this.onAssetDragStarted,
     required this.onAssetDragUpdate,
     required this.onAssetDragEnded,
@@ -733,8 +901,10 @@ final class _NoteAssetEmbedBuilder extends quill.EmbedBuilder {
   final NoteAssetPathResolver? resolveAssetPath;
   final NoteAudioPlaybackDriver? audioPlayback;
   final ValueChanged<NoteAsset>? onOpenAsset;
+  final NoteAttachmentId? selectedAssetId;
   final VoidCallback onAssetInteraction;
-  final ValueChanged<NoteAttachmentId> onToggleImageActions;
+  final ValueChanged<NoteAttachmentId> onSelectAsset;
+  final ValueChanged<NoteAttachmentId> onToggleAssetSelection;
   final ValueChanged<_NoteAssetDragData> onAssetDragStarted;
   final ValueChanged<Offset> onAssetDragUpdate;
   final VoidCallback onAssetDragEnded;
@@ -766,8 +936,9 @@ final class _NoteAssetEmbedBuilder extends quill.EmbedBuilder {
         asset: asset,
         provider: imageProvider,
         readOnly: embedContext.readOnly,
+        selected: selectedAssetId == asset.id,
         onInteraction: onAssetInteraction,
-        onToggleActions: () => onToggleImageActions(asset.id),
+        onToggleSelection: () => onToggleAssetSelection(asset.id),
         onOpen: onOpenAsset == null ? null : () => onOpenAsset!(asset),
       );
     } else if (asset.kind == NoteAssetKind.audio) {
@@ -777,7 +948,10 @@ final class _NoteAssetEmbedBuilder extends quill.EmbedBuilder {
         filePath: resolveAssetPath?.call(asset),
         playback: audioPlayback,
         readOnly: embedContext.readOnly,
+        selected: selectedAssetId == asset.id,
         onInteraction: onAssetInteraction,
+        onSelect: () => onSelectAsset(asset.id),
+        onToggleSelection: () => onToggleAssetSelection(asset.id),
         onRename: (displayName) =>
             session.updateAsset(asset.copyWith(displayName: displayName)),
         onRemove: () {
@@ -792,6 +966,11 @@ final class _NoteAssetEmbedBuilder extends quill.EmbedBuilder {
         key: ValueKey('note-asset-${asset.id.value}'),
         asset: asset,
         readOnly: embedContext.readOnly,
+        selected: selectedAssetId == asset.id,
+        onInteraction: () {
+          onAssetInteraction();
+          onToggleAssetSelection(asset.id);
+        },
         onOpen: onOpenAsset == null ? null : () => onOpenAsset!(asset),
         onRemove: () => session.removeEmbedAt(embedContext.node.documentOffset),
       );
@@ -955,13 +1134,52 @@ final class _AssetDropIndicator extends StatelessWidget {
 
 enum _AudioAssetAction { rename, remove }
 
+final class _AssetSelectionFrame extends StatelessWidget {
+  const _AssetSelectionFrame({
+    required this.asset,
+    required this.selected,
+    required this.borderRadius,
+    required this.child,
+  });
+
+  final NoteAsset asset;
+  final bool selected;
+  final BorderRadius borderRadius;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!selected) return child;
+    return Stack(
+      fit: StackFit.passthrough,
+      children: [
+        child,
+        Positioned.fill(
+          child: IgnorePointer(
+            child: DecoratedBox(
+              key: ValueKey('note-asset-selection-${asset.id.value}'),
+              decoration: BoxDecoration(
+                borderRadius: borderRadius,
+                border: Border.all(color: AppColors.accent, width: 2),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 final class _AudioAssetBlock extends StatelessWidget {
   const _AudioAssetBlock({
     required this.asset,
     required this.filePath,
     required this.playback,
     required this.readOnly,
+    required this.selected,
     required this.onInteraction,
+    required this.onSelect,
+    required this.onToggleSelection,
     required this.onRename,
     required this.onRemove,
     super.key,
@@ -971,7 +1189,10 @@ final class _AudioAssetBlock extends StatelessWidget {
   final String? filePath;
   final NoteAudioPlaybackDriver? playback;
   final bool readOnly;
+  final bool selected;
   final VoidCallback onInteraction;
+  final VoidCallback onSelect;
+  final VoidCallback onToggleSelection;
   final ValueChanged<String?> onRename;
   final VoidCallback onRemove;
 
@@ -988,8 +1209,12 @@ final class _AudioAssetBlock extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onPointerDown: (_) => onInteraction(),
       child: GestureDetector(
+        key: ValueKey('note-audio-selection-target-${asset.id.value}'),
         behavior: HitTestBehavior.opaque,
-        onTap: onInteraction,
+        onTap: () {
+          onInteraction();
+          onToggleSelection();
+        },
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: content,
@@ -1016,171 +1241,186 @@ final class _AudioAssetBlock extends StatelessWidget {
 
     return Semantics(
       label: '${context.l10n.record}：${asset.displayTitle}',
-      child: Material(
-        color: AppColors.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.medium),
-          side: const BorderSide(color: AppColors.line),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            if (constraints.maxWidth < 180) {
-              return _buildCompactPreview(context, duration);
-            }
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(10, 10, 6, 10),
-              child: Row(
-                children: [
-                  IconButton(
-                    key: ValueKey('play-note-audio-${asset.id.value}'),
-                    tooltip: playing
-                        ? context.l10n.pauseRecording
-                        : context.l10n.playRecording,
-                    onPressed: driver == null || filePath == null
-                        ? null
-                        : () {
-                            onInteraction();
-                            unawaited(
-                              driver.toggle(
-                                assetId: asset.id.value,
-                                filePath: filePath!,
-                              ),
-                            );
-                          },
-                    style: IconButton.styleFrom(
-                      backgroundColor: AppColors.accentSoft,
-                      foregroundColor: AppColors.accent,
-                      disabledBackgroundColor: AppColors.surfaceMuted,
-                      fixedSize: const Size.square(44),
+      selected: selected,
+      child: _AssetSelectionFrame(
+        asset: asset,
+        selected: selected,
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+        child: Material(
+          color: AppColors.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.medium),
+            side: const BorderSide(color: AppColors.line),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 180) {
+                return _buildCompactPreview(context, duration);
+              }
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(10, 10, 6, 10),
+                child: Row(
+                  children: [
+                    IconButton(
+                      key: ValueKey('play-note-audio-${asset.id.value}'),
+                      tooltip: playing
+                          ? context.l10n.pauseRecording
+                          : context.l10n.playRecording,
+                      onPressed: driver == null || filePath == null
+                          ? null
+                          : () {
+                              onInteraction();
+                              onSelect();
+                              unawaited(
+                                driver.toggle(
+                                  assetId: asset.id.value,
+                                  filePath: filePath!,
+                                ),
+                              );
+                            },
+                      style: IconButton.styleFrom(
+                        backgroundColor: AppColors.accentSoft,
+                        foregroundColor: AppColors.accent,
+                        disabledBackgroundColor: AppColors.surfaceMuted,
+                        fixedSize: const Size.square(44),
+                      ),
+                      icon: loading
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Icon(
+                              playing
+                                  ? Icons.pause_rounded
+                                  : failed
+                                  ? Icons.refresh_rounded
+                                  : Icons.play_arrow_rounded,
+                            ),
                     ),
-                    icon: loading
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Icon(
-                            playing
-                                ? Icons.pause_rounded
-                                : failed
-                                ? Icons.refresh_rounded
-                                : Icons.play_arrow_rounded,
-                          ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          asset.displayTitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: AppColors.ink,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Text(
-                              failed
-                                  ? context.l10n.recordingPlaybackFailed
-                                  : _formatAudioDuration(position),
-                              style: TextStyle(
-                                color: failed
-                                    ? AppColors.danger
-                                    : AppColors.muted,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                              ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            asset.displayTitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppColors.ink,
+                              fontWeight: FontWeight.w600,
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: SliderTheme(
-                                data: SliderTheme.of(context).copyWith(
-                                  trackHeight: 2,
-                                  thumbShape: const RoundSliderThumbShape(
-                                    enabledThumbRadius: 5,
-                                    disabledThumbRadius: 4,
-                                  ),
-                                  overlayShape: const RoundSliderOverlayShape(
-                                    overlayRadius: 12,
-                                  ),
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Text(
+                                failed
+                                    ? context.l10n.recordingPlaybackFailed
+                                    : _formatAudioDuration(position),
+                                style: TextStyle(
+                                  color: failed
+                                      ? AppColors.danger
+                                      : AppColors.muted,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
                                 ),
-                                child: Slider(
-                                  key: ValueKey(
-                                    'note-audio-progress-${asset.id.value}',
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: SliderTheme(
+                                  data: SliderTheme.of(context).copyWith(
+                                    trackHeight: 2,
+                                    thumbShape: const RoundSliderThumbShape(
+                                      enabledThumbRadius: 5,
+                                      disabledThumbRadius: 4,
+                                    ),
+                                    overlayShape: const RoundSliderOverlayShape(
+                                      overlayRadius: 12,
+                                    ),
                                   ),
-                                  value: value,
-                                  max: maximum,
-                                  onChanged:
-                                      !active ||
-                                          driver == null ||
-                                          duration <= Duration.zero
-                                      ? null
-                                      : (next) {
-                                          onInteraction();
-                                          unawaited(
-                                            driver.seek(
-                                              assetId: asset.id.value,
-                                              position: Duration(
-                                                milliseconds: next.round(),
+                                  child: Slider(
+                                    key: ValueKey(
+                                      'note-audio-progress-${asset.id.value}',
+                                    ),
+                                    value: value,
+                                    max: maximum,
+                                    onChanged:
+                                        !active ||
+                                            driver == null ||
+                                            duration <= Duration.zero
+                                        ? null
+                                        : (next) {
+                                            onInteraction();
+                                            onSelect();
+                                            unawaited(
+                                              driver.seek(
+                                                assetId: asset.id.value,
+                                                position: Duration(
+                                                  milliseconds: next.round(),
+                                                ),
                                               ),
-                                            ),
-                                          );
-                                        },
+                                            );
+                                          },
+                                  ),
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              _formatAudioDuration(duration),
-                              style: const TextStyle(
-                                color: AppColors.muted,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
+                              const SizedBox(width: 8),
+                              Text(
+                                _formatAudioDuration(duration),
+                                style: const TextStyle(
+                                  color: AppColors.muted,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (!readOnly)
+                      Listener(
+                        onPointerDown: (_) {
+                          onInteraction();
+                          onSelect();
+                        },
+                        child: AppAnchoredMenuButton<_AudioAssetAction>(
+                          key: ValueKey('note-audio-actions-${asset.id.value}'),
+                          tooltip: context.l10n.recordingActions,
+                          icon: const Icon(Icons.more_vert_rounded, size: 20),
+                          actions: [
+                            AppMenuAction(
+                              value: _AudioAssetAction.rename,
+                              icon: Icons.edit_outlined,
+                              label: context.l10n.renameAttachment,
+                            ),
+                            AppMenuAction(
+                              value: _AudioAssetAction.remove,
+                              icon: Icons.delete_outline_rounded,
+                              label: context.l10n.remove,
+                              destructive: true,
                             ),
                           ],
+                          onSelected: (action) {
+                            onInteraction();
+                            onSelect();
+                            switch (action) {
+                              case _AudioAssetAction.rename:
+                                unawaited(_rename(context));
+                              case _AudioAssetAction.remove:
+                                onRemove();
+                            }
+                          },
                         ),
-                      ],
-                    ),
-                  ),
-                  if (!readOnly)
-                    AppAnchoredMenuButton<_AudioAssetAction>(
-                      key: ValueKey('note-audio-actions-${asset.id.value}'),
-                      tooltip: context.l10n.recordingActions,
-                      icon: const Icon(Icons.more_vert_rounded, size: 20),
-                      actions: [
-                        AppMenuAction(
-                          value: _AudioAssetAction.rename,
-                          icon: Icons.edit_outlined,
-                          label: context.l10n.renameAttachment,
-                        ),
-                        AppMenuAction(
-                          value: _AudioAssetAction.remove,
-                          icon: Icons.delete_outline_rounded,
-                          label: context.l10n.remove,
-                          destructive: true,
-                        ),
-                      ],
-                      onSelected: (action) {
-                        onInteraction();
-                        switch (action) {
-                          case _AudioAssetAction.rename:
-                            unawaited(_rename(context));
-                          case _AudioAssetAction.remove:
-                            onRemove();
-                        }
-                      },
-                    ),
-                ],
-              ),
-            );
-          },
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
         ),
       ),
     );
@@ -1226,49 +1466,13 @@ final class _AudioAssetBlock extends StatelessWidget {
       );
 
   Future<void> _rename(BuildContext context) async {
-    var value = asset.displayTitle;
-    final result = await showDialog<_AudioRenameResult>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(context.l10n.editAttachmentTitle),
-        content: TextFormField(
-          key: const Key('audio-attachment-title'),
-          initialValue: value,
-          onChanged: (next) => value = next,
-          autofocus: true,
-          maxLength: 120,
-          decoration: InputDecoration(
-            labelText: context.l10n.attachmentTitle,
-            hintText: context.l10n.attachmentTitleHint,
-            helperText: context.l10n.attachmentTitleDescription,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text(context.l10n.cancel),
-          ),
-          TextButton(
-            onPressed: () =>
-                Navigator.pop(dialogContext, const _AudioRenameResult(null)),
-            child: Text(context.l10n.restoreOriginalFileName),
-          ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.pop(dialogContext, _AudioRenameResult(value.trim())),
-            child: Text(context.l10n.save),
-          ),
-        ],
-      ),
+    final result = await showNoteAttachmentTitleSheet(
+      context,
+      initialValue: asset.displayTitle,
+      fieldKey: const Key('audio-attachment-title'),
     );
     if (result != null) onRename(result.displayName);
   }
-}
-
-final class _AudioRenameResult {
-  const _AudioRenameResult(this.displayName);
-
-  final String? displayName;
 }
 
 final class _NoteDividerEmbedBuilder extends quill.EmbedBuilder {
@@ -1447,8 +1651,9 @@ final class _ImageAssetBlock extends StatelessWidget {
     required this.asset,
     required this.provider,
     required this.readOnly,
+    required this.selected,
     required this.onInteraction,
-    required this.onToggleActions,
+    required this.onToggleSelection,
     required this.onOpen,
     super.key,
   });
@@ -1456,8 +1661,9 @@ final class _ImageAssetBlock extends StatelessWidget {
   final NoteAsset asset;
   final ImageProvider? provider;
   final bool readOnly;
+  final bool selected;
   final VoidCallback onInteraction;
-  final VoidCallback onToggleActions;
+  final VoidCallback onToggleSelection;
   final VoidCallback? onOpen;
 
   void _handleImageTap() {
@@ -1466,7 +1672,7 @@ final class _ImageAssetBlock extends StatelessWidget {
       onOpen?.call();
       return;
     }
-    onToggleActions();
+    onToggleSelection();
   }
 
   @override
@@ -1474,42 +1680,24 @@ final class _ImageAssetBlock extends StatelessWidget {
     return Semantics(
       label: '图片：${asset.displayTitle}',
       button: true,
+      selected: selected,
       onTap: _handleImageTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: _handleImageTap,
-          child: Align(
-            alignment: Alignment.center,
-            child: Container(
-              key: ValueKey('note-image-frame-${asset.id.value}'),
-              padding: const EdgeInsets.fromLTRB(6, 6, 6, 9),
-              decoration: BoxDecoration(
-                color: AppColors.paperPrimary,
-                borderRadius: BorderRadius.circular(AppRadius.small),
-                border: Border.all(color: AppColors.line),
-                boxShadow: AppShadows.paperEdge,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(3),
-                    child: provider == null
-                        ? _AssetFallback(asset: asset, minHeight: 180)
-                        : _NaturalRatioImage(
-                            key: ValueKey('note-image-${asset.id.value}'),
-                            asset: asset,
-                            provider: provider!,
-                          ),
+        key: ValueKey('note-image-selection-target-${asset.id.value}'),
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: _AssetSelectionFrame(
+          asset: asset,
+          selected: selected,
+          borderRadius: BorderRadius.circular(4),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: provider == null
+                ? _AssetFallback(asset: asset, minHeight: 180)
+                : _NaturalRatioImage(
+                    key: ValueKey('note-image-${asset.id.value}'),
+                    asset: asset,
+                    provider: provider!,
                   ),
-                  const SizedBox(height: 6),
-                  const _ImageFrameMark(),
-                ],
-              ),
-            ),
           ),
         ),
       ),
@@ -1631,31 +1819,6 @@ final class _NaturalRatioImageState extends State<_NaturalRatioImage> {
     _imageInfo?.dispose();
     super.dispose();
   }
-}
-
-final class _ImageFrameMark extends StatelessWidget {
-  const _ImageFrameMark();
-
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Container(
-        width: 18,
-        height: 1,
-        color: AppColors.mechanicalBlue.withValues(alpha: .62),
-      ),
-      const SizedBox(width: 5),
-      Container(
-        width: 3,
-        height: 3,
-        decoration: BoxDecoration(
-          color: AppColors.mechanicalBlue.withValues(alpha: .74),
-          shape: BoxShape.circle,
-        ),
-      ),
-    ],
-  );
 }
 
 final class _ImageActionBar extends StatelessWidget {
@@ -1852,6 +2015,8 @@ final class _FileAssetBlock extends StatelessWidget {
   const _FileAssetBlock({
     required this.asset,
     required this.readOnly,
+    required this.selected,
+    required this.onInteraction,
     required this.onOpen,
     required this.onRemove,
     super.key,
@@ -1859,67 +2024,82 @@ final class _FileAssetBlock extends StatelessWidget {
 
   final NoteAsset asset;
   final bool readOnly;
+  final bool selected;
+  final VoidCallback onInteraction;
   final VoidCallback? onOpen;
   final VoidCallback onRemove;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 8),
-    child: Material(
-      color: AppColors.surfaceMuted,
-      shape: RoundedRectangleBorder(
+  Widget build(BuildContext context) => Semantics(
+    selected: selected,
+    button: true,
+    label: asset.displayTitle,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: _AssetSelectionFrame(
+        asset: asset,
+        selected: selected,
         borderRadius: BorderRadius.circular(AppRadius.medium),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onOpen,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
-          child: Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(AppRadius.small),
-                ),
-                child: Icon(
-                  _iconFor(asset.kind),
-                  color: AppColors.accent,
-                  size: 21,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      asset.displayTitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.ink,
-                        fontWeight: FontWeight.w600,
-                      ),
+        child: Material(
+          color: AppColors.surfaceMuted,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.medium),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () {
+              onInteraction();
+              onOpen?.call();
+            },
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(AppRadius.small),
                     ),
-                    const SizedBox(height: 3),
-                    Text(
-                      asset.mimeType,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.muted,
-                        fontSize: 12,
-                      ),
+                    child: Icon(
+                      _iconFor(asset.kind),
+                      color: AppColors.accent,
+                      size: 21,
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          asset.displayTitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.ink,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          asset.mimeType,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.muted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (!readOnly) _RemoveButton(onPressed: onRemove),
+                ],
               ),
-              if (!readOnly) _RemoveButton(onPressed: onRemove),
-            ],
+            ),
           ),
         ),
       ),

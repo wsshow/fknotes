@@ -87,7 +87,10 @@ void main() {
               as Map<String, dynamic>;
       expect(manifest['kind'], 'fknotes.delta-backup');
       expect(manifest['formatVersion'], 2);
-      expect(manifest['databaseSchemaVersion'], 1);
+      expect(
+        manifest['databaseSchemaVersion'],
+        NoteDatabaseService.schemaVersion,
+      );
       expect(manifest['documentSchemaVersion'], 1);
       expect(manifest['noteCount'], 1);
       expect(manifest['assetCount'], 1);

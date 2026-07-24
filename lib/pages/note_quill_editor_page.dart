@@ -9,6 +9,7 @@ import 'package:permission_handler/permission_handler.dart' as permissions;
 import 'package:quill_native_bridge/quill_native_bridge.dart';
 
 import '../app.dart';
+import '../debug/app_diagnostics.dart';
 import '../editor/note_editor_controller.dart';
 import '../l10n/l10n.dart';
 import '../l10n/local_model_l10n.dart';
@@ -32,7 +33,9 @@ import '../services/note_read_aloud_service.dart';
 import '../services/note_repository.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/app_popup_menu.dart';
+import '../widgets/note_attachment_title_sheet.dart';
 import '../widgets/note_inline_assistant_composer.dart';
+import '../widgets/note_external_image_drop.dart';
 import '../widgets/note_quill_editor.dart';
 import '../widgets/note_recording_bar.dart';
 import '../widgets/quiet_paper.dart';
@@ -98,6 +101,17 @@ typedef NoteAudioAssetImporter =
     });
 typedef NoteReadAloudAvailabilityChecker = Future<bool> Function();
 typedef NoteLanguageModelAvailabilityChecker = Future<bool> Function();
+
+/// The result returned when the note editor closes.
+///
+/// [completed] distinguishes the explicit toolbar action from system or
+/// header back navigation so callers can return through intermediate routes.
+final class NoteEditorRouteResult {
+  const NoteEditorRouteResult({required this.note, required this.completed});
+
+  final Note? note;
+  final bool completed;
+}
 
 abstract interface class NoteInlineAssistantDriver {
   Future<void> load();
@@ -337,7 +351,19 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
         });
       }
       return true;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppDiagnostics.error(
+        AppLogCategory.editor,
+        'note_autosave_failed',
+        data: {
+          'revision': _note.revision,
+          'dirtyVersion': _dirtyVersion,
+          'savedVersion': _savedVersion,
+          'assetCount': _editor.assets.length,
+        },
+        error: error,
+        stackTrace: stackTrace,
+      );
       if (mounted) setState(() => _saveState = _EditorSaveState.failed);
       return false;
     }
@@ -965,6 +991,66 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     }
   }
 
+  Future<void> _handleDroppedImages(
+    NoteDroppedImageBatch batch,
+    int documentOffset,
+  ) async {
+    final operation = (_imageImport ?? Future<void>.value()).then(
+      (_) => _importDroppedImages(batch, documentOffset),
+    );
+    _imageImport = operation;
+    await operation;
+    if (identical(_imageImport, operation)) _imageImport = null;
+  }
+
+  Future<void> _importDroppedImages(
+    NoteDroppedImageBatch batch,
+    int documentOffset,
+  ) async {
+    if (batch.images.isEmpty) {
+      if (mounted) {
+        AppFeedback.error(context, context.l10n.onlyImagesCanBeDropped);
+      }
+      return;
+    }
+    setState(() => _importingImage = true);
+    var insertionOffset = documentOffset;
+    var importFailures = 0;
+    try {
+      for (final image in batch.images) {
+        NoteAsset? imported;
+        try {
+          imported = await _importImage(
+            image.bytes,
+            originalName: image.originalName,
+          );
+          if (!mounted) {
+            await _deleteAssetFilesBestEffort(imported);
+            return;
+          }
+          _editor.insertAssetAt(imported, insertionOffset);
+          insertionOffset += 2;
+          imported = null;
+        } catch (_) {
+          importFailures++;
+          if (imported != null) await _deleteAssetFilesBestEffort(imported);
+        }
+      }
+      if (!mounted) return;
+      _editorFocusNode.unfocus();
+      if (batch.rejectedCount > 0) {
+        AppFeedback.error(context, context.l10n.droppedImagesRejected);
+      } else if (importFailures > 0) {
+        AppFeedback.error(
+          context,
+          context.l10n.attachmentImportTypeFailed(context.l10n.image),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _importingImage = false);
+    }
+  }
+
   static Future<PickedNoteImage?> _pickImageFromDevice(
     ImageSource source,
   ) async {
@@ -1053,40 +1139,10 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
   }
 
   Future<void> _renameImage(NoteAsset requestedAsset) async {
-    var value = requestedAsset.displayTitle;
-    final result = await showDialog<_ImageRenameResult>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(context.l10n.editAttachmentTitle),
-        content: TextFormField(
-          key: const Key('image-attachment-title'),
-          initialValue: value,
-          onChanged: (next) => value = next,
-          autofocus: true,
-          maxLength: 120,
-          decoration: InputDecoration(
-            labelText: context.l10n.attachmentTitle,
-            hintText: context.l10n.attachmentTitleHint,
-            helperText: context.l10n.attachmentTitleDescription,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text(context.l10n.cancel),
-          ),
-          TextButton(
-            onPressed: () =>
-                Navigator.pop(dialogContext, const _ImageRenameResult(null)),
-            child: Text(context.l10n.restoreOriginalFileName),
-          ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.pop(dialogContext, _ImageRenameResult(value.trim())),
-            child: Text(context.l10n.save),
-          ),
-        ],
-      ),
+    final result = await showNoteAttachmentTitleSheet(
+      context,
+      initialValue: requestedAsset.displayTitle,
+      fieldKey: const Key('image-attachment-title'),
     );
     if (result == null || !mounted) return;
     final current = _editor.asset(requestedAsset.id);
@@ -1450,7 +1506,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     '',
   );
 
-  Future<void> _requestClose() async {
+  Future<void> _requestClose({bool completed = false}) async {
     if (_closing) return;
     setState(() => _closing = true);
     if (_inlineAssistantBusy) await _stopInlineAssistant();
@@ -1513,7 +1569,10 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
       }
     }
 
-    final result = _note.revision == 0 ? null : _note;
+    final result = NoteEditorRouteResult(
+      note: _note.revision == 0 ? null : _note,
+      completed: completed,
+    );
     setState(() => _allowPop = true);
     await WidgetsBinding.instance.endOfFrame;
     if (mounted) Navigator.pop(context, result);
@@ -1549,7 +1608,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
       : AppColors.muted;
 
   @override
-  Widget build(BuildContext context) => PopScope<Note?>(
+  Widget build(BuildContext context) => PopScope<Object?>(
     canPop: _allowPop,
     onPopInvokedWithResult: (didPop, _) {
       if (!didPop) unawaited(_requestClose());
@@ -1629,6 +1688,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
                             onEditImage: _editImage,
                             onViewImageOriginal: _viewOriginalImage,
                             onShowImageDetails: _showImageDetails,
+                            onDropImages: _handleDroppedImages,
                             placeholder: context.l10n.noteStartHint,
                             readOnly:
                                 _inlineAssistantBusy ||
@@ -1692,9 +1752,13 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
                     onOpenAssistant: _toggleInlineAssistant,
                     onInsertImage: _showImageSourceSheet,
                     onRecordAudio: () => unawaited(_startRecording()),
+                    onDone: _closing
+                        ? null
+                        : () => unawaited(_requestClose(completed: true)),
                     assistantTooltip: context.l10n.writeWithAi,
                     imageTooltip: context.l10n.image,
                     recordTooltip: context.l10n.record,
+                    doneLabel: context.l10n.finishEditing,
                   ),
               ],
             ),
@@ -1906,12 +1970,6 @@ enum _FailedSaveAction { keepEditing, retry, discard }
 enum _QuillEditorMenuAction { share, tags, pin, save, delete }
 
 enum _ImageEditAction { rename, gallery, camera }
-
-final class _ImageRenameResult {
-  const _ImageRenameResult(this.displayName);
-
-  final String? displayName;
-}
 
 bool _sameTags(List<String> left, List<String> right) {
   if (left.length != right.length) return false;

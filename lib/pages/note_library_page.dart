@@ -23,12 +23,20 @@ typedef NoteLibraryEditorBuilder =
 
 typedef NoteLibraryImageResolver = ImageProvider? Function(NoteAsset asset);
 
+/// A one-shot request for the library to reveal a specific note card.
+final class NoteLibraryFocusRequest {
+  const NoteLibraryFocusRequest(this.noteId);
+
+  final NoteId noteId;
+}
+
 /// Standalone library for the Delta note model.
 final class NoteLibraryPage extends StatefulWidget {
   const NoteLibraryPage({
     this.controller,
     this.editorBuilder,
     this.resolveImage,
+    this.focusRequest,
     this.onOpenAssistant,
     this.onOpenData,
     this.onSelectionModeChanged,
@@ -38,6 +46,7 @@ final class NoteLibraryPage extends StatefulWidget {
   final NoteLibraryController? controller;
   final NoteLibraryEditorBuilder? editorBuilder;
   final NoteLibraryImageResolver? resolveImage;
+  final NoteLibraryFocusRequest? focusRequest;
   final VoidCallback? onOpenAssistant;
   final VoidCallback? onOpenData;
   final ValueChanged<bool>? onSelectionModeChanged;
@@ -75,6 +84,21 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
     _pageController = PageController(viewportFraction: .42);
     _controller.addListener(_onChanged);
     unawaited(_controller.initialize());
+    if (widget.focusRequest case final request?) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_refreshAndReveal(request.noteId));
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant NoteLibraryPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final request = widget.focusRequest;
+    if (request == null || identical(request, oldWidget.focusRequest)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_refreshAndReveal(request.noteId));
+    });
   }
 
   void _onChanged() {
@@ -227,13 +251,47 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
     final builder =
         widget.editorBuilder ??
         (context, value) => NoteQuillEditorPage(initialNote: value);
-    await Navigator.push<Note?>(
+    final result = await Navigator.push<Object?>(
       context,
       MaterialPageRoute(builder: (context) => builder(context, note)),
     );
     if (!mounted) return;
     _dismissSearchFocus();
-    await _controller.refresh();
+    final savedNote = switch (result) {
+      NoteEditorRouteResult(:final note) => note,
+      Note value => value,
+      _ => null,
+    };
+    if (savedNote == null) {
+      await _controller.refresh();
+    } else {
+      await _refreshAndReveal(savedNote.id);
+    }
+  }
+
+  Future<void> _refreshAndReveal(NoteId noteId) async {
+    _searchTimer?.cancel();
+    _dismissSearchFocus();
+    _searchController.clear();
+    if (_controller.query.isEmpty) {
+      await _controller.refresh();
+    } else {
+      await _controller.search('');
+    }
+    if (!mounted) return;
+
+    final targetIndex = _controller.notes.indexWhere(
+      (note) => note.id == noteId,
+    );
+    setState(() {
+      _searchExpanded = false;
+      _searchOriginNoteId = null;
+      if (targetIndex >= 0) _currentIndex = targetIndex;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_pageController.hasClients || targetIndex < 0) return;
+      _pageController.jumpToPage(targetIndex);
+    });
   }
 
   void _dismissSearchFocus() {
@@ -329,103 +387,116 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
               math.max(220.0, constraints.maxWidth - 104),
             );
             final searchWidth = _searchExpanded
-                ? math.min(250.0, deckWidth * .82)
-                : math.min(176.0, deckWidth * .72);
+                ? math.min(320.0, deckWidth * .9)
+                : math.min(116.0, deckWidth * .46);
             final reduceMotion = MediaQuery.disableAnimationsOf(context);
-            return Stack(
-              children: [
-                Positioned(
-                  top: 66,
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  child: Align(
-                    alignment: Alignment.topCenter,
-                    child: SizedBox(
-                      width: deckWidth,
-                      height: constraints.maxHeight - 66,
-                      child: _buildContent(context),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  top: 24,
-                  bottom: 16,
-                  left: 0,
-                  width: 38,
-                  child: BrandSpine(
-                    label: widget.onOpenData == null
-                        ? context.l10n.library
-                        : context.l10n.appTitle,
-                  ),
-                ),
-                AnimatedPositioned(
-                  duration: reduceMotion
-                      ? Duration.zero
-                      : const Duration(milliseconds: 220),
-                  curve: Curves.easeOutCubic,
-                  top: 0,
-                  left: (constraints.maxWidth - searchWidth) / 2,
-                  width: searchWidth,
-                  child: _buildSearchHandle(context),
-                ),
-                Positioned(
-                  top: 58,
-                  right: 0,
-                  child: EdgeToolDock(
-                    actions: [
-                      if (widget.onOpenAssistant != null)
-                        EdgeToolAction(
-                          buttonKey: const Key('quill-home-assistant'),
-                          tooltip: context.l10n.localAssistant,
-                          onPressed: _openAssistant,
-                          icon: Icons.auto_awesome_outlined,
-                        ),
-                      EdgeToolAction(
-                        buttonKey: widget.onOpenData != null
-                            ? const Key('delta-library-open-data')
-                            : null,
-                        tooltip: widget.onOpenData != null
-                            ? context.l10n.localData
-                            : context.l10n.retry,
-                        onPressed: widget.onOpenData != null
-                            ? _openData
-                            : _controller.isLoading
-                            ? null
-                            : () => unawaited(_controller.refresh()),
-                        icon: widget.onOpenData != null
-                            ? Icons.tune_rounded
-                            : Icons.refresh_rounded,
-                      ),
-                    ],
-                  ),
-                ),
-                if (_controller.notes.isNotEmpty)
+            return GestureDetector(
+              key: const Key('delta-library-dismiss-expanded-search'),
+              behavior: HitTestBehavior.translucent,
+              excludeFromSemantics: true,
+              onTap: _searchExpanded
+                  ? () => unawaited(_collapseSearch())
+                  : null,
+              child: Stack(
+                children: [
                   Positioned(
-                    top: constraints.maxHeight * .34,
-                    bottom: constraints.maxHeight * .27,
+                    top: 66,
+                    bottom: 0,
+                    left: 0,
                     right: 0,
-                    width: 64,
-                    child: IndexTicks(
-                      index: _currentIndex,
-                      count: _controller.notes.length,
-                      onDrag: _jumpToFraction,
-                    ),
-                  ),
-                if (_controller.notes.isNotEmpty)
-                  Positioned.fill(
                     child: Align(
-                      alignment: Alignment.topLeft,
-                      child: CompositedTransformFollower(
-                        link: _activeNoteMenuLink,
-                        showWhenUnlinked: false,
-                        targetAnchor: Alignment.topRight,
-                        followerAnchor: Alignment.topRight,
-                        child: _buildActiveNoteMenu(context),
+                      alignment: Alignment.topCenter,
+                      child: SizedBox(
+                        width: deckWidth,
+                        height: constraints.maxHeight - 66,
+                        child: _buildContent(context),
                       ),
                     ),
                   ),
-              ],
+                  Positioned(
+                    top: 24,
+                    bottom: 16,
+                    left: 0,
+                    width: 38,
+                    child: BrandSpine(
+                      label: widget.onOpenData == null
+                          ? context.l10n.library
+                          : context.l10n.appTitle,
+                    ),
+                  ),
+                  AnimatedPositioned(
+                    duration: reduceMotion
+                        ? Duration.zero
+                        : const Duration(milliseconds: 220),
+                    curve: Curves.easeOutCubic,
+                    top: 0,
+                    left: (constraints.maxWidth - searchWidth) / 2,
+                    width: searchWidth,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      excludeFromSemantics: true,
+                      onTap: () {},
+                      child: _buildSearchHandle(context),
+                    ),
+                  ),
+                  Positioned(
+                    top: 58,
+                    right: 0,
+                    child: EdgeToolDock(
+                      actions: [
+                        if (widget.onOpenAssistant != null)
+                          EdgeToolAction(
+                            buttonKey: const Key('quill-home-assistant'),
+                            tooltip: context.l10n.localAssistant,
+                            onPressed: _openAssistant,
+                            icon: Icons.auto_awesome_outlined,
+                          ),
+                        EdgeToolAction(
+                          buttonKey: widget.onOpenData != null
+                              ? const Key('delta-library-open-data')
+                              : null,
+                          tooltip: widget.onOpenData != null
+                              ? context.l10n.localData
+                              : context.l10n.retry,
+                          onPressed: widget.onOpenData != null
+                              ? _openData
+                              : _controller.isLoading
+                              ? null
+                              : () => unawaited(_controller.refresh()),
+                          icon: widget.onOpenData != null
+                              ? Icons.tune_rounded
+                              : Icons.refresh_rounded,
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (_controller.notes.isNotEmpty)
+                    Positioned(
+                      top: constraints.maxHeight * .34,
+                      bottom: constraints.maxHeight * .27,
+                      right: 0,
+                      width: 64,
+                      child: IndexTicks(
+                        index: _currentIndex,
+                        count: _controller.notes.length,
+                        onDrag: _jumpToFraction,
+                      ),
+                    ),
+                  if (_controller.notes.isNotEmpty)
+                    Positioned.fill(
+                      child: Align(
+                        alignment: Alignment.topLeft,
+                        child: CompositedTransformFollower(
+                          link: _activeNoteMenuLink,
+                          showWhenUnlinked: false,
+                          targetAnchor: Alignment.topRight,
+                          followerAnchor: Alignment.topRight,
+                          child: _buildActiveNoteMenu(context),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             );
           },
         ),
@@ -442,69 +513,95 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
     child: _searchExpanded
         ? SearchPullHandle(
             key: const Key('delta-library-search-expanded'),
-            child: SizedBox(
-              height: 39,
-              child: SearchBar(
-                key: const Key('delta-library-search'),
-                controller: _searchController,
-                focusNode: _searchFocusNode,
-                hintText: context.l10n.searchNotes,
-                textStyle: const WidgetStatePropertyAll(
-                  TextStyle(color: AppColors.ink, fontSize: 13),
-                ),
-                hintStyle: const WidgetStatePropertyAll(
-                  TextStyle(color: AppColors.muted, fontSize: 13),
-                ),
-                elevation: const WidgetStatePropertyAll(0),
-                backgroundColor: const WidgetStatePropertyAll(
-                  Colors.transparent,
-                ),
-                surfaceTintColor: const WidgetStatePropertyAll(
-                  Colors.transparent,
-                ),
-                shape: const WidgetStatePropertyAll(StadiumBorder()),
-                padding: const WidgetStatePropertyAll(
-                  EdgeInsets.symmetric(horizontal: 3),
-                ),
-                leading: IconButton(
-                  key: const Key('delta-library-collapse-search'),
-                  tooltip: context.l10n.close,
-                  onPressed: () => unawaited(_collapseSearch()),
-                  icon: const Icon(
-                    Icons.keyboard_arrow_up_rounded,
-                    size: 20,
-                    color: AppColors.mechanicalBlue,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 40,
+                  child: IconButton(
+                    key: const Key('delta-library-collapse-search'),
+                    tooltip: context.l10n.close,
+                    onPressed: () => unawaited(_collapseSearch()),
+                    padding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(
+                      Icons.keyboard_arrow_up_rounded,
+                      size: 19,
+                      color: AppColors.mechanicalBlue,
+                    ),
                   ),
                 ),
-                trailing: [
-                  if (_searchController.text.isNotEmpty)
-                    IconButton(
-                      tooltip: context.l10n.close,
-                      onPressed: () {
-                        _searchController.clear();
-                        _searchTimer?.cancel();
-                        unawaited(_controller.search(''));
-                        setState(() {});
-                      },
-                      icon: const Icon(Icons.close_rounded, size: 18),
-                    )
-                  else
-                    const Icon(
-                      Icons.search_rounded,
-                      size: 18,
-                      color: AppColors.muted,
+                SizedBox(
+                  height: 20,
+                  child: VerticalDivider(
+                    width: 1,
+                    thickness: .8,
+                    color: AppColors.line.withValues(alpha: .9),
+                  ),
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: TextField(
+                    key: const Key('delta-library-search'),
+                    controller: _searchController,
+                    focusNode: _searchFocusNode,
+                    textInputAction: TextInputAction.search,
+                    style: const TextStyle(
+                      color: AppColors.ink,
+                      fontSize: 13,
+                      height: 1.2,
                     ),
-                ],
-                onChanged: (value) {
-                  _scheduleSearch(value);
-                  setState(() {});
-                },
-              ),
+                    decoration: InputDecoration(
+                      filled: false,
+                      hintText: context.l10n.searchNotes,
+                      hintStyle: const TextStyle(
+                        color: AppColors.muted,
+                        fontSize: 13,
+                      ),
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    onChanged: (value) {
+                      _scheduleSearch(value);
+                      setState(() {});
+                    },
+                  ),
+                ),
+                SizedBox(
+                  width: 42,
+                  child: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          tooltip: context.l10n.close,
+                          padding: EdgeInsets.zero,
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () {
+                            _searchController.clear();
+                            _searchTimer?.cancel();
+                            unawaited(_controller.search(''));
+                            setState(() {});
+                          },
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            size: 17,
+                            color: AppColors.muted,
+                          ),
+                        )
+                      : const Center(
+                          child: Icon(
+                            Icons.search_rounded,
+                            size: 18,
+                            color: AppColors.mechanicalBlue,
+                          ),
+                        ),
+                ),
+              ],
             ),
           )
         : SearchPullTab(
             key: const Key('delta-library-search-pull'),
-            label: context.l10n.pullToSearch,
+            label: context.l10n.searchNotes,
             onTap: _expandSearch,
             onVerticalDragUpdate: _updateSearchPull,
             onVerticalDragEnd: _endSearchPull,
@@ -743,7 +840,13 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
   }
 
   ImageProvider? _resolveManagedImage(NoteAsset asset) {
-    final key = asset.previewStorageKey ?? asset.storageKey;
+    final previewKey = asset.previewStorageKey;
+    // v2 thumbnails used a fixed portrait canvas and added blank bands around
+    // landscape images. Existing notes use the original until a ratio-safe v3
+    // thumbnail is available.
+    final key = previewKey != null && previewKey.endsWith('_thumb_v3.jpg')
+        ? previewKey
+        : asset.storageKey;
     try {
       final file = File(FileStorageService.instance.absolutePath(key));
       return FileImage(file);
@@ -1047,44 +1150,67 @@ final class _RolodexNoteSheet extends StatelessWidget {
                   else
                     const Spacer(),
                   const SizedBox(height: 12),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      if (showTags && note.tags.isNotEmpty) ...[
-                        Flexible(
-                          child: Wrap(
-                            spacing: 6,
-                            runSpacing: 5,
-                            children: [
-                              for (final tag in note.tags.take(3))
-                                PaperTag(label: tag),
+                  SizedBox(
+                    key: ValueKey('delta-note-footer-${note.id.value}'),
+                    width: double.infinity,
+                    child: LayoutBuilder(
+                      builder: (context, footerConstraints) {
+                        final tagMaxWidth = math.min(
+                          156.0,
+                          footerConstraints.maxWidth * .44,
+                        );
+                        return Row(
+                          mainAxisSize: MainAxisSize.max,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            if (showTags && note.tags.isNotEmpty) ...[
+                              ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  maxWidth: tagMaxWidth,
+                                ),
+                                child: Wrap(
+                                  spacing: 6,
+                                  runSpacing: 5,
+                                  children: [
+                                    for (final tag in note.tags.take(3))
+                                      PaperTag(label: tag),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 10),
                             ],
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                      ],
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Container(height: 1, color: AppColors.line),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 2),
-                        child: Text(
-                          _DeltaNoteCard._friendlyTime(
-                            context,
-                            note.updatedAt.toLocal(),
-                          ),
-                          style: const TextStyle(
-                            color: AppColors.muted,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Container(
+                                  height: 1,
+                                  color: AppColors.line,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 2),
+                              child: Text(
+                                _DeltaNoteCard._friendlyTime(
+                                  context,
+                                  note.updatedAt.toLocal(),
+                                ),
+                                key: ValueKey(
+                                  'delta-note-footer-time-${note.id.value}',
+                                ),
+                                textAlign: TextAlign.right,
+                                style: const TextStyle(
+                                  color: AppColors.muted,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),

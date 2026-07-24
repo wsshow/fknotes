@@ -507,10 +507,15 @@ final class BackupService {
     final bytes = entry.readBytes();
     if (bytes == null) throw const FormatException('备份清单不完整');
     final decoded = jsonDecode(utf8.decode(bytes));
+    final databaseSchemaVersion = decoded is Map
+        ? decoded['databaseSchemaVersion']
+        : null;
     if (decoded is! Map ||
         decoded['kind'] != _backupKind ||
         decoded['formatVersion'] != _backupFormatVersion ||
-        decoded['databaseSchemaVersion'] != NoteDatabaseService.schemaVersion ||
+        databaseSchemaVersion is! int ||
+        databaseSchemaVersion < 1 ||
+        databaseSchemaVersion > NoteDatabaseService.schemaVersion ||
         decoded['documentSchemaVersion'] != NoteDocument.schemaVersion ||
         DateTime.tryParse(decoded['createdAt']?.toString() ?? '') == null ||
         decoded['noteCount'] is! int ||

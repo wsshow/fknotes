@@ -62,6 +62,7 @@ final class QuillHomePage extends StatefulWidget {
 final class _QuillHomePageState extends State<QuillHomePage> {
   late final NoteLibraryController _controller;
   late final bool _ownsController;
+  NoteLibraryFocusRequest? _libraryFocusRequest;
   var _selectionMode = false;
 
   @override
@@ -71,18 +72,30 @@ final class _QuillHomePageState extends State<QuillHomePage> {
     _controller = widget.controller ?? NoteLibraryController();
   }
 
-  Future<void> _openEditor([Note? note]) async {
+  Future<NoteEditorRouteResult?> _openEditor([Note? note]) async {
     _dismissRouteFocus();
     final builder =
         widget.editorBuilder ??
         (context, value) => NoteQuillEditorPage(initialNote: value);
-    await Navigator.push<Note?>(
+    final rawResult = await Navigator.push<Object?>(
       context,
       MaterialPageRoute(builder: (context) => builder(context, note)),
     );
-    if (!mounted) return;
+    if (!mounted) return null;
     _dismissRouteFocus();
-    await _refreshAfterRestore();
+    final result = switch (rawResult) {
+      NoteEditorRouteResult value => value,
+      Note value => NoteEditorRouteResult(note: value, completed: false),
+      _ => null,
+    };
+    if (result?.note case final savedNote?) {
+      setState(() {
+        _libraryFocusRequest = NoteLibraryFocusRequest(savedNote.id);
+      });
+    } else {
+      await _refreshAfterRestore();
+    }
+    return result;
   }
 
   Future<void> _openAssistant() async {
@@ -111,7 +124,12 @@ final class _QuillHomePageState extends State<QuillHomePage> {
       AppFeedback.error(context, context.l10n.toolActionTargetMissing);
       return;
     }
-    await _openEditor(note);
+    final result = await _openEditor(note);
+    if (result?.completed == true &&
+        mounted &&
+        Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
   }
 
   Future<void> _refreshAfterRestore() async {
@@ -153,6 +171,7 @@ final class _QuillHomePageState extends State<QuillHomePage> {
     body: NoteLibraryPage(
       controller: _controller,
       editorBuilder: widget.editorBuilder,
+      focusRequest: _libraryFocusRequest,
       onOpenAssistant: _openAssistant,
       onOpenData: _openData,
       onSelectionModeChanged: (value) {

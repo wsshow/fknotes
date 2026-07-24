@@ -194,7 +194,7 @@ class FileStorageService {
   ) async {
     final sourcePath = absolutePath(imagePath);
     if (!await File(sourcePath).exists()) return '';
-    final thumbFilename = '${_uuid.v4()}_thumb_v2.jpg';
+    final thumbFilename = '${_uuid.v4()}_thumb_v3.jpg';
     final relativePath = p.join(subDirectory, thumbFilename);
     final outputPath = absolutePath(relativePath);
     final generated = await Isolate.run(
@@ -332,34 +332,22 @@ bool _generateThumbnailFile(String sourcePath, String outputPath) {
     final decoded = img.decodeImage(File(sourcePath).readAsBytesSync());
     if (decoded == null) return false;
     final oriented = img.bakeOrientation(decoded);
-    const width = 300;
-    const height = 360;
-    const padding = 18;
+    const width = 640;
+    const height = 640;
     final scale = [
-      (width - padding * 2) / oriented.width,
-      (height - padding * 2) / oriented.height,
+      width / oriented.width,
+      height / oriented.height,
       1.0,
     ].reduce((current, candidate) => current < candidate ? current : candidate);
     final preview = img.copyResize(
       oriented,
-      width: (oriented.width * scale)
-          .round()
-          .clamp(1, width - padding * 2)
-          .toInt(),
-      height: (oriented.height * scale)
-          .round()
-          .clamp(1, height - padding * 2)
-          .toInt(),
+      width: (oriented.width * scale).round().clamp(1, width).toInt(),
+      height: (oriented.height * scale).round().clamp(1, height).toInt(),
     );
-    final canvas = img.Image(width: width, height: height);
-    img.fill(canvas, color: img.ColorRgb8(250, 247, 242));
-    img.compositeImage(
-      canvas,
-      preview,
-      dstX: (width - preview.width) ~/ 2,
-      dstY: (height - preview.height) ~/ 2,
-    );
-    File(outputPath).writeAsBytesSync(img.encodeJpg(canvas, quality: 86));
+    final flattened = img.Image(width: preview.width, height: preview.height);
+    img.fill(flattened, color: img.ColorRgb8(250, 247, 242));
+    img.compositeImage(flattened, preview);
+    File(outputPath).writeAsBytesSync(img.encodeJpg(flattened, quality: 86));
     return true;
   } catch (_) {
     return false;

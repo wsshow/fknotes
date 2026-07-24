@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:desktop_drop/desktop_drop.dart';
+import 'package:fknotes/debug/app_diagnostics.dart';
 import 'package:fknotes/l10n/generated/app_localizations.dart';
 import 'package:fknotes/models/local_llm.dart';
 import 'package:fknotes/models/note.dart';
@@ -13,6 +14,7 @@ import 'package:fknotes/services/note_audio_playback_service.dart';
 import 'package:fknotes/services/note_audio_recording_service.dart';
 import 'package:fknotes/services/note_read_aloud_service.dart';
 import 'package:fknotes/widgets/note_recording_bar.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:flutter_quill/quill_delta.dart';
@@ -96,6 +98,29 @@ void main() {
     expect(writer.notes.single.title, '退出前保存');
   });
 
+  testWidgets('done action saves immediately and returns to the opener', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _RouteTestApp(
+        page: NoteQuillEditorPage(
+          writerLoader: () async => writer,
+          autosaveDelay: const Duration(minutes: 1),
+          now: () => DateTime.utc(2026, 7, 23, 16),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('open-quill-editor')));
+    await _pumpFor(tester, const Duration(milliseconds: 400));
+    await tester.enterText(find.byKey(const Key('quill-note-title')), '完成后定位');
+    await tester.tap(find.byKey(const Key('quill-toolbar-done')));
+    await _pumpFor(tester, const Duration(milliseconds: 800));
+
+    expect(find.byKey(const Key('open-quill-editor')), findsOneWidget);
+    expect(writer.notes.single.title, '完成后定位');
+  });
+
   testWidgets('serializes a newer edit behind an in-flight create', (
     tester,
   ) async {
@@ -125,6 +150,30 @@ void main() {
     expect(writer.updateCalls, 1);
     expect(writer.notes.single.title, '第二版');
     expect(writer.notes.single.revision, 2);
+  });
+
+  testWidgets('records the root cause when automatic saving fails', (
+    tester,
+  ) async {
+    writer.createError = StateError('NOT NULL constraint failed: notes.status');
+    await tester.pumpWidget(
+      _TestApp(
+        child: NoteQuillEditorPage(
+          writerLoader: () async => writer,
+          autosaveDelay: const Duration(milliseconds: 10),
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byKey(const Key('quill-note-title')), '迁移失败诊断');
+    await _pumpFor(tester, const Duration(milliseconds: 200));
+
+    final record = AppDiagnostics.instance
+        .snapshot(categories: {AppLogCategory.editor})
+        .lastWhere((item) => item.event == 'note_autosave_failed');
+    expect(record.level, AppLogLevel.error);
+    expect(record.error, contains('notes.status'));
+    expect(record.data['revision'], 0);
   });
 
   testWidgets('does not persist an untouched empty draft', (tester) async {
@@ -206,6 +255,118 @@ void main() {
       saved.assets.single.id,
     ]);
     expect(find.byIcon(Icons.image_outlined), findsOneWidget);
+
+    final image = find.byKey(ValueKey('note-image-${importedAsset!.id.value}'));
+    await tester.ensureVisible(image);
+    await tester.tap(image);
+    await _pumpFor(tester, const Duration(milliseconds: 350));
+    await tester.tap(
+      find.byKey(ValueKey('edit-note-image-${importedAsset!.id.value}')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('修改标题'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.byKey(const Key('image-attachment-title')), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const Key('image-attachment-title')),
+      '重命名图片',
+    );
+    await tester.tap(find.byKey(const Key('save-attachment-title')));
+    await _pumpFor(tester, const Duration(milliseconds: 300));
+
+    expect(writer.notes.single.assets.single.displayTitle, '重命名图片');
+  });
+
+  testWidgets('imports an externally dropped image at the visible drop point', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final now = DateTime.utc(2026, 7, 23, 17, 30);
+    NoteAsset? importedAsset;
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: NoteQuillEditorPage(
+          writerLoader: () async => writer,
+          importImage: (bytes, {required originalName}) async {
+            expect(bytes, _onePixelPng);
+            expect(originalName, '外部拖入.png');
+            importedAsset = NoteAsset(
+              id: NoteAttachmentId.generate(),
+              kind: NoteAssetKind.image,
+              storageKey: 'notes/images/dropped.png',
+              originalName: originalName,
+              byteLength: bytes.length,
+              mimeType: 'image/png',
+              createdAt: now,
+              updatedAt: now,
+            );
+            return importedAsset!;
+          },
+          resolveImage: (_) => MemoryImage(_onePixelPng),
+          autosaveDelay: const Duration(milliseconds: 50),
+        ),
+      ),
+    );
+    await _pumpFor(tester, const Duration(milliseconds: 200));
+
+    final region = find.byKey(const Key('note-external-image-drop-region'));
+    final globalPosition = tester.getCenter(
+      find.byKey(const Key('quill-note-body')),
+    );
+    final dropTarget = tester.widget<DropTarget>(region);
+    dropTarget.onDragEntered!(
+      DropEventDetails(
+        localPosition: const Offset(40, 80),
+        globalPosition: globalPosition,
+      ),
+    );
+    await tester.pump();
+    expect(
+      find.byKey(const Key('note-external-image-drop-overlay')),
+      findsOneWidget,
+    );
+
+    dropTarget.onDragDone!(
+      DropDoneDetails(
+        files: [
+          DropItemFile.fromData(
+            _onePixelPng,
+            name: '外部拖入.png',
+            path: '外部拖入.png',
+            mimeType: 'image/png',
+          ),
+          DropItemFile.fromData(
+            Uint8List.fromList([1, 2, 3]),
+            name: '说明.txt',
+            path: '说明.txt',
+            mimeType: 'text/plain',
+          ),
+        ],
+        localPosition: const Offset(40, 80),
+        globalPosition: globalPosition,
+      ),
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await _pumpFor(tester, const Duration(milliseconds: 800));
+    debugDefaultTargetPlatformOverride = null;
+
+    expect(
+      find.byKey(const Key('note-external-image-drop-overlay')),
+      findsNothing,
+    );
+    expect(importedAsset, isNotNull);
+    expect(
+      find.byKey(ValueKey('note-image-${importedAsset!.id.value}')),
+      findsOneWidget,
+    );
+    expect(writer.notes.single.assets.single.originalName, '外部拖入.png');
+    expect(find.text('部分文件不是支持的图片或超过 20 MB'), findsOneWidget);
   });
 
   testWidgets('records, pauses and inserts a managed audio card', (
@@ -696,6 +857,7 @@ final class _MemoryNoteWriter implements NoteEditorWriter {
   final List<Note> notes = [];
   final List<Note> deletedNotes = [];
   Completer<void>? createGate;
+  Object? createError;
   var createCalls = 0;
   var updateCalls = 0;
 
@@ -703,6 +865,8 @@ final class _MemoryNoteWriter implements NoteEditorWriter {
   Future<Note> create(Note note) async {
     createCalls++;
     await createGate?.future;
+    final error = createError;
+    if (error != null) throw error;
     final persisted = note.copyWith(revision: 1);
     notes.add(persisted);
     return persisted;
@@ -801,7 +965,7 @@ final class _RouteTestApp extends StatelessWidget {
         body: Center(
           child: FilledButton(
             key: const Key('open-quill-editor'),
-            onPressed: () => Navigator.push<void>(
+            onPressed: () => Navigator.push<Object?>(
               context,
               MaterialPageRoute(builder: (_) => page),
             ),

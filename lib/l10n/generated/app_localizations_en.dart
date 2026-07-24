@@ -1940,6 +1940,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get newNote => 'New note';
 
   @override
+  String get finishEditing => 'Done';
+
+  @override
+  String get releaseToInsertImages => 'Release to insert images';
+
+  @override
+  String get onlyImagesCanBeDropped => 'Only images can be dropped here';
+
+  @override
+  String get droppedImagesRejected =>
+      'Some files were unsupported images or exceeded 20 MB';
+
+  @override
   String get autosaveEnabled => 'Autosave is on';
 
   @override

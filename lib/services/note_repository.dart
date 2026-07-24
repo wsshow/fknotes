@@ -24,21 +24,7 @@ final class NoteRepository {
 
   Future<void> initialize() async {
     await _database.execute('PRAGMA foreign_keys = ON');
-    await _database.execute('''
-      CREATE TABLE IF NOT EXISTS notes (
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        document_json TEXT NOT NULL,
-        search_text TEXT NOT NULL,
-        is_pinned INTEGER NOT NULL CHECK(is_pinned IN (0, 1)),
-        cover_attachment_id TEXT,
-        revision INTEGER NOT NULL CHECK(revision > 0),
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL,
-        FOREIGN KEY(cover_attachment_id) REFERENCES note_assets(id)
-          ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED
-      )
-    ''');
+    await _createNotesTable(_database, 'notes');
     await _database.execute('''
       CREATE TABLE IF NOT EXISTS note_assets (
         id TEXT PRIMARY KEY,
@@ -83,6 +69,194 @@ final class NoteRepository {
       'ON note_tags(normalized_value)',
     );
     await _createSearchIndex();
+  }
+
+  static Future<void> upgrade(
+    Database database,
+    int oldVersion,
+    int newVersion,
+  ) async {
+    if (oldVersion < 2 && newVersion >= 2) {
+      await _removeLegacyOrganizationColumns(database);
+    }
+  }
+
+  static Future<void> _createNotesTable(
+    DatabaseExecutor database,
+    String tableName,
+  ) => database.execute('''
+      CREATE TABLE IF NOT EXISTS $tableName (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        document_json TEXT NOT NULL,
+        search_text TEXT NOT NULL,
+        is_pinned INTEGER NOT NULL CHECK(is_pinned IN (0, 1)),
+        cover_attachment_id TEXT,
+        revision INTEGER NOT NULL CHECK(revision > 0),
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY(cover_attachment_id) REFERENCES note_assets(id)
+          ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED
+      )
+    ''');
+
+  static Future<void> _removeLegacyOrganizationColumns(
+    Database database,
+  ) async {
+    final columns = (await database.rawQuery(
+      'PRAGMA table_info(notes)',
+    )).map((row) => row['name']).whereType<String>().toSet();
+    if (!columns.contains('status') &&
+        !columns.contains('is_favorite') &&
+        !columns.contains('trashed_at')) {
+      return;
+    }
+
+    const requiredColumns = {
+      'id',
+      'title',
+      'document_json',
+      'search_text',
+      'is_pinned',
+      'cover_attachment_id',
+      'revision',
+      'created_at',
+      'updated_at',
+    };
+    if (!columns.containsAll(requiredColumns)) {
+      throw const FormatException('旧笔记数据库结构不完整，无法安全升级');
+    }
+
+    for (final trigger in [
+      'notes_search_insert',
+      'notes_search_update',
+      'notes_search_delete',
+    ]) {
+      await database.execute('DROP TRIGGER IF EXISTS $trigger');
+    }
+    for (final table in [
+      '_fknotes_v2_assets',
+      '_fknotes_v2_tags',
+      '_fknotes_v2_covers',
+    ]) {
+      await database.execute('DROP TABLE IF EXISTS temp.$table');
+    }
+
+    await database.execute(
+      'CREATE TEMP TABLE _fknotes_v2_assets AS SELECT * FROM note_assets',
+    );
+    await database.execute(
+      'CREATE TEMP TABLE _fknotes_v2_tags AS SELECT * FROM note_tags',
+    );
+    await database.execute('''
+      CREATE TEMP TABLE _fknotes_v2_covers AS
+      SELECT id, cover_attachment_id
+      FROM notes
+      WHERE cover_attachment_id IS NOT NULL
+    ''');
+    await _createNotesTable(database, '_fknotes_v2_notes');
+    await database.execute('''
+      INSERT INTO _fknotes_v2_notes (
+        id,
+        title,
+        document_json,
+        search_text,
+        is_pinned,
+        cover_attachment_id,
+        revision,
+        created_at,
+        updated_at
+      )
+      SELECT
+        id,
+        title,
+        document_json,
+        search_text,
+        is_pinned,
+        NULL,
+        revision,
+        created_at,
+        updated_at
+      FROM notes
+    ''');
+
+    // Backups live in TEMP tables, so clearing the child rows makes replacing
+    // the parent table safe even with foreign keys enabled.
+    await database.delete('note_assets');
+    await database.delete('note_tags');
+    await database.execute('DROP TABLE notes');
+    await database.execute('ALTER TABLE _fknotes_v2_notes RENAME TO notes');
+    await database.execute('''
+      INSERT INTO note_assets (
+        id,
+        note_id,
+        kind,
+        storage_key,
+        original_name,
+        display_name,
+        byte_length,
+        mime_type,
+        preview_storage_key,
+        duration_ms,
+        ocr_text,
+        transcript,
+        transcription_engine,
+        transcribed_at,
+        created_at,
+        updated_at
+      )
+      SELECT
+        id,
+        note_id,
+        kind,
+        storage_key,
+        original_name,
+        display_name,
+        byte_length,
+        mime_type,
+        preview_storage_key,
+        duration_ms,
+        ocr_text,
+        transcript,
+        transcription_engine,
+        transcribed_at,
+        created_at,
+        updated_at
+      FROM _fknotes_v2_assets
+    ''');
+    await database.execute('''
+      INSERT INTO note_tags (
+        note_id,
+        position,
+        value,
+        normalized_value
+      )
+      SELECT note_id, position, value, normalized_value
+      FROM _fknotes_v2_tags
+    ''');
+    await database.execute('''
+      UPDATE notes
+      SET cover_attachment_id = (
+        SELECT covers.cover_attachment_id
+        FROM _fknotes_v2_covers AS covers
+        JOIN note_assets AS assets ON assets.id = covers.cover_attachment_id
+        WHERE covers.id = notes.id
+      )
+      WHERE EXISTS (
+        SELECT 1
+        FROM _fknotes_v2_covers AS covers
+        JOIN note_assets AS assets ON assets.id = covers.cover_attachment_id
+        WHERE covers.id = notes.id
+      )
+    ''');
+
+    for (final table in [
+      '_fknotes_v2_assets',
+      '_fknotes_v2_tags',
+      '_fknotes_v2_covers',
+    ]) {
+      await database.execute('DROP TABLE temp.$table');
+    }
   }
 
   Future<Note> create(Note note) async {

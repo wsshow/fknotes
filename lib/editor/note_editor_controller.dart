@@ -352,6 +352,35 @@ final class NoteEditorController extends ChangeNotifier {
     }
   }
 
+  void insertAssetAt(NoteAsset asset, int documentOffset) {
+    if (_assets.containsKey(asset.id)) {
+      throw ArgumentError('The asset already exists in this note: ${asset.id}');
+    }
+    final safeOffset = documentOffset.clamp(
+      0,
+      quillController.document.length - 1,
+    );
+    _assets[asset.id] = asset;
+    try {
+      final insertion = Delta()
+        ..insert(NoteEmbed.attachment(asset.id).toDeltaData())
+        ..insert('\n');
+      quillController.replaceText(safeOffset, 0, insertion, null);
+      quillController.updateSelection(
+        TextSelection.collapsed(
+          offset: (safeOffset + 2).clamp(
+            0,
+            quillController.document.length - 1,
+          ),
+        ),
+        ChangeSource.local,
+      );
+    } catch (_) {
+      _assets.remove(asset.id);
+      rethrow;
+    }
+  }
+
   void updateAsset(NoteAsset asset) {
     if (!_assets.containsKey(asset.id)) {
       throw ArgumentError(
@@ -367,6 +396,11 @@ final class NoteEditorController extends ChangeNotifier {
 
   bool isAttachmentEmbedAtOffset(int offset) =>
       _noteEmbedAtOffset(offset)?.kind == NoteEmbedKind.attachment;
+
+  NoteAsset? attachmentAtOffset(int offset) {
+    final id = _noteEmbedAtOffset(offset)?.attachmentId;
+    return id == null ? null : _assets[id];
+  }
 
   int blockDropOffsetFor(int textOffset, {required bool afterLine}) {
     final plainText = quillController.document.toPlainText();

@@ -1789,6 +1789,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get newNote => '新笔记';
 
   @override
+  String get finishEditing => '完成';
+
+  @override
+  String get releaseToInsertImages => '松开以插入图片';
+
+  @override
+  String get onlyImagesCanBeDropped => '这里只能拖入图片';
+
+  @override
+  String get droppedImagesRejected => '部分文件不是支持的图片或超过 20 MB';
+
+  @override
   String get autosaveEnabled => '自动保存已开启';
 
   @override

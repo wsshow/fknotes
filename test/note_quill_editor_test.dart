@@ -85,6 +85,32 @@ void main() {
       },
     );
 
+    test(
+      'inserts dropped images at the requested document offset in order',
+      () {
+        final first = _imageAsset();
+        final second = _imageAsset('72b9ed8e-983d-4b35-9032-0bb05c456e45');
+        final controller = NoteEditorController(
+          document: NoteDocument.fromPlainText('前\n后'),
+          assets: const [],
+        );
+        addTearDown(controller.dispose);
+
+        controller.insertAssetAt(first, 2);
+        controller.insertAssetAt(second, 4);
+
+        final snapshot = controller.snapshot();
+        expect(snapshot.assets, [first, second]);
+        expect(snapshot.document.toDelta().toJson(), [
+          {'insert': '前\n'},
+          {'insert': NoteEmbed.attachment(first.id).toDeltaData()},
+          {'insert': '\n'},
+          {'insert': NoteEmbed.attachment(second.id).toDeltaData()},
+          {'insert': '\n后\n'},
+        ]);
+      },
+    );
+
     test('moves a media block atomically without changing its asset', () {
       final image = _imageAsset();
       final audio = _audioAsset();
@@ -642,21 +668,15 @@ final value = 1;
       final imageFinder = find.byKey(ValueKey('note-image-${asset.id.value}'));
       final editorFinder = find.byType(NoteQuillEditor);
       expect(imageFinder, findsOneWidget);
-      final imageFrameFinder = find.byKey(
-        ValueKey('note-image-frame-${asset.id.value}'),
+      expect(
+        find.byKey(ValueKey('note-image-frame-${asset.id.value}')),
+        findsNothing,
       );
-      final imageFrame = tester.widget<Container>(imageFrameFinder);
-      final imageFrameDecoration = imageFrame.decoration! as BoxDecoration;
-      expect(imageFrameDecoration.color, AppColors.paperPrimary);
-      expect(imageFrameDecoration.border, Border.all(color: AppColors.line));
-      expect(imageFrameDecoration.boxShadow, AppShadows.paperEdge);
-      final frameSize = tester.getSize(imageFrameFinder);
       final imageSize = tester.getSize(imageFinder);
       expect(
-        frameSize.width,
+        imageSize.width,
         closeTo(tester.getSize(editorFinder).width - 48, 1),
       );
-      expect(imageSize.width, closeTo(frameSize.width - 14, 1));
       expect(imageSize.height, closeTo(imageSize.width, 1));
       expect(
         imageSize.height,
@@ -665,6 +685,10 @@ final value = 1;
       );
       expect(
         find.byKey(ValueKey('note-image-actions-${asset.id.value}')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(ValueKey('note-asset-selection-${asset.id.value}')),
         findsNothing,
       );
       expect(
@@ -691,6 +715,47 @@ final value = 1;
       await tester.tapAt(visibleImageRect.intersect(visibleEditorRect).center);
       await tester.pump(const Duration(milliseconds: 350));
       expect(focusNode.hasFocus, isFalse);
+      expect(
+        find.byKey(ValueKey('note-image-actions-${asset.id.value}')),
+        findsOneWidget,
+      );
+      final imageSelection = tester.widget<DecoratedBox>(
+        find.byKey(ValueKey('note-asset-selection-${asset.id.value}')),
+      );
+      expect(
+        (imageSelection.decoration as BoxDecoration).border,
+        Border.all(color: AppColors.accent, width: 2),
+      );
+
+      final imageSelectionTarget = find.byKey(
+        ValueKey('note-image-selection-target-${asset.id.value}'),
+      );
+      final imageTapArea = tester
+          .getRect(imageSelectionTarget)
+          .intersect(
+            Rect.fromLTRB(
+              visibleEditorRect.left,
+              visibleEditorRect.top,
+              visibleEditorRect.right,
+              visibleEditorRect.bottom - 112,
+            ),
+          );
+      await tester.tapAt(imageTapArea.center);
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(
+        find.byKey(ValueKey('note-asset-selection-${asset.id.value}')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(ValueKey('note-image-actions-${asset.id.value}')),
+        findsNothing,
+      );
+
+      final restoredImageTapArea = tester
+          .getRect(imageSelectionTarget)
+          .intersect(visibleEditorRect);
+      await tester.tapAt(restoredImageTapArea.center);
+      await tester.pump(const Duration(milliseconds: 500));
       expect(
         find.byKey(ValueKey('note-image-actions-${asset.id.value}')),
         findsOneWidget,
@@ -761,6 +826,10 @@ final value = 1;
     );
     expect(find.text('产品讨论'), findsOneWidget);
     expect(find.text('01:32'), findsOneWidget);
+    expect(
+      find.byKey(ValueKey('note-asset-selection-${asset.id.value}')),
+      findsNothing,
+    );
 
     focusNode.requestFocus();
     await tester.pump();
@@ -771,6 +840,36 @@ final value = 1;
     expect(playback.activeAssetId, asset.id.value);
     expect(playback.lastPath, '/managed/recording.m4a');
     expect(find.byIcon(Icons.pause_rounded), findsOneWidget);
+    final audioSelection = tester.widget<DecoratedBox>(
+      find.byKey(ValueKey('note-asset-selection-${asset.id.value}')),
+    );
+    expect(
+      (audioSelection.decoration as BoxDecoration).border,
+      Border.all(color: AppColors.accent, width: 2),
+    );
+
+    final audioSelectionTarget = find.byKey(
+      ValueKey('note-audio-selection-target-${asset.id.value}'),
+    );
+    var audioTargetRect = tester.getRect(audioSelectionTarget);
+    await tester.tapAt(
+      Offset(audioTargetRect.center.dx, audioTargetRect.top + 4),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(
+      find.byKey(ValueKey('note-asset-selection-${asset.id.value}')),
+      findsNothing,
+    );
+
+    audioTargetRect = tester.getRect(audioSelectionTarget);
+    await tester.tapAt(
+      Offset(audioTargetRect.center.dx, audioTargetRect.top + 4),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(
+      find.byKey(ValueKey('note-asset-selection-${asset.id.value}')),
+      findsOneWidget,
+    );
 
     await tester.tap(
       find.byKey(ValueKey('note-audio-actions-${asset.id.value}')),
@@ -778,14 +877,32 @@ final value = 1;
     await tester.pumpAndSettle();
     await tester.tap(find.text('修改标题'));
     await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.byKey(const Key('attachment-title-count')), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(const Key('cancel-attachment-title'))).width,
+      tester.getSize(find.byKey(const Key('save-attachment-title'))).width,
+    );
     await tester.enterText(
       find.byKey(const Key('audio-attachment-title')),
       '周会录音',
     );
-    await tester.tap(find.text('保存'));
+    await tester.tap(find.byKey(const Key('save-attachment-title')));
     await tester.pumpAndSettle();
 
     expect(controller.assets.single.displayTitle, '周会录音');
+
+    await tester.tap(
+      find.byKey(ValueKey('note-audio-actions-${asset.id.value}')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('修改标题'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('restore-attachment-title')));
+    await tester.pumpAndSettle();
+
+    expect(controller.assets.single.displayTitle, 'recording.m4a');
   });
 
   testWidgets('long press drag reorders image and recording blocks', (
@@ -991,6 +1108,7 @@ final value = 1;
       document: NoteDocument.empty(),
       assets: const [],
     );
+    var doneCalls = 0;
     addTearDown(controller.dispose);
 
     await tester.pumpWidget(
@@ -1002,6 +1120,8 @@ final value = 1;
             onOpenAssistant: () {},
             onInsertImage: () {},
             onRecordAudio: () {},
+            onDone: () => doneCalls++,
+            doneLabel: '完成',
           ),
         ),
       ),
@@ -1059,6 +1179,21 @@ final value = 1;
     expect(assistantButton.style, isNull);
     expect(imageButton.style, isNull);
     expect(recordingButton.style, isNull);
+    final doneButton = find.byKey(const Key('quill-toolbar-done'));
+    final scrollView = find.byKey(const Key('quill-toolbar-scroll-view'));
+    expect(doneButton, findsOneWidget);
+    expect(find.descendant(of: scrollView, matching: doneButton), findsNothing);
+    expect(
+      find.descendant(of: doneButton, matching: find.byType(Icon)),
+      findsNothing,
+    );
+    expect(tester.getSize(doneButton).width, lessThan(60));
+    final doneButtonRect = tester.getRect(doneButton);
+    await tester.drag(scrollView, const Offset(-300, 0));
+    await tester.pump();
+    expect(tester.getRect(doneButton), doneButtonRect);
+    await tester.tap(doneButton);
+    expect(doneCalls, 1);
     expect(tester.getSize(find.byType(NoteQuillToolbar)).height, lessThan(90));
   });
 }
@@ -1093,12 +1228,12 @@ final Uint8List _onePixelPng = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
 );
 
-NoteAsset _imageAsset() {
+NoteAsset _imageAsset([String id = '3d2be3d5-00c8-4f5c-8e69-e90085dc2873']) {
   final now = DateTime.utc(2026, 7, 23, 12);
   return NoteAsset(
-    id: NoteAttachmentId.parse('3d2be3d5-00c8-4f5c-8e69-e90085dc2873'),
+    id: NoteAttachmentId.parse(id),
     kind: NoteAssetKind.image,
-    storageKey: 'notes/images/3d2be3d5.png',
+    storageKey: 'notes/images/$id.png',
     originalName: '原图.png',
     byteLength: _onePixelPng.length,
     mimeType: 'image/png',

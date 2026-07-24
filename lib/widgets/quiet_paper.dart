@@ -142,13 +142,33 @@ final class SearchPullHandle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    decoration: const BoxDecoration(
-      color: AppColors.paperPrimary,
-      border: Border.fromBorderSide(BorderSide(color: AppColors.line)),
-      borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
-      boxShadow: AppShadows.paperEdge,
+    key: const Key('search-pull-handle-surface'),
+    height: 48,
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          AppColors.paperPrimary.withValues(alpha: .98),
+          AppColors.paperSecondary.withValues(alpha: .96),
+        ],
+      ),
+      border: Border.all(
+        color: AppColors.line.withValues(alpha: .9),
+        width: .8,
+      ),
+      borderRadius: const BorderRadius.vertical(
+        bottom: Radius.circular(AppRadius.large),
+      ),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x10263847),
+          blurRadius: 10,
+          offset: Offset(0, 4),
+        ),
+      ],
     ),
-    padding: const EdgeInsets.fromLTRB(10, 7, 10, 9),
+    clipBehavior: Clip.antiAlias,
     child: child,
   );
 }
@@ -177,32 +197,56 @@ final class SearchPullTab extends StatelessWidget {
       onVerticalDragUpdate: onVerticalDragUpdate,
       onVerticalDragEnd: onVerticalDragEnd,
       child: SizedBox(
-        height: 44,
-        child: CustomPaint(
-          painter: const _SearchPullTabPainter(),
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: SizedBox(
-              height: 30,
+        height: 40,
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: Container(
+            key: const Key('search-pull-tab-surface'),
+            width: 100,
+            height: 28,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppColors.paperPrimary.withValues(alpha: .96),
+                  AppColors.paperSecondary.withValues(alpha: .94),
+                ],
+              ),
+              border: Border.all(
+                color: AppColors.line.withValues(alpha: .9),
+                width: .8,
+              ),
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(10),
+              ),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x0B263847),
+                  blurRadius: 5,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Center(
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const SizedBox(
-                    width: 10,
-                    height: 6,
-                    child: CustomPaint(painter: _SearchPullChevronPainter()),
+                  const Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    size: 13,
+                    color: AppColors.mechanicalBlue,
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 3),
                   Text(
                     label,
                     style: const TextStyle(
                       color: AppColors.ink,
-                      fontFamily: 'Songti SC',
-                      fontFamilyFallback: ['Noto Serif CJK SC', 'serif'],
                       fontSize: 10,
-                      height: 1,
-                      fontWeight: FontWeight.w400,
-                      letterSpacing: 1.5,
+                      height: 1.1,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: .45,
                     ),
                   ),
                 ],
@@ -732,86 +776,6 @@ final class _IndexTicksPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _IndexTicksPainter oldDelegate) =>
       oldDelegate.position != position || oldDelegate.count != count;
-}
-
-final class _SearchPullTabPainter extends CustomPainter {
-  const _SearchPullTabPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const visibleHeight = 30.0;
-    final shoulder = size.width * .19;
-    final bottomLeft = size.width * .36;
-    final bottomRight = size.width * .64;
-    final outline = Path()
-      ..moveTo(0, 0)
-      ..lineTo(shoulder, 0)
-      ..cubicTo(shoulder + 8, 0, shoulder + 10, 3, shoulder + 12, 7)
-      ..cubicTo(
-        shoulder + 16,
-        18,
-        bottomLeft - 10,
-        27,
-        bottomLeft,
-        visibleHeight - 1,
-      )
-      ..cubicTo(
-        bottomLeft + 7,
-        visibleHeight,
-        bottomRight - 7,
-        visibleHeight,
-        bottomRight,
-        visibleHeight - 1,
-      )
-      ..cubicTo(
-        bottomRight + 10,
-        27,
-        size.width - shoulder - 16,
-        18,
-        size.width - shoulder - 12,
-        7,
-      )
-      ..cubicTo(
-        size.width - shoulder - 10,
-        3,
-        size.width - shoulder - 8,
-        0,
-        size.width - shoulder,
-        0,
-      )
-      ..lineTo(size.width, 0);
-    canvas.drawPath(
-      outline,
-      Paint()
-        ..color = AppColors.mechanicalBlue.withValues(alpha: .7)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = .55,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-final class _SearchPullChevronPainter extends CustomPainter {
-  const _SearchPullChevronPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = AppColors.mechanicalBlue
-      ..strokeWidth = .8
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-    final path = Path()
-      ..moveTo(.5, .5)
-      ..lineTo(size.width / 2, size.height - .5)
-      ..lineTo(size.width - .5, .5);
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 final class _PaperBackdropPainter extends CustomPainter {

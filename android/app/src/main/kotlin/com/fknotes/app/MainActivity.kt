@@ -7,11 +7,15 @@ import android.media.AudioFormat
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.LocaleList
 import android.app.LocaleManager
+import android.provider.OpenableColumns
+import android.view.DragEvent
+import android.view.View
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -21,14 +25,17 @@ import java.io.IOException
 import java.io.RandomAccessFile
 import java.nio.ByteOrder
 import java.util.concurrent.Executors
+import java.util.UUID
 
 open class MainActivity : FlutterFragmentActivity() {
     private companion object {
         const val AUDIO_DECODE_CHANNEL = "fknotes/audio_decode"
         const val APP_LOCALE_CHANNEL = "fknotes/app_locale"
         const val BACKUP_EXPORT_CHANNEL = "fknotes/backup_export"
+        const val EXTERNAL_IMAGE_DROP_CHANNEL = "fknotes/external_image_drop"
         const val BACKUP_SAVE_REQUEST = 7302
         const val COPY_BUFFER_SIZE = 256 * 1024
+        const val MAX_DROPPED_IMAGE_BYTES = 20L * 1024L * 1024L
     }
 
     private val preparationExecutor = Executors.newSingleThreadExecutor()
@@ -36,6 +43,8 @@ open class MainActivity : FlutterFragmentActivity() {
     private lateinit var audioDecodeChannel: MethodChannel
     private lateinit var appLocaleChannel: MethodChannel
     private lateinit var backupExportChannel: MethodChannel
+    private lateinit var externalImageDropChannel: MethodChannel
+    private var externalDropView: View? = null
     private var liteRtLmBridge: LiteRtLmBridge? = null
     private var pendingBackupResult: MethodChannel.Result? = null
     private var pendingBackupSource: File? = null
@@ -121,6 +130,27 @@ open class MainActivity : FlutterFragmentActivity() {
             }
             launchBackupExporter(File(sourcePath), suggestedName, mimeType, result)
         }
+        externalImageDropChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            EXTERNAL_IMAGE_DROP_CHANNEL,
+        )
+        externalImageDropChannel.setMethodCallHandler { call, result ->
+            if (call.method != "deleteTemporaryFiles") {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+            val paths = (call.arguments as? List<*>)
+                ?.mapNotNull { it as? String }
+                .orEmpty()
+            preparationExecutor.execute {
+                deleteExternalDropFiles(paths)
+                mainHandler.post { result.success(null) }
+            }
+        }
+        installExternalImageDropTarget()
+        preparationExecutor.execute {
+            File(cacheDir, "fknotes-external-drop").deleteRecursively()
+        }
     }
 
     protected open fun liteRtLmServiceClass(): Class<out Service> =
@@ -130,9 +160,224 @@ open class MainActivity : FlutterFragmentActivity() {
         if (::backupExportChannel.isInitialized) {
             backupExportChannel.setMethodCallHandler(null)
         }
+        if (::externalImageDropChannel.isInitialized) {
+            externalImageDropChannel.setMethodCallHandler(null)
+        }
+        externalDropView?.setOnDragListener(null)
+        externalDropView = null
         liteRtLmBridge?.dispose()
         liteRtLmBridge = null
         super.cleanUpFlutterEngine(flutterEngine)
+    }
+
+    private fun installExternalImageDropTarget() {
+        val target = findViewById<View>(android.R.id.content) ?: return
+        externalDropView = target
+        target.setOnDragListener { _, event ->
+            when (event.action) {
+                DragEvent.ACTION_DRAG_STARTED ->
+                    return@setOnDragListener event.clipDescription != null
+                DragEvent.ACTION_DRAG_ENTERED ->
+                    sendExternalDropEvent("entered", event.x, event.y)
+                DragEvent.ACTION_DRAG_LOCATION ->
+                    sendExternalDropEvent("updated", event.x, event.y)
+                DragEvent.ACTION_DRAG_EXITED ->
+                    sendExternalDropEvent("exited", event.x, event.y)
+                DragEvent.ACTION_DROP -> {
+                    copyExternalDrop(event)
+                    return@setOnDragListener true
+                }
+                DragEvent.ACTION_DRAG_ENDED -> {
+                    if (!event.result) {
+                        sendExternalDropEvent("exited", event.x, event.y)
+                    }
+                }
+            }
+            true
+        }
+    }
+
+    private fun sendExternalDropEvent(method: String, x: Float, y: Float) {
+        externalImageDropChannel.invokeMethod(
+            method,
+            mapOf("position" to listOf(x.toDouble(), y.toDouble())),
+        )
+    }
+
+    private fun copyExternalDrop(event: DragEvent) {
+        val uris = buildList {
+            for (index in 0 until event.clipData.itemCount) {
+                event.clipData.getItemAt(index)?.uri?.let(::add)
+            }
+        }
+        val position = listOf(event.x.toDouble(), event.y.toDouble())
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            requestDragAndDropPermissions(event)
+        } else {
+            null
+        }
+        preparationExecutor.execute {
+            val files = mutableListOf<Map<String, Any>>()
+            var rejectedCount = 0
+            val batchDirectory = File(
+                cacheDir,
+                "fknotes-external-drop/${UUID.randomUUID()}",
+            ).apply { mkdirs() }
+            try {
+                uris.forEachIndexed { index, uri ->
+                    val copied = copyDroppedImage(uri, batchDirectory, index)
+                    if (copied == null) {
+                        rejectedCount++
+                    } else {
+                        files.add(copied)
+                    }
+                }
+            } finally {
+                permission?.release()
+                if (files.isEmpty()) batchDirectory.deleteRecursively()
+            }
+            mainHandler.post {
+                externalImageDropChannel.invokeMethod(
+                    "done",
+                    mapOf(
+                        "position" to position,
+                        "files" to files,
+                        "rejectedCount" to rejectedCount,
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun copyDroppedImage(
+        uri: Uri,
+        destinationDirectory: File,
+        index: Int,
+    ): Map<String, Any>? {
+        val metadata = queryDropMetadata(uri)
+        val name = metadata.first
+            ?.let { File(it).name }
+            ?.takeIf { it.isNotBlank() }
+            ?: "dropped-image-$index"
+        val mimeType = contentResolver.getType(uri).orEmpty().lowercase()
+        if (!isSupportedDroppedImage(name, mimeType)) return null
+        val declaredLength = metadata.second
+        if (declaredLength != null &&
+            (declaredLength <= 0L || declaredLength > MAX_DROPPED_IMAGE_BYTES)
+        ) {
+            return null
+        }
+        val extension = File(name).extension
+            .lowercase()
+            .takeIf { it.matches(Regex("[a-z0-9]{1,8}")) }
+            ?.let { ".$it" }
+            .orEmpty()
+        val destination = File(
+            destinationDirectory,
+            "$index-${UUID.randomUUID()}$extension",
+        )
+        return try {
+            val input = contentResolver.openInputStream(uri) ?: return null
+            var copiedLength = 0L
+            input.use { source ->
+                destination.outputStream().use { output ->
+                    val buffer = ByteArray(COPY_BUFFER_SIZE)
+                    while (true) {
+                        val read = source.read(buffer)
+                        if (read < 0) break
+                        copiedLength += read
+                        if (copiedLength > MAX_DROPPED_IMAGE_BYTES) {
+                            throw IOException("Dropped image exceeds 20 MB")
+                        }
+                        output.write(buffer, 0, read)
+                    }
+                }
+            }
+            if (copiedLength <= 0L) {
+                destination.delete()
+                null
+            } else {
+                mapOf(
+                    "path" to destination.absolutePath,
+                    "name" to name,
+                    "mimeType" to mimeType,
+                    "byteLength" to copiedLength,
+                )
+            }
+        } catch (_: Exception) {
+            destination.delete()
+            null
+        }
+    }
+
+    private fun queryDropMetadata(uri: Uri): Pair<String?, Long?> {
+        return try {
+            contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+                null,
+                null,
+                null,
+            )?.use { cursor ->
+                if (!cursor.moveToFirst()) return@use null
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                val name = if (nameIndex >= 0 && !cursor.isNull(nameIndex)) {
+                    cursor.getString(nameIndex)
+                } else {
+                    null
+                }
+                val size = if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) {
+                    cursor.getLong(sizeIndex)
+                } else {
+                    null
+                }
+                name to size
+            } ?: (uri.lastPathSegment to null)
+        } catch (_: Exception) {
+            uri.lastPathSegment to null
+        }
+    }
+
+    private fun isSupportedDroppedImage(name: String, mimeType: String): Boolean {
+        if (
+            mimeType in setOf(
+                "image/bmp",
+                "image/gif",
+                "image/jpeg",
+                "image/png",
+                "image/tiff",
+                "image/webp",
+            )
+        ) {
+            return true
+        }
+        return File(name).extension.lowercase() in setOf(
+            "bmp",
+            "gif",
+            "jpeg",
+            "jpg",
+            "png",
+            "tif",
+            "tiff",
+            "webp",
+        )
+    }
+
+    private fun deleteExternalDropFiles(paths: List<String>) {
+        val root = File(cacheDir, "fknotes-external-drop").canonicalFile
+        for (path in paths) {
+            try {
+                val candidate = File(path).canonicalFile
+                if (!candidate.path.startsWith("${root.path}${File.separator}")) {
+                    continue
+                }
+                candidate.delete()
+                candidate.parentFile?.takeIf { it != root }?.delete()
+            } catch (_: IOException) {
+                // Temporary cleanup is best effort.
+            }
+        }
     }
 
     private fun decodeAudioToWav(source: File, destination: File) {
