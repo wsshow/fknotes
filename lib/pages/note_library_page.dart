@@ -325,8 +325,8 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
               );
             }
             final deckWidth = math.min(
-              620.0,
-              math.max(220.0, constraints.maxWidth - 128),
+              640.0,
+              math.max(220.0, constraints.maxWidth - 104),
             );
             final searchWidth = _searchExpanded
                 ? math.min(250.0, deckWidth * .82)
@@ -334,18 +334,6 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
             final reduceMotion = MediaQuery.disableAnimationsOf(context);
             return Stack(
               children: [
-                Positioned(
-                  top: 0,
-                  bottom: 0,
-                  left: 0,
-                  width: 58,
-                  child: BrandSpine(
-                    label: widget.onOpenData == null
-                        ? context.l10n.library
-                        : context.l10n.appTitle,
-                    itemLabel: context.l10n.itemCount(_controller.notes.length),
-                  ),
-                ),
                 Positioned(
                   top: 66,
                   bottom: 0,
@@ -360,6 +348,17 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
                     ),
                   ),
                 ),
+                Positioned(
+                  top: 24,
+                  bottom: 16,
+                  left: 0,
+                  width: 38,
+                  child: BrandSpine(
+                    label: widget.onOpenData == null
+                        ? context.l10n.library
+                        : context.l10n.appTitle,
+                  ),
+                ),
                 AnimatedPositioned(
                   duration: reduceMotion
                       ? Duration.zero
@@ -372,19 +371,17 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
                 ),
                 Positioned(
                   top: 58,
-                  right: 7,
-                  child: Column(
-                    children: [
-                      if (widget.onOpenAssistant != null) ...[
-                        ToolNodeButton(
+                  right: 0,
+                  child: EdgeToolDock(
+                    actions: [
+                      if (widget.onOpenAssistant != null)
+                        EdgeToolAction(
                           buttonKey: const Key('quill-home-assistant'),
                           tooltip: context.l10n.localAssistant,
                           onPressed: _openAssistant,
                           icon: Icons.auto_awesome_outlined,
                         ),
-                        const SizedBox(height: 14),
-                      ],
-                      ToolNodeButton(
+                      EdgeToolAction(
                         buttonKey: widget.onOpenData != null
                             ? const Key('delta-library-open-data')
                             : null,
@@ -407,8 +404,8 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
                   Positioned(
                     top: constraints.maxHeight * .34,
                     bottom: constraints.maxHeight * .27,
-                    right: 2,
-                    width: 51,
+                    right: 0,
+                    width: 64,
                     child: IndexTicks(
                       index: _currentIndex,
                       count: _controller.notes.length,

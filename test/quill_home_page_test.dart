@@ -53,6 +53,15 @@ void main() {
       tester.getSize(find.byKey(const Key('quill-home-new-note'))),
       const Size.square(56),
     );
+    final toolDock = find.byKey(const Key('edge-tool-dock'));
+    final brandSpine = find.byKey(const Key('brand-spine-paper-tab'));
+    expect(tester.getSize(toolDock), const Size(38, 86.5));
+    expect(tester.getSize(toolDock).width, tester.getSize(brandSpine).width);
+    expect(tester.getRect(toolDock).right, 800);
+    expect(
+      tester.getSize(find.byKey(const Key('quill-home-assistant'))).height,
+      42,
+    );
     expect(
       tester.getRect(find.byKey(const Key('quill-home-assistant'))).top,
       lessThan(80),

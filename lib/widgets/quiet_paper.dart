@@ -22,10 +22,9 @@ final class PaperShell extends StatelessWidget {
 }
 
 final class BrandSpine extends StatelessWidget {
-  const BrandSpine({required this.label, required this.itemLabel, super.key});
+  const BrandSpine({required this.label, super.key});
 
   final String label;
-  final String itemLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +40,7 @@ final class BrandSpine extends StatelessWidget {
               child: Container(
                 key: const Key('brand-spine-paper-tab'),
                 width: double.infinity,
-                height: math.min(282.0, constraints.maxHeight),
+                height: math.min(208.0, constraints.maxHeight),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
@@ -56,18 +55,14 @@ final class BrandSpine extends StatelessWidget {
                     width: .75,
                   ),
                   borderRadius: const BorderRadius.only(
-                    bottomRight: Radius.circular(10),
+                    topRight: Radius.circular(AppRadius.medium),
+                    bottomRight: Radius.circular(AppRadius.medium),
                   ),
                   boxShadow: const [
                     BoxShadow(
-                      color: Color(0x18263847),
-                      blurRadius: 12,
-                      offset: Offset(2, 4),
-                    ),
-                    BoxShadow(
-                      color: Color(0x0A263847),
-                      blurRadius: 2,
-                      offset: Offset(1, 1),
+                      color: Color(0x14263847),
+                      blurRadius: 10,
+                      offset: Offset(3, 3),
                     ),
                   ],
                 ),
@@ -76,23 +71,23 @@ final class BrandSpine extends StatelessWidget {
                   painter: const _BrandSpineTexturePainter(),
                   child: Padding(
                     padding: const EdgeInsets.only(
-                      top: 42,
-                      right: 8,
-                      bottom: 10,
-                      left: 8,
+                      top: 20,
+                      right: 5,
+                      bottom: 8,
+                      left: 5,
                     ),
                     child: Column(
                       children: [
                         const SizedBox(
-                          width: 30,
-                          height: 28,
+                          width: 24,
+                          height: 22,
                           child: CustomPaint(painter: _SpineMonogramPainter()),
                         ),
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 9),
                         const _SpineLocator(),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 5),
                         SizedBox(
-                          height: 80,
+                          height: 64,
                           child: Center(
                             child: isCjk
                                 ? Text(
@@ -105,8 +100,8 @@ final class BrandSpine extends StatelessWidget {
                                         'Noto Serif CJK SC',
                                         'serif',
                                       ],
-                                      fontSize: 15,
-                                      height: 1.33,
+                                      fontSize: 13,
+                                      height: 1.23,
                                       fontWeight: FontWeight.w400,
                                     ),
                                   )
@@ -117,15 +112,15 @@ final class BrandSpine extends StatelessWidget {
                                       maxLines: 1,
                                       style: const TextStyle(
                                         color: AppColors.ink,
-                                        fontSize: 11,
+                                        fontSize: 9,
                                         fontWeight: FontWeight.w600,
-                                        letterSpacing: 2.1,
+                                        letterSpacing: 1.4,
                                       ),
                                     ),
                                   ),
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 5),
                         const _SpineTerminal(),
                       ],
                     ),
@@ -133,24 +128,6 @@ final class BrandSpine extends StatelessWidget {
                 ),
               ),
             ),
-            if (constraints.maxHeight > 330)
-              Positioned(
-                right: 5,
-                bottom: 18,
-                left: 5,
-                child: Text(
-                  itemLabel,
-                  key: const Key('brand-spine-item-count'),
-                  maxLines: 1,
-                  overflow: TextOverflow.fade,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: AppColors.muted,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
           ],
         ),
       ),
@@ -238,35 +215,95 @@ final class SearchPullTab extends StatelessWidget {
   );
 }
 
-final class ToolNodeButton extends StatelessWidget {
-  const ToolNodeButton({
+final class EdgeToolAction {
+  const EdgeToolAction({
     required this.icon,
     required this.tooltip,
     required this.onPressed,
     this.buttonKey,
-    super.key,
   });
 
   final IconData icon;
   final String tooltip;
   final VoidCallback? onPressed;
   final Key? buttonKey;
+}
+
+final class EdgeToolDock extends StatelessWidget {
+  const EdgeToolDock({required this.actions, super.key});
+
+  final List<EdgeToolAction> actions;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const Key('edge-tool-dock'),
+    width: 38,
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          AppColors.paperPrimary.withValues(alpha: .96),
+          AppColors.paperSecondary.withValues(alpha: .94),
+        ],
+      ),
+      border: Border.all(
+        color: AppColors.line.withValues(alpha: .88),
+        width: .75,
+      ),
+      borderRadius: const BorderRadius.horizontal(
+        left: Radius.circular(AppRadius.medium),
+      ),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x10263847),
+          blurRadius: 8,
+          offset: Offset(-2, 3),
+        ),
+      ],
+    ),
+    clipBehavior: Clip.antiAlias,
+    child: Material(
+      color: Colors.transparent,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var index = 0; index < actions.length; index++) ...[
+            if (index > 0)
+              const Divider(
+                height: 1,
+                indent: 6,
+                endIndent: 6,
+                color: AppColors.line,
+              ),
+            _EdgeToolButton(action: actions[index]),
+          ],
+        ],
+      ),
+    ),
+  );
+}
+
+final class _EdgeToolButton extends StatelessWidget {
+  const _EdgeToolButton({required this.action});
+
+  final EdgeToolAction action;
 
   @override
   Widget build(BuildContext context) => Tooltip(
-    message: tooltip,
-    child: Material(
-      color: AppColors.paperPrimary,
-      shape: const CircleBorder(side: BorderSide(color: AppColors.line)),
-      elevation: 0,
-      shadowColor: AppColors.shadow.withValues(alpha: .08),
-      child: InkWell(
-        key: buttonKey,
-        customBorder: const CircleBorder(),
-        onTap: onPressed,
-        child: SizedBox.square(
-          dimension: 48,
-          child: Icon(icon, size: 21, color: AppColors.mechanicalBlue),
+    message: action.tooltip,
+    child: InkWell(
+      key: action.buttonKey,
+      onTap: action.onPressed,
+      child: SizedBox(
+        width: 38,
+        height: 42,
+        child: Icon(
+          action.icon,
+          size: 19,
+          color: action.onPressed == null
+              ? AppColors.subtle
+              : AppColors.mechanicalBlue,
         ),
       ),
     ),
@@ -324,65 +361,126 @@ final class IndexTicks extends StatelessWidget {
   final ValueChanged<double>? onDrag;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    label: count == 0 ? '0 / 0' : '${index + 1} / $count',
-    value: count == 0 ? '0 / 0' : '${index + 1} / $count',
-    child: LayoutBuilder(
-      builder: (context, constraints) => GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onVerticalDragStart: onDrag == null
-            ? null
-            : (details) => _update(details.localPosition.dy, constraints),
-        onVerticalDragUpdate: onDrag == null
-            ? null
-            : (details) => _update(details.localPosition.dy, constraints),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Positioned.fill(
-              child: TweenAnimationBuilder<double>(
-                duration: MediaQuery.disableAnimationsOf(context)
-                    ? Duration.zero
-                    : const Duration(milliseconds: 180),
-                curve: Curves.easeOutCubic,
-                tween: Tween<double>(end: count == 0 ? 0 : index.toDouble()),
-                builder: (context, position, _) => CustomPaint(
-                  key: const Key('index-ticks-dial'),
-                  painter: _IndexTicksPainter(position: position, count: count),
-                ),
-              ),
-            ),
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: SizedBox(
-                key: Key('index-ticks-pointer'),
-                width: 22,
-                height: 12,
-                child: CustomPaint(painter: _IndexPointerPainter()),
-              ),
-            ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Container(
-                key: const Key('index-ticks-reading'),
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
-                color: AppColors.canvas.withValues(alpha: .92),
-                child: Text(
-                  count == 0 ? '0 / 0' : '${index + 1} / $count',
-                  style: const TextStyle(
-                    color: AppColors.ink,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    fontFeatures: [FontFeature.tabularFigures()],
+  Widget build(BuildContext context) {
+    final current = count == 0 ? 0 : index + 1;
+    final exactReading = '$current / $count';
+    return Semantics(
+      label: exactReading,
+      value: exactReading,
+      child: LayoutBuilder(
+        builder: (context, constraints) => GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onVerticalDragStart: onDrag == null
+              ? null
+              : (details) => _update(details.localPosition.dy, constraints),
+          onVerticalDragUpdate: onDrag == null
+              ? null
+              : (details) => _update(details.localPosition.dy, constraints),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Positioned.fill(
+                child: TweenAnimationBuilder<double>(
+                  duration: MediaQuery.disableAnimationsOf(context)
+                      ? Duration.zero
+                      : const Duration(milliseconds: 180),
+                  curve: Curves.easeOutCubic,
+                  tween: Tween<double>(end: count == 0 ? 0 : index.toDouble()),
+                  builder: (context, position, _) => CustomPaint(
+                    key: const Key('index-ticks-dial'),
+                    painter: _IndexTicksPainter(
+                      position: position,
+                      count: count,
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+              Align(
+                alignment: Alignment.centerRight,
+                child: Container(
+                  key: const Key('index-ticks-reading'),
+                  width: 60,
+                  height: 22,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        AppColors.paperPrimary.withValues(alpha: .96),
+                        AppColors.paperSecondary.withValues(alpha: .94),
+                      ],
+                    ),
+                    border: Border.all(
+                      color: AppColors.line.withValues(alpha: .88),
+                      width: .75,
+                    ),
+                    borderRadius: const BorderRadius.horizontal(
+                      left: Radius.circular(AppRadius.medium),
+                    ),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x10263847),
+                        blurRadius: 8,
+                        offset: Offset(-2, 3),
+                      ),
+                    ],
+                  ),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '$current',
+                          key: const Key('index-ticks-current'),
+                          maxLines: 1,
+                          softWrap: false,
+                          style: const TextStyle(
+                            color: AppColors.ink,
+                            fontSize: 10,
+                            height: 1,
+                            fontWeight: FontWeight.w700,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                        const Text(
+                          '/',
+                          key: Key('index-ticks-reading-divider'),
+                          style: TextStyle(
+                            color: AppColors.subtle,
+                            fontSize: 8,
+                            height: 1,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        Text(
+                          '$count',
+                          key: const Key('index-ticks-total'),
+                          maxLines: 1,
+                          softWrap: false,
+                          style: const TextStyle(
+                            color: AppColors.muted,
+                            fontSize: 8,
+                            height: 1,
+                            fontWeight: FontWeight.w600,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 
   void _update(double dy, BoxConstraints constraints) {
     final height = constraints.maxHeight;
@@ -459,8 +557,8 @@ final class _SpineLocator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const SizedBox(
-    width: 14,
-    height: 40,
+    width: 12,
+    height: 28,
     child: CustomPaint(painter: _SpineLocatorPainter()),
   );
 }
@@ -474,8 +572,8 @@ final class _SpineLocatorPainter extends CustomPainter {
       ..color = AppColors.mechanicalBlue
       ..strokeWidth = 1;
     final x = size.width / 2;
-    canvas.drawLine(Offset(x, 0), Offset(x, 22), paint);
-    canvas.drawCircle(Offset(x, 32), 2.6, paint);
+    canvas.drawLine(Offset(x, 0), Offset(x, 15), paint);
+    canvas.drawCircle(Offset(x, 23), 2.2, paint);
   }
 
   @override
@@ -487,8 +585,8 @@ final class _SpineTerminal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const SizedBox(
-    width: 14,
-    height: 46,
+    width: 12,
+    height: 32,
     child: CustomPaint(painter: _SpineTerminalPainter()),
   );
 }
@@ -502,12 +600,12 @@ final class _SpineTerminalPainter extends CustomPainter {
       ..color = AppColors.mechanicalBlue
       ..strokeWidth = 1;
     final x = size.width / 2;
-    canvas.drawLine(Offset(x, 0), Offset(x, 23), paint);
-    canvas.drawLine(Offset(x - 3.5, 31), Offset(x + 3.5, 31), paint);
-    canvas.drawLine(Offset(x - 3.5, 37), Offset(x + 3.5, 37), paint);
+    canvas.drawLine(Offset(x, 0), Offset(x, 15), paint);
+    canvas.drawLine(Offset(x - 3, 21), Offset(x + 3, 21), paint);
+    canvas.drawLine(Offset(x - 3, 25), Offset(x + 3, 25), paint);
     canvas.drawCircle(
-      Offset(x, 44),
-      2,
+      Offset(x, 30),
+      1.6,
       Paint()
         ..color = AppColors.mechanicalBlue
         ..style = PaintingStyle.stroke
@@ -618,37 +716,22 @@ final class _IndexTicksPainter extends CustomPainter {
       ..strokeWidth = 1;
     final centerY = size.height / 2;
     final gap = math.max(1.0, (centerY - 6) / (count - 1));
-    for (var ordinal = 0; ordinal < count; ordinal++) {
+    final firstVisible = math.max(0, ((5 - centerY) / gap + position).ceil());
+    final lastVisible = math.min(
+      count - 1,
+      ((size.height - 5 - centerY) / gap + position).floor(),
+    );
+    for (var ordinal = firstVisible; ordinal <= lastVisible; ordinal++) {
       final y = centerY + (ordinal - position) * gap;
-      if (y < 5 || y > size.height - 5) continue;
       final length = ordinal % 4 == 0 ? 10.0 : 6.0;
-      canvas.drawLine(Offset(2, y), Offset(2 + length, y), paint);
+      final right = size.width - 2;
+      canvas.drawLine(Offset(right - length, y), Offset(right, y), paint);
     }
   }
 
   @override
   bool shouldRepaint(covariant _IndexTicksPainter oldDelegate) =>
       oldDelegate.position != position || oldDelegate.count != count;
-}
-
-final class _IndexPointerPainter extends CustomPainter {
-  const _IndexPointerPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final centerY = size.height / 2;
-    final marker = Paint()..color = AppColors.mechanicalBlue;
-    canvas.drawRect(Rect.fromLTWH(1, centerY - 2, 11, 4), marker);
-    final triangle = Path()
-      ..moveTo(15, centerY)
-      ..lineTo(21, centerY - 5)
-      ..lineTo(21, centerY + 5)
-      ..close();
-    canvas.drawPath(triangle, marker);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 final class _SearchPullTabPainter extends CustomPainter {

@@ -56,12 +56,17 @@ void main() {
     expect(find.byKey(const Key('delta-library-search')), findsNothing);
 
     final paperTab = find.byKey(const Key('brand-spine-paper-tab'));
-    final itemCount = find.byKey(const Key('brand-spine-item-count'));
-    expect(tester.getSize(paperTab), const Size(58, 282));
-    expect(
-      tester.getRect(paperTab).bottom,
-      lessThan(tester.getRect(itemCount).top),
+    final noteSheet = find.byKey(
+      ValueKey('delta-note-${store.notes.first.id.value}'),
     );
+    expect(tester.getSize(paperTab), const Size(38, 208));
+    expect(tester.getTopLeft(paperTab), const Offset(0, 24));
+    expect(tester.getSize(noteSheet).width, 640);
+    final noteSheetRect = tester.getRect(noteSheet);
+    final viewportWidth =
+        tester.view.physicalSize.width / tester.view.devicePixelRatio;
+    expect(noteSheetRect.left, viewportWidth - noteSheetRect.right);
+    expect(find.byKey(const Key('brand-spine-item-count')), findsNothing);
   });
 
   testWidgets('debounces search and never exposes Markdown marker fields', (
@@ -175,7 +180,7 @@ void main() {
     }
   });
 
-  testWidgets('index dial moves beneath a stationary center pointer', (
+  testWidgets('index dial moves beneath a stationary reading capsule', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -183,18 +188,30 @@ void main() {
     );
     await _pump(tester);
 
-    final pointer = find.byKey(const Key('index-ticks-pointer'));
+    final pointer = find.byKey(const Key('index-ticks-reading'));
     final dial = find.byKey(const Key('index-ticks-dial'));
     expect(pointer, findsOneWidget);
+    expect(find.byKey(const Key('index-ticks-pointer')), findsNothing);
     expect(dial, findsOneWidget);
     final pointerBefore = tester.getRect(pointer);
-    expect(find.text('1 / 2'), findsOneWidget);
+    expect(pointerBefore.right, 800);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('index-ticks-current'))).data,
+      '1',
+    );
+    expect(
+      tester.widget<Text>(find.byKey(const Key('index-ticks-total'))).data,
+      '2',
+    );
 
     await tester.tap(find.text('普通笔记'));
     await tester.pumpAndSettle();
 
     expect(tester.getRect(pointer), pointerBefore);
-    expect(find.text('2 / 2'), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('index-ticks-current'))).data,
+      '2',
+    );
   });
 
   testWidgets('returning from a note does not restore search focus', (
