@@ -39,6 +39,7 @@ class NoteSharePageCanvas extends StatelessWidget {
     final landscape = layout.logicalHeight < layout.logicalWidth;
     final letter = options.template == NoteShareTemplateId.letter;
     final night = options.template == NoteShareTemplateId.night;
+    final neon = options.template == NoteShareTemplateId.neon;
     final paperHeight = layout.logicalHeight * metrics.paperHeightFactor;
     final paperWidth = layout.logicalWidth * metrics.paperWidthFactor;
     final verticalPadding = metrics.verticalPadding(landscape);
@@ -60,7 +61,7 @@ class NoteSharePageCanvas extends StatelessWidget {
                   CustomPaint(
                     key: const ValueKey('note-share-paper-texture'),
                     painter: _PaperTexturePainter(
-                      paper: palette.paper,
+                      paper: palette.canvas,
                       fiber: palette.line,
                       accent: palette.accent,
                     ),
@@ -85,13 +86,31 @@ class NoteSharePageCanvas extends StatelessWidget {
                     ),
                   ),
                 Align(
-                  alignment: _paperAlignment(options.template),
+                  key: ValueKey(
+                    'note-share-paper-alignment-${options.template.name}',
+                  ),
+                  alignment: Alignment.center,
                   child: Container(
+                    key: ValueKey(
+                      'note-share-paper-sheet-${options.template.name}',
+                    ),
                     width: paperWidth,
                     height: paperHeight,
                     decoration: paperDecoration,
                     child: Stack(
                       children: [
+                        if (neon)
+                          Positioned.fill(
+                            child: Padding(
+                              padding: const EdgeInsets.all(2),
+                              child: DecoratedBox(
+                                key: const ValueKey(
+                                  'note-share-neon-paper-interior',
+                                ),
+                                decoration: _neonPaperInteriorDecoration,
+                              ),
+                            ),
+                          ),
                         Positioned.fill(
                           child: IgnorePointer(
                             child: CustomPaint(
@@ -195,21 +214,24 @@ class NoteSharePageCanvas extends StatelessWidget {
   }
 }
 
-Alignment _paperAlignment(NoteShareTemplateId template) => switch (template) {
-  NoteShareTemplateId.editorial => Alignment.centerLeft,
-  NoteShareTemplateId.gallery => Alignment.centerRight,
-  _ => Alignment.center,
-};
-
 BoxDecoration _paperDecoration(
   NoteShareTemplateId template,
   _SharePalette palette,
 ) => switch (template) {
-  NoteShareTemplateId.letter ||
-  NoteShareTemplateId.manuscript ||
-  NoteShareTemplateId.vermilion => const BoxDecoration(
-    color: Colors.transparent,
+  NoteShareTemplateId.letter => BoxDecoration(
+    color: palette.paper,
+    borderRadius: BorderRadius.circular(AppRadius.small),
+    border: Border.all(color: palette.line),
+    boxShadow: [
+      BoxShadow(
+        color: palette.shadow,
+        blurRadius: 10,
+        offset: const Offset(0, 3),
+      ),
+    ],
   ),
+  NoteShareTemplateId.manuscript || NoteShareTemplateId.vermilion =>
+    const BoxDecoration(color: Colors.transparent),
   NoteShareTemplateId.plain => BoxDecoration(
     color: palette.paper,
     borderRadius: BorderRadius.circular(14),
@@ -305,11 +327,15 @@ BoxDecoration _paperDecoration(
     gradient: const LinearGradient(
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
-      colors: [Color(0xFF141625), Color(0xFF080910)],
+      colors: [Color(0xFFEF4CFF), Color(0xFF8B5CF6), Color(0xFF43F2D2)],
     ),
     borderRadius: BorderRadius.circular(16),
     boxShadow: [
-      BoxShadow(color: palette.accent.withValues(alpha: .22), blurRadius: 24),
+      BoxShadow(
+        color: const Color(0xFFEF4CFF).withValues(alpha: .18),
+        blurRadius: 22,
+      ),
+      BoxShadow(color: palette.accent.withValues(alpha: .18), blurRadius: 26),
     ],
   ),
   NoteShareTemplateId.tide => BoxDecoration(
@@ -324,6 +350,15 @@ BoxDecoration _paperDecoration(
     ],
   ),
 };
+
+const _neonPaperInteriorDecoration = BoxDecoration(
+  gradient: LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF141625), Color(0xFF080910)],
+  ),
+  borderRadius: BorderRadius.all(Radius.circular(14)),
+);
 
 class _PageHeader extends StatelessWidget {
   final NoteShareDraft draft;
@@ -532,7 +567,14 @@ class _ShareBlockView extends StatelessWidget {
           padding: const EdgeInsets.all(NoteShareLayoutEngine.codePadding),
           decoration: BoxDecoration(
             color: palette.code,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(
+              options.template == NoteShareTemplateId.letter
+                  ? AppRadius.small
+                  : 8,
+            ),
+            border: options.template == NoteShareTemplateId.letter
+                ? Border.all(color: palette.line)
+                : null,
           ),
           child: richText,
         ),
@@ -794,15 +836,15 @@ class _SharePalette {
   factory _SharePalette.forTemplate(NoteShareTemplateId template) =>
       switch (template) {
         NoteShareTemplateId.letter => const _SharePalette(
-          canvas: Color(0xFFF6EEDF),
-          paper: Color(0xFFF6EEDF),
-          ink: Color(0xFF342E28),
-          muted: Color(0xFF776B60),
-          accent: Color(0xFFB85C43),
-          line: Color(0xFFD8CAB8),
-          quote: Color(0x59E8D8C4),
-          code: Color(0x73E9DECF),
-          shadow: Colors.transparent,
+          canvas: AppColors.canvas,
+          paper: AppColors.paperPrimary,
+          ink: AppColors.ink,
+          muted: AppColors.muted,
+          accent: AppColors.mechanicalBlue,
+          line: AppColors.line,
+          quote: AppColors.accentSoft,
+          code: AppColors.paperSecondary,
+          shadow: Color(0x18263847),
         ),
         NoteShareTemplateId.plain => const _SharePalette(
           canvas: Color(0xFFF5F0E9),
@@ -1336,24 +1378,15 @@ class _PaperDetailPainter extends CustomPainter {
             ..strokeWidth = 2,
         );
       case NoteShareTemplateId.neon:
-        final rect = Offset.zero & size;
-        canvas.drawRect(
-          Rect.fromLTWH(0, 0, size.width, 2),
-          Paint()
-            ..shader = const LinearGradient(
-              colors: [Color(0xFFEF4CFF), Color(0xFF43F2D2)],
-            ).createShader(rect),
+        canvas.drawCircle(
+          Offset(size.width - 18, 18),
+          1.6,
+          Paint()..color = const Color(0xFF43F2D2),
         );
-        canvas.drawRect(
-          Rect.fromLTWH(0, 0, 2, size.height * .34),
-          Paint()..color = const Color(0xFFEF4CFF).withValues(alpha: .85),
-        );
-        canvas.drawLine(
-          Offset(18, size.height - 16),
-          Offset(size.width * .45, size.height - 16),
-          Paint()
-            ..color = palette.accent.withValues(alpha: .7)
-            ..strokeWidth = 1,
+        canvas.drawCircle(
+          Offset(18, size.height - 18),
+          1.6,
+          Paint()..color = const Color(0xFFEF4CFF),
         );
       case NoteShareTemplateId.tide:
         _drawWave(canvas, size.height * .16, size, .09);
@@ -1388,7 +1421,27 @@ class _PaperDetailPainter extends CustomPainter {
             ..strokeWidth = 1,
         );
       case NoteShareTemplateId.letter:
-        break;
+        final mark = Paint()
+          ..color = palette.accent.withValues(alpha: .72)
+          ..strokeWidth = .8
+          ..strokeCap = StrokeCap.round;
+        canvas.drawLine(const Offset(15, 18), const Offset(15, 42), mark);
+        canvas.drawCircle(
+          const Offset(15, 49),
+          1.8,
+          Paint()..color = palette.accent.withValues(alpha: .78),
+        );
+        canvas.drawLine(const Offset(15, 56), const Offset(15, 64), mark);
+        canvas.drawLine(
+          Offset(size.width - 48, 16),
+          Offset(size.width - 18, 16),
+          mark,
+        );
+        canvas.drawLine(
+          Offset(size.width - 38, size.height - 16),
+          Offset(size.width - 18, size.height - 16),
+          mark,
+        );
     }
   }
 
@@ -1407,7 +1460,6 @@ class _PaperDetailPainter extends CustomPainter {
           NoteShareTemplateId.amber => (28, 1, palette.line),
           NoteShareTemplateId.film => (5, 1, palette.line),
           NoteShareTemplateId.postcard => (0, 1.2, palette.line),
-          NoteShareTemplateId.neon => (16, 1, palette.line),
           NoteShareTemplateId.tide => (22, 1, palette.line),
           _ => null,
         };

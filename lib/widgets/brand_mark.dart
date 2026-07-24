@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app.dart';
 
-/// The FKNotes mark: a warm, bound notebook with two content lines.
+/// The FKNotes geometric monogram used by the Quiet Paper Mechanics shell.
 class BrandMark extends StatelessWidget {
   final double size;
   final bool showSurface;
@@ -31,7 +31,7 @@ class _BrandMarkPainter extends CustomPainter {
     if (surface.a > 0) {
       final frame = RRect.fromRectAndRadius(
         Rect.fromLTWH(2 * unit, 2 * unit, 96 * unit, 96 * unit),
-        Radius.circular(23 * unit),
+        Radius.circular(6 * unit),
       );
       canvas.drawRRect(frame, Paint()..color = surface);
       canvas.drawRRect(
@@ -43,50 +43,30 @@ class _BrandMarkPainter extends CustomPainter {
       );
     }
 
-    final notebook = Path()
-      ..addRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(23 * unit, 20 * unit, 56 * unit, 60 * unit),
-          Radius.circular(10 * unit),
-        ),
-      );
-
-    final cutouts = Path()
-      ..moveTo(35.5 * unit, 20 * unit)
-      ..cubicTo(
-        39 * unit,
-        31 * unit,
-        39 * unit,
-        69 * unit,
-        35.5 * unit,
-        80 * unit,
-      )
-      ..lineTo(39 * unit, 80 * unit)
-      ..cubicTo(
-        42.5 * unit,
-        69 * unit,
-        42.5 * unit,
-        31 * unit,
-        39 * unit,
-        20 * unit,
-      )
+    final monogram = Path()
+      // F
+      ..addRect(Rect.fromLTWH(22 * unit, 24 * unit, 8 * unit, 53 * unit))
+      ..addRect(Rect.fromLTWH(30 * unit, 24 * unit, 21 * unit, 8 * unit))
+      ..addRect(Rect.fromLTWH(30 * unit, 46 * unit, 17 * unit, 8 * unit))
+      // K stem
+      ..addRect(Rect.fromLTWH(55 * unit, 24 * unit, 8 * unit, 53 * unit))
+      // K upper arm
+      ..moveTo(63 * unit, 50 * unit)
+      ..lineTo(77 * unit, 24 * unit)
+      ..lineTo(86 * unit, 24 * unit)
+      ..lineTo(69 * unit, 55 * unit)
       ..close()
-      ..addRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(47 * unit, 41 * unit, 25 * unit, 6 * unit),
-          Radius.circular(3 * unit),
-        ),
-      )
-      ..addRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(47 * unit, 54 * unit, 19 * unit, 6 * unit),
-          Radius.circular(3 * unit),
-        ),
-      );
-
-    canvas.drawPath(
-      Path.combine(PathOperation.difference, notebook, cutouts),
-      Paint()..color = color,
+      // K lower arm
+      ..moveTo(65 * unit, 47 * unit)
+      ..lineTo(87 * unit, 77 * unit)
+      ..lineTo(77 * unit, 77 * unit)
+      ..lineTo(60 * unit, 55 * unit)
+      ..close();
+    canvas.drawPath(monogram, Paint()..color = color);
+    canvas.drawCircle(
+      Offset(87 * unit, 84 * unit),
+      3 * unit,
+      Paint()..color = AppColors.terracotta,
     );
   }
 

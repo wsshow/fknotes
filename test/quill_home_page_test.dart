@@ -7,6 +7,7 @@ import 'package:fknotes/pages/quill_home_page.dart';
 import 'package:fknotes/providers/app_lock_controller.dart';
 import 'package:fknotes/providers/app_locale_controller.dart';
 import 'package:fknotes/providers/note_library_controller.dart';
+import 'package:fknotes/widgets/note_quill_editor.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -44,10 +45,18 @@ void main() {
 
     expect(find.byType(QuillHomePage), findsOneWidget);
     expect(find.byType(NoteLibraryPage), findsOneWidget);
-    expect(find.byKey(const Key('delta-library-search')), findsOneWidget);
+    expect(find.byKey(const Key('delta-library-search-pull')), findsOneWidget);
     expect(find.byKey(const Key('quill-home-new-note')), findsOneWidget);
     expect(find.byKey(const Key('quill-home-assistant')), findsOneWidget);
     expect(find.byKey(const Key('delta-library-open-data')), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(const Key('quill-home-new-note'))),
+      const Size.square(56),
+    );
+    expect(
+      tester.getRect(find.byKey(const Key('quill-home-assistant'))).top,
+      lessThan(80),
+    );
     expect(find.byKey(const Key('quill-floating-navigation')), findsNothing);
     expect(find.textContaining('**'), findsNothing);
     expect(find.text('最新笔记'), findsOneWidget);
@@ -112,7 +121,10 @@ void main() {
 
       await tester.tap(find.byKey(const Key('quill-data-back')));
       await _pump(tester);
-      expect(find.byKey(const Key('delta-library-search')), findsOneWidget);
+      expect(
+        find.byKey(const Key('delta-library-search-pull')),
+        findsOneWidget,
+      );
     },
   );
 
@@ -151,7 +163,10 @@ void main() {
       await _pump(tester);
 
       expect(find.byType(NoteLibraryPage), findsOneWidget);
-      expect(find.byKey(const Key('delta-library-search')), findsOneWidget);
+      expect(
+        find.byKey(const Key('delta-library-search-pull')),
+        findsOneWidget,
+      );
 
       await tester.tap(find.byKey(const Key('delta-library-open-data')));
       await _pump(tester);
@@ -176,6 +191,8 @@ void main() {
     );
     await _pump(tester);
 
+    await tester.tap(find.byKey(const Key('delta-library-search-pull')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('delta-library-search')));
     await tester.pump();
     expect(_searchEditable(tester).focusNode.hasFocus, isTrue);
@@ -188,6 +205,46 @@ void main() {
 
     expect(_searchEditable(tester).focusNode.hasFocus, isFalse);
     expect(tester.testTextInput.isVisible, isFalse);
+  });
+
+  testWidgets('bulk selection uses a compact grid and hides note creation', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(430, 932);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: QuillHomePage(
+          controller: controller,
+          editorBuilder: _testEditor,
+        ),
+      ),
+    );
+    await _pump(tester);
+
+    await tester.longPress(find.text('最新笔记'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('delta-library-selection-grid')),
+      findsOneWidget,
+    );
+    expect(find.byType(NoteRichDocumentPreview), findsNWidgets(2));
+    expect(find.byKey(const Key('quill-home-new-note')), findsNothing);
+    final first = find.byKey(
+      ValueKey('delta-note-${store.notes.first.id.value}'),
+    );
+    final second = find.byKey(
+      ValueKey('delta-note-${store.notes.last.id.value}'),
+    );
+    expect(tester.getRect(first).top, tester.getRect(second).top);
+
+    await tester.tap(find.byKey(const Key('delta-library-exit-selection')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('quill-home-new-note')), findsOneWidget);
   });
 }
 

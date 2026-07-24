@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:fknotes/app.dart';
 import 'package:fknotes/l10n/generated/app_localizations.dart';
 import 'package:fknotes/models/note.dart';
 import 'package:fknotes/models/note_document.dart';
@@ -168,6 +169,32 @@ void main() {
         .map((item) => item.block.text)
         .join();
     expect(longOutput, source);
+  });
+
+  test('long image dimensions stay stable while switching templates', () {
+    final draft = _draft(
+      content: List.generate(
+        18,
+        (index) => '第${index + 1}段：同一篇笔记切换视觉样式时，长图画布尺寸不应发生变化。',
+      ).join('\n\n'),
+    );
+    final sizes = <NoteSharePixelSize>{
+      for (final template in NoteShareTemplateId.values)
+        const NoteShareLayoutEngine()
+            .paginate(
+              draft: draft,
+              options: NoteShareOptions(
+                template: template,
+                canvas: const NoteShareCanvasSpec(
+                  preset: NoteShareCanvasPreset.long,
+                ),
+              ),
+              textDirection: TextDirection.ltr,
+              untitledTitle: '一则笔记',
+            )
+            .outputPixelSize,
+    };
+    expect(sizes, hasLength(1));
   });
 
   test('share layout paginates tables by row and repeats the header', () {
@@ -435,6 +462,21 @@ void main() {
       find.byKey(const ValueKey('note-share-paper-texture')),
       findsOneWidget,
     );
+    final letterSheet = tester.widget<Container>(
+      find.byKey(const ValueKey('note-share-paper-sheet-letter')),
+    );
+    final letterDecoration = letterSheet.decoration! as BoxDecoration;
+    expect(letterDecoration.color, AppColors.paperPrimary);
+    expect(letterDecoration.border, Border.all(color: AppColors.line));
+    expect(
+      letterDecoration.borderRadius,
+      BorderRadius.circular(AppRadius.small),
+    );
+    expect(letterDecoration.boxShadow, isNotEmpty);
+    expect(
+      tester.widget<Text>(find.text('把今天写成一封信')).style?.color,
+      AppColors.ink,
+    );
     final styleChips = tester.widgetList<ChoiceChip>(find.byType(ChoiceChip));
     expect(styleChips, hasLength(NoteShareTemplateId.values.length));
     expect(NoteShareTemplateId.values.length, greaterThanOrEqualTo(13));
@@ -519,6 +561,32 @@ void main() {
             ),
           );
           await tester.pump();
+          expect(
+            tester
+                .widget<Align>(
+                  find.byKey(
+                    ValueKey('note-share-paper-alignment-${template.name}'),
+                  ),
+                )
+                .alignment,
+            Alignment.center,
+          );
+          if (template == NoteShareTemplateId.neon) {
+            final sheet = tester.widget<Container>(
+              find.byKey(const ValueKey('note-share-paper-sheet-neon')),
+            );
+            final decoration = sheet.decoration! as BoxDecoration;
+            expect(decoration.gradient, isA<LinearGradient>());
+            expect((decoration.gradient! as LinearGradient).colors, const [
+              Color(0xFFEF4CFF),
+              Color(0xFF8B5CF6),
+              Color(0xFF43F2D2),
+            ]);
+            expect(
+              find.byKey(const ValueKey('note-share-neon-paper-interior')),
+              findsOneWidget,
+            );
+          }
           expect(
             tester.takeException(),
             isNull,

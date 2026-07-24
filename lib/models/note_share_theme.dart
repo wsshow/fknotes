@@ -69,14 +69,17 @@ class NoteShareTemplateMetrics {
   static NoteShareTemplateMetrics of(NoteShareTemplateId template) =>
       switch (template) {
         NoteShareTemplateId.letter => const NoteShareTemplateMetrics(
-          paperWidthFactor: 1,
-          paperHeightFactor: 1,
-          portraitHorizontalPadding: 32,
-          portraitVerticalPadding: 32,
-          landscapeHorizontalPadding: 30,
-          landscapeVerticalPadding: 22,
-          portraitTitleSize: 25,
+          paperWidthFactor: .96,
+          paperHeightFactor: .96,
+          portraitHorizontalPadding: 28,
+          portraitVerticalPadding: 28,
+          landscapeHorizontalPadding: 26,
+          landscapeVerticalPadding: 18,
+          portraitTitleSize: 26,
+          titleWeight: FontWeight.w700,
           titleFontFamily: 'serif',
+          titleLetterSpacing: -.2,
+          portraitTitleBottomGap: 14,
         ),
         NoteShareTemplateId.plain => const NoteShareTemplateMetrics(
           paperWidthFactor: .92,

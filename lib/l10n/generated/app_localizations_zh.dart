@@ -157,6 +157,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get searchNotes => '搜索笔记';
 
   @override
+  String get pullToSearch => '下拉搜索';
+
+  @override
   String get savedOnlyOnDevice => '仅保存在本机';
 
   @override
@@ -2872,6 +2875,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get replaceWithCamera => '重新拍摄';
+
+  @override
+  String get viewOriginalImage => '查看原图';
 
   @override
   String get imageDetails => '图片详情';

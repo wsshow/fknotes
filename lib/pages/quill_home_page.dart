@@ -19,6 +19,7 @@ import '../services/app_lock_preferences_service.dart';
 import '../services/file_storage_service.dart';
 import '../services/note_database_service.dart';
 import '../widgets/app_feedback.dart';
+import '../widgets/quiet_paper.dart';
 import 'app_lock_settings_page.dart';
 import 'backup_export_page.dart';
 import 'backup_restore_page.dart';
@@ -61,6 +62,7 @@ final class QuillHomePage extends StatefulWidget {
 final class _QuillHomePageState extends State<QuillHomePage> {
   late final NoteLibraryController _controller;
   late final bool _ownsController;
+  var _selectionMode = false;
 
   @override
   void initState() {
@@ -153,17 +155,21 @@ final class _QuillHomePageState extends State<QuillHomePage> {
       editorBuilder: widget.editorBuilder,
       onOpenAssistant: _openAssistant,
       onOpenData: _openData,
+      onSelectionModeChanged: (value) {
+        if (_selectionMode == value) return;
+        setState(() => _selectionMode = value);
+      },
     ),
-    floatingActionButton: Padding(
-      padding: const EdgeInsets.only(bottom: 24),
-      child: FloatingActionButton(
-        key: const Key('quill-home-new-note'),
-        heroTag: null,
-        tooltip: context.l10n.newNote,
-        onPressed: _openEditor,
-        child: const Icon(Icons.add_rounded),
-      ),
-    ),
+    floatingActionButton: _selectionMode
+        ? null
+        : Padding(
+            padding: const EdgeInsets.only(right: 2, bottom: 24),
+            child: CreateArcButton(
+              key: const Key('quill-home-new-note'),
+              tooltip: context.l10n.newNote,
+              onPressed: _openEditor,
+            ),
+          ),
   );
 
   @override
@@ -236,143 +242,145 @@ final class _QuillDataTabState extends State<_QuillDataTab> {
     );
     return SafeArea(
       bottom: false,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 14, 20, 48),
-        children: [
-          Row(
-            children: [
-              IconButton(
-                key: const Key('quill-data-back'),
-                tooltip: context.l10n.back,
-                onPressed: widget.onBack,
-                style: IconButton.styleFrom(
-                  backgroundColor: AppColors.surface,
-                  fixedSize: const Size.square(44),
-                ),
-                icon: const Icon(Icons.arrow_back_rounded, size: 21),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  context.l10n.localData,
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            context.l10n.localDataSubtitle,
-            style: const TextStyle(color: AppColors.muted),
-          ),
-          const SizedBox(height: 24),
-          _DataSummary(
-            noteCount: notes.length,
-            attachmentCount: attachmentCount,
-            dataSize: _dataSize,
-          ),
-          const SizedBox(height: 22),
-          _SettingsSection(
-            title: context.l10n.backupAndMigration,
-            children: [
-              _SettingsRow(
-                icon: Icons.ios_share_rounded,
-                title: context.l10n.exportCompleteBackup,
-                subtitle: context.l10n.exportCompleteBackupSubtitle,
-                onTap: _openBackupExport,
-              ),
-              const Divider(height: 1),
-              _SettingsRow(
-                icon: Icons.settings_backup_restore_rounded,
-                title: context.l10n.restoreFromBackup,
-                subtitle: context.l10n.restoreFromBackupSubtitle,
-                onTap: _openBackupRestore,
-              ),
-              const Divider(height: 1),
-              _SettingsRow(
-                icon: Icons.cloud_sync_outlined,
-                title: context.l10n.cloudSync,
-                subtitle: context.l10n.cloudSyncSubtitle,
-                onTap: _openCloudSync,
-              ),
-            ],
-          ),
-          const SizedBox(height: 22),
-          _SettingsSection(
-            title: context.l10n.preferences,
-            children: [
-              _SettingsRow(
-                icon: Icons.language_rounded,
-                title: context.l10n.language,
-                subtitle: _languageLabel(context.l10n, locale.language),
-                onTap: () => Navigator.push<void>(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const LanguageSettingsPage(),
+      child: PaperShell(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 48),
+          children: [
+            Row(
+              children: [
+                IconButton(
+                  key: const Key('quill-data-back'),
+                  tooltip: context.l10n.back,
+                  onPressed: widget.onBack,
+                  style: IconButton.styleFrom(
+                    backgroundColor: AppColors.surface,
+                    fixedSize: const Size.square(44),
                   ),
+                  icon: const Icon(Icons.arrow_back_rounded, size: 21),
                 ),
-              ),
-              const Divider(height: 1),
-              _SettingsRow(
-                icon: Icons.lock_outline_rounded,
-                title: context.l10n.appLock,
-                subtitle: appLock.enabled
-                    ? context.l10n.appLockEnabledSubtitle(
-                        _lockTimeoutLabel(context.l10n, appLock.timeout),
-                      )
-                    : context.l10n.appLockDisabledSubtitle,
-                onTap: () => Navigator.push<void>(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const AppLockSettingsPage(),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    context.l10n.localData,
+                    style: Theme.of(context).textTheme.headlineMedium,
                   ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 22),
-          _SettingsSection(
-            title: context.l10n.unifiedStorage,
-            children: [
-              _SettingsRow(
-                icon: Icons.memory_rounded,
-                title: context.l10n.localModels,
-                subtitle: context.l10n.localModelsSubtitle,
-                onTap: () async {
-                  await Navigator.push<void>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const ModelManagementPage(),
-                    ),
-                  );
-                  await _loadDataSize();
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 22),
-          _SettingsSection(
-            title: context.l10n.about,
-            children: [
-              _SettingsRow(
-                icon: Icons.info_outline_rounded,
-                title: context.l10n.appTitle,
-                subtitle: _metadata == null
-                    ? context.l10n.loadingVersion
-                    : _buildMetadataSubtitle(context.l10n, _metadata!),
-              ),
-              if (kDebugMode) ...[
-                const Divider(height: 1),
-                _SettingsRow(
-                  icon: Icons.bug_report_outlined,
-                  title: '调试中心 · Debug',
-                  subtitle: '实时日志、异常堆栈与脱敏诊断包',
-                  onTap: () => openDebugConsole(context),
                 ),
               ],
-            ],
-          ),
-        ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              context.l10n.localDataSubtitle,
+              style: const TextStyle(color: AppColors.muted),
+            ),
+            const SizedBox(height: 24),
+            _DataSummary(
+              noteCount: notes.length,
+              attachmentCount: attachmentCount,
+              dataSize: _dataSize,
+            ),
+            const SizedBox(height: 22),
+            _SettingsSection(
+              title: context.l10n.backupAndMigration,
+              children: [
+                _SettingsRow(
+                  icon: Icons.ios_share_rounded,
+                  title: context.l10n.exportCompleteBackup,
+                  subtitle: context.l10n.exportCompleteBackupSubtitle,
+                  onTap: _openBackupExport,
+                ),
+                const Divider(height: 1),
+                _SettingsRow(
+                  icon: Icons.settings_backup_restore_rounded,
+                  title: context.l10n.restoreFromBackup,
+                  subtitle: context.l10n.restoreFromBackupSubtitle,
+                  onTap: _openBackupRestore,
+                ),
+                const Divider(height: 1),
+                _SettingsRow(
+                  icon: Icons.cloud_sync_outlined,
+                  title: context.l10n.cloudSync,
+                  subtitle: context.l10n.cloudSyncSubtitle,
+                  onTap: _openCloudSync,
+                ),
+              ],
+            ),
+            const SizedBox(height: 22),
+            _SettingsSection(
+              title: context.l10n.preferences,
+              children: [
+                _SettingsRow(
+                  icon: Icons.language_rounded,
+                  title: context.l10n.language,
+                  subtitle: _languageLabel(context.l10n, locale.language),
+                  onTap: () => Navigator.push<void>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const LanguageSettingsPage(),
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                _SettingsRow(
+                  icon: Icons.lock_outline_rounded,
+                  title: context.l10n.appLock,
+                  subtitle: appLock.enabled
+                      ? context.l10n.appLockEnabledSubtitle(
+                          _lockTimeoutLabel(context.l10n, appLock.timeout),
+                        )
+                      : context.l10n.appLockDisabledSubtitle,
+                  onTap: () => Navigator.push<void>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const AppLockSettingsPage(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 22),
+            _SettingsSection(
+              title: context.l10n.unifiedStorage,
+              children: [
+                _SettingsRow(
+                  icon: Icons.memory_rounded,
+                  title: context.l10n.localModels,
+                  subtitle: context.l10n.localModelsSubtitle,
+                  onTap: () async {
+                    await Navigator.push<void>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ModelManagementPage(),
+                      ),
+                    );
+                    await _loadDataSize();
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 22),
+            _SettingsSection(
+              title: context.l10n.about,
+              children: [
+                _SettingsRow(
+                  icon: Icons.info_outline_rounded,
+                  title: context.l10n.appTitle,
+                  subtitle: _metadata == null
+                      ? context.l10n.loadingVersion
+                      : _buildMetadataSubtitle(context.l10n, _metadata!),
+                ),
+                if (kDebugMode) ...[
+                  const Divider(height: 1),
+                  _SettingsRow(
+                    icon: Icons.bug_report_outlined,
+                    title: '调试中心 · Debug',
+                    subtitle: '实时日志、异常堆栈与脱敏诊断包',
+                    onTap: () => openDebugConsole(context),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -421,13 +429,8 @@ final class _DataSummary extends StatelessWidget {
   final int? dataSize;
 
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) => PaperSection(
     padding: const EdgeInsets.all(18),
-    decoration: BoxDecoration(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(AppRadius.large),
-      border: Border.all(color: AppColors.line),
-    ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -526,14 +529,7 @@ final class _SettingsSection extends StatelessWidget {
     children: [
       Text(title, style: Theme.of(context).textTheme.titleMedium),
       const SizedBox(height: 12),
-      Material(
-        color: AppColors.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.large),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(children: children),
-      ),
+      PaperSection(child: Column(children: children)),
     ],
   );
 }
@@ -558,11 +554,11 @@ final class _SettingsRow extends StatelessWidget {
     leading: DecoratedBox(
       decoration: const BoxDecoration(
         color: AppColors.surfaceMuted,
-        borderRadius: BorderRadius.all(Radius.circular(AppRadius.small)),
+        shape: BoxShape.circle,
       ),
       child: SizedBox.square(
         dimension: 38,
-        child: Icon(icon, size: 20, color: AppColors.ink),
+        child: Icon(icon, size: 19, color: AppColors.mechanicalBlue),
       ),
     ),
     title: Text(

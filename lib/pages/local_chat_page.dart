@@ -33,6 +33,7 @@ import '../widgets/fk_markdown_view.dart';
 import '../widgets/local_chat_note_picker.dart';
 import '../widgets/local_chat_tool_action_sheet.dart';
 import '../widgets/local_llm_runtime_badge.dart';
+import '../widgets/quiet_paper.dart';
 import '../widgets/realtime_dictation_provider_badge.dart';
 import 'local_chat_roles_page.dart';
 import 'model_management_page.dart';
@@ -244,8 +245,11 @@ class _LocalChatPageState extends State<LocalChatPage>
   );
 
   Widget _buildPage(BuildContext context) => Scaffold(
+    backgroundColor: AppColors.canvas,
     appBar: AppBar(
       toolbarHeight: 64,
+      backgroundColor: AppColors.paperPrimary,
+      shape: const Border(bottom: BorderSide(color: AppColors.line)),
       titleSpacing: 2,
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -303,56 +307,58 @@ class _LocalChatPageState extends State<LocalChatPage>
         const SizedBox(width: 6),
       ],
     ),
-    body: _loading
-        ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
-        : Column(
-            children: [
-              _ModelBar(
-                name: _modelId.isEmpty
-                    ? context.l10n.localLanguageModel
-                    : _localizedModelName(context, _modelId),
-                modelId: _modelId,
-                installed: _modelInstalled,
-                runtimeSnapshot: _runtimeSnapshot,
-                roleLabel: _roleLabel(context),
-                onModelTap: _generating ? null : _openModels,
-                onRoleTap: _generating ? null : _showPersonaSwitcher,
-              ),
-              if (widget.initialNoteContext case final noteContext?)
-                _ActiveNoteContextBar(noteContext: noteContext),
-              Expanded(child: _buildConversationBody()),
-              if (_generationError != null)
-                _GenerationError(
-                  message: _generationError!,
-                  onRetry: _canRetry ? _retryLastMessage : null,
-                  onClose: () => setState(() => _generationError = null),
+    body: PaperShell(
+      child: _loading
+          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+          : Column(
+              children: [
+                _ModelBar(
+                  name: _modelId.isEmpty
+                      ? context.l10n.localLanguageModel
+                      : _localizedModelName(context, _modelId),
+                  modelId: _modelId,
+                  installed: _modelInstalled,
+                  runtimeSnapshot: _runtimeSnapshot,
+                  roleLabel: _roleLabel(context),
+                  onModelTap: _generating ? null : _openModels,
+                  onRoleTap: _generating ? null : _showPersonaSwitcher,
                 ),
-              LocalChatComposer(
-                controller: _input,
-                focusNode: _inputFocus,
-                generating: _generating,
-                pendingAttachments: _pendingAttachments,
-                pendingNoteContexts: _pendingNoteContexts,
-                imageInputAvailable: _modelCapabilities.imageInput,
-                pickingImages: _pickingImages,
-                dictating: _chatDictating,
-                dictationPreparing:
-                    _chatDictating &&
-                    _dictation.status == RealtimeDictationStatus.preparing,
-                dictationProvider: _dictation.activeExecutionProvider,
-                dictationProviderFallback:
-                    _dictation.usedExecutionProviderFallback,
-                onTakePhoto: _takeChatPhoto,
-                onPickImages: _pickChatImages,
-                onRemoveAttachment: _removePendingAttachment,
-                onPickNoteContexts: _pickNoteContexts,
-                onRemoveNoteContext: _removePendingNoteContext,
-                onToggleDictation: _toggleDictation,
-                onSend: _send,
-                onStop: _stop,
-              ),
-            ],
-          ),
+                if (widget.initialNoteContext case final noteContext?)
+                  _ActiveNoteContextBar(noteContext: noteContext),
+                Expanded(child: _buildConversationBody()),
+                if (_generationError != null)
+                  _GenerationError(
+                    message: _generationError!,
+                    onRetry: _canRetry ? _retryLastMessage : null,
+                    onClose: () => setState(() => _generationError = null),
+                  ),
+                LocalChatComposer(
+                  controller: _input,
+                  focusNode: _inputFocus,
+                  generating: _generating,
+                  pendingAttachments: _pendingAttachments,
+                  pendingNoteContexts: _pendingNoteContexts,
+                  imageInputAvailable: _modelCapabilities.imageInput,
+                  pickingImages: _pickingImages,
+                  dictating: _chatDictating,
+                  dictationPreparing:
+                      _chatDictating &&
+                      _dictation.status == RealtimeDictationStatus.preparing,
+                  dictationProvider: _dictation.activeExecutionProvider,
+                  dictationProviderFallback:
+                      _dictation.usedExecutionProviderFallback,
+                  onTakePhoto: _takeChatPhoto,
+                  onPickImages: _pickChatImages,
+                  onRemoveAttachment: _removePendingAttachment,
+                  onPickNoteContexts: _pickNoteContexts,
+                  onRemoveNoteContext: _removePendingNoteContext,
+                  onToggleDictation: _toggleDictation,
+                  onSend: _send,
+                  onStop: _stop,
+                ),
+              ],
+            ),
+    ),
   );
 
   Widget _buildConversationBody() {
@@ -1451,8 +1457,11 @@ class _ModelBar extends StatelessWidget {
     child: Padding(
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
       child: Material(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.medium),
+        color: AppColors.paperPrimary,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.small),
+          side: const BorderSide(color: AppColors.line),
+        ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onModelTap,
@@ -1542,8 +1551,9 @@ class _ActiveNoteContextBar extends StatelessWidget {
     margin: const EdgeInsets.fromLTRB(12, 2, 12, 4),
     padding: const EdgeInsets.fromLTRB(14, 9, 14, 9),
     decoration: BoxDecoration(
-      color: AppColors.accentSoft,
+      color: AppColors.paperSecondary,
       borderRadius: BorderRadius.circular(AppRadius.small),
+      border: Border.all(color: AppColors.line),
     ),
     child: Row(
       children: [
@@ -1583,8 +1593,10 @@ class _EmptyChat extends StatelessWidget {
           width: 62,
           height: 62,
           decoration: BoxDecoration(
-            color: AppColors.accentSoft,
-            borderRadius: BorderRadius.circular(AppRadius.large),
+            color: AppColors.paperPrimary,
+            shape: BoxShape.circle,
+            border: Border.all(color: AppColors.line),
+            boxShadow: AppShadows.paperEdge,
           ),
           child: const Icon(
             Icons.auto_awesome_rounded,
@@ -1636,9 +1648,9 @@ class _Suggestion extends StatelessWidget {
         alignment: Alignment.centerLeft,
         foregroundColor: AppColors.ink,
         backgroundColor: AppColors.surface,
-        side: BorderSide.none,
+        side: const BorderSide(color: AppColors.line),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.medium),
+          borderRadius: BorderRadius.circular(AppRadius.small),
         ),
       ),
       child: Row(
@@ -1709,13 +1721,10 @@ class _ChatBubble extends StatelessWidget {
           margin: const EdgeInsets.only(bottom: 14),
           padding: EdgeInsets.fromLTRB(14, 11, 14, user ? 10 : 8),
           decoration: BoxDecoration(
-            color: user ? AppColors.accent : AppColors.surface,
-            borderRadius: BorderRadius.only(
-              topLeft: const Radius.circular(17),
-              topRight: const Radius.circular(17),
-              bottomLeft: Radius.circular(user ? 17 : 5),
-              bottomRight: Radius.circular(user ? 5 : 17),
-            ),
+            color: user ? AppColors.paperSecondary : AppColors.paperPrimary,
+            borderRadius: BorderRadius.circular(AppRadius.small),
+            border: Border.all(color: AppColors.line),
+            boxShadow: AppShadows.paperEdge,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1730,6 +1739,7 @@ class _ChatBubble extends StatelessWidget {
                 LocalChatUserMessageText(
                   content: displayContent,
                   lineHeight: 1.55,
+                  paperStyle: true,
                 )
               else
                 FkMarkdownView(data: displayContent, compact: true),
@@ -1772,7 +1782,7 @@ class _ChatBubble extends StatelessWidget {
                   child: Text(
                     LocalChatTimeLabel.time(message.createdAt),
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: .72),
+                      color: AppColors.muted.withValues(alpha: .82),
                       fontSize: 10,
                     ),
                   ),
@@ -2218,11 +2228,10 @@ class LocalChatComposer extends StatelessWidget {
                 final canReferenceNotes = !generating && !dictating;
                 return Container(
                   decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(
-                      pendingAttachments.isEmpty ? 28 : 24,
-                    ),
-                    boxShadow: AppShadows.low,
+                    color: AppColors.paperPrimary,
+                    borderRadius: BorderRadius.circular(AppRadius.small),
+                    border: Border.all(color: AppColors.line),
+                    boxShadow: AppShadows.paperEdge,
                   ),
                   clipBehavior: Clip.antiAlias,
                   child: Column(
@@ -2766,14 +2775,11 @@ class _UserMediaMessage extends StatelessWidget {
           const SizedBox(height: 7),
           Container(
             padding: const EdgeInsets.fromLTRB(13, 9, 13, 7),
-            decoration: const BoxDecoration(
-              color: AppColors.moss,
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(16),
-                topRight: Radius.circular(16),
-                bottomLeft: Radius.circular(16),
-                bottomRight: Radius.circular(5),
-              ),
+            decoration: BoxDecoration(
+              color: AppColors.paperSecondary,
+              borderRadius: BorderRadius.circular(AppRadius.small),
+              border: Border.all(color: AppColors.line),
+              boxShadow: AppShadows.paperEdge,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2781,6 +2787,7 @@ class _UserMediaMessage extends StatelessWidget {
                 LocalChatUserMessageText(
                   content: message.content,
                   lineHeight: 1.5,
+                  paperStyle: true,
                 ),
                 const SizedBox(height: 3),
                 Align(
@@ -2788,7 +2795,7 @@ class _UserMediaMessage extends StatelessWidget {
                   child: Text(
                     LocalChatTimeLabel.time(message.createdAt),
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: .72),
+                      color: AppColors.muted.withValues(alpha: .82),
                       fontSize: 10,
                     ),
                   ),
@@ -2814,23 +2821,33 @@ class LocalChatUserMessageText extends StatelessWidget {
 
   final String content;
   final double lineHeight;
+  final bool paperStyle;
 
   const LocalChatUserMessageText({
     super.key,
     required this.content,
     this.lineHeight = 1.55,
+    this.paperStyle = false,
   });
 
   @override
   Widget build(BuildContext context) => TextSelectionTheme(
     data: TextSelectionTheme.of(context).copyWith(
-      selectionColor: selectionColor,
-      selectionHandleColor: selectionHandleColor,
+      selectionColor: paperStyle
+          ? AppColors.mechanicalBlue.withValues(alpha: .22)
+          : selectionColor,
+      selectionHandleColor: paperStyle
+          ? AppColors.mechanicalBlue
+          : selectionHandleColor,
     ),
     child: SelectableText(
       content,
       contextMenuBuilder: buildAppEditableTextContextMenu,
-      style: TextStyle(color: Colors.white, fontSize: 15, height: lineHeight),
+      style: TextStyle(
+        color: paperStyle ? AppColors.ink : Colors.white,
+        fontSize: 15,
+        height: lineHeight,
+      ),
     ),
   );
 }

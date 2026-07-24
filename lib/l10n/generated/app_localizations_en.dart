@@ -163,6 +163,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchNotes => 'Search notes';
 
   @override
+  String get pullToSearch => 'Pull to search';
+
+  @override
   String get savedOnlyOnDevice => 'Stored only on this device';
 
   @override
@@ -3089,6 +3092,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get replaceWithCamera => 'Retake photo';
+
+  @override
+  String get viewOriginalImage => 'View original';
 
   @override
   String get imageDetails => 'Image details';

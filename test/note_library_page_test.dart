@@ -7,6 +7,7 @@ import 'package:fknotes/models/note_document.dart';
 import 'package:fknotes/pages/note_library_page.dart';
 import 'package:fknotes/providers/note_library_controller.dart';
 import 'package:fknotes/widgets/note_delta_preview.dart';
+import 'package:fknotes/widgets/note_quill_editor.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/quill_delta.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -39,10 +40,28 @@ void main() {
 
     expect(find.text('格式笔记'), findsOneWidget);
     expect(find.text('普通笔记'), findsOneWidget);
-    expect(find.byType(NoteDeltaPreview), findsNWidgets(2));
+    expect(find.byType(NoteRichDocumentPreview), findsOneWidget);
+    expect(find.byType(NoteDeltaPreview), findsOneWidget);
+    expect(
+      find.byKey(ValueKey('folded-note-preview-${store.notes.last.id.value}')),
+      findsOneWidget,
+    );
+    expect(find.text('可搜索内容', findRichText: true), findsOneWidget);
+    expect(find.byKey(const Key('note-document-preview-fade')), findsNothing);
     expect(find.text('收藏'), findsNothing);
     expect(find.text('归档'), findsNothing);
     expect(find.text('回收站'), findsNothing);
+    expect(find.text('下拉搜索'), findsOneWidget);
+    expect(find.byKey(const Key('delta-library-search-pull')), findsOneWidget);
+    expect(find.byKey(const Key('delta-library-search')), findsNothing);
+
+    final paperTab = find.byKey(const Key('brand-spine-paper-tab'));
+    final itemCount = find.byKey(const Key('brand-spine-item-count'));
+    expect(tester.getSize(paperTab), const Size(58, 282));
+    expect(
+      tester.getRect(paperTab).bottom,
+      lessThan(tester.getRect(itemCount).top),
+    );
   });
 
   testWidgets('debounces search and never exposes Markdown marker fields', (
@@ -53,6 +72,8 @@ void main() {
     );
     await _pump(tester);
 
+    await tester.tap(find.byKey(const Key('delta-library-search-pull')));
+    await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('delta-library-search')),
       '可搜索',
@@ -66,6 +87,39 @@ void main() {
     expect(find.text('普通笔记'), findsOneWidget);
     expect(find.text('格式笔记'), findsNothing);
     expect(find.textContaining('**'), findsNothing);
+  });
+
+  testWidgets('pull gesture expands search and collapse restores the deck', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _TestApp(child: NoteLibraryPage(controller: controller)),
+    );
+    await _pump(tester);
+
+    await tester.drag(
+      find.byKey(const Key('delta-library-search-pull')),
+      const Offset(0, 28),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('delta-library-search')), findsOneWidget);
+    expect(_searchEditable(tester).focusNode.hasFocus, isFalse);
+
+    await tester.enterText(
+      find.byKey(const Key('delta-library-search')),
+      '可搜索',
+    );
+    await tester.pump(const Duration(milliseconds: 281));
+    await _pump(tester);
+    expect(find.text('格式笔记'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('delta-library-collapse-search')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('delta-library-search-pull')), findsOneWidget);
+    expect(find.text('格式笔记'), findsOneWidget);
+    expect(find.text('普通笔记'), findsOneWidget);
+    expect(controller.query, isEmpty);
   });
 
   testWidgets('keeps creation on home and opens existing notes', (
@@ -96,6 +150,53 @@ void main() {
     expect(find.text('格式笔记'), findsOneWidget);
   });
 
+  testWidgets('card switching keeps intermediate animation frames in bounds', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(430, 932);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _TestApp(child: NoteLibraryPage(controller: controller)),
+    );
+    await _pump(tester);
+
+    await tester.tap(find.text('普通笔记'));
+    for (final duration in const [
+      Duration(milliseconds: 40),
+      Duration(milliseconds: 40),
+      Duration(milliseconds: 40),
+      Duration(milliseconds: 100),
+    ]) {
+      await tester.pump(duration);
+      expect(tester.takeException(), isNull);
+    }
+  });
+
+  testWidgets('index dial moves beneath a stationary center pointer', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _TestApp(child: NoteLibraryPage(controller: controller)),
+    );
+    await _pump(tester);
+
+    final pointer = find.byKey(const Key('index-ticks-pointer'));
+    final dial = find.byKey(const Key('index-ticks-dial'));
+    expect(pointer, findsOneWidget);
+    expect(dial, findsOneWidget);
+    final pointerBefore = tester.getRect(pointer);
+    expect(find.text('1 / 2'), findsOneWidget);
+
+    await tester.tap(find.text('普通笔记'));
+    await tester.pumpAndSettle();
+
+    expect(tester.getRect(pointer), pointerBefore);
+    expect(find.text('2 / 2'), findsOneWidget);
+  });
+
   testWidgets('returning from a note does not restore search focus', (
     tester,
   ) async {
@@ -117,6 +218,8 @@ void main() {
     );
     await _pump(tester);
 
+    await tester.tap(find.byKey(const Key('delta-library-search-pull')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('delta-library-search')));
     await tester.pump();
     expect(_searchEditable(tester).focusNode.hasFocus, isTrue);
@@ -139,12 +242,11 @@ void main() {
     );
     await _pump(tester);
 
-    final card = find.byKey(
-      ValueKey('delta-note-${store.notes.first.id.value}'),
+    final menu = find.byKey(
+      ValueKey('delta-note-menu-${store.notes.first.id.value}'),
     );
-    await tester.tap(
-      find.descendant(of: card, matching: find.byIcon(Icons.more_vert_rounded)),
-    );
+    expect(tester.getSize(menu), const Size.square(48));
+    await tester.tapAt(tester.getRect(menu).topLeft + const Offset(8, 8));
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.delete_outline_rounded), findsOneWidget);
     expect(find.byIcon(Icons.delete_forever_outlined), findsNothing);
@@ -159,7 +261,7 @@ void main() {
   });
 
   testWidgets(
-    'image notes hide attachment names and vertically center their cover',
+    'image notes keep images inline with the document instead of a side cover',
     (tester) async {
       final asset = _imageAsset('61.png');
       store.notes
@@ -168,9 +270,9 @@ void main() {
           _note(
             '图片笔记',
             document: Delta()
+              ..insert('正文预览\n')
               ..insert(NoteEmbed.attachment(asset.id).toDeltaData())
-              ..insert('\n')
-              ..insert('正文预览\n'),
+              ..insert('\n'),
             assets: [asset],
           ),
         );
@@ -186,19 +288,91 @@ void main() {
       await _pump(tester);
 
       expect(find.textContaining('61.png'), findsNothing);
-      expect(find.text('正文预览'), findsOneWidget);
-      final card = find.byKey(
-        ValueKey('delta-note-${store.notes.single.id.value}'),
+      final bodyText = find.text('正文预览', findRichText: true);
+      expect(bodyText, findsOneWidget);
+      expect(
+        find.byKey(ValueKey('delta-note-cover-${store.notes.single.id.value}')),
+        findsNothing,
       );
-      final cover = find.byKey(
-        ValueKey('delta-note-cover-${store.notes.single.id.value}'),
+      final inlineImage = find.byKey(ValueKey('note-image-${asset.id.value}'));
+      expect(inlineImage, findsOneWidget);
+      expect(
+        tester.getRect(bodyText).bottom,
+        lessThanOrEqualTo(tester.getRect(inlineImage).top),
       );
       expect(
-        tester.getRect(cover).center.dy,
-        closeTo(tester.getRect(card).center.dy, 1),
+        find.byKey(
+          ValueKey('delta-note-document-${store.notes.single.id.value}'),
+        ),
+        findsOneWidget,
       );
     },
   );
+
+  testWidgets('long document previews fade into the paper at the cutoff', (
+    tester,
+  ) async {
+    store.notes
+      ..clear()
+      ..add(
+        _note(
+          '长笔记',
+          document: Delta()
+            ..insert(
+              List.generate(32, (index) => '第 ${index + 1} 段正文').join('\n'),
+            )
+            ..insert('\n'),
+        ),
+      );
+
+    await tester.pumpWidget(
+      _TestApp(child: NoteLibraryPage(controller: controller)),
+    );
+    await _pump(tester);
+
+    expect(find.byKey(const Key('note-document-preview-fade')), findsOneWidget);
+    final fade = tester.widget<ShaderMask>(
+      find.byKey(const Key('note-document-preview-fade')),
+    );
+    expect(fade.blendMode, BlendMode.dstIn);
+  });
+
+  testWidgets('bulk audio previews switch to the compact narrow layout', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(430, 932);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final audio = _audioAsset();
+    store.notes
+      ..clear()
+      ..addAll([
+        _note(
+          '录音笔记',
+          document: Delta()
+            ..insert(NoteEmbed.attachment(audio.id).toDeltaData())
+            ..insert('\n正文\n'),
+          assets: [audio],
+        ),
+        _note('普通笔记', document: Delta()..insert('正文\n')),
+      ]);
+
+    await tester.pumpWidget(
+      _TestApp(child: NoteLibraryPage(controller: controller)),
+    );
+    await _pump(tester);
+    await tester.longPress(
+      find.byKey(ValueKey('delta-note-${store.notes.first.id.value}')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(ValueKey('compact-note-audio-${audio.id.value}')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('long press selects notes for bulk pinning and deletion', (
     tester,
@@ -312,6 +486,22 @@ NoteAsset _imageAsset(String originalName) {
     originalName: originalName,
     byteLength: _onePixelPng.length,
     mimeType: 'image/png',
+    createdAt: now,
+    updatedAt: now,
+  );
+}
+
+NoteAsset _audioAsset() {
+  final now = DateTime.utc(2026, 7, 23, 12);
+  return NoteAsset(
+    id: NoteAttachmentId.generate(),
+    kind: NoteAssetKind.audio,
+    storageKey: 'notes/audio/${NoteAttachmentId.generate().value}.m4a',
+    originalName: 'recording.m4a',
+    displayName: '语音笔记',
+    byteLength: 4096,
+    mimeType: 'audio/mp4',
+    durationMs: 92340,
     createdAt: now,
     updatedAt: now,
   );

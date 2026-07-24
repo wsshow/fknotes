@@ -137,7 +137,10 @@ class NoteShareTextPresentation {
 class NoteShareLayoutEngine {
   static const logicalWidth = 360.0;
   static const chromeMeasurementSafety = 4.0;
-  static const blockMeasurementSafety = 1.0;
+  // Narrow paper themes create more wrapped lines, and RenderParagraph rounds
+  // each line independently. Keep enough per-block room for those fractions
+  // to accumulate safely in long-image exports.
+  static const blockMeasurementSafety = 2.25;
   static const blockBottomGap = 8.0;
   static const dividerVerticalPadding = 10.0;
   static const quoteBorderWidth = 2.5;
@@ -375,20 +378,12 @@ class NoteShareLayoutEngine {
       previousType = block.type;
     }
 
-    final fixedHeight = _fixedChromeHeight(
-      pageIndex: 0,
+    final logicalHeight = _stableLongImageHeight(
+      blocks: blocks,
       draft: draft,
       options: options,
       textDirection: textDirection,
       untitledTitle: untitledTitle,
-      landscape: false,
-    );
-    final paperFactor = NoteShareTemplateMetrics.of(
-      options.template,
-    ).paperHeightFactor;
-    final logicalHeight = math.max(
-      480.0,
-      (fixedHeight + bodyHeight) / paperFactor,
     );
     final outputPixelSize = _longOutputPixelSize(
       logicalHeight,
@@ -406,6 +401,47 @@ class NoteShareLayoutEngine {
         ),
       ],
     );
+  }
+
+  double _stableLongImageHeight({
+    required List<NoteShareBlock> blocks,
+    required NoteShareDraft draft,
+    required NoteShareOptions options,
+    required TextDirection textDirection,
+    required String untitledTitle,
+  }) {
+    // A style change must not silently change the requested long-image canvas.
+    // Reserve the largest safe geometry across the built-in templates so every
+    // style receives the same output size while retaining its own typography.
+    var logicalHeight = 480.0;
+    for (final template in NoteShareTemplateId.values) {
+      final candidateOptions = options.copyWith(template: template);
+      var candidateBodyHeight = 0.0;
+      for (final block in blocks) {
+        candidateBodyHeight += _blockHeight(
+          block,
+          draft: draft,
+          options: candidateOptions,
+          textDirection: textDirection,
+        );
+      }
+      final fixedHeight = _fixedChromeHeight(
+        pageIndex: 0,
+        draft: draft,
+        options: candidateOptions,
+        textDirection: textDirection,
+        untitledTitle: untitledTitle,
+        landscape: false,
+      );
+      final paperFactor = NoteShareTemplateMetrics.of(
+        template,
+      ).paperHeightFactor;
+      logicalHeight = math.max(
+        logicalHeight,
+        (fixedHeight + candidateBodyHeight) / paperFactor,
+      );
+    }
+    return logicalHeight;
   }
 
   NoteSharePixelSize _longOutputPixelSize(

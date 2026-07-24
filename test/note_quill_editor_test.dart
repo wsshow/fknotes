@@ -2,8 +2,9 @@
 // ignore_for_file: experimental_member_use
 
 import 'dart:convert';
-import 'dart:typed_data';
+import 'dart:ui' as ui;
 
+import 'package:fknotes/app.dart';
 import 'package:fknotes/editor/note_assistant_editing.dart';
 import 'package:fknotes/editor/note_editor_controller.dart';
 import 'package:fknotes/editor/note_markdown_codec.dart';
@@ -13,6 +14,7 @@ import 'package:fknotes/models/note_document.dart';
 import 'package:fknotes/services/note_audio_playback_service.dart';
 import 'package:fknotes/widgets/note_quill_editor.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:flutter_quill/quill_delta.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -545,6 +547,57 @@ final value = 1;
     });
   });
 
+  testWidgets('editor and card preview share the paper-themed code style', (
+    tester,
+  ) async {
+    final document = NoteDocument.fromDelta(
+      Delta()
+        ..insert('final answer = 42;')
+        ..insert('\n', {'code-block': true}),
+    );
+    final controller = NoteEditorController(
+      document: document,
+      assets: const [],
+    );
+    final now = DateTime.utc(2026, 7, 23, 12);
+    final note = Note(
+      id: NoteId.generate(),
+      title: '代码笔记',
+      document: document,
+      assets: const [],
+      revision: 1,
+      createdAt: now,
+      updatedAt: now,
+    );
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      _EditorTestApp(
+        child: Column(
+          children: [
+            Expanded(child: NoteQuillEditor(controller: controller)),
+            SizedBox(height: 180, child: NoteRichDocumentPreview(note: note)),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final editors = tester
+        .widgetList<quill.QuillEditor>(find.byType(quill.QuillEditor))
+        .toList();
+    expect(editors, hasLength(2));
+    for (final editor in editors) {
+      final styles = editor.config.customStyles!;
+      final code = styles.code!;
+      expect(code.style.color, AppColors.ink);
+      expect(code.decoration!.color, AppColors.paperSecondary);
+      expect(code.decoration!.border, Border.all(color: AppColors.line));
+      expect(styles.inlineCode!.backgroundColor, AppColors.accentSoft);
+      expect(styles.inlineCode!.style.color, AppColors.mechanicalBlue);
+    }
+  });
+
   testWidgets(
     'reveals copy edit details and delete actions only after tapping an image',
     (tester) async {
@@ -563,18 +616,23 @@ final value = 1;
       final focusNode = FocusNode();
       var copyCalls = 0;
       var editCalls = 0;
+      var viewOriginalCalls = 0;
       var detailsCalls = 0;
+      final testImage = await _createTestImage(320, 320);
+      final imageProvider = _SynchronousTestImageProvider(testImage);
       addTearDown(controller.dispose);
       addTearDown(focusNode.dispose);
+      addTearDown(testImage.dispose);
 
       await tester.pumpWidget(
         _EditorTestApp(
           child: NoteQuillEditor(
             controller: controller,
             focusNode: focusNode,
-            resolveImage: (_) => MemoryImage(_onePixelPng),
+            resolveImage: (_) => imageProvider,
             onCopyImage: (_) async => copyCalls++,
             onEditImage: (_) async => editCalls++,
+            onViewImageOriginal: (_) async => viewOriginalCalls++,
             onShowImageDetails: (_) async => detailsCalls++,
           ),
         ),
@@ -584,11 +642,27 @@ final value = 1;
       final imageFinder = find.byKey(ValueKey('note-image-${asset.id.value}'));
       final editorFinder = find.byType(NoteQuillEditor);
       expect(imageFinder, findsOneWidget);
+      final imageFrameFinder = find.byKey(
+        ValueKey('note-image-frame-${asset.id.value}'),
+      );
+      final imageFrame = tester.widget<Container>(imageFrameFinder);
+      final imageFrameDecoration = imageFrame.decoration! as BoxDecoration;
+      expect(imageFrameDecoration.color, AppColors.paperPrimary);
+      expect(imageFrameDecoration.border, Border.all(color: AppColors.line));
+      expect(imageFrameDecoration.boxShadow, AppShadows.paperEdge);
+      final frameSize = tester.getSize(imageFrameFinder);
+      final imageSize = tester.getSize(imageFinder);
       expect(
-        tester.getSize(imageFinder).width,
+        frameSize.width,
         closeTo(tester.getSize(editorFinder).width - 48, 1),
       );
-      expect(tester.getSize(imageFinder).height, greaterThan(10));
+      expect(imageSize.width, closeTo(frameSize.width - 14, 1));
+      expect(imageSize.height, closeTo(imageSize.width, 1));
+      expect(
+        imageSize.height,
+        greaterThan(260),
+        reason: '图片高度应由原始比例决定，不再受旧的 260dp 上限约束',
+      );
       expect(
         find.byKey(ValueKey('note-image-actions-${asset.id.value}')),
         findsNothing,
@@ -598,20 +672,23 @@ final value = 1;
         findsNothing,
       );
 
-      await tester.drag(imageFinder, const Offset(0, -80));
+      await tester.drag(imageFinder, const Offset(0, -80), warnIfMissed: false);
       await tester.pumpAndSettle();
       expect(
         find.byKey(ValueKey('note-image-actions-${asset.id.value}')),
         findsNothing,
       );
 
+      await tester.ensureVisible(
+        find.byKey(ValueKey('note-asset-${asset.id.value}')),
+      );
+      await tester.pumpAndSettle();
       focusNode.requestFocus();
       await tester.pump();
       expect(focusNode.hasFocus, isTrue);
-      await tester.tap(
-        find.byKey(ValueKey('note-asset-${asset.id.value}')),
-        warnIfMissed: false,
-      );
+      final visibleImageRect = tester.getRect(imageFinder);
+      final visibleEditorRect = tester.getRect(editorFinder);
+      await tester.tapAt(visibleImageRect.intersect(visibleEditorRect).center);
       await tester.pump(const Duration(milliseconds: 350));
       expect(focusNode.hasFocus, isFalse);
       expect(
@@ -619,6 +696,10 @@ final value = 1;
         findsOneWidget,
       );
 
+      await tester.tap(
+        find.byKey(ValueKey('view-original-note-image-${asset.id.value}')),
+      );
+      await tester.pump();
       await tester.tap(
         find.byKey(ValueKey('copy-note-image-${asset.id.value}')),
       );
@@ -631,6 +712,7 @@ final value = 1;
         find.byKey(ValueKey('details-note-image-${asset.id.value}')),
       );
       await tester.pump();
+      expect(viewOriginalCalls, 1);
       expect(copyCalls, 1);
       expect(editCalls, 1);
       expect(detailsCalls, 1);
@@ -979,6 +1061,32 @@ final value = 1;
     expect(recordingButton.style, isNull);
     expect(tester.getSize(find.byType(NoteQuillToolbar)).height, lessThan(90));
   });
+}
+
+Future<ui.Image> _createTestImage(int width, int height) {
+  final recorder = ui.PictureRecorder();
+  final canvas = ui.Canvas(recorder);
+  canvas.drawRect(
+    ui.Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
+    ui.Paint()..color = const Color(0xFF587086),
+  );
+  return recorder.endRecording().toImage(width, height);
+}
+
+final class _SynchronousTestImageProvider extends ImageProvider<int> {
+  const _SynchronousTestImageProvider(this.image);
+
+  final ui.Image image;
+
+  @override
+  Future<int> obtainKey(ImageConfiguration configuration) =>
+      SynchronousFuture<int>(identityHashCode(this));
+
+  @override
+  ImageStreamCompleter loadImage(int key, ImageDecoderCallback decode) =>
+      OneFrameImageStreamCompleter(
+        SynchronousFuture<ImageInfo>(ImageInfo(image: image)),
+      );
 }
 
 final Uint8List _onePixelPng = base64Decode(

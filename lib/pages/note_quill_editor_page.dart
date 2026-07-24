@@ -35,6 +35,7 @@ import '../widgets/app_popup_menu.dart';
 import '../widgets/note_inline_assistant_composer.dart';
 import '../widgets/note_quill_editor.dart';
 import '../widgets/note_recording_bar.dart';
+import '../widgets/quiet_paper.dart';
 import '../widgets/note_tags_editor_sheet.dart';
 import 'model_management_page.dart';
 import 'note_share_composer_page.dart';
@@ -1220,6 +1221,25 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     );
   }
 
+  Future<void> _viewOriginalImage(NoteAsset requestedAsset) async {
+    final asset = _editor.asset(requestedAsset.id);
+    if (asset == null || !mounted) return;
+    final imageProvider = (widget.resolveImage ?? _resolveManagedImage)(asset);
+    if (imageProvider == null) {
+      AppFeedback.error(context, context.l10n.originalFileMissing);
+      return;
+    }
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (viewerContext) => _OriginalImageViewer(
+          imageProvider: imageProvider,
+          title: asset.displayTitle,
+        ),
+      ),
+    );
+  }
+
   Future<void> _deleteAssetFilesBestEffort(NoteAsset asset) async {
     try {
       await _deleteAssetFiles(asset);
@@ -1535,116 +1555,149 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
       if (!didPop) unawaited(_requestClose());
     },
     child: Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: AppColors.canvas,
       body: SafeArea(
         bottom: false,
-        child: AbsorbPointer(
-          absorbing: _actionPending,
-          child: Column(
-            children: [
-              _buildHeader(context),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 18, 24, 2),
-                child: TextField(
-                  key: const Key('quill-note-title'),
-                  controller: _titleController,
-                  focusNode: _titleFocusNode,
-                  autofocus: _note.revision == 0,
-                  readOnly: _recordingVisible,
-                  maxLines: 1,
-                  textInputAction: TextInputAction.next,
-                  inputFormatters: [LengthLimitingTextInputFormatter(200)],
-                  onSubmitted: (_) => _editorFocusNode.requestFocus(),
-                  style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                    fontSize: 29,
-                    height: 1.25,
+        child: PaperShell(
+          child: AbsorbPointer(
+            absorbing: _actionPending,
+            child: Column(
+              children: [
+                _buildHeader(context),
+                Expanded(
+                  child: Container(
+                    margin: const EdgeInsets.fromLTRB(12, 7, 12, 0),
+                    decoration: BoxDecoration(
+                      color: AppColors.paperPrimary,
+                      border: Border.all(color: AppColors.line),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(AppRadius.small),
+                      ),
+                      boxShadow: AppShadows.paperEdge,
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 21, 24, 2),
+                          child: TextField(
+                            key: const Key('quill-note-title'),
+                            controller: _titleController,
+                            focusNode: _titleFocusNode,
+                            autofocus: _note.revision == 0,
+                            readOnly: _recordingVisible,
+                            maxLines: 1,
+                            textInputAction: TextInputAction.next,
+                            inputFormatters: [
+                              LengthLimitingTextInputFormatter(200),
+                            ],
+                            onSubmitted: (_) => _editorFocusNode.requestFocus(),
+                            style: Theme.of(context).textTheme.headlineLarge
+                                ?.copyWith(fontSize: 29, height: 1.25),
+                            decoration: InputDecoration(
+                              hintText: context.l10n.newNote,
+                              filled: false,
+                              contentPadding: EdgeInsets.zero,
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                            ),
+                          ),
+                        ),
+                        _buildTags(context),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 5, 24, 0),
+                          child: Container(
+                            height: 1,
+                            color: AppColors.mechanicalBlue.withValues(
+                              alpha: .42,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: NoteQuillEditor(
+                            key: const Key('quill-note-body'),
+                            controller: _editor,
+                            focusNode: _editorFocusNode,
+                            resolveImage:
+                                widget.resolveImage ?? _resolveManagedImage,
+                            resolveAssetPath:
+                                widget.resolveAssetPath ??
+                                _resolveManagedAssetPath,
+                            audioPlayback: _audioPlayback,
+                            onCopyImage: _copyImage,
+                            onEditImage: _editImage,
+                            onViewImageOriginal: _viewOriginalImage,
+                            onShowImageDetails: _showImageDetails,
+                            placeholder: context.l10n.noteStartHint,
+                            readOnly:
+                                _inlineAssistantBusy ||
+                                _inlineAssistantSession != null ||
+                                _recordingVisible,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  decoration: InputDecoration(
-                    hintText: context.l10n.newNote,
-                    filled: false,
-                    contentPadding: EdgeInsets.zero,
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
+                ),
+                if (_importingImage)
+                  const LinearProgressIndicator(
+                    minHeight: 2,
+                    color: AppColors.accent,
+                    backgroundColor: AppColors.accentSoft,
                   ),
-                ),
-              ),
-              _buildTags(context),
-              Expanded(
-                child: NoteQuillEditor(
-                  key: const Key('quill-note-body'),
-                  controller: _editor,
-                  focusNode: _editorFocusNode,
-                  resolveImage: widget.resolveImage ?? _resolveManagedImage,
-                  resolveAssetPath:
-                      widget.resolveAssetPath ?? _resolveManagedAssetPath,
-                  audioPlayback: _audioPlayback,
-                  onCopyImage: _copyImage,
-                  onEditImage: _editImage,
-                  onShowImageDetails: _showImageDetails,
-                  placeholder: context.l10n.noteStartHint,
-                  readOnly:
-                      _inlineAssistantBusy ||
-                      _inlineAssistantSession != null ||
-                      _recordingVisible,
-                ),
-              ),
-              if (_importingImage)
-                const LinearProgressIndicator(
-                  minHeight: 2,
-                  color: AppColors.accent,
-                  backgroundColor: AppColors.accentSoft,
-                ),
-              if (_recordingVisible)
-                NoteRecordingBar(
-                  preparing: _recordingState == _NoteRecordingState.preparing,
-                  saving: _recordingState == _NoteRecordingState.saving,
-                  paused: _recordingState == _NoteRecordingState.paused,
-                  elapsed: _recordingElapsed,
-                  amplitudes: _recordingAmplitudes,
-                  onCancel: _recordingState == _NoteRecordingState.saving
-                      ? null
-                      : () => unawaited(_cancelRecording()),
-                  onPauseOrResume:
-                      _recordingState == _NoteRecordingState.recording ||
-                          _recordingState == _NoteRecordingState.paused
-                      ? () => unawaited(_pauseOrResumeRecording())
-                      : null,
-                  onFinish:
-                      _recordingState == _NoteRecordingState.recording ||
-                          _recordingState == _NoteRecordingState.paused
-                      ? () => unawaited(_finishRecording())
-                      : null,
-                )
-              else if (_inlineAssistantOpen)
-                NoteInlineAssistantComposer(
-                  controller: _inlineAssistantController,
-                  focusNode: _inlineAssistantFocusNode,
-                  loading: _inlineAssistantLoading,
-                  generating: _inlineAssistantGenerating,
-                  hasResult:
-                      _inlineAssistantSession != null &&
-                      _inlineAssistantOutput.trim().isNotEmpty,
-                  replacesSelection: _inlineAssistantReplacesSelection,
-                  error: _inlineAssistantError,
-                  onSubmit: (value) => unawaited(_submitInlineAssistant(value)),
-                  onStop: () => unawaited(_stopInlineAssistant()),
-                  onRetry: _retryInlineAssistant,
-                  onUndo: _undoInlineAssistant,
-                  onContinue: _continueInlineAssistant,
-                  onClose: _closeInlineAssistant,
-                )
-              else
-                NoteQuillToolbar(
-                  controller: _editor,
-                  onOpenAssistant: _toggleInlineAssistant,
-                  onInsertImage: _showImageSourceSheet,
-                  onRecordAudio: () => unawaited(_startRecording()),
-                  assistantTooltip: context.l10n.writeWithAi,
-                  imageTooltip: context.l10n.image,
-                  recordTooltip: context.l10n.record,
-                ),
-            ],
+                if (_recordingVisible)
+                  NoteRecordingBar(
+                    preparing: _recordingState == _NoteRecordingState.preparing,
+                    saving: _recordingState == _NoteRecordingState.saving,
+                    paused: _recordingState == _NoteRecordingState.paused,
+                    elapsed: _recordingElapsed,
+                    amplitudes: _recordingAmplitudes,
+                    onCancel: _recordingState == _NoteRecordingState.saving
+                        ? null
+                        : () => unawaited(_cancelRecording()),
+                    onPauseOrResume:
+                        _recordingState == _NoteRecordingState.recording ||
+                            _recordingState == _NoteRecordingState.paused
+                        ? () => unawaited(_pauseOrResumeRecording())
+                        : null,
+                    onFinish:
+                        _recordingState == _NoteRecordingState.recording ||
+                            _recordingState == _NoteRecordingState.paused
+                        ? () => unawaited(_finishRecording())
+                        : null,
+                  )
+                else if (_inlineAssistantOpen)
+                  NoteInlineAssistantComposer(
+                    controller: _inlineAssistantController,
+                    focusNode: _inlineAssistantFocusNode,
+                    loading: _inlineAssistantLoading,
+                    generating: _inlineAssistantGenerating,
+                    hasResult:
+                        _inlineAssistantSession != null &&
+                        _inlineAssistantOutput.trim().isNotEmpty,
+                    replacesSelection: _inlineAssistantReplacesSelection,
+                    error: _inlineAssistantError,
+                    onSubmit: (value) =>
+                        unawaited(_submitInlineAssistant(value)),
+                    onStop: () => unawaited(_stopInlineAssistant()),
+                    onRetry: _retryInlineAssistant,
+                    onUndo: _undoInlineAssistant,
+                    onContinue: _continueInlineAssistant,
+                    onClose: _closeInlineAssistant,
+                  )
+                else
+                  NoteQuillToolbar(
+                    controller: _editor,
+                    onOpenAssistant: _toggleInlineAssistant,
+                    onInsertImage: _showImageSourceSheet,
+                    onRecordAudio: () => unawaited(_startRecording()),
+                    assistantTooltip: context.l10n.writeWithAi,
+                    imageTooltip: context.l10n.image,
+                    recordTooltip: context.l10n.record,
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1664,8 +1717,8 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
               key: ValueKey('quill-note-tag-$tag'),
               label: Text('#$tag'),
               onDeleted: () => _removeTag(tag),
-              backgroundColor: AppColors.surfaceMuted,
-              side: BorderSide.none,
+              backgroundColor: Colors.transparent,
+              side: const BorderSide(color: AppColors.line),
               deleteIconColor: AppColors.subtle,
               visualDensity: VisualDensity.compact,
             ),
@@ -1676,10 +1729,8 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
               _tags.isEmpty ? context.l10n.addTags : context.l10n.tags,
             ),
             onPressed: _editTags,
-            backgroundColor: _tags.isEmpty
-                ? AppColors.surfaceMuted
-                : Colors.transparent,
-            side: BorderSide.none,
+            backgroundColor: Colors.transparent,
+            side: const BorderSide(color: AppColors.line),
             labelStyle: const TextStyle(
               color: AppColors.muted,
               fontWeight: FontWeight.w500,
@@ -1691,8 +1742,12 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     ),
   );
 
-  Widget _buildHeader(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+  Widget _buildHeader(BuildContext context) => Container(
+    padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+    decoration: const BoxDecoration(
+      color: AppColors.paperSecondary,
+      border: Border(bottom: BorderSide(color: AppColors.line)),
+    ),
     child: Row(
       children: [
         IconButton(
@@ -1873,6 +1928,52 @@ String _formatBytes(int bytes) {
     return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
   }
   return '${(bytes / 1024 / 1024 / 1024).toStringAsFixed(1)} GB';
+}
+
+final class _OriginalImageViewer extends StatelessWidget {
+  const _OriginalImageViewer({
+    required this.imageProvider,
+    required this.title,
+  });
+
+  final ImageProvider imageProvider;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: Colors.black,
+    appBar: AppBar(
+      backgroundColor: Colors.black,
+      foregroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+    ),
+    body: SafeArea(
+      child: LayoutBuilder(
+        builder: (context, constraints) => InteractiveViewer(
+          minScale: .75,
+          maxScale: 6,
+          boundaryMargin: const EdgeInsets.all(80),
+          child: SizedBox(
+            width: constraints.maxWidth,
+            height: constraints.maxHeight,
+            child: Image(
+              key: const Key('note-original-image'),
+              image: imageProvider,
+              fit: BoxFit.contain,
+              errorBuilder: (_, _, _) => const Center(
+                child: Icon(
+                  Icons.broken_image_outlined,
+                  color: Colors.white70,
+                  size: 48,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 final class _ImageDetailRow extends StatelessWidget {

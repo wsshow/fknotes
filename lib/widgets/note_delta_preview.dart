@@ -17,6 +17,7 @@ final class NoteDeltaPreview extends StatelessWidget {
     this.style,
     this.embedLabel,
     this.includeAttachmentLabels = true,
+    this.compactWhitespace = false,
     super.key,
   });
 
@@ -25,6 +26,7 @@ final class NoteDeltaPreview extends StatelessWidget {
   final TextStyle? style;
   final NotePreviewEmbedLabel? embedLabel;
   final bool includeAttachmentLabels;
+  final bool compactWhitespace;
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +40,8 @@ final class NoteDeltaPreview extends StatelessWidget {
     final spans = <InlineSpan>[];
     final operations = note.document.toDelta().operations;
     var removeNextAttachmentLineBreak = false;
+    var wroteCompactContent = false;
+    var compactTrailingWhitespace = false;
     for (var index = 0; index < operations.length; index++) {
       final operation = operations[index];
       final data = operation.data;
@@ -49,6 +53,24 @@ final class NoteDeltaPreview extends StatelessWidget {
         removeNextAttachmentLineBreak = false;
         if (index == operations.length - 1 && value.endsWith('\n')) {
           value = value.substring(0, value.length - 1);
+        }
+        if (compactWhitespace) {
+          final hadLeadingWhitespace =
+              value.isNotEmpty && RegExp(r'^\s').hasMatch(value);
+          final hadTrailingWhitespace =
+              value.isNotEmpty && RegExp(r'\s$').hasMatch(value);
+          final compactValue = value.replaceAll(RegExp(r'\s+'), ' ').trim();
+          if (compactValue.isEmpty) {
+            compactTrailingWhitespace =
+                compactTrailingWhitespace || value.isNotEmpty;
+            continue;
+          }
+          final needsSpace =
+              wroteCompactContent &&
+              (compactTrailingWhitespace || hadLeadingWhitespace);
+          value = '${needsSpace ? ' ' : ''}$compactValue';
+          wroteCompactContent = true;
+          compactTrailingWhitespace = hadTrailingWhitespace;
         }
         if (value.isEmpty) continue;
         spans.add(
@@ -73,12 +95,20 @@ final class NoteDeltaPreview extends StatelessWidget {
             NoteEmbedKind.attachment =>
               asset == null ? '【附件】' : '【${asset.displayTitle}】',
           };
+      final prefix =
+          compactWhitespace && wroteCompactContent && compactTrailingWhitespace
+          ? ' '
+          : '';
       spans.add(
         TextSpan(
-          text: label,
+          text: '$prefix$label',
           style: baseStyle.copyWith(fontWeight: FontWeight.w600),
         ),
       );
+      if (compactWhitespace) {
+        wroteCompactContent = true;
+        compactTrailingWhitespace = false;
+      }
     }
     return Text.rich(
       TextSpan(children: spans),

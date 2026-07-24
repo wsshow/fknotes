@@ -386,6 +386,12 @@ abstract class AppLocalizations {
   /// **'搜索笔记'**
   String get searchNotes;
 
+  /// No description provided for @pullToSearch.
+  ///
+  /// In zh, this message translates to:
+  /// **'下拉搜索'**
+  String get pullToSearch;
+
   /// No description provided for @savedOnlyOnDevice.
   ///
   /// In zh, this message translates to:
@@ -5347,6 +5353,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'重新拍摄'**
   String get replaceWithCamera;
+
+  /// No description provided for @viewOriginalImage.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看原图'**
+  String get viewOriginalImage;
 
   /// No description provided for @imageDetails.
   ///

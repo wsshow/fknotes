@@ -85,6 +85,26 @@ void main() {
     expect(text.textSpan!.toPlainText(), contains('项目\t状态'));
     expect(text.textSpan!.toPlainText(), contains('Quill\t完成'));
   });
+
+  testWidgets('compact preview skips blank lines and collapses whitespace', (
+    tester,
+  ) async {
+    final note = _noteWithDocument(
+      Delta()
+        ..insert('\n\n第一段  ')
+        ..insert('重点', {'bold': true})
+        ..insert('\n\n第二段\n'),
+    );
+
+    await tester.pumpWidget(
+      _TestApp(child: NoteDeltaPreview(note: note, compactWhitespace: true)),
+    );
+
+    final text = tester.widget<Text>(
+      find.byKey(const Key('note-delta-preview-text')),
+    );
+    expect(text.textSpan!.toPlainText(), '第一段 重点 第二段');
+  });
 }
 
 Note _noteWithDocument(Delta delta) {
