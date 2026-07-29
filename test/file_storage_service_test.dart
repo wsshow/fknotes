@@ -172,6 +172,41 @@ void main() {
     );
   });
 
+  test('atomically imports a supported video into note storage', () async {
+    final source = File(p.join(root.path, 'selected-video.mp4'));
+    await source.writeAsBytes(List<int>.generate(8192, (index) => index % 251));
+
+    final stored = await FileStorageService.instance.importNoteVideoFile(
+      source,
+    );
+    final managed = File(
+      FileStorageService.instance.absolutePath(stored.storageKey),
+    );
+
+    expect(stored.storageKey, startsWith('notes/video/'));
+    expect(stored.storageKey, endsWith('.mp4'));
+    expect(stored.mimeType, 'video/mp4');
+    expect(stored.byteLength, 8192);
+    expect(await managed.readAsBytes(), await source.readAsBytes());
+    expect(
+      await managed.parent
+          .list()
+          .where((entity) => entity.path.endsWith('.part'))
+          .isEmpty,
+      isTrue,
+    );
+  });
+
+  test('rejects unsupported video formats', () async {
+    final source = File(p.join(root.path, 'selected-video.avi'));
+    await source.writeAsBytes([1, 2, 3]);
+
+    await expectLater(
+      FileStorageService.instance.importNoteVideoFile(source),
+      throwsFormatException,
+    );
+  });
+
   test(
     'initialization creates only canonical note folders and clears parts',
     () async {

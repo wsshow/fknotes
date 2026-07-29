@@ -693,10 +693,12 @@ final class NoteQuillToolbar extends StatelessWidget {
     required this.controller,
     this.onOpenAssistant,
     this.onInsertImage,
+    this.onInsertVideo,
     this.onRecordAudio,
     this.onDone,
     this.assistantTooltip = 'AI 创作',
     this.imageTooltip = '插入图片',
+    this.videoTooltip = '插入视频',
     this.recordTooltip = '录音',
     this.dividerTooltip = '插入分隔线',
     this.doneLabel,
@@ -706,10 +708,12 @@ final class NoteQuillToolbar extends StatelessWidget {
   final NoteEditorController controller;
   final VoidCallback? onOpenAssistant;
   final VoidCallback? onInsertImage;
+  final VoidCallback? onInsertVideo;
   final VoidCallback? onRecordAudio;
   final VoidCallback? onDone;
   final String assistantTooltip;
   final String imageTooltip;
+  final String videoTooltip;
   final String recordTooltip;
   final String dividerTooltip;
   final String? doneLabel;
@@ -776,6 +780,13 @@ final class NoteQuillToolbar extends StatelessWidget {
                           tooltip: imageTooltip,
                           onPressed: onInsertImage!,
                           icon: Icons.image_outlined,
+                        ),
+                      if (onInsertVideo != null)
+                        _NoteToolbarActionButton(
+                          key: const Key('quill-insert-video'),
+                          tooltip: videoTooltip,
+                          onPressed: onInsertVideo!,
+                          icon: Icons.video_library_outlined,
                         ),
                       if (onRecordAudio != null)
                         _NoteToolbarActionButton(
@@ -1024,6 +1035,19 @@ final class _NoteAssetEmbedBuilder extends quill.EmbedBuilder {
           session.removeEmbedAt(embedContext.node.documentOffset);
         },
       );
+    } else if (asset.kind == NoteAssetKind.video) {
+      block = _VideoAssetBlock(
+        key: ValueKey('note-asset-${asset.id.value}'),
+        asset: asset,
+        readOnly: embedContext.readOnly,
+        selected: selectedAssetId == asset.id,
+        onInteraction: onAssetInteraction,
+        onToggleSelection: () => onToggleAssetSelection(asset.id),
+        onOpen: onOpenAsset == null ? null : () => onOpenAsset!(asset),
+        onRename: (displayName) =>
+            session.updateAsset(asset.copyWith(displayName: displayName)),
+        onRemove: () => session.removeEmbedAt(embedContext.node.documentOffset),
+      );
     } else {
       return _FileAssetBlock(
         key: ValueKey('note-asset-${asset.id.value}'),
@@ -1137,8 +1161,13 @@ final class _AssetDragFeedback extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
               child: Row(
                 children: [
-                  const Icon(
-                    Icons.graphic_eq_rounded,
+                  Icon(
+                    switch (asset.kind) {
+                      NoteAssetKind.audio => Icons.graphic_eq_rounded,
+                      NoteAssetKind.video => Icons.video_library_outlined,
+                      NoteAssetKind.image => Icons.image_outlined,
+                      NoteAssetKind.file => Icons.insert_drive_file_outlined,
+                    },
                     color: AppColors.accent,
                     size: 27,
                   ),
@@ -2072,6 +2101,201 @@ String _formatAudioDuration(Duration value) {
   }
   return '${minutes.toString().padLeft(2, '0')}:'
       '${seconds.toString().padLeft(2, '0')}';
+}
+
+final class _VideoAssetBlock extends StatelessWidget {
+  const _VideoAssetBlock({
+    required this.asset,
+    required this.readOnly,
+    required this.selected,
+    required this.onInteraction,
+    required this.onToggleSelection,
+    required this.onOpen,
+    required this.onRename,
+    required this.onRemove,
+    super.key,
+  });
+
+  final NoteAsset asset;
+  final bool readOnly;
+  final bool selected;
+  final VoidCallback onInteraction;
+  final VoidCallback onToggleSelection;
+  final VoidCallback? onOpen;
+  final ValueChanged<String?> onRename;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    selected: selected,
+    button: true,
+    label: '${context.l10n.video}：${asset.displayTitle}',
+    child: GestureDetector(
+      key: ValueKey('note-video-selection-target-${asset.id.value}'),
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        onInteraction();
+        if (readOnly) {
+          onOpen?.call();
+        } else {
+          onToggleSelection();
+        }
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: _AssetSelectionFrame(
+          asset: asset,
+          selected: selected,
+          borderRadius: BorderRadius.circular(AppRadius.medium),
+          child: Material(
+            color: AppColors.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.medium),
+              side: const BorderSide(color: AppColors.line),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                InkWell(
+                  key: ValueKey('play-note-video-${asset.id.value}'),
+                  onTap: onOpen == null
+                      ? null
+                      : () {
+                          onInteraction();
+                          onOpen!();
+                        },
+                  child: Container(
+                    height: 148,
+                    width: double.infinity,
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Color(0xFF273B4D), Color(0xFF111820)],
+                      ),
+                    ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        const Positioned(
+                          right: 18,
+                          top: 18,
+                          child: Icon(
+                            Icons.movie_outlined,
+                            size: 62,
+                            color: Color(0x24FFFFFF),
+                          ),
+                        ),
+                        Container(
+                          width: 58,
+                          height: 58,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: .94),
+                            shape: BoxShape.circle,
+                            boxShadow: AppShadows.floating,
+                          ),
+                          child: const Icon(
+                            Icons.play_arrow_rounded,
+                            size: 36,
+                            color: AppColors.accent,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 10, 7, 10),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              asset.displayTitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppColors.ink,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              [
+                                if (asset.durationMs case final duration?)
+                                  _formatAudioDuration(
+                                    Duration(milliseconds: duration),
+                                  ),
+                                _formatAssetBytes(asset.byteLength),
+                              ].join(' · '),
+                              style: const TextStyle(
+                                color: AppColors.muted,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (!readOnly)
+                        AppAnchoredMenuButton<_AudioAssetAction>(
+                          key: ValueKey('note-video-actions-${asset.id.value}'),
+                          tooltip: context.l10n.video,
+                          icon: const Icon(Icons.more_vert_rounded, size: 20),
+                          actions: [
+                            AppMenuAction(
+                              value: _AudioAssetAction.rename,
+                              icon: Icons.edit_outlined,
+                              label: context.l10n.renameAttachment,
+                            ),
+                            AppMenuAction(
+                              value: _AudioAssetAction.remove,
+                              icon: Icons.delete_outline_rounded,
+                              label: context.l10n.remove,
+                              destructive: true,
+                            ),
+                          ],
+                          onSelected: (action) {
+                            onInteraction();
+                            switch (action) {
+                              case _AudioAssetAction.rename:
+                                unawaited(_rename(context));
+                              case _AudioAssetAction.remove:
+                                onRemove();
+                            }
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  Future<void> _rename(BuildContext context) async {
+    final result = await showNoteAttachmentTitleSheet(
+      context,
+      initialValue: asset.displayTitle,
+      fieldKey: const Key('video-attachment-title'),
+    );
+    if (result != null) onRename(result.displayName);
+  }
+}
+
+String _formatAssetBytes(int bytes) {
+  if (bytes < 1024) return '$bytes B';
+  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+  if (bytes < 1024 * 1024 * 1024) {
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+  return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
 }
 
 final class _FileAssetBlock extends StatelessWidget {

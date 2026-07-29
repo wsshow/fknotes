@@ -1929,6 +1929,40 @@ class AppLocalizationsEn extends AppLocalizations {
   String get camera => 'Camera';
 
   @override
+  String get watermarkCamera => 'Watermark camera';
+
+  @override
+  String get locatingForWatermark => 'Getting your current location…';
+
+  @override
+  String get locationServiceDisabled =>
+      'Turn on location services before using the watermark camera.';
+
+  @override
+  String get locationPermissionRequired =>
+      'The watermark camera needs location access. The location is written only to the photo and stored on this device.';
+
+  @override
+  String get locationPermissionPermanentlyDenied =>
+      'Location access is disabled. Enable it in system settings and try again.';
+
+  @override
+  String get locationUnavailable =>
+      'Your current location is unavailable. Move to an open area and try again.';
+
+  @override
+  String get chooseVideo => 'Choose video';
+
+  @override
+  String get recordVideo => 'Record video';
+
+  @override
+  String get playVideo => 'Play video';
+
+  @override
+  String get videoPlaybackFailed => 'Couldn\'t play this video.';
+
+  @override
   String attachmentImportTypeFailed(String type) {
     return 'Couldn\'t import $type.';
   }

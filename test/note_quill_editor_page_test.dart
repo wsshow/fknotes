@@ -13,6 +13,7 @@ import 'package:fknotes/pages/note_share_composer_page.dart';
 import 'package:fknotes/services/note_audio_playback_service.dart';
 import 'package:fknotes/services/note_audio_recording_service.dart';
 import 'package:fknotes/services/note_read_aloud_service.dart';
+import 'package:fknotes/services/note_watermark_service.dart';
 import 'package:fknotes/widgets/note_recording_bar.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -277,6 +278,142 @@ void main() {
     await _pumpFor(tester, const Duration(milliseconds: 300));
 
     expect(writer.notes.single.assets.single.displayTitle, '重命名图片');
+  });
+
+  testWidgets('watermark camera locates and burns the photo before import', (
+    tester,
+  ) async {
+    final capturedAt = DateTime(2026, 7, 29, 14, 30);
+    final location = NoteWatermarkLocation(
+      latitude: 31.230416,
+      longitude: 121.473701,
+      accuracy: 7,
+      capturedAt: capturedAt,
+    );
+    var locationCalls = 0;
+    var watermarkCalls = 0;
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: NoteQuillEditorPage(
+          writerLoader: () async => writer,
+          locateForWatermark: () async {
+            locationCalls++;
+            return location;
+          },
+          pickImage: (source) async {
+            expect(source, ImageSource.camera);
+            return PickedNoteImage(
+              bytes: Uint8List.fromList([1, 2, 3]),
+              originalName: 'camera.jpg',
+            );
+          },
+          watermarkImage: (bytes, selectedLocation) async {
+            watermarkCalls++;
+            expect(bytes, [1, 2, 3]);
+            expect(selectedLocation, same(location));
+            return Uint8List.fromList([9, 8, 7, 6]);
+          },
+          importImage: (bytes, {required originalName}) async {
+            expect(bytes, [9, 8, 7, 6]);
+            expect(originalName, startsWith('watermark-'));
+            return NoteAsset(
+              id: NoteAttachmentId.generate(),
+              kind: NoteAssetKind.image,
+              storageKey: 'notes/images/watermark.jpg',
+              originalName: originalName,
+              byteLength: bytes.length,
+              mimeType: 'image/jpeg',
+              createdAt: capturedAt,
+              updatedAt: capturedAt,
+            );
+          },
+          resolveImage: (_) => MemoryImage(_onePixelPng),
+          autosaveDelay: const Duration(milliseconds: 50),
+        ),
+      ),
+    );
+    await _pumpFor(tester, const Duration(milliseconds: 150));
+
+    await tester.tap(find.byKey(const Key('quill-insert-image')));
+    await _pumpFor(tester, const Duration(milliseconds: 300));
+    await tester.tap(find.byKey(const Key('quill-take-watermarked-photo')));
+    await _pumpFor(tester, const Duration(milliseconds: 700));
+
+    expect(locationCalls, 1);
+    expect(watermarkCalls, 1);
+    expect(writer.notes.single.assets.single.kind, NoteAssetKind.image);
+    expect(
+      writer.notes.single.assets.single.originalName,
+      startsWith('watermark-'),
+    );
+  });
+
+  testWidgets('imports a selected video as a native note card', (tester) async {
+    final directory = Directory.systemTemp.createTempSync(
+      'fknotes_video_widget_',
+    );
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final source = File('${directory.path}/现场记录.mp4')
+      ..writeAsBytesSync([1, 2, 3, 4]);
+    final now = DateTime.utc(2026, 7, 29, 15);
+    NoteAsset? imported;
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: NoteQuillEditorPage(
+          writerLoader: () async => writer,
+          pickVideo: (sourceType) async {
+            expect(sourceType, ImageSource.gallery);
+            return PickedNoteVideo(
+              file: source,
+              originalName: '现场记录.mp4',
+              durationMs: 125000,
+            );
+          },
+          importVideo: (file, {required originalName, durationMs}) async {
+            expect(file.path, source.path);
+            expect(originalName, '现场记录.mp4');
+            expect(durationMs, 125000);
+            imported = NoteAsset(
+              id: NoteAttachmentId.generate(),
+              kind: NoteAssetKind.video,
+              storageKey: 'notes/video/managed.mp4',
+              originalName: originalName,
+              byteLength: file.lengthSync(),
+              mimeType: 'video/mp4',
+              durationMs: durationMs,
+              createdAt: now,
+              updatedAt: now,
+            );
+            return imported!;
+          },
+          resolveAssetPath: (_) => source.path,
+          autosaveDelay: const Duration(milliseconds: 50),
+        ),
+      ),
+    );
+    await _pumpFor(tester, const Duration(milliseconds: 150));
+
+    await tester.tap(find.byKey(const Key('quill-insert-video')));
+    await _pumpFor(tester, const Duration(milliseconds: 300));
+    await tester.tap(find.byKey(const Key('quill-pick-gallery-video')));
+    await _pumpFor(tester, const Duration(milliseconds: 800));
+
+    expect(imported, isNotNull);
+    expect(
+      find.byKey(ValueKey('note-asset-${imported!.id.value}')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(ValueKey('play-note-video-${imported!.id.value}')),
+      findsOneWidget,
+    );
+    expect(find.text('02:05 · 4 B'), findsOneWidget);
+    expect(writer.notes.single.assets.single.kind, NoteAssetKind.video);
+    expect(writer.notes.single.document.project().referencedAttachmentIds, [
+      imported!.id,
+    ]);
   });
 
   testWidgets('imports an externally dropped image at the visible drop point', (

@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart' as permissions;
 import 'package:quill_native_bridge/quill_native_bridge.dart';
+import 'package:video_player/video_player.dart';
 
 import '../app.dart';
 import '../debug/app_diagnostics.dart';
@@ -31,6 +33,7 @@ import '../services/note_assistant_prompt_builder.dart';
 import '../services/note_database_service.dart';
 import '../services/note_read_aloud_service.dart';
 import '../services/note_repository.dart';
+import '../services/note_watermark_service.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/app_popup_menu.dart';
 import '../widgets/note_attachment_title_sheet.dart';
@@ -40,6 +43,7 @@ import '../widgets/note_quill_editor.dart';
 import '../widgets/note_recording_bar.dart';
 import '../widgets/quiet_paper.dart';
 import '../widgets/note_tags_editor_sheet.dart';
+import '../widgets/note_video_player_page.dart';
 import 'model_management_page.dart';
 import 'note_share_composer_page.dart';
 
@@ -89,7 +93,20 @@ final class PickedNoteImage {
   final String originalName;
 }
 
+final class PickedNoteVideo {
+  const PickedNoteVideo({
+    required this.file,
+    required this.originalName,
+    this.durationMs,
+  });
+
+  final File file;
+  final String originalName;
+  final int? durationMs;
+}
+
 typedef NoteImagePicker = Future<PickedNoteImage?> Function(ImageSource source);
+typedef NoteVideoPicker = Future<PickedNoteVideo?> Function(ImageSource source);
 typedef NoteImageAssetImporter =
     Future<NoteAsset> Function(Uint8List bytes, {required String originalName});
 typedef NoteAudioAssetImporter =
@@ -98,6 +115,12 @@ typedef NoteAudioAssetImporter =
       required String originalName,
       required String displayName,
       required int durationMs,
+    });
+typedef NoteVideoAssetImporter =
+    Future<NoteAsset> Function(
+      File source, {
+      required String originalName,
+      int? durationMs,
     });
 typedef NoteReadAloudAvailabilityChecker = Future<bool> Function();
 typedef NoteLanguageModelAvailabilityChecker = Future<bool> Function();
@@ -150,7 +173,11 @@ final class NoteQuillEditorPage extends StatefulWidget {
     this.writerLoader,
     this.importImage,
     this.importAudio,
+    this.importVideo,
     this.pickImage,
+    this.pickVideo,
+    this.locateForWatermark,
+    this.watermarkImage,
     this.resolveImage,
     this.resolveAssetPath,
     this.readAloud,
@@ -168,7 +195,11 @@ final class NoteQuillEditorPage extends StatefulWidget {
   final NoteEditorWriterLoader? writerLoader;
   final NoteImageAssetImporter? importImage;
   final NoteAudioAssetImporter? importAudio;
+  final NoteVideoAssetImporter? importVideo;
   final NoteImagePicker? pickImage;
+  final NoteVideoPicker? pickVideo;
+  final NoteWatermarkLocationProvider? locateForWatermark;
+  final NoteImageWatermarker? watermarkImage;
   final NoteAssetImageProvider? resolveImage;
   final NoteAssetPathResolver? resolveAssetPath;
   final NoteReadAloudDriver? readAloud;
@@ -193,8 +224,12 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
   late final FocusNode _editorFocusNode;
   late final NoteImageAssetImporter _importImage;
   late final NoteAudioAssetImporter _importAudio;
+  late final NoteVideoAssetImporter _importVideo;
   late final NoteEditorWriterLoader _writerLoader;
   late final NoteImagePicker _pickImage;
+  late final NoteVideoPicker _pickVideo;
+  late final NoteWatermarkLocationProvider _locateForWatermark;
+  late final NoteImageWatermarker _watermarkImage;
   late final NoteReadAloudDriver _readAloud;
   late final NoteInlineAssistantDriver _inlineAssistant;
   late final NoteAudioRecordingDriver _audioRecorder;
@@ -207,6 +242,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
   Future<void> _saveTail = Future<void>.value();
   Future<void>? _imageImport;
   Future<void>? _audioImport;
+  Future<void>? _videoImport;
   StreamSubscription<double>? _recordingAmplitudeSubscription;
   Timer? _recordingTimer;
   _EditorSaveState _saveState = _EditorSaveState.enabled;
@@ -214,6 +250,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
   var _savedVersion = 0;
   late String _observedTitle;
   var _importingImage = false;
+  var _importingVideo = false;
   var _actionPending = false;
   var _closing = false;
   var _allowPop = false;
@@ -235,6 +272,11 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
 
   bool get _recordingVisible => _recordingState != _NoteRecordingState.idle;
 
+  bool get _supportsCameraCapture =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+
   @override
   void initState() {
     super.initState();
@@ -245,12 +287,21 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
         widget.importImage ?? NoteAssetImportService.instance.importImageBytes;
     _importAudio =
         widget.importAudio ?? NoteAssetImportService.instance.importAudioFile;
+    _importVideo =
+        widget.importVideo ?? NoteAssetImportService.instance.importVideoFile;
     _writerLoader =
         widget.writerLoader ??
         () async => RepositoryNoteEditorWriter(
           await NoteDatabaseService.instance.repository,
         );
     _pickImage = widget.pickImage ?? _pickImageFromDevice;
+    _pickVideo = widget.pickVideo ?? _pickVideoFromDevice;
+    _locateForWatermark =
+        widget.locateForWatermark ??
+        NoteWatermarkService.instance.currentLocation;
+    _watermarkImage =
+        widget.watermarkImage ??
+        NoteWatermarkService.instance.applyLocationWatermark;
     _readAloud = widget.readAloud ?? NoteReadAloudService.instance;
     _inlineAssistant =
         widget.inlineAssistantDriver ?? LocalNoteInlineAssistantDriver();
@@ -911,8 +962,8 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
   }
 
   Future<void> _showImageSourceSheet() async {
-    if (_importingImage) return;
-    final source = await showModalBottomSheet<ImageSource>(
+    if (_importingImage || _importingVideo) return;
+    final source = await showModalBottomSheet<_ImageImportSource>(
       context: context,
       showDragHandle: true,
       builder: (sheetContext) => SafeArea(
@@ -934,22 +985,40 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
                       key: const Key('quill-pick-gallery-image'),
                       icon: Icons.photo_library_outlined,
                       label: context.l10n.image,
-                      onTap: () =>
-                          Navigator.pop(sheetContext, ImageSource.gallery),
+                      onTap: () => Navigator.pop(
+                        sheetContext,
+                        _ImageImportSource.gallery,
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _ImageSourceAction(
-                      key: const Key('quill-take-photo'),
-                      icon: Icons.photo_camera_outlined,
-                      label: context.l10n.camera,
-                      onTap: () =>
-                          Navigator.pop(sheetContext, ImageSource.camera),
+                  if (_supportsCameraCapture) ...[
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _ImageSourceAction(
+                        key: const Key('quill-take-photo'),
+                        icon: Icons.photo_camera_outlined,
+                        label: context.l10n.camera,
+                        onTap: () => Navigator.pop(
+                          sheetContext,
+                          _ImageImportSource.camera,
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
+              if (_supportsCameraCapture) ...[
+                const SizedBox(height: 12),
+                _ImageSourceAction(
+                  key: const Key('quill-take-watermarked-photo'),
+                  icon: Icons.add_location_alt_outlined,
+                  label: context.l10n.watermarkCamera,
+                  onTap: () => Navigator.pop(
+                    sheetContext,
+                    _ImageImportSource.watermarkCamera,
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -962,15 +1031,149 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     if (identical(_imageImport, operation)) _imageImport = null;
   }
 
-  Future<void> _pickAndInsertImage(ImageSource source) async {
+  Future<void> _pickAndInsertImage(_ImageImportSource source) async {
     setState(() => _importingImage = true);
     NoteAsset? imported;
     try {
-      final selected = await _pickImage(source);
+      final selected = await _pickImage(source.imageSource);
       if (selected == null || !mounted) return;
+      NoteWatermarkLocation? location;
+      if (source == _ImageImportSource.watermarkCamera) {
+        AppFeedback.show(context, context.l10n.locatingForWatermark);
+        location = await _locateForWatermark();
+      }
+      final bytes = location == null
+          ? selected.bytes
+          : await _watermarkImage(selected.bytes, location);
       imported = await _importImage(
-        selected.bytes,
+        bytes,
+        originalName: location == null
+            ? selected.originalName
+            : 'watermark-${location.capturedAt.microsecondsSinceEpoch}.jpg',
+      );
+      if (!mounted) {
+        await _deleteAssetFiles(imported);
+        return;
+      }
+      _editor.insertAsset(imported);
+      _editorFocusNode.unfocus();
+    } on NoteWatermarkLocationException catch (error) {
+      if (mounted) await _showWatermarkLocationError(error.failure);
+    } catch (_) {
+      if (imported != null) await _deleteAssetFiles(imported);
+      if (mounted) {
+        AppFeedback.error(
+          context,
+          context.l10n.attachmentImportTypeFailed(context.l10n.image),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _importingImage = false);
+    }
+  }
+
+  Future<void> _showWatermarkLocationError(
+    NoteWatermarkLocationFailure failure,
+  ) async {
+    if (!mounted) return;
+    final message = switch (failure) {
+      NoteWatermarkLocationFailure.serviceDisabled =>
+        context.l10n.locationServiceDisabled,
+      NoteWatermarkLocationFailure.permissionDenied =>
+        context.l10n.locationPermissionRequired,
+      NoteWatermarkLocationFailure.permissionDeniedForever =>
+        context.l10n.locationPermissionPermanentlyDenied,
+      NoteWatermarkLocationFailure.unavailable =>
+        context.l10n.locationUnavailable,
+    };
+    if (failure != NoteWatermarkLocationFailure.permissionDeniedForever) {
+      AppFeedback.error(context, message);
+      return;
+    }
+    final openSettings = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.l10n.watermarkCamera),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(context.l10n.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(context.l10n.openSettings),
+          ),
+        ],
+      ),
+    );
+    if (openSettings == true) await permissions.openAppSettings();
+  }
+
+  Future<void> _showVideoSourceSheet() async {
+    if (_importingImage || _importingVideo) return;
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                context.l10n.addToNote,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _ImageSourceAction(
+                      key: const Key('quill-pick-gallery-video'),
+                      icon: Icons.video_library_outlined,
+                      label: context.l10n.chooseVideo,
+                      onTap: () =>
+                          Navigator.pop(sheetContext, ImageSource.gallery),
+                    ),
+                  ),
+                  if (_supportsCameraCapture) ...[
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _ImageSourceAction(
+                        key: const Key('quill-record-video'),
+                        icon: Icons.videocam_outlined,
+                        label: context.l10n.recordVideo,
+                        onTap: () =>
+                            Navigator.pop(sheetContext, ImageSource.camera),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (source == null || !mounted) return;
+    final operation = _pickAndInsertVideo(source);
+    _videoImport = operation;
+    await operation;
+    if (identical(_videoImport, operation)) _videoImport = null;
+  }
+
+  Future<void> _pickAndInsertVideo(ImageSource source) async {
+    setState(() => _importingVideo = true);
+    NoteAsset? imported;
+    try {
+      final selected = await _pickVideo(source);
+      if (selected == null || !mounted) return;
+      imported = await _importVideo(
+        selected.file,
         originalName: selected.originalName,
+        durationMs: selected.durationMs,
       );
       if (!mounted) {
         await _deleteAssetFiles(imported);
@@ -983,11 +1186,11 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
       if (mounted) {
         AppFeedback.error(
           context,
-          context.l10n.attachmentImportTypeFailed(context.l10n.image),
+          context.l10n.attachmentImportTypeFailed(context.l10n.video),
         );
       }
     } finally {
-      if (mounted) setState(() => _importingImage = false);
+      if (mounted) setState(() => _importingVideo = false);
     }
   }
 
@@ -1069,9 +1272,58 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     );
   }
 
+  static Future<PickedNoteVideo?> _pickVideoFromDevice(
+    ImageSource source,
+  ) async {
+    final selected = await ImagePicker().pickVideo(source: source);
+    if (selected == null) return null;
+    final byteLength = await selected.length();
+    if (byteLength <= 0 || byteLength > 2 * 1024 * 1024 * 1024) {
+      throw const FormatException('视频文件为空或超过 2 GB');
+    }
+    final file = File(selected.path);
+    int? durationMs;
+    final metadataReader = VideoPlayerController.file(file);
+    try {
+      await metadataReader.initialize();
+      durationMs = metadataReader.value.duration.inMilliseconds;
+    } catch (_) {
+      // Duration is optional. A platform decoder can still play the managed
+      // file later even when metadata probing is unavailable during import.
+    } finally {
+      await metadataReader.dispose();
+    }
+    return PickedNoteVideo(
+      file: file,
+      originalName: selected.name,
+      durationMs: durationMs,
+    );
+  }
+
   Future<void> _deleteAssetFiles(NoteAsset asset) async {
     await FileStorageService.instance.deleteFile(asset.storageKey);
     await FileStorageService.instance.deleteFile(asset.previewStorageKey);
+  }
+
+  void _openAsset(NoteAsset asset) {
+    if (asset.kind != NoteAssetKind.video || !mounted) return;
+    final filePath = (widget.resolveAssetPath ?? _resolveManagedAssetPath)(
+      asset,
+    );
+    if (filePath == null || filePath.isEmpty) {
+      AppFeedback.error(context, context.l10n.videoPlaybackFailed);
+      return;
+    }
+    unawaited(
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => NoteVideoPlayerPage(
+            filePath: filePath,
+            title: asset.displayTitle,
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _copyImage(NoteAsset asset) async {
@@ -1527,6 +1779,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     }
     if (!mounted) return;
     await _imageImport;
+    await _videoImport;
     var saved = await _persistLatest();
     if (!mounted) return;
 
@@ -1684,6 +1937,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
                                 widget.resolveAssetPath ??
                                 _resolveManagedAssetPath,
                             audioPlayback: _audioPlayback,
+                            onOpenAsset: _openAsset,
                             onCopyImage: _copyImage,
                             onEditImage: _editImage,
                             onViewImageOriginal: _viewOriginalImage,
@@ -1700,7 +1954,7 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
                     ),
                   ),
                 ),
-                if (_importingImage)
+                if (_importingImage || _importingVideo)
                   const LinearProgressIndicator(
                     minHeight: 2,
                     color: AppColors.accent,
@@ -1751,12 +2005,14 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
                     controller: _editor,
                     onOpenAssistant: _toggleInlineAssistant,
                     onInsertImage: _showImageSourceSheet,
+                    onInsertVideo: _showVideoSourceSheet,
                     onRecordAudio: () => unawaited(_startRecording()),
                     onDone: _closing
                         ? null
                         : () => unawaited(_requestClose(completed: true)),
                     assistantTooltip: context.l10n.writeWithAi,
                     imageTooltip: context.l10n.image,
+                    videoTooltip: context.l10n.video,
                     recordTooltip: context.l10n.record,
                     doneLabel: context.l10n.finishEditing,
                   ),
@@ -1968,6 +2224,16 @@ enum _NoteRecordingState { idle, preparing, recording, paused, saving }
 enum _FailedSaveAction { keepEditing, retry, discard }
 
 enum _QuillEditorMenuAction { share, tags, pin, save, delete }
+
+enum _ImageImportSource {
+  gallery(ImageSource.gallery),
+  camera(ImageSource.camera),
+  watermarkCamera(ImageSource.camera);
+
+  const _ImageImportSource(this.imageSource);
+
+  final ImageSource imageSource;
+}
 
 enum _ImageEditAction { rename, gallery, camera }
 

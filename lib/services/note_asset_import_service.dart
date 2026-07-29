@@ -75,4 +75,30 @@ final class NoteAssetImportService {
       rethrow;
     }
   }
+
+  Future<NoteAsset> importVideoFile(
+    File source, {
+    required String originalName,
+    int? durationMs,
+  }) async {
+    final stored = await _storage.importNoteVideoFile(source);
+    try {
+      final timestamp = _now().toUtc();
+      final safeOriginalName = p.basename(originalName.trim());
+      return NoteAsset(
+        id: NoteAttachmentId.generate(),
+        kind: NoteAssetKind.video,
+        storageKey: stored.storageKey,
+        originalName: safeOriginalName.isEmpty ? 'video.mp4' : safeOriginalName,
+        byteLength: stored.byteLength,
+        mimeType: stored.mimeType,
+        durationMs: durationMs,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      );
+    } catch (_) {
+      await _storage.deleteFile(stored.storageKey);
+      rethrow;
+    }
+  }
 }

@@ -203,6 +203,52 @@ class FileStorageService {
     }
   }
 
+  /// Copies a user-selected video into the canonical note video tree.
+  ///
+  /// The source remains untouched and the `.part` file prevents interrupted
+  /// imports from becoming reachable note assets.
+  Future<StoredNoteVideo> importNoteVideoFile(File source) async {
+    if (!await source.exists()) {
+      throw const FormatException('视频文件不存在');
+    }
+    final byteLength = await source.length();
+    if (byteLength <= 0 || byteLength > 2 * 1024 * 1024 * 1024) {
+      throw const FormatException('视频文件为空或超过 2 GB');
+    }
+    final extension = p.extension(source.path).toLowerCase();
+    final mimeType = switch (extension) {
+      '.mp4' => 'video/mp4',
+      '.mov' => 'video/quicktime',
+      '.m4v' => 'video/x-m4v',
+      '.webm' => 'video/webm',
+      _ => throw const FormatException('暂不支持这种视频格式'),
+    };
+    final relativePath = p.posix.join(
+      'notes',
+      'video',
+      '${_uuid.v4()}$extension',
+    );
+    final destination = File(absolutePath(relativePath));
+    final partial = File('${destination.path}.part');
+    try {
+      await source.openRead().pipe(partial.openWrite());
+      final copiedLength = await partial.length();
+      if (copiedLength != byteLength) {
+        throw const FileSystemException('视频文件复制不完整');
+      }
+      await partial.rename(destination.path);
+      return StoredNoteVideo(
+        storageKey: relativePath,
+        mimeType: mimeType,
+        byteLength: copiedLength,
+      );
+    } catch (_) {
+      if (await partial.exists()) await partial.delete();
+      if (await destination.exists()) await destination.delete();
+      rethrow;
+    }
+  }
+
   /// Generates a preview inside the isolated Delta-note storage tree.
   Future<String> generateNoteThumbnailInBackground(String imagePath) async {
     return _generateThumbnailInBackground(
@@ -342,6 +388,18 @@ class StoredNoteImage {
 
 class StoredNoteAudio {
   const StoredNoteAudio({
+    required this.storageKey,
+    required this.mimeType,
+    required this.byteLength,
+  });
+
+  final String storageKey;
+  final String mimeType;
+  final int byteLength;
+}
+
+class StoredNoteVideo {
+  const StoredNoteVideo({
     required this.storageKey,
     required this.mimeType,
     required this.byteLength,

@@ -69,4 +69,26 @@ void main() {
       );
     },
   );
+
+  test('creates a managed video asset with optional duration', () async {
+    final source = File('${directory.path}/capture.mp4');
+    await source.writeAsBytes(List<int>.filled(4096, 9));
+
+    final asset = await importer.importVideoFile(
+      source,
+      originalName: '../现场记录.mp4',
+      durationMs: 125000,
+    );
+
+    expect(asset.kind, NoteAssetKind.video);
+    expect(asset.originalName, '现场记录.mp4');
+    expect(asset.storageKey, startsWith('notes/video/'));
+    expect(asset.mimeType, 'video/mp4');
+    expect(asset.durationMs, 125000);
+    expect(asset.createdAt, DateTime.utc(2026, 7, 23, 14));
+    expect(
+      await FileStorageService.instance.fileExists(asset.storageKey),
+      isTrue,
+    );
+  });
 }

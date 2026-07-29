@@ -440,11 +440,7 @@ final class NoteEditorController extends ChangeNotifier {
       return false;
     }
     final asset = _assets[attachmentId];
-    if (asset == null ||
-        (asset.kind != NoteAssetKind.image &&
-            asset.kind != NoteAssetKind.audio)) {
-      return false;
-    }
+    if (asset == null) return false;
 
     final safeTarget = targetOffset.clamp(0, quillController.document.length);
     const blockLength = 2;

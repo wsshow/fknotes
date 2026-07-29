@@ -149,6 +149,34 @@ void main() {
       );
     });
 
+    test('moves a video card with the same block transaction', () {
+      final video = _videoAsset();
+      final controller = NoteEditorController(
+        document: NoteDocument.fromDelta(
+          Delta()
+            ..insert(NoteEmbed.attachment(video.id).toDeltaData())
+            ..insert('\n正文\n'),
+        ),
+        assets: [video],
+      );
+      addTearDown(controller.dispose);
+
+      expect(
+        controller.moveAssetEmbed(
+          attachmentId: video.id,
+          sourceOffset: 0,
+          targetOffset: controller.quillController.document.length,
+        ),
+        isTrue,
+      );
+      expect(controller.snapshot().assets, [video]);
+      expect(controller.snapshot().document.toDelta().toJson(), [
+        {'insert': '正文\n'},
+        {'insert': NoteEmbed.attachment(video.id).toDeltaData()},
+        {'insert': '\n'},
+      ]);
+    });
+
     test(
       'system image paste imports bytes into a domain asset embed',
       () async {
@@ -1117,6 +1145,36 @@ final value = 1;
     expect(controller.assets.single.displayTitle, 'recording.m4a');
   });
 
+  testWidgets('renders and opens a dedicated video card', (tester) async {
+    final video = _videoAsset();
+    final controller = NoteEditorController(
+      document: NoteDocument.fromDelta(
+        Delta()
+          ..insert(NoteEmbed.attachment(video.id).toDeltaData())
+          ..insert('\n'),
+      ),
+      assets: [video],
+    );
+    NoteAsset? opened;
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      _EditorTestApp(
+        child: NoteQuillEditor(
+          controller: controller,
+          onOpenAsset: (asset) => opened = asset,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('现场记录.mp4'), findsOneWidget);
+    expect(find.text('02:05 · 4.0 KB'), findsOneWidget);
+    await tester.tap(find.byKey(ValueKey('play-note-video-${video.id.value}')));
+    await tester.pump();
+    expect(opened, same(video));
+  });
+
   testWidgets('long press drag reorders image and recording blocks', (
     tester,
   ) async {
@@ -1338,6 +1396,7 @@ final value = 1;
             controller: controller,
             onOpenAssistant: () {},
             onInsertImage: () {},
+            onInsertVideo: () {},
             onRecordAudio: () {},
             onDone: () => doneCalls++,
             doneLabel: '完成',
@@ -1353,6 +1412,7 @@ final value = 1;
     expect(actions.children.map((child) => child.key).toList(), const [
       Key('quill-open-inline-assistant'),
       Key('quill-insert-image'),
+      Key('quill-insert-video'),
       Key('quill-record-audio'),
       Key('quill-toolbar-undo'),
       Key('quill-toolbar-redo'),
@@ -1371,6 +1431,7 @@ final value = 1;
     expect(find.byType(quill.QuillSimpleToolbar), findsNothing);
     expect(find.byIcon(Icons.format_bold), findsOneWidget);
     expect(find.byIcon(Icons.image_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.video_library_outlined), findsOneWidget);
     expect(find.byIcon(Icons.graphic_eq_rounded), findsOneWidget);
     expect(find.byIcon(Icons.code), findsNothing);
     expect(find.byIcon(Icons.format_strikethrough), findsNothing);
@@ -1472,6 +1533,21 @@ NoteAsset _audioAsset() {
     byteLength: 4096,
     mimeType: 'audio/mp4',
     durationMs: 92340,
+    createdAt: now,
+    updatedAt: now,
+  );
+}
+
+NoteAsset _videoAsset() {
+  final now = DateTime.utc(2026, 7, 29, 12);
+  return NoteAsset(
+    id: NoteAttachmentId.parse('88cd8ed8-4637-40e1-8c91-ff6df6593605'),
+    kind: NoteAssetKind.video,
+    storageKey: 'notes/video/88cd8ed8.mp4',
+    originalName: '现场记录.mp4',
+    byteLength: 4096,
+    mimeType: 'video/mp4',
+    durationMs: 125000,
     createdAt: now,
     updatedAt: now,
   );

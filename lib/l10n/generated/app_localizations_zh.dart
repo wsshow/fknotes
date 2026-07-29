@@ -1778,6 +1778,36 @@ class AppLocalizationsZh extends AppLocalizations {
   String get camera => '拍照';
 
   @override
+  String get watermarkCamera => '水印相机';
+
+  @override
+  String get locatingForWatermark => '正在获取当前位置…';
+
+  @override
+  String get locationServiceDisabled => '请先开启系统定位服务，再使用水印相机';
+
+  @override
+  String get locationPermissionRequired => '水印相机需要位置权限，位置只会写入照片并保存在本机';
+
+  @override
+  String get locationPermissionPermanentlyDenied => '位置权限已被关闭，请前往系统设置开启后重试';
+
+  @override
+  String get locationUnavailable => '暂时无法获取当前位置，请到开阔处重试';
+
+  @override
+  String get chooseVideo => '选择视频';
+
+  @override
+  String get recordVideo => '拍摄视频';
+
+  @override
+  String get playVideo => '播放视频';
+
+  @override
+  String get videoPlaybackFailed => '无法播放这段视频';
+
+  @override
   String attachmentImportTypeFailed(String type) {
     return '$type导入失败';
   }

@@ -3362,6 +3362,66 @@ abstract class AppLocalizations {
   /// **'拍照'**
   String get camera;
 
+  /// No description provided for @watermarkCamera.
+  ///
+  /// In zh, this message translates to:
+  /// **'水印相机'**
+  String get watermarkCamera;
+
+  /// No description provided for @locatingForWatermark.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在获取当前位置…'**
+  String get locatingForWatermark;
+
+  /// No description provided for @locationServiceDisabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先开启系统定位服务，再使用水印相机'**
+  String get locationServiceDisabled;
+
+  /// No description provided for @locationPermissionRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'水印相机需要位置权限，位置只会写入照片并保存在本机'**
+  String get locationPermissionRequired;
+
+  /// No description provided for @locationPermissionPermanentlyDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'位置权限已被关闭，请前往系统设置开启后重试'**
+  String get locationPermissionPermanentlyDenied;
+
+  /// No description provided for @locationUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时无法获取当前位置，请到开阔处重试'**
+  String get locationUnavailable;
+
+  /// No description provided for @chooseVideo.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择视频'**
+  String get chooseVideo;
+
+  /// No description provided for @recordVideo.
+  ///
+  /// In zh, this message translates to:
+  /// **'拍摄视频'**
+  String get recordVideo;
+
+  /// No description provided for @playVideo.
+  ///
+  /// In zh, this message translates to:
+  /// **'播放视频'**
+  String get playVideo;
+
+  /// No description provided for @videoPlaybackFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法播放这段视频'**
+  String get videoPlaybackFailed;
+
   /// No description provided for @attachmentImportTypeFailed.
   ///
   /// In zh, this message translates to:
