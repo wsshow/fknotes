@@ -8,6 +8,20 @@ import '../models/note_document.dart';
 /// Notes remain Delta documents. Markdown is accepted only at explicit
 /// boundaries such as clipboard paste and local-model output.
 final class NoteMarkdownCodec {
+  static final _fencedCodeMarker = RegExp(r'^[ \t]{0,3}(`{3,}|~{3,})');
+  static final _listTaskMarker = RegExp(
+    r'^([ \t]*)(?:[-+*]|\d+[.)])[ \t]+\[[ \t]*([xX]?)[ \t]*\][ \t]*(.*)$',
+  );
+  static final _bareTaskMarker = RegExp(
+    r'^( {0,3})\[[ \t]*([xX]?)[ \t]*\][ \t]*(.*)$',
+  );
+  static final _listSymbolTaskMarker = RegExp(
+    r'^([ \t]*)(?:[-+*]|\d+[.)])[ \t]+(☐|☑|☒|✅|✔)[ \t]*(.*)$',
+  );
+  static final _bareSymbolTaskMarker = RegExp(
+    r'^( {0,3})(☐|☑|☒|✅|✔)[ \t]*(.*)$',
+  );
+
   static const _richTags = <String>{
     'h1',
     'h2',
@@ -60,9 +74,74 @@ final class NoteMarkdownCodec {
 
   static String _normalize(String source) {
     final normalized = source.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
-    return normalized
+    final trimmed = normalized
         .replaceFirst(RegExp(r'^(?:[ \t]*\n)+'), '')
         .replaceFirst(RegExp(r'(?:\n[ \t]*)+$'), '');
+    return _normalizeTaskMarkers(trimmed);
+  }
+
+  /// Accepts the task markers produced by FKNotes' assistant and common
+  /// Markdown variants, then feeds one canonical form into the parser.
+  ///
+  /// Fenced code is deliberately left untouched: examples such as
+  /// `☐ example` inside a code block are content, not editor formatting.
+  static String _normalizeTaskMarkers(String source) {
+    String? openFence;
+    final lines = source.split('\n');
+    for (var index = 0; index < lines.length; index++) {
+      final line = lines[index];
+      final fence = _fencedCodeMarker.firstMatch(line)?.group(1);
+      if (fence != null) {
+        if (openFence == null) {
+          openFence = fence;
+        } else if (fence.codeUnitAt(0) == openFence.codeUnitAt(0) &&
+            fence.length >= openFence.length) {
+          openFence = null;
+        }
+        continue;
+      }
+      if (openFence != null) continue;
+
+      final listTask = _listTaskMarker.firstMatch(line);
+      if (listTask != null) {
+        lines[index] = _canonicalTaskLine(
+          indent: listTask.group(1)!,
+          checked: listTask.group(2)!.isNotEmpty,
+          content: listTask.group(3)!,
+        );
+        continue;
+      }
+      final bareTask = _bareTaskMarker.firstMatch(line);
+      if (bareTask != null) {
+        lines[index] = _canonicalTaskLine(
+          indent: bareTask.group(1)!,
+          checked: bareTask.group(2)!.isNotEmpty,
+          content: bareTask.group(3)!,
+        );
+        continue;
+      }
+      final symbolTask =
+          _listSymbolTaskMarker.firstMatch(line) ??
+          _bareSymbolTaskMarker.firstMatch(line);
+      if (symbolTask != null) {
+        lines[index] = _canonicalTaskLine(
+          indent: symbolTask.group(1)!,
+          checked: symbolTask.group(2) != '☐',
+          content: symbolTask.group(3)!,
+        );
+      }
+    }
+    return lines.join('\n');
+  }
+
+  static String _canonicalTaskLine({
+    required String indent,
+    required bool checked,
+    required String content,
+  }) {
+    final marker = checked ? 'x' : ' ';
+    final text = content.trimLeft();
+    return '$indent- [$marker]${text.isEmpty ? ' ' : ' $text'}';
   }
 
   static List<md.Node> _parse(String source) => md.Document(
@@ -166,18 +245,27 @@ final class NoteMarkdownCodec {
         in (list.children ?? const <md.Node>[]).whereType<md.Element>()) {
       if (item.tag != 'li') continue;
       final checkbox = _findFirstElement(item, 'input');
+      final isTask =
+          checkbox != null ||
+          item.attributes['class']
+                  ?.split(RegExp(r'\s+'))
+                  .contains('task-list-item') ==
+              true;
+      final isChecked =
+          checkbox?.attributes.containsKey('checked') == true &&
+          checkbox?.attributes['checked'] != 'false';
       final attributes = <String, dynamic>{
-        'list': checkbox == null
+        'list': !isTask
             ? ordered
                   ? 'ordered'
                   : 'bullet'
-            : checkbox.attributes['checked'] == 'true'
+            : isChecked
             ? 'checked'
             : 'unchecked',
         if (indent > 0) 'indent': indent.clamp(0, 8),
       };
       output.addInlineBlock(
-        _inlineRuns(item.children, skipBlockLists: true),
+        _listItemRuns(item.children),
         blockAttributes: attributes,
       );
       for (final child
@@ -243,6 +331,27 @@ final class NoteMarkdownCodec {
 
     for (final node in nodes ?? const <md.Node>[]) {
       visit(node, const <String, dynamic>{});
+    }
+    return output;
+  }
+
+  static List<_InlineRun> _listItemRuns(List<md.Node>? nodes) {
+    final output = <_InlineRun>[];
+    for (final node in nodes ?? const <md.Node>[]) {
+      if (node is md.Element && (node.tag == 'ul' || node.tag == 'ol')) {
+        continue;
+      }
+      final runs = _inlineRuns([node], skipBlockLists: true);
+      if (runs.isEmpty) continue;
+      final startsNewBlock =
+          node is md.Element &&
+          const {'p', 'pre', 'blockquote', 'table'}.contains(node.tag);
+      if (startsNewBlock &&
+          output.isNotEmpty &&
+          !output.last.text.endsWith('\n')) {
+        output.add(const _InlineRun('\n'));
+      }
+      output.addAll(runs);
     }
     return output;
   }

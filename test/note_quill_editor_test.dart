@@ -230,6 +230,56 @@ final value = 1;
       );
     });
 
+    test(
+      'task Markdown paste keeps checked and unchecked list types',
+      () async {
+        final controller = NoteEditorController(
+          document: NoteDocument.empty(),
+          assets: const [],
+          readClipboardText: () async => '☐ 待处理\n☑ 已完成',
+        );
+        addTearDown(controller.dispose);
+
+        expect(await controller.quillController.clipboardPaste(), isTrue);
+
+        expect(controller.snapshot().document.toDelta().toJson(), [
+          {'insert': '待处理'},
+          {
+            'insert': '\n',
+            'attributes': {'list': 'unchecked'},
+          },
+          {'insert': '已完成'},
+          {
+            'insert': '\n',
+            'attributes': {'list': 'checked'},
+          },
+        ]);
+      },
+    );
+
+    test('system text replacement converts task Markdown before insertion', () {
+      final controller = NoteEditorController(
+        document: NoteDocument.empty(),
+        assets: const [],
+      );
+      addTearDown(controller.dispose);
+
+      controller.quillController.replaceText(
+        0,
+        0,
+        '☐ 系统粘贴',
+        const TextSelection.collapsed(offset: 6),
+      );
+
+      expect(controller.snapshot().document.toDelta().toJson(), [
+        {'insert': '系统粘贴'},
+        {
+          'insert': '\n',
+          'attributes': {'list': 'unchecked'},
+        },
+      ]);
+    });
+
     test('ordinary plain-text paste stays on Quill native path', () async {
       final controller = NoteEditorController(
         document: NoteDocument.fromPlainText('原文'),
@@ -291,6 +341,30 @@ final value = 1;
         {'insert': '后\n'},
       ]);
     });
+
+    test(
+      'single structural Markdown block never becomes an inline embed',
+      () async {
+        final controller = NoteEditorController(
+          document: NoteDocument.fromPlainText('前后'),
+          assets: const [],
+          readClipboardText: () async => '---',
+        );
+        addTearDown(controller.dispose);
+        controller.quillController.updateSelection(
+          const TextSelection.collapsed(offset: 1),
+          quill.ChangeSource.local,
+        );
+
+        expect(await controller.quillController.clipboardPaste(), isTrue);
+
+        expect(controller.snapshot().document.toDelta().toJson(), [
+          {'insert': '前\n'},
+          {'insert': const NoteEmbed.divider().toDeltaData()},
+          {'insert': '\n后\n'},
+        ]);
+      },
+    );
 
     test('discards imported files when an embed cannot be inserted', () async {
       final asset = _imageAsset();
@@ -463,6 +537,51 @@ final value = 1;
       expect(document.project().plainText, isNot(contains('---')));
     });
 
+    test('loose Markdown list paragraphs keep their line boundary', () {
+      final delta = NoteMarkdownCodec.decode('''
+- 第一段
+
+  第二段
+''');
+
+      expect(NoteDocument.fromDelta(delta).project().plainText, '第一段\n第二段');
+      expect(delta.toJson(), [
+        {'insert': '第一段'},
+        {
+          'insert': '\n',
+          'attributes': {'list': 'bullet'},
+        },
+        {'insert': '第二段'},
+        {
+          'insert': '\n',
+          'attributes': {'list': 'bullet'},
+        },
+      ]);
+    });
+
+    test('task-like markers inside code blocks stay literal', () {
+      final delta = NoteMarkdownCodec.decode('''
+```
+☐ fenced example
+```
+
+    ☑ indented example
+
+	[ ] tab-indented example
+''');
+
+      expect(
+        NoteDocument.fromDelta(delta).project().plainText,
+        '☐ fenced example\n☑ indented example\n\n[ ] tab-indented example',
+      );
+      expect(
+        delta.operations
+            .where((operation) => operation.data == '\n')
+            .every((operation) => operation.attributes?['code-block'] == true),
+        isTrue,
+      );
+    });
+
     test('AI selection replacement is one native document transaction', () {
       final controller = NoteEditorController(
         document: NoteDocument.fromPlainText('保留 需要润色 结尾'),
@@ -571,6 +690,46 @@ final value = 1;
         '第一行\n插入行\n第二行',
       );
     });
+
+    test('AI append preserves both existing and generated block styles', () {
+      final controller = NoteEditorController(
+        document: NoteDocument.fromDelta(
+          Delta()
+            ..insert('原待办')
+            ..insert('\n', {'list': 'unchecked'}),
+        ),
+        assets: const [],
+      );
+      addTearDown(controller.dispose);
+      final anchor = controller.captureAssistantAnchor();
+
+      expect(
+        controller.applyAssistantMarkdown(
+          anchor: anchor,
+          scope: NoteAssistantEditScope.document,
+          placement: NoteAssistantEditPlacement.append,
+          markdown: '# 新标题\n\n☑ 新待办',
+        ),
+        isTrue,
+      );
+      expect(controller.snapshot().document.toDelta().toJson(), [
+        {'insert': '原待办'},
+        {
+          'insert': '\n',
+          'attributes': {'list': 'unchecked'},
+        },
+        {'insert': '新标题'},
+        {
+          'insert': '\n',
+          'attributes': {'header': 1},
+        },
+        {'insert': '新待办'},
+        {
+          'insert': '\n',
+          'attributes': {'list': 'checked'},
+        },
+      ]);
+    });
   });
 
   testWidgets('editor and card preview share the paper-themed code style', (
@@ -622,6 +781,59 @@ final value = 1;
       expect(styles.inlineCode!.backgroundColor, AppColors.accentSoft);
       expect(styles.inlineCode!.style.color, AppColors.mechanicalBlue);
     }
+  });
+
+  testWidgets('wrapped TODO marker stays aligned with the first text line', (
+    tester,
+  ) async {
+    final controller = NoteEditorController(
+      document: NoteDocument.fromDelta(
+        Delta()
+          ..insert('这是一条会在较窄编辑器中换行的待办事项，用来验证复选框始终跟正文第一行对齐')
+          ..insert('\n', {'list': 'unchecked'}),
+      ),
+      assets: const [],
+    );
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      _EditorTestApp(
+        child: MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+          child: Center(
+            child: SizedBox(
+              width: 260,
+              height: 240,
+              child: NoteQuillEditor(controller: controller),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final checkbox = find.byKey(const Key('note-todo-checkbox'));
+    expect(checkbox, findsOneWidget);
+    final rawEditorState = tester.state<quill.QuillRawEditorState>(
+      find.byType(quill.QuillRawEditor),
+    );
+    final caret = rawEditorState.renderEditor.getLocalRectForCaret(
+      const TextPosition(offset: 0),
+    );
+    final caretCenter = rawEditorState.renderEditor.localToGlobal(caret.center);
+
+    expect(
+      tester.getRect(checkbox).center.dy,
+      closeTo(caretCenter.dy, 1),
+      reason: 'TODO 复选框应跟换行正文的第一行垂直居中，而不是跟整个段落居中',
+    );
+
+    await tester.tap(checkbox);
+    await tester.pump();
+    expect(
+      controller.snapshot().document.toDelta().operations.last.attributes,
+      containsPair('list', 'checked'),
+    );
   });
 
   testWidgets(
@@ -1025,7 +1237,7 @@ final value = 1;
       await tester.pump();
       await tester.tap(find.byType(quill.QuillRawEditor));
       await tester.pump();
-      const pasted = '# 系统粘贴\n\n正文 **重点**\n';
+      const pasted = '# 系统粘贴\n\n☐ 待处理\n☑ 已完成\n';
       tester.testTextInput.updateEditingValue(
         const TextEditingValue(
           text: pasted,
@@ -1034,19 +1246,26 @@ final value = 1;
       );
       await tester.pump();
 
-      expect(controller.snapshot().document.project().plainText, '系统粘贴\n正文 重点');
+      expect(
+        controller.snapshot().document.project().plainText,
+        '系统粘贴\n待处理\n已完成',
+      );
       expect(controller.snapshot().document.toDelta().toJson(), [
         {'insert': '系统粘贴'},
         {
           'insert': '\n',
           'attributes': {'header': 1},
         },
-        {'insert': '正文 '},
+        {'insert': '待处理'},
         {
-          'insert': '重点',
-          'attributes': {'bold': true},
+          'insert': '\n',
+          'attributes': {'list': 'unchecked'},
         },
-        {'insert': '\n'},
+        {'insert': '已完成'},
+        {
+          'insert': '\n',
+          'attributes': {'list': 'checked'},
+        },
       ]);
 
       controller.quillController.undo();

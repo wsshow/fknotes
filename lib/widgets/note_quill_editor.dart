@@ -1,3 +1,7 @@
+// Flutter Quill 11.5.1 exposes custom list-leading layout as experimental. The
+// dependency is pinned and this integration is covered by editor widget tests.
+// ignore_for_file: experimental_member_use
+
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -17,6 +21,63 @@ import 'note_external_image_drop.dart';
 typedef NoteAssetImageProvider = ImageProvider? Function(NoteAsset asset);
 typedef NoteAssetPathResolver = String? Function(NoteAsset asset);
 typedef NoteImageAssetAction = Future<void> Function(NoteAsset asset);
+
+Widget? _paperLeadingBlockBuilder(quill.Node _, quill.LeadingConfig config) {
+  final isTask =
+      config.attribute == quill.Attribute.checked ||
+      config.attribute == quill.Attribute.unchecked;
+  if (!isTask) return null;
+
+  final size = config.lineSize ?? 16;
+  final enabled = config.enabled ?? false;
+  final checked = config.value;
+  return Builder(
+    builder: (context) {
+      final firstLineHeight =
+          MediaQuery.textScalerOf(context).scale(size) * 1.15;
+      return SizedBox(
+        key: const Key('note-todo-leading'),
+        height: firstLineHeight,
+        child: Align(
+          alignment: AlignmentDirectional.centerEnd,
+          child: Padding(
+            padding: EdgeInsetsDirectional.only(end: size / 2),
+            child: Semantics(
+              button: true,
+              checked: checked,
+              enabled: enabled,
+              child: SizedBox.square(
+                key: const Key('note-todo-checkbox'),
+                dimension: size,
+                child: Material(
+                  color: checked
+                      ? enabled
+                            ? AppColors.accent
+                            : AppColors.muted
+                      : AppColors.surface,
+                  shape: RoundedRectangleBorder(
+                    side: BorderSide(
+                      color: enabled ? AppColors.muted : AppColors.line,
+                    ),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                  child: InkWell(
+                    onTap: enabled
+                        ? () => config.onCheckboxTap(!checked)
+                        : null,
+                    child: checked
+                        ? const Icon(Icons.check, size: 16, color: Colors.white)
+                        : null,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
 
 quill.DefaultStyles _paperQuillStyles() {
   const codeTextStyle = TextStyle(
@@ -159,6 +220,7 @@ final class _NoteRichDocumentPreviewState
         enableInteractiveSelection: false,
         enableSelectionToolbar: false,
         padding: EdgeInsets.zero,
+        customLeadingBlockBuilder: _paperLeadingBlockBuilder,
         embedBuilders: [
           _NoteAssetEmbedBuilder(
             session: _controller,
@@ -309,6 +371,7 @@ final class _NoteQuillEditorState extends State<NoteQuillEditor> {
         enableInteractiveSelection: true,
         enableSelectionToolbar: true,
         textInputAction: TextInputAction.newline,
+        customLeadingBlockBuilder: _paperLeadingBlockBuilder,
         onTapDown: (details, getPosition) => handleAssetTap(
           details.globalPosition,
           getPosition,

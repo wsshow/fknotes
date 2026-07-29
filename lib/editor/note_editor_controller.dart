@@ -250,11 +250,22 @@ final class NoteEditorController extends ChangeNotifier {
 
     if (placement == NoteAssistantEditPlacement.append) {
       offset = (documentLength - 1).clamp(0, documentLength);
-      length = 0;
+      length = 1;
       replacement = Delta();
-      if (documentLength > 1) replacement.insert('\n');
-      final generatedBody = _deltaWithoutTerminalNewline(generated);
-      for (final operation in generatedBody.operations) {
+      if (documentLength > 1) {
+        final terminalAttributes = quillController.document
+            .toDelta()
+            .operations
+            .last
+            .attributes;
+        replacement.insert(
+          '\n',
+          terminalAttributes == null
+              ? null
+              : Map<String, dynamic>.of(terminalAttributes),
+        );
+      }
+      for (final operation in generated.operations) {
         replacement.push(operation);
       }
     } else if (placement == NoteAssistantEditPlacement.insertBelow) {
@@ -298,8 +309,11 @@ final class NoteEditorController extends ChangeNotifier {
     if (operations.last.attributes?.isNotEmpty == true) return false;
     return operations
         .take(operations.length - 1)
-        .where((operation) => operation.data is String)
-        .every((operation) => !(operation.data as String).contains('\n'));
+        .every(
+          (operation) =>
+              operation.data is String &&
+              !(operation.data as String).contains('\n'),
+        );
   }
 
   static Delta _deltaWithoutTerminalNewline(Delta source) {
