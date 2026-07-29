@@ -416,6 +416,12 @@ abstract class AppLocalizations {
   /// **'选择'**
   String get selectNotes;
 
+  /// No description provided for @selectNotesTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择笔记'**
+  String get selectNotesTitle;
+
   /// No description provided for @savedOnlyOnDevice.
   ///
   /// In zh, this message translates to:
@@ -2665,6 +2671,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'全选'**
   String get selectAll;
+
+  /// No description provided for @deselectAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消全选'**
+  String get deselectAll;
 
   /// No description provided for @share.
   ///

@@ -172,6 +172,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get selectNotes => '选择';
 
   @override
+  String get selectNotesTitle => '选择笔记';
+
+  @override
   String get savedOnlyOnDevice => '仅保存在本机';
 
   @override
@@ -1401,6 +1404,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get selectAll => '全选';
+
+  @override
+  String get deselectAll => '取消全选';
 
   @override
   String get share => '分享';

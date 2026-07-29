@@ -237,12 +237,44 @@ void main() {
         find.byKey(const Key('delta-library-selection-header')),
         findsOneWidget,
       );
+      expect(find.text('选择笔记'), findsOneWidget);
       expect(find.text('已选择 0 篇'), findsOneWidget);
+      expect(
+        find.byKey(const Key('delta-library-selection-actions')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('delta-library-selection-header')),
+          matching: find.byKey(const Key('delta-library-pin-selected')),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('delta-library-selection-actions')),
+          matching: find.byKey(const Key('delta-library-pin-selected')),
+        ),
+        findsOneWidget,
+      );
       expect(
         find.byKey(const Key('delta-library-selection-grid')),
         findsNothing,
       );
       expect(find.byKey(const Key('delta-library-shelf-grid')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('delta-library-select-all')));
+      await tester.pump();
+      expect(find.text('已选择 2 篇'), findsOneWidget);
+      expect(find.text('取消全选'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('delta-library-select-all')));
+      await tester.pump();
+      expect(find.text('已选择 0 篇'), findsOneWidget);
+      expect(
+        find.byKey(const Key('delta-library-selection-header')),
+        findsOneWidget,
+      );
 
       await tester.tap(
         find.byKey(ValueKey('delta-shelf-note-${store.notes.first.id.value}')),
@@ -611,6 +643,11 @@ void main() {
     await tester.pump();
     expect(
       find.byKey(const Key('delta-library-selection-header')),
+      findsOneWidget,
+    );
+    expect(find.text('选择笔记'), findsOneWidget);
+    expect(
+      find.byKey(const Key('delta-library-selection-actions')),
       findsOneWidget,
     );
     expect(find.byKey(const Key('delta-library-shelf-grid')), findsOneWidget);

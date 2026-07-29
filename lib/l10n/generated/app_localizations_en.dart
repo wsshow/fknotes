@@ -178,6 +178,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get selectNotes => 'Select';
 
   @override
+  String get selectNotesTitle => 'Select notes';
+
+  @override
   String get savedOnlyOnDevice => 'Stored only on this device';
 
   @override
@@ -1531,6 +1534,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get selectAll => 'Select all';
+
+  @override
+  String get deselectAll => 'Deselect all';
 
   @override
   String get share => 'Share';

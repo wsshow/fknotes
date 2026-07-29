@@ -183,12 +183,14 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage>
     setState(() {
       final available = _controller.notes
           .where((note) => !_controller.isBusy(note.id))
-          .map((note) => note.id);
-      if (_selectedNoteIds.length == _controller.notes.length) {
+          .map((note) => note.id)
+          .toSet();
+      final allSelected =
+          available.isNotEmpty && available.every(_selectedNoteIds.contains);
+      _selectionRequested = true;
+      if (allSelected) {
         _selectedNoteIds.clear();
-        _selectionRequested = false;
       } else {
-        _selectionRequested = true;
         _selectedNoteIds
           ..clear()
           ..addAll(available);
@@ -1072,7 +1074,11 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage>
                         horizontalPadding,
                         10,
                         horizontalPadding,
-                        widget.onOpenData == null ? 40 : 108,
+                        _selectionMode
+                            ? 24
+                            : widget.onOpenData == null
+                            ? 40
+                            : 108,
                       ),
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: columns,
@@ -1105,6 +1111,7 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage>
                   },
                 ),
         ),
+        if (_selectionMode) _buildSelectionActions(context),
       ],
     );
   }
@@ -1127,71 +1134,136 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage>
 
   Widget _buildSelectionHeader(BuildContext context) {
     final notes = _selectedNotes;
-    final allPinned = notes.isNotEmpty && notes.every((note) => note.isPinned);
-    return Container(
+    final available = _controller.notes
+        .where((note) => !_controller.isBusy(note.id))
+        .map((note) => note.id);
+    final allSelected =
+        available.isNotEmpty && available.every(_selectedNoteIds.contains);
+    return Padding(
       key: const Key('delta-library-selection-header'),
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 9),
-      decoration: const BoxDecoration(
-        color: AppColors.paperPrimary,
-        border: Border(bottom: BorderSide(color: AppColors.line)),
-        boxShadow: AppShadows.paperEdge,
-      ),
-      child: Row(
-        children: [
-          IconButton(
-            key: const Key('delta-library-exit-selection'),
-            tooltip: context.l10n.close,
-            onPressed: _selectionBusy ? null : _clearSelection,
-            icon: const Icon(Icons.close_rounded),
-          ),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Text(
-              context.l10n.selectedNoteCount(notes.length),
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-          ),
-          if (_selectionBusy)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 13),
-              child: SizedBox.square(
-                dimension: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            )
-          else ...[
-            IconButton(
-              key: const Key('delta-library-select-all'),
-              tooltip: context.l10n.selectAll,
-              onPressed: _selectAll,
-              icon: Icon(
-                _selectedNoteIds.length == _controller.notes.length
-                    ? Icons.deselect_rounded
-                    : Icons.select_all_rounded,
+      padding: const EdgeInsets.fromLTRB(8, 10, 8, 4),
+      child: SizedBox(
+        height: 58,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SizedBox(
+                width: 88,
+                child: TextButton(
+                  key: const Key('delta-library-select-all'),
+                  onPressed: _selectionBusy ? null : _selectAll,
+                  child: Text(
+                    allSelected
+                        ? context.l10n.deselectAll
+                        : context.l10n.selectAll,
+                  ),
+                ),
               ),
             ),
-            IconButton(
-              key: const Key('delta-library-pin-selected'),
-              tooltip: allPinned ? context.l10n.unpin : context.l10n.pin,
-              onPressed: notes.isEmpty
-                  ? null
-                  : () => unawaited(_setSelectedPinned()),
-              icon: Icon(
-                allPinned ? Icons.push_pin_outlined : Icons.push_pin_rounded,
-                color: AppColors.terracotta,
+            Positioned(
+              left: 88,
+              right: 88,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    context.l10n.selectNotesTitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: AppColors.ink,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  if (_selectionBusy)
+                    const SizedBox(
+                      width: 54,
+                      child: LinearProgressIndicator(
+                        minHeight: 2,
+                        color: AppColors.accent,
+                        backgroundColor: AppColors.accentSoft,
+                      ),
+                    )
+                  else
+                    Text(
+                      context.l10n.selectedNoteCount(notes.length),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.muted,
+                        fontSize: 12,
+                      ),
+                    ),
+                ],
               ),
             ),
-            IconButton(
-              key: const Key('delta-library-delete-selected'),
-              tooltip: context.l10n.deletePermanently,
-              color: AppColors.danger,
-              onPressed: notes.isEmpty
-                  ? null
-                  : () => unawaited(_deleteSelected()),
-              icon: const Icon(Icons.delete_outline_rounded),
+            Align(
+              alignment: Alignment.centerRight,
+              child: SizedBox(
+                width: 88,
+                child: TextButton(
+                  key: const Key('delta-library-exit-selection'),
+                  onPressed: _selectionBusy ? null : _clearSelection,
+                  child: Text(context.l10n.cancel),
+                ),
+              ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSelectionActions(BuildContext context) {
+    final notes = _selectedNotes;
+    final allPinned = notes.isNotEmpty && notes.every((note) => note.isPinned);
+    return Container(
+      key: const Key('delta-library-selection-actions'),
+      decoration: const BoxDecoration(
+        color: AppColors.paperPrimary,
+        border: Border(top: BorderSide(color: AppColors.line)),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x10263847),
+            blurRadius: 12,
+            offset: Offset(0, -4),
+          ),
         ],
+      ),
+      child: SafeArea(
+        top: false,
+        minimum: const EdgeInsets.only(bottom: 9),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 7, 16, 0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _SelectionActionButton(
+                key: const Key('delta-library-pin-selected'),
+                icon: allPinned
+                    ? Icons.push_pin_outlined
+                    : Icons.push_pin_rounded,
+                label: allPinned ? context.l10n.unpin : context.l10n.pin,
+                color: AppColors.terracotta,
+                onPressed: notes.isEmpty || _selectionBusy
+                    ? null
+                    : () => unawaited(_setSelectedPinned()),
+              ),
+              _SelectionActionButton(
+                key: const Key('delta-library-delete-selected'),
+                icon: Icons.delete_outline_rounded,
+                label: context.l10n.deletePermanently,
+                color: AppColors.danger,
+                onPressed: notes.isEmpty || _selectionBusy
+                    ? null
+                    : () => unawaited(_deleteSelected()),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1327,6 +1399,48 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage>
     if (_ownsController) _controller.dispose();
     super.dispose();
   }
+}
+
+final class _SelectionActionButton extends StatelessWidget {
+  const _SelectionActionButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onPressed,
+    super.key,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => TextButton(
+    style: TextButton.styleFrom(
+      foregroundColor: color,
+      disabledForegroundColor: AppColors.subtle,
+      minimumSize: const Size(120, 64),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+      ),
+    ),
+    onPressed: onPressed,
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 24),
+        const SizedBox(height: 3),
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        ),
+      ],
+    ),
+  );
 }
 
 enum _ShelfFilter {
