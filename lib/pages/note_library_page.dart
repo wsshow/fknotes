@@ -66,11 +66,15 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
   Timer? _searchTimer;
   NoteId? _searchOriginNoteId;
   var _selectionBusy = false;
+  var _selectionRequested = false;
   var _currentIndex = 0;
   var _searchExpanded = false;
   var _searchPullDistance = 0.0;
+  var _shelfExpanded = false;
+  var _shelfPullDistance = 0.0;
+  _ShelfFilter _shelfFilter = _ShelfFilter.all;
 
-  bool get _selectionMode => _selectedNoteIds.isNotEmpty;
+  bool get _selectionMode => _selectionRequested || _selectedNoteIds.isNotEmpty;
 
   List<Note> get _selectedNotes => _controller.notes
       .where((note) => _selectedNoteIds.contains(note.id))
@@ -106,6 +110,7 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
     final wasSelectionMode = _selectionMode;
     final available = _controller.notes.map((note) => note.id).toSet();
     _selectedNoteIds.removeWhere((id) => !available.contains(id));
+    if (_controller.notes.isEmpty) _selectionRequested = false;
     final lastIndex = math.max(0, _controller.notes.length - 1);
     if (_currentIndex > lastIndex) {
       _currentIndex = lastIndex;
@@ -122,17 +127,29 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
     if (_controller.isBusy(note.id) || _selectionBusy) return;
     final wasSelectionMode = _selectionMode;
     setState(() {
+      _selectionRequested = true;
       if (!_selectedNoteIds.add(note.id)) {
         _selectedNoteIds.remove(note.id);
+        if (_selectedNoteIds.isEmpty) _selectionRequested = false;
       }
     });
+    _notifySelectionModeChanged(wasSelectionMode);
+  }
+
+  void _enterSelectionMode() {
+    if (_selectionBusy || _selectionMode) return;
+    final wasSelectionMode = _selectionMode;
+    setState(() => _selectionRequested = true);
     _notifySelectionModeChanged(wasSelectionMode);
   }
 
   void _clearSelection() {
     if (_selectionBusy) return;
     final wasSelectionMode = _selectionMode;
-    setState(_selectedNoteIds.clear);
+    setState(() {
+      _selectionRequested = false;
+      _selectedNoteIds.clear();
+    });
     _notifySelectionModeChanged(wasSelectionMode);
   }
 
@@ -145,7 +162,9 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
           .map((note) => note.id);
       if (_selectedNoteIds.length == _controller.notes.length) {
         _selectedNoteIds.clear();
+        _selectionRequested = false;
       } else {
+        _selectionRequested = true;
         _selectedNoteIds
           ..clear()
           ..addAll(available);
@@ -180,7 +199,10 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
     try {
       await _runAction(() => _controller.deletePermanentlyAll(notes));
       if (mounted) {
-        setState(_selectedNoteIds.clear);
+        setState(() {
+          _selectionRequested = false;
+          _selectedNoteIds.clear();
+        });
       }
     } finally {
       if (mounted) setState(() => _selectionBusy = false);
@@ -221,6 +243,73 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
     if (shouldExpand) _expandSearch();
   }
 
+  void _expandShelf() {
+    if (_shelfExpanded || _selectionMode || _controller.notes.isEmpty) return;
+    if (_currentIndex < _controller.notes.length) {
+      _searchOriginNoteId = _controller.notes[_currentIndex].id;
+    }
+    _dismissSearchFocus();
+    setState(() {
+      _shelfExpanded = true;
+      _searchExpanded = false;
+      _shelfPullDistance = 0;
+      _shelfFilter = _ShelfFilter.all;
+    });
+    if (!MediaQuery.disableAnimationsOf(context)) {
+      unawaited(HapticFeedback.mediumImpact());
+    }
+  }
+
+  void _updateShelfPull(PointerMoveEvent event) {
+    if (_shelfExpanded || _selectionMode || _currentIndex != 0) return;
+    _shelfPullDistance = math.max(0, _shelfPullDistance + event.delta.dy);
+    if (_shelfPullDistance >= 54) _expandShelf();
+  }
+
+  Future<void> _collapseShelf() async {
+    if (!_shelfExpanded) return;
+    _searchTimer?.cancel();
+    _dismissSearchFocus();
+    _searchController.clear();
+    if (_controller.query.isNotEmpty) {
+      await _controller.search('');
+    }
+    if (!mounted) return;
+
+    final origin = _searchOriginNoteId;
+    final targetIndex = origin == null
+        ? _currentIndex
+        : _controller.notes.indexWhere((note) => note.id == origin);
+    setState(() {
+      _shelfExpanded = false;
+      _shelfFilter = _ShelfFilter.all;
+      _searchOriginNoteId = null;
+      if (targetIndex >= 0) _currentIndex = targetIndex;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_pageController.hasClients || targetIndex < 0) return;
+      _pageController.jumpToPage(targetIndex);
+    });
+  }
+
+  List<Note> get _shelfNotes => _controller.notes
+      .where((note) {
+        return switch (_shelfFilter) {
+          _ShelfFilter.all => true,
+          _ShelfFilter.pinned => note.isPinned,
+          _ShelfFilter.image => note.assets.any(
+            (asset) => asset.kind == NoteAssetKind.image,
+          ),
+          _ShelfFilter.audio => note.assets.any(
+            (asset) => asset.kind == NoteAssetKind.audio,
+          ),
+          _ShelfFilter.video => note.assets.any(
+            (asset) => asset.kind == NoteAssetKind.video,
+          ),
+        };
+      })
+      .toList(growable: false);
+
   Future<void> _collapseSearch() async {
     if (!_searchExpanded) return;
     _searchTimer?.cancel();
@@ -247,6 +336,7 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
   }
 
   Future<void> _openEditor([Note? note]) async {
+    final preserveShelf = _shelfExpanded;
     _dismissSearchFocus();
     final builder =
         widget.editorBuilder ??
@@ -265,11 +355,14 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
     if (savedNote == null) {
       await _controller.refresh();
     } else {
-      await _refreshAndReveal(savedNote.id);
+      await _refreshAndReveal(savedNote.id, preserveShelf: preserveShelf);
     }
   }
 
-  Future<void> _refreshAndReveal(NoteId noteId) async {
+  Future<void> _refreshAndReveal(
+    NoteId noteId, {
+    bool preserveShelf = false,
+  }) async {
     _searchTimer?.cancel();
     _dismissSearchFocus();
     _searchController.clear();
@@ -285,6 +378,8 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
     );
     setState(() {
       _searchExpanded = false;
+      _shelfExpanded = preserveShelf;
+      _shelfFilter = _ShelfFilter.all;
       _searchOriginNoteId = null;
       if (targetIndex >= 0) _currentIndex = targetIndex;
     });
@@ -381,6 +476,9 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
                   Expanded(child: _buildContent(context)),
                 ],
               );
+            }
+            if (_shelfExpanded) {
+              return _buildShelfPage(context);
             }
             final deckWidth = math.min(
               640.0,
@@ -608,6 +706,200 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
           ),
   );
 
+  Widget _buildShelfPage(BuildContext context) {
+    final notes = _shelfNotes;
+    return Column(
+      key: const Key('delta-library-shelf-page'),
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: Container(
+            height: 48,
+            decoration: BoxDecoration(
+              color: AppColors.paperSecondary,
+              border: Border.all(color: AppColors.line),
+              borderRadius: BorderRadius.circular(AppRadius.large),
+            ),
+            child: Row(
+              children: [
+                const SizedBox(width: 4),
+                const Padding(
+                  padding: EdgeInsets.only(left: 12),
+                  child: Icon(
+                    Icons.search_rounded,
+                    size: 21,
+                    color: AppColors.muted,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    key: const Key('delta-library-shelf-search'),
+                    controller: _searchController,
+                    focusNode: _searchFocusNode,
+                    textInputAction: TextInputAction.search,
+                    onChanged: (value) {
+                      _scheduleSearch(value);
+                      setState(() {});
+                    },
+                    style: const TextStyle(color: AppColors.ink, fontSize: 14),
+                    decoration: InputDecoration(
+                      hintText: context.l10n.searchNotes,
+                      hintStyle: const TextStyle(color: AppColors.muted),
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      filled: false,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+                if (_searchController.text.isNotEmpty)
+                  IconButton(
+                    key: const Key('delta-library-clear-shelf-search'),
+                    tooltip: context.l10n.clear,
+                    onPressed: () {
+                      _searchController.clear();
+                      _searchTimer?.cancel();
+                      unawaited(_controller.search(''));
+                      setState(() {});
+                    },
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                  )
+                else
+                  const SizedBox(width: 12),
+              ],
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
+          child: Row(
+            children: [
+              IconButton(
+                key: const Key('delta-library-collapse-shelf'),
+                tooltip: context.l10n.backToCardView,
+                onPressed: () => unawaited(_collapseShelf()),
+                icon: const Icon(Icons.keyboard_arrow_up_rounded),
+              ),
+              const SizedBox(width: 2),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      context.l10n.allNotes,
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      context.l10n.noteCountShort(_controller.notes.length),
+                      style: const TextStyle(
+                        color: AppColors.muted,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton.icon(
+                key: const Key('delta-library-enter-selection'),
+                onPressed: _enterSelectionMode,
+                icon: const Icon(Icons.check_circle_outline_rounded, size: 20),
+                label: Text(context.l10n.selectNotes),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: 44,
+          child: ListView.separated(
+            key: const Key('delta-library-shelf-filters'),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
+            scrollDirection: Axis.horizontal,
+            itemCount: _ShelfFilter.values.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              final filter = _ShelfFilter.values[index];
+              return ChoiceChip(
+                key: ValueKey('delta-library-shelf-filter-${filter.name}'),
+                selected: _shelfFilter == filter,
+                showCheckmark: false,
+                avatar: Icon(filter.icon, size: 16),
+                label: Text(filter.label(context)),
+                onSelected: (_) => setState(() => _shelfFilter = filter),
+              );
+            },
+          ),
+        ),
+        if (_controller.isLoading)
+          const LinearProgressIndicator(
+            minHeight: 2,
+            color: AppColors.accent,
+            backgroundColor: AppColors.accentSoft,
+          )
+        else
+          const SizedBox(height: 2),
+        Expanded(
+          child: notes.isEmpty
+              ? Center(
+                  child: Text(
+                    context.l10n.noMatchingNotes,
+                    style: const TextStyle(color: AppColors.muted),
+                  ),
+                )
+              : LayoutBuilder(
+                  builder: (context, gridConstraints) {
+                    final columns = switch (gridConstraints.maxWidth) {
+                      >= 900 => 5,
+                      >= 620 => 4,
+                      >= 360 => 3,
+                      _ => 2,
+                    };
+                    const spacing = 12.0;
+                    const horizontalPadding = 16.0;
+                    final tileWidth =
+                        (gridConstraints.maxWidth -
+                            horizontalPadding * 2 -
+                            spacing * (columns - 1)) /
+                        columns;
+                    final tileHeight = (tileWidth * 1.58).clamp(174.0, 310.0);
+                    return GridView.builder(
+                      key: const Key('delta-library-shelf-grid'),
+                      padding: EdgeInsets.fromLTRB(
+                        horizontalPadding,
+                        10,
+                        horizontalPadding,
+                        widget.onOpenData == null ? 40 : 108,
+                      ),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: columns,
+                        crossAxisSpacing: spacing,
+                        mainAxisSpacing: 18,
+                        childAspectRatio: tileWidth / tileHeight,
+                      ),
+                      itemCount: notes.length,
+                      itemBuilder: (context, index) {
+                        final note = notes[index];
+                        return _ShelfNoteTile(
+                          key: ValueKey('delta-shelf-note-${note.id.value}'),
+                          note: note,
+                          busy: _controller.isBusy(note.id),
+                          resolveImage:
+                              widget.resolveImage ?? _resolveManagedImage,
+                          onTap: () => unawaited(_openEditor(note)),
+                          onLongPress: () => _toggleSelection(note),
+                        );
+                      },
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildActiveNoteMenu(BuildContext context) {
     final index = math.min(
       math.max(0, _currentIndex),
@@ -672,7 +964,9 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
             IconButton(
               key: const Key('delta-library-pin-selected'),
               tooltip: allPinned ? context.l10n.unpin : context.l10n.pin,
-              onPressed: () => unawaited(_setSelectedPinned()),
+              onPressed: notes.isEmpty
+                  ? null
+                  : () => unawaited(_setSelectedPinned()),
               icon: Icon(
                 allPinned ? Icons.push_pin_outlined : Icons.push_pin_rounded,
                 color: AppColors.terracotta,
@@ -682,7 +976,9 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
               key: const Key('delta-library-delete-selected'),
               tooltip: context.l10n.deletePermanently,
               color: AppColors.danger,
-              onPressed: () => unawaited(_deleteSelected()),
+              onPressed: notes.isEmpty
+                  ? null
+                  : () => unawaited(_deleteSelected()),
               icon: const Icon(Icons.delete_outline_rounded),
             ),
           ],
@@ -740,48 +1036,45 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
                 spacing * (columns - 1)) /
             columns;
         final tileHeight = (tileWidth * 1.42).clamp(158.0, 224.0);
-        return RefreshIndicator(
-          onRefresh: _controller.refresh,
-          child: GridView.builder(
-            key: const Key('delta-library-selection-grid'),
-            padding: EdgeInsets.fromLTRB(
-              horizontalPadding,
-              16,
-              horizontalPadding,
-              widget.onOpenData == null ? 40 : 108,
-            ),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: columns,
-              crossAxisSpacing: spacing,
-              mainAxisSpacing: spacing,
-              childAspectRatio: tileWidth / tileHeight,
-            ),
-            itemCount: _controller.notes.length,
-            itemBuilder: (context, index) {
-              final note = _controller.notes[index];
-              return _DeltaNoteCard(
-                key: ValueKey('delta-note-${note.id.value}'),
-                note: note,
-                busy: _controller.isBusy(note.id),
-                selectionMode: _selectionMode,
-                selected: _selectedNoteIds.contains(note.id),
-                resolveImage: widget.resolveImage ?? _resolveManagedImage,
-                onTap: () => _toggleSelection(note),
-                onLongPress: () => _toggleSelection(note),
-                onAction: (action) => unawaited(_handleAction(note, action)),
-              );
-            },
+        return GridView.builder(
+          key: const Key('delta-library-selection-grid'),
+          padding: EdgeInsets.fromLTRB(
+            horizontalPadding,
+            16,
+            horizontalPadding,
+            widget.onOpenData == null ? 40 : 108,
           ),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            crossAxisSpacing: spacing,
+            mainAxisSpacing: spacing,
+            childAspectRatio: tileWidth / tileHeight,
+          ),
+          itemCount: _controller.notes.length,
+          itemBuilder: (context, index) {
+            final note = _controller.notes[index];
+            return _DeltaNoteCard(
+              key: ValueKey('delta-note-${note.id.value}'),
+              note: note,
+              busy: _controller.isBusy(note.id),
+              selectionMode: _selectionMode,
+              selected: _selectedNoteIds.contains(note.id),
+              resolveImage: widget.resolveImage ?? _resolveManagedImage,
+              onTap: () => _toggleSelection(note),
+              onLongPress: () => _toggleSelection(note),
+              onAction: (action) => unawaited(_handleAction(note, action)),
+            );
+          },
         );
       },
     );
   }
 
-  Widget _buildRolodex(BuildContext context) => RefreshIndicator(
-    onRefresh: _controller.refresh,
-    displacement: 76,
-    color: AppColors.mechanicalBlue,
-    backgroundColor: AppColors.paperPrimary,
+  Widget _buildRolodex(BuildContext context) => Listener(
+    behavior: HitTestBehavior.opaque,
+    onPointerMove: _updateShelfPull,
+    onPointerUp: (_) => _shelfPullDistance = 0,
+    onPointerCancel: (_) => _shelfPullDistance = 0,
     child: PageView.builder(
       key: const Key('delta-library-rolodex'),
       controller: _pageController,
@@ -865,6 +1158,26 @@ final class _NoteLibraryPageState extends State<NoteLibraryPage> {
     if (_ownsController) _controller.dispose();
     super.dispose();
   }
+}
+
+enum _ShelfFilter {
+  all(Icons.grid_view_rounded),
+  pinned(Icons.push_pin_outlined),
+  image(Icons.image_outlined),
+  audio(Icons.graphic_eq_rounded),
+  video(Icons.video_library_outlined);
+
+  const _ShelfFilter(this.icon);
+
+  final IconData icon;
+
+  String label(BuildContext context) => switch (this) {
+    _ShelfFilter.all => context.l10n.all,
+    _ShelfFilter.pinned => context.l10n.pin,
+    _ShelfFilter.image => context.l10n.image,
+    _ShelfFilter.audio => context.l10n.audio,
+    _ShelfFilter.video => context.l10n.video,
+  };
 }
 
 enum _LibraryNoteAction { pin, delete }
@@ -1306,6 +1619,243 @@ final class _RolodexNoteSheet extends StatelessWidget {
     }
     return Icons.subject_rounded;
   }
+}
+
+final class _ShelfNoteTile extends StatelessWidget {
+  const _ShelfNoteTile({
+    required this.note,
+    required this.busy,
+    required this.resolveImage,
+    required this.onTap,
+    required this.onLongPress,
+    super.key,
+  });
+
+  final Note note;
+  final bool busy;
+  final NoteLibraryImageResolver resolveImage;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    NoteAsset? imageAsset;
+    for (final asset in note.assets) {
+      if (asset.kind == NoteAssetKind.image) {
+        imageAsset = asset;
+        break;
+      }
+    }
+    final imageProvider = imageAsset == null ? null : resolveImage(imageAsset);
+    final title = note.title.trim().isEmpty
+        ? context.l10n.untitled
+        : note.title;
+    return Semantics(
+      button: true,
+      label: title,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                boxShadow: AppShadows.paperEdge,
+                borderRadius: BorderRadius.circular(AppRadius.small),
+              ),
+              child: Material(
+                key: ValueKey('delta-shelf-note-cover-${note.id.value}'),
+                color: AppColors.paperPrimary,
+                shape: RoundedRectangleBorder(
+                  side: const BorderSide(color: AppColors.line),
+                  borderRadius: BorderRadius.circular(AppRadius.small),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: busy ? null : onTap,
+                  onLongPress: busy ? null : onLongPress,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (imageProvider == null)
+                        _ShelfTextCover(note: note, title: title)
+                      else
+                        Image(
+                          image: imageProvider,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) =>
+                              _ShelfTextCover(note: note, title: title),
+                        ),
+                      Positioned(
+                        left: 0,
+                        top: 0,
+                        child: CustomPaint(
+                          painter: const _ShelfCornerPainter(),
+                          child: const SizedBox.square(dimension: 28),
+                        ),
+                      ),
+                      if (note.isPinned)
+                        const Positioned(
+                          top: 7,
+                          right: 7,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: Color(0xDDFBF8F0),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Padding(
+                              padding: EdgeInsets.all(5),
+                              child: Icon(
+                                Icons.push_pin_rounded,
+                                size: 13,
+                                color: AppColors.terracotta,
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (busy)
+                        const ColoredBox(
+                          color: Color(0x66FBF8F0),
+                          child: Center(
+                            child: SizedBox.square(
+                              dimension: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 7),
+          Row(
+            children: [
+              Icon(_contentIcon(note), size: 14, color: AppColors.subtle),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.ink,
+                    fontSize: 13,
+                    height: 1.2,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  static IconData _contentIcon(Note note) {
+    if (note.assets.any((asset) => asset.kind == NoteAssetKind.video)) {
+      return Icons.video_library_outlined;
+    }
+    if (note.assets.any((asset) => asset.kind == NoteAssetKind.audio)) {
+      return Icons.graphic_eq_rounded;
+    }
+    if (note.assets.any((asset) => asset.kind == NoteAssetKind.image)) {
+      return Icons.image_outlined;
+    }
+    return Icons.notes_rounded;
+  }
+}
+
+final class _ShelfTextCover extends StatelessWidget {
+  const _ShelfTextCover({required this.note, required this.title});
+
+  final Note note;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final preview = note.contentProjection.plainText
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.paperPrimary, AppColors.paperSecondary],
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 16, 12, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontSize: 14, height: 1.25),
+            ),
+            const SizedBox(height: 9),
+            Container(
+              width: 30,
+              height: 2,
+              color: AppColors.mechanicalBlue.withValues(alpha: .62),
+            ),
+            const SizedBox(height: 9),
+            if (preview.isNotEmpty)
+              Expanded(
+                child: Text(
+                  preview,
+                  maxLines: 7,
+                  overflow: TextOverflow.fade,
+                  style: const TextStyle(
+                    color: AppColors.muted,
+                    fontSize: 10,
+                    height: 1.45,
+                  ),
+                ),
+              )
+            else
+              const Spacer(),
+            Text(
+              DateFormat.MMMd(
+                Localizations.localeOf(context).toLanguageTag(),
+              ).format(note.updatedAt.toLocal()),
+              style: const TextStyle(
+                color: AppColors.subtle,
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+final class _ShelfCornerPainter extends CustomPainter {
+  const _ShelfCornerPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(
+      path,
+      Paint()..color = AppColors.mechanicalBlue.withValues(alpha: .16),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _ShelfCornerPainter oldDelegate) => false;
 }
 
 final class _DeltaNoteCard extends StatelessWidget {

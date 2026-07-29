@@ -51,6 +51,8 @@
   "searchLocalKnowledge": "Search local knowledge",
   "searchNotes": "Search notes",
   "pullToSearch": "Pull to search",
+  "backToCardView": "Back to card view",
+  "selectNotes": "Select",
   "savedOnlyOnDevice": "Stored only on this device",
   "allNotes": "All notes",
   "noteCountShort": "{count, plural, =1{1 note} other{{count} notes}}",

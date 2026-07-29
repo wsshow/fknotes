@@ -392,6 +392,18 @@ abstract class AppLocalizations {
   /// **'下拉搜索'**
   String get pullToSearch;
 
+  /// No description provided for @backToCardView.
+  ///
+  /// In zh, this message translates to:
+  /// **'返回卡片视图'**
+  String get backToCardView;
+
+  /// No description provided for @selectNotes.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择'**
+  String get selectNotes;
+
   /// No description provided for @savedOnlyOnDevice.
   ///
   /// In zh, this message translates to:

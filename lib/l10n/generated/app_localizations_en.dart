@@ -166,6 +166,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get pullToSearch => 'Pull to search';
 
   @override
+  String get backToCardView => 'Back to card view';
+
+  @override
+  String get selectNotes => 'Select';
+
+  @override
   String get savedOnlyOnDevice => 'Stored only on this device';
 
   @override

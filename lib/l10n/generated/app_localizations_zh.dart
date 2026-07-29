@@ -160,6 +160,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get pullToSearch => '下拉搜索';
 
   @override
+  String get backToCardView => '返回卡片视图';
+
+  @override
+  String get selectNotes => '选择';
+
+  @override
   String get savedOnlyOnDevice => '仅保存在本机';
 
   @override

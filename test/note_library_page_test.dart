@@ -143,6 +143,79 @@ void main() {
     expect(controller.query, isEmpty);
   });
 
+  testWidgets(
+    'pulling down the first card opens a tiled shelf without refresh UI',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(430, 932);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      await tester.pumpWidget(
+        _TestApp(child: NoteLibraryPage(controller: controller)),
+      );
+      await _pump(tester);
+
+      expect(find.byType(RefreshIndicator), findsNothing);
+      expect(find.byKey(const Key('delta-library-shelf-page')), findsNothing);
+
+      await tester.drag(
+        find.byKey(const Key('delta-library-rolodex')),
+        const Offset(0, 220),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('delta-library-shelf-page')), findsOneWidget);
+      expect(find.byKey(const Key('delta-library-shelf-grid')), findsOneWidget);
+      expect(find.byType(RefreshIndicator), findsNothing);
+      expect(find.byType(RefreshProgressIndicator), findsNothing);
+      expect(find.text('所有笔记'), findsOneWidget);
+      expect(find.text('2 条笔记'), findsOneWidget);
+      expect(
+        find.byKey(ValueKey('delta-shelf-note-${store.notes.first.id.value}')),
+        findsOneWidget,
+      );
+      final grid = tester.widget<GridView>(
+        find.byKey(const Key('delta-library-shelf-grid')),
+      );
+      expect(
+        (grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount)
+            .crossAxisCount,
+        3,
+      );
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(
+        find.byKey(const Key('delta-library-shelf-filter-image')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('没有找到匹配的笔记'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('delta-library-shelf-filter-all')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('delta-library-enter-selection')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('delta-library-selection-header')),
+        findsOneWidget,
+      );
+      expect(find.text('已选择 0 篇'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(ValueKey('delta-note-${store.notes.first.id.value}')),
+      );
+      await tester.pump();
+      expect(find.text('已选择 1 篇'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('delta-library-exit-selection')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('delta-library-shelf-page')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('delta-library-collapse-shelf')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('delta-library-rolodex')), findsOneWidget);
+    },
+  );
+
   testWidgets('tapping a blank home area collapses expanded search', (
     tester,
   ) async {
@@ -388,6 +461,18 @@ void main() {
         find.byKey(ValueKey('delta-note-footer-time-$noteId')),
       );
       expect(sheetRect.right - timeRect.right, closeTo(28, 1));
+
+      await tester.drag(
+        find.byKey(const Key('delta-library-rolodex')),
+        const Offset(0, 220),
+      );
+      await tester.pumpAndSettle();
+      final shelfCover = find.byKey(ValueKey('delta-shelf-note-cover-$noteId'));
+      expect(shelfCover, findsOneWidget);
+      expect(
+        find.descendant(of: shelfCover, matching: find.byType(Image)),
+        findsOneWidget,
+      );
     },
   );
 
