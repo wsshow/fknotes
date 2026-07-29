@@ -20,12 +20,19 @@ void main() {
     expect(iconSvg, contains('<linearGradient id="spineGradient"'));
     expect(iconSvg, contains('<filter id="bookShadow"'));
     expect(iconSvg, isNot(contains('#B9573D')));
-    expect(iconSvg, contains('M31 18H73C80 18 85 23 85 30'));
+    expect(iconSvg, contains('M34 20H67C72.5 20 76 24 76 30'));
     expect(iconSvg, isNot(contains('M25 24H72')));
+    expect(iconSvg, contains('x="44.5" y="46.5" width="22"'));
+    expect(iconSvg, contains('x="44.5" y="56.5" width="22"'));
     expect(
       markSvg,
       contains('<rect width="100" height="100" fill="url(#canvasGradient)"/>'),
     );
+    final adaptiveForeground = File(
+      'android/app/src/main/res/drawable/ic_launcher_foreground.xml',
+    ).readAsStringSync();
+    expect(adaptiveForeground, contains('android:scaleX="0.88"'));
+    expect(adaptiveForeground, contains('android:scaleY="0.88"'));
   });
 
   test('generated platform icons have their required dimensions', () {
@@ -88,5 +95,33 @@ void main() {
     expect(corner.g, closeTo(238, 1));
     expect(corner.b, closeTo(231, 1));
     expect(mark.getPixel(mark.width ~/ 2, mark.height ~/ 2).a, 255);
+  });
+
+  test('book silhouette is vertical and retains a generous safe margin', () {
+    final icon = image.decodePng(
+      File('assets/brand/fknotes_icon.png').readAsBytesSync(),
+    )!;
+    var minX = icon.width;
+    var minY = icon.height;
+    var maxX = 0;
+    var maxY = 0;
+    for (final pixel in icon) {
+      if (pixel.r < 45 && pixel.g < 65 && pixel.b < 75) {
+        minX = pixel.x < minX ? pixel.x : minX;
+        minY = pixel.y < minY ? pixel.y : minY;
+        maxX = pixel.x > maxX ? pixel.x : maxX;
+        maxY = pixel.y > maxY ? pixel.y : maxY;
+      }
+    }
+
+    final width = maxX - minX + 1;
+    final height = maxY - minY + 1;
+    expect(width / height, closeTo(.87, .04));
+    expect(width / icon.width, lessThan(.58));
+    expect(height / icon.height, lessThan(.64));
+    expect(minX / icon.width, greaterThan(.20));
+    expect(minY / icon.height, greaterThan(.16));
+    expect((icon.width - maxX - 1) / icon.width, greaterThan(.18));
+    expect((icon.height - maxY - 1) / icon.height, greaterThan(.16));
   });
 }
