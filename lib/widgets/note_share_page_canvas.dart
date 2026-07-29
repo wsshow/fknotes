@@ -491,6 +491,7 @@ class _ShareBlockView extends StatelessWidget {
         includeImages: options.includeImages,
         palette: palette,
         landscape: landscape,
+        imageHeight: item.imageHeight,
       );
     }
     if (block.type == NoteShareBlockType.table) {
@@ -659,12 +660,14 @@ class _ShareAttachment extends StatelessWidget {
   final bool includeImages;
   final _SharePalette palette;
   final bool landscape;
+  final double? imageHeight;
 
   const _ShareAttachment({
     required this.attachment,
     required this.includeImages,
     required this.palette,
     required this.landscape,
+    required this.imageHeight,
   });
 
   @override
@@ -672,9 +675,12 @@ class _ShareAttachment extends StatelessWidget {
     final item = attachment;
     if (item != null && item.kind == NoteAssetKind.image && includeImages) {
       return Container(
-        height: landscape
-            ? NoteShareLayoutEngine.landscapeImageHeight
-            : NoteShareLayoutEngine.portraitImageHeight,
+        key: ValueKey('note-share-image-frame-${item.id.value}'),
+        height:
+            imageHeight ??
+            (landscape
+                ? NoteShareLayoutEngine.landscapeImageHeight
+                : NoteShareLayoutEngine.portraitImageHeight),
         margin: const EdgeInsets.only(
           bottom: NoteShareLayoutEngine.attachmentBottomGap,
         ),
@@ -727,7 +733,8 @@ class _ShareAttachment extends StatelessWidget {
       final path = FileStorageService.instance.absolutePath(item.storageKey);
       return Image.file(
         File(path),
-        fit: BoxFit.cover,
+        key: ValueKey('note-share-image-${item.id.value}'),
+        fit: BoxFit.contain,
         width: double.infinity,
         errorBuilder: (_, _, _) => _imagePlaceholder(),
       );

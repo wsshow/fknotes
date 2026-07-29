@@ -11,11 +11,13 @@ class NoteSharePageBlock {
   final NoteShareBlock block;
   final int? orderedNumber;
   final bool showMarker;
+  final double? imageHeight;
 
   const NoteSharePageBlock({
     required this.block,
     this.orderedNumber,
     this.showMarker = true,
+    this.imageHeight,
   });
 }
 
@@ -165,6 +167,7 @@ class NoteShareLayoutEngine {
     required NoteShareOptions options,
     required TextDirection textDirection,
     required String untitledTitle,
+    Map<NoteAttachmentId, double> imageAspectRatios = const {},
   }) {
     final pixelSize = options.canvas.pixelSize;
     if (options.canvas.isLong) {
@@ -173,6 +176,7 @@ class NoteShareLayoutEngine {
         options: options,
         textDirection: textDirection,
         untitledTitle: untitledTitle,
+        imageAspectRatios: imageAspectRatios,
       );
     }
     final logicalHeight = logicalWidth / pixelSize.aspectRatio;
@@ -215,9 +219,13 @@ class NoteShareLayoutEngine {
           draft: draft,
           options: options,
           textDirection: textDirection,
+          imageAspectRatios: imageAspectRatios,
         );
         if (measured <= available ||
             (pageBlocks[pageIndex].isEmpty && !_canSplit(remainingBlock))) {
+          final maxBlockHeight = measured <= available
+              ? null
+              : capacity(pageIndex);
           pageBlocks[pageIndex].add(
             NoteSharePageBlock(
               block: remainingBlock,
@@ -225,6 +233,12 @@ class NoteShareLayoutEngine {
                   ? orderedNumber
                   : null,
               showMarker: marker,
+              imageHeight: _imageHeight(
+                remainingBlock,
+                options: options,
+                imageAspectRatios: imageAspectRatios,
+                maxBlockHeight: maxBlockHeight,
+              ),
             ),
           );
           usedHeights[pageIndex] += math.min(measured, capacity(pageIndex));
@@ -347,6 +361,7 @@ class NoteShareLayoutEngine {
     required NoteShareOptions options,
     required TextDirection textDirection,
     required String untitledTitle,
+    required Map<NoteAttachmentId, double> imageAspectRatios,
   }) {
     final blocks = _shareableBlocks(draft, options);
     final pageBlocks = <NoteSharePageBlock>[];
@@ -367,6 +382,11 @@ class NoteShareLayoutEngine {
           orderedNumber: block.type == NoteShareBlockType.ordered
               ? orderedNumber
               : null,
+          imageHeight: _imageHeight(
+            block,
+            options: options,
+            imageAspectRatios: imageAspectRatios,
+          ),
         ),
       );
       bodyHeight += _blockHeight(
@@ -374,6 +394,7 @@ class NoteShareLayoutEngine {
         draft: draft,
         options: options,
         textDirection: textDirection,
+        imageAspectRatios: imageAspectRatios,
       );
       previousType = block.type;
     }
@@ -384,6 +405,7 @@ class NoteShareLayoutEngine {
       options: options,
       textDirection: textDirection,
       untitledTitle: untitledTitle,
+      imageAspectRatios: imageAspectRatios,
     );
     final outputPixelSize = _longOutputPixelSize(
       logicalHeight,
@@ -409,6 +431,7 @@ class NoteShareLayoutEngine {
     required NoteShareOptions options,
     required TextDirection textDirection,
     required String untitledTitle,
+    required Map<NoteAttachmentId, double> imageAspectRatios,
   }) {
     // A style change must not silently change the requested long-image canvas.
     // Reserve the largest safe geometry across the built-in templates so every
@@ -423,6 +446,7 @@ class NoteShareLayoutEngine {
           draft: draft,
           options: candidateOptions,
           textDirection: textDirection,
+          imageAspectRatios: imageAspectRatios,
         );
       }
       final fixedHeight = _fixedChromeHeight(
@@ -544,6 +568,7 @@ class NoteShareLayoutEngine {
     required NoteShareDraft draft,
     required NoteShareOptions options,
     required TextDirection textDirection,
+    Map<NoteAttachmentId, double> imageAspectRatios = const {},
   }) {
     final landscape = options.canvas.pixelSize.aspectRatio > 1;
     final width = _contentWidth(options, landscape) - block.indent * 14;
@@ -554,7 +579,11 @@ class NoteShareLayoutEngine {
     if (block.type == NoteShareBlockType.attachment) {
       final image = block.asset?.kind == NoteAssetKind.image;
       if (image && options.includeImages) {
-        return (landscape ? landscapeImageHeight : portraitImageHeight) +
+        return _imageHeight(
+              block,
+              options: options,
+              imageAspectRatios: imageAspectRatios,
+            )! +
             attachmentBottomGap;
       }
       return attachmentMinHeight + attachmentBottomGap;
@@ -595,6 +624,35 @@ class NoteShareLayoutEngine {
     return textHeight +
         decoration +
         (blockBottomGap + blockMeasurementSafety) * scale;
+  }
+
+  double? _imageHeight(
+    NoteShareBlock block, {
+    required NoteShareOptions options,
+    required Map<NoteAttachmentId, double> imageAspectRatios,
+    double? maxBlockHeight,
+  }) {
+    final asset = block.asset;
+    if (block.type != NoteShareBlockType.attachment ||
+        asset?.kind != NoteAssetKind.image ||
+        !options.includeImages) {
+      return null;
+    }
+    final landscape = options.canvas.pixelSize.aspectRatio > 1;
+    final width = _contentWidth(options, landscape) - block.indent * 14;
+    final aspectRatio = imageAspectRatios[asset!.id];
+    var height = aspectRatio != null && aspectRatio.isFinite && aspectRatio > 0
+        ? width / aspectRatio
+        : landscape
+        ? landscapeImageHeight
+        : portraitImageHeight;
+    if (maxBlockHeight != null) {
+      height = math.min(
+        height,
+        math.max(1, maxBlockHeight - attachmentBottomGap),
+      );
+    }
+    return height;
   }
 
   double _minimumSplitHeight(

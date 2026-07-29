@@ -119,6 +119,128 @@ void main() {
     expect(draft.attachments, [same(asset)]);
   });
 
+  test('share layout preserves tall image geometry without cropping', () {
+    final asset = _imageAsset('notes/images/tall-layout.png');
+    final draft = _draft(
+      blocks: [
+        NoteShareBlock(type: NoteShareBlockType.attachment, asset: asset),
+      ],
+    );
+    final layout = const NoteShareLayoutEngine().paginate(
+      draft: draft,
+      options: const NoteShareOptions(
+        canvas: NoteShareCanvasSpec(preset: NoteShareCanvasPreset.long),
+      ),
+      textDirection: TextDirection.ltr,
+      untitledTitle: '一则笔记',
+      imageAspectRatios: {asset.id: .25},
+    );
+    final sharedImage = layout.pages.single.blocks.single;
+
+    expect(sharedImage.imageHeight, greaterThan(1000));
+    expect(
+      layout.pages.single.bodyHeight,
+      closeTo(
+        sharedImage.imageHeight! + NoteShareLayoutEngine.attachmentBottomGap,
+        .01,
+      ),
+    );
+  });
+
+  test('fixed share cards scale an oversized image into the page body', () {
+    final asset = _imageAsset('notes/images/tall-card.png');
+    final draft = _draft(
+      blocks: [
+        NoteShareBlock(type: NoteShareBlockType.attachment, asset: asset),
+      ],
+    );
+    final layout = const NoteShareLayoutEngine().paginate(
+      draft: draft,
+      options: const NoteShareOptions(
+        canvas: NoteShareCanvasSpec(preset: NoteShareCanvasPreset.square),
+      ),
+      textDirection: TextDirection.ltr,
+      untitledTitle: '一则笔记',
+      imageAspectRatios: {asset.id: .1},
+    );
+    final page = layout.pages.single;
+    final sharedImage = page.blocks.single;
+
+    expect(sharedImage.imageHeight, isNotNull);
+    expect(
+      sharedImage.imageHeight! + NoteShareLayoutEngine.attachmentBottomGap,
+      lessThanOrEqualTo(page.bodyHeight),
+    );
+  });
+
+  testWidgets('share canvas contains the full image at its measured ratio', (
+    tester,
+  ) async {
+    const storageKey = 'notes/images/tall-share.png';
+    await tester.runAsync(
+      () => File('assets/brand/fknotes_icon.png').copy(
+        FileStorageService.instance.absolutePath(storageKey),
+      ),
+    );
+    final asset = _imageAsset(storageKey);
+    final draft = _draft(
+      blocks: [
+        NoteShareBlock(type: NoteShareBlockType.attachment, asset: asset),
+      ],
+    );
+    const options = NoteShareOptions(
+      canvas: NoteShareCanvasSpec(preset: NoteShareCanvasPreset.long),
+    );
+    final layout = const NoteShareLayoutEngine().paginate(
+      draft: draft,
+      options: options,
+      textDirection: TextDirection.ltr,
+      untitledTitle: '一则笔记',
+      imageAspectRatios: {asset.id: .25},
+    );
+    tester.view.physicalSize = Size(500, layout.logicalHeight + 100);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: NoteSharePageCanvas(
+            draft: draft,
+            options: options,
+            layout: layout,
+            pageIndex: 0,
+            untitledTitle: '一则笔记',
+            sourceLabel: '来自「非空笔记」',
+            locale: const Locale('zh'),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final image = tester.widget<Image>(
+      find.byKey(ValueKey('note-share-image-${asset.id.value}')),
+    );
+    expect(image.fit, BoxFit.contain);
+    expect(
+      tester
+          .getSize(
+            find.byKey(ValueKey('note-share-image-frame-${asset.id.value}')),
+          )
+          .height,
+      closeTo(
+        layout.pages.single.blocks.single.imageHeight! +
+            NoteShareLayoutEngine.attachmentBottomGap,
+        .01,
+      ),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   test('layout paginates long content without dropping text', () {
     final content = List.generate(
       24,
@@ -854,6 +976,20 @@ NoteShareDraft _poemDraft() {
         ),
     ],
     tags: const ['唐诗', '早春'],
+    createdAt: now,
+    updatedAt: now,
+  );
+}
+
+NoteAsset _imageAsset(String storageKey) {
+  final now = DateTime.utc(2026, 7, 29);
+  return NoteAsset(
+    id: NoteAttachmentId.generate(),
+    kind: NoteAssetKind.image,
+    storageKey: storageKey,
+    originalName: storageKey.split('/').last,
+    byteLength: 12,
+    mimeType: 'image/png',
     createdAt: now,
     updatedAt: now,
   );

@@ -11,6 +11,7 @@ import '../app.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../l10n/l10n.dart';
 import '../models/note.dart';
+import '../models/note_document.dart';
 import '../models/note_share.dart';
 import '../services/file_storage_service.dart';
 import '../services/note_share_image_service.dart';
@@ -52,11 +53,14 @@ class _NoteShareComposerPageState extends State<NoteShareComposerPage> {
   var _renderedPages = 0;
   var _totalPages = 0;
   var _optionsChangedBeforeLoad = false;
+  Map<NoteAttachmentId, double> _imageAspectRatios = const {};
+  Future<void>? _imageAspectRatioLoad;
 
   @override
   void initState() {
     super.initState();
     unawaited(_loadPreferences());
+    unawaited(_ensureImageAspectRatios());
   }
 
   Future<void> _loadPreferences() async {
@@ -169,6 +173,7 @@ class _NoteShareComposerPageState extends State<NoteShareComposerPage> {
       options: _options,
       textDirection: Directionality.of(context),
       untitledTitle: l10n.noteShareUntitled,
+      imageAspectRatios: _imageAspectRatios,
     );
     _latestLayout = layout;
     final pageIndex = _rendering
@@ -741,8 +746,12 @@ class _NoteShareComposerPageState extends State<NoteShareComposerPage> {
   );
 
   Future<void> _generateAndShare() async {
+    if (_rendering) return;
+    await _ensureImageAspectRatios();
+    if (!mounted || _rendering) return;
+    await WidgetsBinding.instance.endOfFrame;
     final layout = _latestLayout;
-    if (_rendering || layout == null) return;
+    if (!mounted || layout == null || _rendering) return;
     final l10n = context.l10n;
     final exportTitle = widget.draft.title.trim().isEmpty
         ? l10n.noteShareUntitled
@@ -834,6 +843,38 @@ class _NoteShareComposerPageState extends State<NoteShareComposerPage> {
         // The renderer will show a neutral placeholder for unreadable images.
       }
     }
+  }
+
+  Future<void> _ensureImageAspectRatios() =>
+      _imageAspectRatioLoad ??= _loadImageAspectRatios();
+
+  Future<void> _loadImageAspectRatios() async {
+    final ratios = <NoteAttachmentId, double>{};
+    for (final attachment in widget.draft.attachments) {
+      if (attachment.kind != NoteAssetKind.image) continue;
+      ui.ImmutableBuffer? buffer;
+      ui.ImageDescriptor? descriptor;
+      try {
+        final previewKey = attachment.previewStorageKey;
+        final dimensionKey =
+            previewKey != null && previewKey.endsWith('_thumb_v3.jpg')
+            ? previewKey
+            : attachment.storageKey;
+        final path = FileStorageService.instance.absolutePath(dimensionKey);
+        buffer = await ui.ImmutableBuffer.fromFilePath(path);
+        descriptor = await ui.ImageDescriptor.encoded(buffer);
+        if (descriptor.width > 0 && descriptor.height > 0) {
+          ratios[attachment.id] = descriptor.width / descriptor.height;
+        }
+      } catch (_) {
+        // Missing dimensions fall back to a contained legacy-height preview.
+      } finally {
+        descriptor?.dispose();
+        buffer?.dispose();
+      }
+    }
+    if (!mounted) return;
+    setState(() => _imageAspectRatios = Map.unmodifiable(ratios));
   }
 
   String _templateLabel(AppLocalizations l10n, NoteShareTemplateId template) =>
