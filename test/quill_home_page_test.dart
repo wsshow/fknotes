@@ -301,7 +301,7 @@ void main() {
     );
   });
 
-  testWidgets('bulk selection uses a compact grid and hides note creation', (
+  testWidgets('bulk selection reuses the tiled shelf and hides note creation', (
     tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -322,17 +322,15 @@ void main() {
     await tester.longPress(find.text('最新笔记'));
     await tester.pumpAndSettle();
 
-    expect(
-      find.byKey(const Key('delta-library-selection-grid')),
-      findsOneWidget,
-    );
-    expect(find.byType(NoteRichDocumentPreview), findsNWidgets(2));
+    expect(find.byKey(const Key('delta-library-shelf-grid')), findsOneWidget);
+    expect(find.byKey(const Key('delta-library-selection-grid')), findsNothing);
+    expect(find.byType(NoteRichDocumentPreview), findsNothing);
     expect(find.byKey(const Key('quill-home-new-note')), findsNothing);
     final first = find.byKey(
-      ValueKey('delta-note-${store.notes.first.id.value}'),
+      ValueKey('delta-shelf-note-${store.notes.first.id.value}'),
     );
     final second = find.byKey(
-      ValueKey('delta-note-${store.notes.last.id.value}'),
+      ValueKey('delta-shelf-note-${store.notes.last.id.value}'),
     );
     expect(tester.getRect(first).top, tester.getRect(second).top);
 

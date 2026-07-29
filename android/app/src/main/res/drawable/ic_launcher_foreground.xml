@@ -1,22 +1,34 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="100"
     android:viewportHeight="100">
     <path
         android:fillColor="#203442"
-        android:pathData="M25,24 H72 C78.6,24 84,29.4 84,36 V74 C84,80.6 78.6,86 72,86 H25 C18.4,86 13,80.6 13,74 V36 C13,29.4 18.4,24 25,24 Z" />
+        android:pathData="M31,18 H73 C80,18 85,23 85,30 V70 C85,77 80,82 73,82 H31 C24,82 19,77 19,70 V30 C19,23 24,18 31,18 Z" />
     <path
-        android:fillColor="#587086"
-        android:pathData="M29,17 H72 C78.6,17 84,22.4 84,29 V68 C84,74.6 78.6,80 72,80 H29 C22.4,80 17,74.6 17,68 V29 C17,22.4 22.4,17 29,17 Z" />
+        android:pathData="M31,21 H39 V79 H31 C25.5,79 22,75.5 22,70 V30 C22,24.5 25.5,21 31,21 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="22"
+                android:startY="21"
+                android:endX="39"
+                android:endY="79"
+                android:type="linear">
+                <item android:color="#FF70889B" android:offset="0" />
+                <item android:color="#FF496276" android:offset="1" />
+            </gradient>
+        </aapt:attr>
+    </path>
     <path
         android:fillColor="#FAF8F2"
-        android:pathData="M39,23 H70 C74.4,23 78,26.6 78,31 V66 C78,70.4 74.4,74 70,74 H39 Z" />
+        android:pathData="M42,21 H73 C78.5,21 82,24.5 82,30 V70 C82,75.5 78.5,79 73,79 H42 Z" />
     <path
         android:fillColor="#A76649"
-        android:pathData="M62,23 H70 V38 L66,35.3 62,38 Z" />
+        android:pathData="M50,21 H59 V39 L54.5,36 50,39 Z" />
     <path
         android:fillColor="#203442"
-        android:pathData="M50.5,43 H66.5 A2.5,2.5 0,0 1,69 45.5 A2.5,2.5 0,0 1,66.5 48 H50.5 A2.5,2.5 0,0 1,48 45.5 A2.5,2.5 0,0 1,50.5 43 Z M50.5,55 H60.5 A2.5,2.5 0,0 1,63 57.5 A2.5,2.5 0,0 1,60.5 60 H50.5 A2.5,2.5 0,0 1,48 57.5 A2.5,2.5 0,0 1,50.5 55 Z" />
+        android:pathData="M55.5,48 H71.5 A2.5,2.5 0,0 1,74 50.5 A2.5,2.5 0,0 1,71.5 53 H55.5 A2.5,2.5 0,0 1,53 50.5 A2.5,2.5 0,0 1,55.5 48 Z M55.5,60 H68.5 A2.5,2.5 0,0 1,71 62.5 A2.5,2.5 0,0 1,68.5 65 H55.5 A2.5,2.5 0,0 1,53 62.5 A2.5,2.5 0,0 1,55.5 60 Z" />
 </vector>

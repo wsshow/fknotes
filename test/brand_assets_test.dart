@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as image;
 
 void main() {
-  test('brand master uses the app theme palette and flat geometry', () {
+  test('brand master follows the outlined dimensional reference style', () {
     final iconSvg = File('assets/brand/fknotes_icon.svg').readAsStringSync();
     final markSvg = File('assets/brand/fknotes_mark.svg').readAsStringSync();
 
@@ -17,12 +17,14 @@ void main() {
     ]) {
       expect(iconSvg, contains(color));
     }
-    expect(iconSvg, isNot(contains('<linearGradient')));
-    expect(iconSvg, isNot(contains('<filter')));
+    expect(iconSvg, contains('<linearGradient id="spineGradient"'));
+    expect(iconSvg, contains('<filter id="bookShadow"'));
     expect(iconSvg, isNot(contains('#B9573D')));
+    expect(iconSvg, contains('M31 18H73C80 18 85 23 85 30'));
+    expect(iconSvg, isNot(contains('M25 24H72')));
     expect(
       markSvg,
-      contains('<rect width="100" height="100" fill="#F1EEE7"/>'),
+      contains('<rect width="100" height="100" fill="url(#canvasGradient)"/>'),
     );
   });
 
@@ -81,10 +83,10 @@ void main() {
 
     expect(icon.getPixel(0, 0).a, 255);
     expect(mark.getPixel(0, 0).a, 255);
-    expect(
-      (mark.getPixel(0, 0).r, mark.getPixel(0, 0).g, mark.getPixel(0, 0).b),
-      (241, 238, 231),
-    );
+    final corner = mark.getPixel(0, 0);
+    expect(corner.r, closeTo(241, 1));
+    expect(corner.g, closeTo(238, 1));
+    expect(corner.b, closeTo(231, 1));
     expect(mark.getPixel(mark.width ~/ 2, mark.height ~/ 2).a, 255);
   });
 }

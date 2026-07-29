@@ -160,6 +160,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get pullToSearch => '下拉搜索';
 
   @override
+  String get pullToOpenShelf => '继续下拉查看所有笔记';
+
+  @override
+  String get releaseToOpenShelf => '松开进入平铺视图';
+
+  @override
   String get backToCardView => '返回卡片视图';
 
   @override

@@ -51,6 +51,8 @@
   "searchLocalKnowledge": "Search local knowledge",
   "searchNotes": "Search notes",
   "pullToSearch": "Pull to search",
+  "pullToOpenShelf": "Pull further for all notes",
+  "releaseToOpenShelf": "Release for tiled view",
   "backToCardView": "Back to card view",
   "selectNotes": "Select",
   "savedOnlyOnDevice": "Stored only on this device",

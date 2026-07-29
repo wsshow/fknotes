@@ -51,6 +51,8 @@
   "searchLocalKnowledge": "搜索本地知识库",
   "searchNotes": "搜索笔记",
   "pullToSearch": "下拉搜索",
+  "pullToOpenShelf": "继续下拉查看所有笔记",
+  "releaseToOpenShelf": "松开进入平铺视图",
   "backToCardView": "返回卡片视图",
   "selectNotes": "选择",
   "savedOnlyOnDevice": "仅保存在本机",

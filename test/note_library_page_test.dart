@@ -158,10 +158,49 @@ void main() {
       expect(find.byType(RefreshIndicator), findsNothing);
       expect(find.byKey(const Key('delta-library-shelf-page')), findsNothing);
 
-      await tester.drag(
-        find.byKey(const Key('delta-library-rolodex')),
-        const Offset(0, 220),
+      final rolodex = find.byKey(const Key('delta-library-rolodex'));
+      final initialTop = tester.getTopLeft(rolodex).dy;
+      final partialPull = await tester.startGesture(tester.getCenter(rolodex));
+      await partialPull.moveBy(const Offset(0, 70));
+      await tester.pump();
+
+      expect(find.byKey(const Key('delta-library-shelf-page')), findsNothing);
+      expect(
+        find.byKey(const Key('delta-library-shelf-pull-indicator')),
+        findsOneWidget,
       );
+      final partialProgress = tester
+          .widget<CircularProgressIndicator>(
+            find.byKey(const Key('delta-library-shelf-pull-progress')),
+          )
+          .value!;
+      expect(partialProgress, inInclusiveRange(.5, .6));
+      expect(tester.getTopLeft(rolodex).dy, greaterThan(initialTop));
+
+      await partialPull.up();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('delta-library-shelf-page')), findsNothing);
+      expect(
+        find.byKey(const Key('delta-library-shelf-pull-indicator')),
+        findsNothing,
+      );
+      expect(tester.getTopLeft(rolodex).dy, closeTo(initialTop, .1));
+
+      final fullPull = await tester.startGesture(tester.getCenter(rolodex));
+      await fullPull.moveBy(const Offset(0, 140));
+      await tester.pump();
+      expect(find.byKey(const Key('delta-library-shelf-page')), findsNothing);
+      expect(find.text('松开进入平铺视图'), findsOneWidget);
+      expect(
+        tester
+            .widget<CircularProgressIndicator>(
+              find.byKey(const Key('delta-library-shelf-pull-progress')),
+            )
+            .value,
+        1,
+      );
+
+      await fullPull.up();
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('delta-library-shelf-page')), findsOneWidget);
@@ -199,9 +238,14 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('已选择 0 篇'), findsOneWidget);
+      expect(
+        find.byKey(const Key('delta-library-selection-grid')),
+        findsNothing,
+      );
+      expect(find.byKey(const Key('delta-library-shelf-grid')), findsOneWidget);
 
       await tester.tap(
-        find.byKey(ValueKey('delta-note-${store.notes.first.id.value}')),
+        find.byKey(ValueKey('delta-shelf-note-${store.notes.first.id.value}')),
       );
       await tester.pump();
       expect(find.text('已选择 1 篇'), findsOneWidget);
@@ -504,7 +548,7 @@ void main() {
     expect(fade.blendMode, BlendMode.dstIn);
   });
 
-  testWidgets('bulk audio previews switch to the compact narrow layout', (
+  testWidgets('bulk audio selection reuses the tiled shelf layout', (
     tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -534,9 +578,20 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.byKey(const Key('delta-library-shelf-grid')), findsOneWidget);
     expect(
-      find.byKey(ValueKey('compact-note-audio-${audio.id.value}')),
+      find.byKey(ValueKey('delta-shelf-note-${store.notes.first.id.value}')),
       findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<Icon>(
+            find.byKey(
+              ValueKey('delta-shelf-note-kind-${store.notes.first.id.value}'),
+            ),
+          )
+          .icon,
+      Icons.graphic_eq_rounded,
     );
     expect(tester.takeException(), isNull);
   });
@@ -558,10 +613,17 @@ void main() {
       find.byKey(const Key('delta-library-selection-header')),
       findsOneWidget,
     );
+    expect(find.byKey(const Key('delta-library-shelf-grid')), findsOneWidget);
+    expect(
+      find.byKey(
+        ValueKey('delta-shelf-note-selection-${store.notes.first.id.value}'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('已选择 1 篇'), findsOneWidget);
 
     final second = find.byKey(
-      ValueKey('delta-note-${store.notes.last.id.value}'),
+      ValueKey('delta-shelf-note-${store.notes.last.id.value}'),
     );
     await tester.tap(second);
     await tester.pump();
@@ -576,7 +638,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('永久删除这 2 篇笔记？'), findsOneWidget);
     await tester.tap(find.text('永久删除').last);
-    await _pump(tester);
+    await tester.pumpAndSettle();
 
     expect(store.notes, isEmpty);
     expect(

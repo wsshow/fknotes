@@ -392,6 +392,18 @@ abstract class AppLocalizations {
   /// **'下拉搜索'**
   String get pullToSearch;
 
+  /// No description provided for @pullToOpenShelf.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续下拉查看所有笔记'**
+  String get pullToOpenShelf;
+
+  /// No description provided for @releaseToOpenShelf.
+  ///
+  /// In zh, this message translates to:
+  /// **'松开进入平铺视图'**
+  String get releaseToOpenShelf;
+
   /// No description provided for @backToCardView.
   ///
   /// In zh, this message translates to:
