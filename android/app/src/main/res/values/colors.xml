@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="fknotes_ink">#B9573D</color>
-    <color name="fknotes_canvas">#FAF7F2</color>
-    <color name="fknotes_paper">#FFF9F3</color>
+    <color name="fknotes_ink">#203442</color>
+    <color name="fknotes_accent">#587086</color>
+    <color name="fknotes_terracotta">#A76649</color>
+    <color name="fknotes_canvas">#F1EEE7</color>
+    <color name="fknotes_paper">#FAF8F2</color>
 </resources>

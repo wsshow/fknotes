@@ -44,11 +44,11 @@ cp "$MARK_PNG" "$ROOT/assets/brand/fknotes_mark.png"
 sips -c 192 640 "$WORDMARK_PNG" \
   --out "$ROOT/android/app/src/main/res/drawable-nodpi/splash_wordmark.png" >/dev/null
 
-resize 48  "$MARK_PNG" "$ROOT/android/app/src/main/res/mipmap-mdpi/ic_launcher.png"
-resize 72  "$MARK_PNG" "$ROOT/android/app/src/main/res/mipmap-hdpi/ic_launcher.png"
-resize 96  "$MARK_PNG" "$ROOT/android/app/src/main/res/mipmap-xhdpi/ic_launcher.png"
-resize 144 "$MARK_PNG" "$ROOT/android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png"
-resize 192 "$MARK_PNG" "$ROOT/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png"
+resize 48  "$ICON_PNG" "$ROOT/android/app/src/main/res/mipmap-mdpi/ic_launcher.png"
+resize 72  "$ICON_PNG" "$ROOT/android/app/src/main/res/mipmap-hdpi/ic_launcher.png"
+resize 96  "$ICON_PNG" "$ROOT/android/app/src/main/res/mipmap-xhdpi/ic_launcher.png"
+resize 144 "$ICON_PNG" "$ROOT/android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png"
+resize 192 "$ICON_PNG" "$ROOT/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png"
 
 IOS="$ROOT/ios/Runner/Assets.xcassets/AppIcon.appiconset"
 resize 20   "$ICON_PNG" "$IOS/Icon-App-20x20@1x.png"
@@ -74,18 +74,18 @@ resize 264 "$MARK_PNG" "$LAUNCH/LaunchImage@3x.png"
 
 MAC="$ROOT/macos/Runner/Assets.xcassets/AppIcon.appiconset"
 for size in 16 32 64 128 256 512 1024; do
-  resize "$size" "$MARK_PNG" "$MAC/app_icon_$size.png"
+  resize "$size" "$ICON_PNG" "$MAC/app_icon_$size.png"
 done
-cp "$MARK_PNG" "$MAC/fknotes_icon.svg.png"
+cp "$ICON_PNG" "$MAC/fknotes_icon.svg.png"
 
-resize 32  "$MARK_PNG" "$ROOT/web/favicon.png"
-resize 192 "$MARK_PNG" "$ROOT/web/icons/Icon-192.png"
-resize 512 "$MARK_PNG" "$ROOT/web/icons/Icon-512.png"
+resize 32  "$ICON_PNG" "$ROOT/web/favicon.png"
+resize 192 "$ICON_PNG" "$ROOT/web/icons/Icon-192.png"
+resize 512 "$ICON_PNG" "$ROOT/web/icons/Icon-512.png"
 resize 192 "$ICON_PNG" "$ROOT/web/icons/Icon-maskable-192.png"
 resize 512 "$ICON_PNG" "$ROOT/web/icons/Icon-maskable-512.png"
 
-resize 256 "$MARK_PNG" "$TMP/windows-icon.png"
+resize 256 "$ICON_PNG" "$TMP/windows-icon.png"
 sips -s format ico "$TMP/windows-icon.png" \
   --out "$ROOT/windows/runner/resources/app_icon.ico" >/dev/null
 
-echo "已从 assets/brand/fknotes_icon.svg 生成全平台应用图标"
+echo "已从 assets/brand 的 SVG 母版生成全平台应用图标与启动标志"
