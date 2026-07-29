@@ -109,7 +109,7 @@ void main() {
   });
 
   test(
-    'normalizes note image bytes into managed content and a thumbnail',
+    'normalizes note image and thumbnail together from one import',
     () async {
       final source = img.Image(width: 120, height: 80, numChannels: 4);
       img.fill(source, color: img.ColorRgba8(230, 80, 40, 180));
@@ -117,18 +117,24 @@ void main() {
       final stored = await FileStorageService.instance.importNoteImageBytes(
         Uint8List.fromList(img.encodePng(source)),
       );
-      final thumbnail = await FileStorageService.instance
-          .generateNoteThumbnailInBackground(stored.storageKey);
+      final thumbnail = File(
+        FileStorageService.instance.absolutePath(stored.previewStorageKey),
+      );
+      final decodedThumbnail = img.decodeJpg(await thumbnail.readAsBytes());
 
       expect(stored.storageKey, startsWith('notes/images/'));
       expect(stored.mimeType, 'image/png');
       expect(stored.byteLength, greaterThan(0));
+      expect(stored.previewStorageKey, startsWith('notes/thumbnails/'));
+      expect(stored.previewStorageKey, endsWith('_thumb_v3.jpg'));
       expect(
         await FileStorageService.instance.fileExists(stored.storageKey),
         isTrue,
       );
-      expect(thumbnail, startsWith('notes/thumbnails/'));
-      expect(await FileStorageService.instance.fileExists(thumbnail), isTrue);
+      expect(await thumbnail.exists(), isTrue);
+      expect(decodedThumbnail, isNotNull);
+      expect(decodedThumbnail!.width, 120);
+      expect(decodedThumbnail.height, 80);
     },
   );
 

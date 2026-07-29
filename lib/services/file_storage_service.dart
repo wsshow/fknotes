@@ -114,25 +114,48 @@ class FileStorageService {
     return relativePath;
   }
 
-  /// Validates and normalizes an image before it becomes note content.
+  /// Validates and normalizes an image and creates its note thumbnail.
   ///
-  /// Decoding and encoding happen outside the UI isolate. Screenshots with an
-  /// alpha channel stay PNG; photos use a high-quality bounded JPEG.
+  /// A single decode outside the UI isolate feeds both outputs. Screenshots
+  /// with an alpha channel stay PNG; photos use a high-quality bounded JPEG.
   Future<StoredNoteImage> importNoteImageBytes(Uint8List bytes) async {
     if (bytes.isEmpty || bytes.length > 20 * 1024 * 1024) {
       throw const FormatException('图片文件为空或超过 20 MB');
     }
-    final normalized = await Isolate.run(() => _normalizeNoteImageBytes(bytes));
-    final storageKey = await _writeBytes(
-      normalized.bytes,
-      p.posix.join('notes', 'images'),
-      extension: normalized.extension,
+    final processed = await Isolate.run(() => _processNoteImageBytes(bytes));
+    String? storageKey;
+    String? previewStorageKey;
+    try {
+      storageKey = await _writeBytes(
+        processed.bytes,
+        p.posix.join('notes', 'images'),
+        extension: processed.extension,
+      );
+      previewStorageKey = await _writeNoteThumbnailBytes(
+        processed.thumbnailBytes,
+      );
+      return StoredNoteImage(
+        storageKey: storageKey,
+        mimeType: processed.mimeType,
+        byteLength: processed.bytes.length,
+        previewStorageKey: previewStorageKey,
+      );
+    } catch (_) {
+      await deleteFile(storageKey);
+      await deleteFile(previewStorageKey);
+      rethrow;
+    }
+  }
+
+  Future<String> _writeNoteThumbnailBytes(Uint8List bytes) async {
+    if (bytes.isEmpty) throw const FormatException('缩略图内容为空');
+    final relativePath = p.posix.join(
+      'notes',
+      'thumbnails',
+      '${_uuid.v4()}_thumb_v3.jpg',
     );
-    return StoredNoteImage(
-      storageKey: storageKey,
-      mimeType: normalized.mimeType,
-      byteLength: normalized.bytes.length,
-    );
+    await File(absolutePath(relativePath)).writeAsBytes(bytes, flush: true);
+    return relativePath;
   }
 
   /// Copies a completed recording into the canonical note audio tree.
@@ -308,11 +331,13 @@ class StoredNoteImage {
     required this.storageKey,
     required this.mimeType,
     required this.byteLength,
+    required this.previewStorageKey,
   });
 
   final String storageKey;
   final String mimeType;
   final int byteLength;
+  final String previewStorageKey;
 }
 
 class StoredNoteAudio {
@@ -332,22 +357,7 @@ bool _generateThumbnailFile(String sourcePath, String outputPath) {
     final decoded = img.decodeImage(File(sourcePath).readAsBytesSync());
     if (decoded == null) return false;
     final oriented = img.bakeOrientation(decoded);
-    const width = 640;
-    const height = 640;
-    final scale = [
-      width / oriented.width,
-      height / oriented.height,
-      1.0,
-    ].reduce((current, candidate) => current < candidate ? current : candidate);
-    final preview = img.copyResize(
-      oriented,
-      width: (oriented.width * scale).round().clamp(1, width).toInt(),
-      height: (oriented.height * scale).round().clamp(1, height).toInt(),
-    );
-    final flattened = img.Image(width: preview.width, height: preview.height);
-    img.fill(flattened, color: img.ColorRgb8(250, 247, 242));
-    img.compositeImage(flattened, preview);
-    File(outputPath).writeAsBytesSync(img.encodeJpg(flattened, quality: 86));
+    File(outputPath).writeAsBytesSync(_encodeNoteThumbnail(oriented));
     return true;
   } catch (_) {
     return false;
@@ -386,9 +396,8 @@ void _normalizeAssistantImageFile(String sourcePath, String outputPath) {
   File(outputPath).writeAsBytesSync(img.encodeJpg(normalized, quality: 88));
 }
 
-({Uint8List bytes, String extension, String mimeType}) _normalizeNoteImageBytes(
-  Uint8List bytes,
-) {
+({Uint8List bytes, String extension, String mimeType, Uint8List thumbnailBytes})
+_processNoteImageBytes(Uint8List bytes) {
   final (decoder, info) = _inspectImage(bytes);
   if (decoder == null || info == null || info.width <= 0 || info.height <= 0) {
     throw const FormatException('暂不支持这种图片格式');
@@ -408,18 +417,40 @@ void _normalizeAssistantImageFile(String sourcePath, String outputPath) {
         ? img.copyResize(normalized, width: maxLongEdge)
         : img.copyResize(normalized, height: maxLongEdge);
   }
+  final thumbnailBytes = _encodeNoteThumbnail(normalized);
   if (normalized.hasAlpha) {
     return (
       bytes: Uint8List.fromList(img.encodePng(normalized, level: 6)),
       extension: 'png',
       mimeType: 'image/png',
+      thumbnailBytes: thumbnailBytes,
     );
   }
   return (
     bytes: Uint8List.fromList(img.encodeJpg(normalized, quality: 92)),
     extension: 'jpg',
     mimeType: 'image/jpeg',
+    thumbnailBytes: thumbnailBytes,
   );
+}
+
+Uint8List _encodeNoteThumbnail(img.Image source) {
+  const width = 640;
+  const height = 640;
+  final scale = [
+    width / source.width,
+    height / source.height,
+    1.0,
+  ].reduce((current, candidate) => current < candidate ? current : candidate);
+  final preview = img.copyResize(
+    source,
+    width: (source.width * scale).round().clamp(1, width).toInt(),
+    height: (source.height * scale).round().clamp(1, height).toInt(),
+  );
+  final flattened = img.Image(width: preview.width, height: preview.height);
+  img.fill(flattened, color: img.ColorRgb8(250, 247, 242));
+  img.compositeImage(flattened, preview);
+  return Uint8List.fromList(img.encodeJpg(flattened, quality: 86));
 }
 
 (img.Decoder?, img.DecodeInfo?) _inspectImage(Uint8List bytes) {

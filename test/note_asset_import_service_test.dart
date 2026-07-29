@@ -31,6 +31,7 @@ void main() {
     expect(asset.displayTitle, '截屏.jpg');
     expect(asset.storageKey, startsWith('notes/images/'));
     expect(asset.previewStorageKey, startsWith('notes/thumbnails/'));
+    expect(asset.previewStorageKey, endsWith('_thumb_v3.jpg'));
     expect(asset.mimeType, 'image/jpeg');
     expect(asset.createdAt, DateTime.utc(2026, 7, 23, 14));
     expect(

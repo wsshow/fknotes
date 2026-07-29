@@ -24,12 +24,7 @@ final class NoteAssetImportService {
     String originalName = '粘贴的图片',
   }) async {
     final stored = await _storage.importNoteImageBytes(bytes);
-    String? previewStorageKey;
     try {
-      final generated = await _storage.generateNoteThumbnailInBackground(
-        stored.storageKey,
-      );
-      previewStorageKey = generated.isEmpty ? null : generated;
       final timestamp = _now().toUtc();
       final safeName = p.basename(originalName.trim());
       return NoteAsset(
@@ -39,13 +34,13 @@ final class NoteAssetImportService {
         originalName: safeName.isEmpty ? '图片' : safeName,
         byteLength: stored.byteLength,
         mimeType: stored.mimeType,
-        previewStorageKey: previewStorageKey,
+        previewStorageKey: stored.previewStorageKey,
         createdAt: timestamp,
         updatedAt: timestamp,
       );
     } catch (_) {
       await _storage.deleteFile(stored.storageKey);
-      await _storage.deleteFile(previewStorageKey);
+      await _storage.deleteFile(stored.previewStorageKey);
       rethrow;
     }
   }
