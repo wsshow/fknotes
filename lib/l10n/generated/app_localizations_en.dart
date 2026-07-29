@@ -1944,6 +1944,40 @@ class AppLocalizationsEn extends AppLocalizations {
   String get watermarkCamera => 'Watermark camera';
 
   @override
+  String get watermarkLocationTitle => 'Set watermark location';
+
+  @override
+  String get watermarkLocationDescription =>
+      'Use a readable name for your current location, or enter the place you want shown on the photo.';
+
+  @override
+  String get useCurrentLocation => 'Current location';
+
+  @override
+  String get enterLocationManually => 'Enter manually';
+
+  @override
+  String get detectedLocation => 'Detected location';
+
+  @override
+  String get locationNameUnavailable =>
+      'Your coordinates are available, but no place name was found. Retry or enter a location manually.';
+
+  @override
+  String get customLocationName => 'Location name';
+
+  @override
+  String get customLocationHint =>
+      'For example: Riverside Park or Meeting Room';
+
+  @override
+  String get locationNameRequired =>
+      'Enter the location name to show in the watermark.';
+
+  @override
+  String get continueToCamera => 'Continue to camera';
+
+  @override
   String get locatingForWatermark => 'Getting your current location…';
 
   @override

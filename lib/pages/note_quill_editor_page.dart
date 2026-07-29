@@ -1009,14 +1009,22 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
               ),
               if (_supportsCameraCapture) ...[
                 const SizedBox(height: 12),
-                _ImageSourceAction(
-                  key: const Key('quill-take-watermarked-photo'),
-                  icon: Icons.add_location_alt_outlined,
-                  label: context.l10n.watermarkCamera,
-                  onTap: () => Navigator.pop(
-                    sheetContext,
-                    _ImageImportSource.watermarkCamera,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _ImageSourceAction(
+                        key: const Key('quill-take-watermarked-photo'),
+                        icon: Icons.add_location_alt_outlined,
+                        label: context.l10n.watermarkCamera,
+                        onTap: () => Navigator.pop(
+                          sheetContext,
+                          _ImageImportSource.watermarkCamera,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(child: SizedBox()),
+                  ],
                 ),
               ],
             ],
@@ -1025,31 +1033,50 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
       ),
     );
     if (source == null || !mounted) return;
-    final operation = _pickAndInsertImage(source);
+    NoteWatermarkLocation? watermarkLocation;
+    if (source == _ImageImportSource.watermarkCamera) {
+      watermarkLocation = await _chooseWatermarkLocation();
+      if (watermarkLocation == null || !mounted) return;
+    }
+    final operation = _pickAndInsertImage(
+      source,
+      watermarkLocation: watermarkLocation,
+    );
     _imageImport = operation;
     await operation;
     if (identical(_imageImport, operation)) _imageImport = null;
   }
 
-  Future<void> _pickAndInsertImage(_ImageImportSource source) async {
+  Future<NoteWatermarkLocation?> _chooseWatermarkLocation() =>
+      showModalBottomSheet<NoteWatermarkLocation>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        showDragHandle: true,
+        builder: (sheetContext) => _WatermarkLocationSheet(
+          locate: _locateForWatermark,
+          now: widget.now ?? DateTime.now,
+        ),
+      );
+
+  Future<void> _pickAndInsertImage(
+    _ImageImportSource source, {
+    NoteWatermarkLocation? watermarkLocation,
+  }) async {
     setState(() => _importingImage = true);
     NoteAsset? imported;
     try {
       final selected = await _pickImage(source.imageSource);
       if (selected == null || !mounted) return;
-      NoteWatermarkLocation? location;
-      if (source == _ImageImportSource.watermarkCamera) {
-        AppFeedback.show(context, context.l10n.locatingForWatermark);
-        location = await _locateForWatermark();
-      }
-      final bytes = location == null
+      final bytes = watermarkLocation == null
           ? selected.bytes
-          : await _watermarkImage(selected.bytes, location);
+          : await _watermarkImage(selected.bytes, watermarkLocation);
       imported = await _importImage(
         bytes,
-        originalName: location == null
+        originalName: watermarkLocation == null
             ? selected.originalName
-            : 'watermark-${location.capturedAt.microsecondsSinceEpoch}.jpg',
+            : 'watermark-'
+                  '${watermarkLocation.capturedAt.microsecondsSinceEpoch}.jpg',
       );
       if (!mounted) {
         await _deleteAssetFiles(imported);
@@ -1057,8 +1084,6 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
       }
       _editor.insertAsset(imported);
       _editorFocusNode.unfocus();
-    } on NoteWatermarkLocationException catch (error) {
-      if (mounted) await _showWatermarkLocationError(error.failure);
     } catch (_) {
       if (imported != null) await _deleteAssetFiles(imported);
       if (mounted) {
@@ -1070,44 +1095,6 @@ final class _NoteQuillEditorPageState extends State<NoteQuillEditorPage>
     } finally {
       if (mounted) setState(() => _importingImage = false);
     }
-  }
-
-  Future<void> _showWatermarkLocationError(
-    NoteWatermarkLocationFailure failure,
-  ) async {
-    if (!mounted) return;
-    final message = switch (failure) {
-      NoteWatermarkLocationFailure.serviceDisabled =>
-        context.l10n.locationServiceDisabled,
-      NoteWatermarkLocationFailure.permissionDenied =>
-        context.l10n.locationPermissionRequired,
-      NoteWatermarkLocationFailure.permissionDeniedForever =>
-        context.l10n.locationPermissionPermanentlyDenied,
-      NoteWatermarkLocationFailure.unavailable =>
-        context.l10n.locationUnavailable,
-    };
-    if (failure != NoteWatermarkLocationFailure.permissionDeniedForever) {
-      AppFeedback.error(context, message);
-      return;
-    }
-    final openSettings = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(context.l10n.watermarkCamera),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(context.l10n.cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(context.l10n.openSettings),
-          ),
-        ],
-      ),
-    );
-    if (openSettings == true) await permissions.openAppSettings();
   }
 
   Future<void> _showVideoSourceSheet() async {
@@ -2338,6 +2325,365 @@ final class _ImageDetailRow extends StatelessWidget {
   );
 }
 
+enum _WatermarkLocationMode { current, manual }
+
+final class _WatermarkLocationSheet extends StatefulWidget {
+  const _WatermarkLocationSheet({required this.locate, required this.now});
+
+  final NoteWatermarkLocationProvider locate;
+  final DateTime Function() now;
+
+  @override
+  State<_WatermarkLocationSheet> createState() =>
+      _WatermarkLocationSheetState();
+}
+
+final class _WatermarkLocationSheetState
+    extends State<_WatermarkLocationSheet> {
+  final TextEditingController _manualController = TextEditingController();
+  final FocusNode _manualFocusNode = FocusNode();
+  _WatermarkLocationMode _mode = _WatermarkLocationMode.current;
+  NoteWatermarkLocation? _currentLocation;
+  NoteWatermarkLocationFailure? _failure;
+  var _loading = true;
+  var _showManualError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadCurrentLocation());
+  }
+
+  Future<void> _loadCurrentLocation() async {
+    setState(() {
+      _loading = true;
+      _failure = null;
+    });
+    try {
+      final location = await widget.locate();
+      if (!mounted) return;
+      setState(() {
+        _currentLocation = location;
+        _loading = false;
+      });
+    } on NoteWatermarkLocationException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _failure = error.failure;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _failure = NoteWatermarkLocationFailure.unavailable;
+        _loading = false;
+      });
+    }
+  }
+
+  void _selectMode(_WatermarkLocationMode mode) {
+    if (_mode == mode) return;
+    setState(() {
+      _mode = mode;
+      _showManualError = false;
+    });
+    if (mode == _WatermarkLocationMode.manual) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _manualFocusNode.requestFocus();
+      });
+    }
+  }
+
+  void _confirm() {
+    if (_mode == _WatermarkLocationMode.current) {
+      final location = _currentLocation;
+      if (location != null) Navigator.pop(context, location);
+      return;
+    }
+    final placeName = normalizeNoteWatermarkPlaceName(_manualController.text);
+    if (placeName == null) {
+      setState(() => _showManualError = true);
+      return;
+    }
+    Navigator.pop(
+      context,
+      NoteWatermarkLocation(placeName: placeName, capturedAt: widget.now()),
+    );
+  }
+
+  String _failureMessage(BuildContext context) => switch (_failure) {
+    NoteWatermarkLocationFailure.serviceDisabled =>
+      context.l10n.locationServiceDisabled,
+    NoteWatermarkLocationFailure.permissionDenied =>
+      context.l10n.locationPermissionRequired,
+    NoteWatermarkLocationFailure.permissionDeniedForever =>
+      context.l10n.locationPermissionPermanentlyDenied,
+    NoteWatermarkLocationFailure.unavailable ||
+    null => context.l10n.locationUnavailable,
+  };
+
+  Widget _buildCurrentLocation(BuildContext context) {
+    if (_loading) {
+      return SizedBox(
+        height: 104,
+        child: Center(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox.square(
+                dimension: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              const SizedBox(width: 12),
+              Text(context.l10n.locatingForWatermark),
+            ],
+          ),
+        ),
+      );
+    }
+    final location = _currentLocation;
+    if (location != null) {
+      final placeName = location.normalizedPlaceName;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.location_on_outlined, color: AppColors.accent),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (placeName != null) ...[
+                      Text(
+                        context.l10n.detectedLocation,
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(color: AppColors.muted),
+                      ),
+                      const SizedBox(height: 3),
+                    ],
+                    Text(
+                      placeName ?? context.l10n.locationNameUnavailable,
+                      key: const Key('watermark-detected-location'),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: AppColors.ink,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (location.coordinateSummary case final coordinate?) ...[
+                      const SizedBox(height: 5),
+                      Text(
+                        coordinate,
+                        style: Theme.of(
+                          context,
+                        ).textTheme.bodySmall?.copyWith(color: AppColors.muted),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              key: const Key('watermark-location-retry'),
+              onPressed: _loadCurrentLocation,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: Text(context.l10n.retry),
+            ),
+          ),
+        ],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          _failureMessage(context),
+          key: const Key('watermark-location-error'),
+          style: const TextStyle(color: AppColors.danger, height: 1.45),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            OutlinedButton.icon(
+              key: const Key('watermark-location-retry'),
+              onPressed: _loadCurrentLocation,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: Text(context.l10n.retry),
+            ),
+            if (_failure ==
+                NoteWatermarkLocationFailure.permissionDeniedForever)
+              TextButton(
+                key: const Key('watermark-open-settings'),
+                onPressed: permissions.openAppSettings,
+                child: Text(context.l10n.openSettings),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final manualNameReady =
+        normalizeNoteWatermarkPlaceName(_manualController.text) != null;
+    final canContinue = _mode == _WatermarkLocationMode.current
+        ? _currentLocation != null
+        : manualNameReady;
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              context.l10n.watermarkLocationTitle,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              context.l10n.watermarkLocationDescription,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: AppColors.muted),
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Expanded(
+                  child: _WatermarkLocationModeButton(
+                    key: const Key('watermark-use-current-location'),
+                    selected: _mode == _WatermarkLocationMode.current,
+                    icon: Icons.my_location_rounded,
+                    label: context.l10n.useCurrentLocation,
+                    onPressed: () =>
+                        _selectMode(_WatermarkLocationMode.current),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _WatermarkLocationModeButton(
+                    key: const Key('watermark-use-manual-location'),
+                    selected: _mode == _WatermarkLocationMode.manual,
+                    icon: Icons.edit_location_alt_outlined,
+                    label: context.l10n.enterLocationManually,
+                    onPressed: () => _selectMode(_WatermarkLocationMode.manual),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 180),
+              child: Container(
+                key: ValueKey(_mode),
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceMuted,
+                  borderRadius: BorderRadius.circular(AppRadius.large),
+                  border: Border.all(color: AppColors.line),
+                ),
+                child: _mode == _WatermarkLocationMode.current
+                    ? _buildCurrentLocation(context)
+                    : TextField(
+                        key: const Key('watermark-manual-location-field'),
+                        controller: _manualController,
+                        focusNode: _manualFocusNode,
+                        maxLength: 80,
+                        textInputAction: TextInputAction.done,
+                        decoration: InputDecoration(
+                          labelText: context.l10n.customLocationName,
+                          hintText: context.l10n.customLocationHint,
+                          errorText: _showManualError
+                              ? context.l10n.locationNameRequired
+                              : null,
+                          prefixIcon: const Icon(
+                            Icons.place_outlined,
+                            color: AppColors.accent,
+                          ),
+                        ),
+                        onChanged: (_) => setState(() {
+                          _showManualError = false;
+                        }),
+                        onSubmitted: (_) => _confirm(),
+                      ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(context.l10n.cancel),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton.icon(
+                    key: const Key('watermark-location-confirm'),
+                    onPressed: canContinue ? _confirm : null,
+                    icon: const Icon(Icons.photo_camera_outlined, size: 19),
+                    label: Text(context.l10n.continueToCamera),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _manualController.dispose();
+    _manualFocusNode.dispose();
+    super.dispose();
+  }
+}
+
+final class _WatermarkLocationModeButton extends StatelessWidget {
+  const _WatermarkLocationModeButton({
+    required this.selected,
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    super.key,
+  });
+
+  final bool selected;
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => OutlinedButton.icon(
+    onPressed: onPressed,
+    style: OutlinedButton.styleFrom(
+      minimumSize: const Size.fromHeight(48),
+      foregroundColor: selected ? AppColors.ink : AppColors.muted,
+      backgroundColor: selected ? AppColors.accentSoft : Colors.transparent,
+      side: BorderSide(color: selected ? AppColors.accent : AppColors.line),
+    ),
+    icon: Icon(icon, size: 19),
+    label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+  );
+}
+
 final class _ImageSourceAction extends StatelessWidget {
   const _ImageSourceAction({
     required this.icon,
@@ -2351,23 +2697,31 @@ final class _ImageSourceAction extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Material(
-    color: AppColors.surfaceMuted,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(AppRadius.medium),
-    ),
-    clipBehavior: Clip.antiAlias,
-    child: InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: AppColors.accent),
-            const SizedBox(height: 8),
-            Text(label, style: Theme.of(context).textTheme.labelLarge),
-          ],
+  Widget build(BuildContext context) => SizedBox(
+    height: 100,
+    child: Material(
+      color: AppColors.surfaceMuted,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: AppColors.accent),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+            ],
+          ),
         ),
       ),
     ),

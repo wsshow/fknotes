@@ -288,6 +288,7 @@ void main() {
       latitude: 31.230416,
       longitude: 121.473701,
       accuracy: 7,
+      placeName: '上海市 · 黄浦区 · 人民广场',
       capturedAt: capturedAt,
     );
     var locationCalls = 0;
@@ -337,16 +338,98 @@ void main() {
 
     await tester.tap(find.byKey(const Key('quill-insert-image')));
     await _pumpFor(tester, const Duration(milliseconds: 300));
+    final gallerySize = tester.getSize(
+      find.byKey(const Key('quill-pick-gallery-image')),
+    );
+    expect(
+      tester.getSize(find.byKey(const Key('quill-take-photo'))),
+      gallerySize,
+    );
+    expect(
+      tester.getSize(find.byKey(const Key('quill-take-watermarked-photo'))),
+      gallerySize,
+    );
     await tester.tap(find.byKey(const Key('quill-take-watermarked-photo')));
-    await _pumpFor(tester, const Duration(milliseconds: 700));
+    await _pumpFor(tester, const Duration(milliseconds: 400));
 
     expect(locationCalls, 1);
+    expect(find.text('上海市 · 黄浦区 · 人民广场'), findsOneWidget);
+    expect(watermarkCalls, 0);
+
+    await tester.tap(find.byKey(const Key('watermark-location-confirm')));
+    await _pumpFor(tester, const Duration(milliseconds: 700));
+
     expect(watermarkCalls, 1);
     expect(writer.notes.single.assets.single.kind, NoteAssetKind.image);
     expect(
       writer.notes.single.assets.single.originalName,
       startsWith('watermark-'),
     );
+  });
+
+  testWidgets('watermark camera accepts a manually entered location', (
+    tester,
+  ) async {
+    final capturedAt = DateTime(2026, 7, 29, 15);
+    NoteWatermarkLocation? selectedLocation;
+    var locationCalls = 0;
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: NoteQuillEditorPage(
+          writerLoader: () async => writer,
+          now: () => capturedAt,
+          locateForWatermark: () async {
+            locationCalls++;
+            throw const NoteWatermarkLocationException(
+              NoteWatermarkLocationFailure.serviceDisabled,
+            );
+          },
+          pickImage: (_) async => PickedNoteImage(
+            bytes: Uint8List.fromList([1, 2, 3]),
+            originalName: 'camera.jpg',
+          ),
+          watermarkImage: (bytes, location) async {
+            selectedLocation = location;
+            return Uint8List.fromList([9, 8, 7]);
+          },
+          importImage: (bytes, {required originalName}) async => NoteAsset(
+            id: NoteAttachmentId.generate(),
+            kind: NoteAssetKind.image,
+            storageKey: 'notes/images/manual-watermark.jpg',
+            originalName: originalName,
+            byteLength: bytes.length,
+            mimeType: 'image/jpeg',
+            createdAt: capturedAt,
+            updatedAt: capturedAt,
+          ),
+          resolveImage: (_) => MemoryImage(_onePixelPng),
+          autosaveDelay: const Duration(milliseconds: 50),
+        ),
+      ),
+    );
+    await _pumpFor(tester, const Duration(milliseconds: 150));
+
+    await tester.tap(find.byKey(const Key('quill-insert-image')));
+    await _pumpFor(tester, const Duration(milliseconds: 300));
+    await tester.tap(find.byKey(const Key('quill-take-watermarked-photo')));
+    await _pumpFor(tester, const Duration(milliseconds: 300));
+
+    expect(find.text('请先开启系统定位服务，再使用水印相机'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('watermark-use-manual-location')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('watermark-manual-location-field')),
+      '  公司会议室  ',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('watermark-location-confirm')));
+    await _pumpFor(tester, const Duration(milliseconds: 700));
+
+    expect(locationCalls, 1);
+    expect(selectedLocation?.normalizedPlaceName, '公司会议室');
+    expect(selectedLocation?.hasCoordinates, isFalse);
+    expect(writer.notes.single.assets.single.kind, NoteAssetKind.image);
   });
 
   testWidgets('imports a selected video as a native note card', (tester) async {

@@ -1793,6 +1793,36 @@ class AppLocalizationsZh extends AppLocalizations {
   String get watermarkCamera => '水印相机';
 
   @override
+  String get watermarkLocationTitle => '设置水印地点';
+
+  @override
+  String get watermarkLocationDescription => '自动识别当前位置的地点名称，也可以填写你想展示在照片上的地点。';
+
+  @override
+  String get useCurrentLocation => '当前位置';
+
+  @override
+  String get enterLocationManually => '手动填写';
+
+  @override
+  String get detectedLocation => '已识别地点';
+
+  @override
+  String get locationNameUnavailable => '已获得定位，但暂时没有识别出地点名称。可以重试或改为手动填写。';
+
+  @override
+  String get customLocationName => '地点名称';
+
+  @override
+  String get customLocationHint => '例如：上海外滩、公司会议室';
+
+  @override
+  String get locationNameRequired => '请填写要展示在水印中的地点名称';
+
+  @override
+  String get continueToCamera => '继续拍照';
+
+  @override
   String get locatingForWatermark => '正在获取当前位置…';
 
   @override

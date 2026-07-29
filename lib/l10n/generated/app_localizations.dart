@@ -3392,6 +3392,66 @@ abstract class AppLocalizations {
   /// **'水印相机'**
   String get watermarkCamera;
 
+  /// No description provided for @watermarkLocationTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'设置水印地点'**
+  String get watermarkLocationTitle;
+
+  /// No description provided for @watermarkLocationDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动识别当前位置的地点名称，也可以填写你想展示在照片上的地点。'**
+  String get watermarkLocationDescription;
+
+  /// No description provided for @useCurrentLocation.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前位置'**
+  String get useCurrentLocation;
+
+  /// No description provided for @enterLocationManually.
+  ///
+  /// In zh, this message translates to:
+  /// **'手动填写'**
+  String get enterLocationManually;
+
+  /// No description provided for @detectedLocation.
+  ///
+  /// In zh, this message translates to:
+  /// **'已识别地点'**
+  String get detectedLocation;
+
+  /// No description provided for @locationNameUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'已获得定位，但暂时没有识别出地点名称。可以重试或改为手动填写。'**
+  String get locationNameUnavailable;
+
+  /// No description provided for @customLocationName.
+  ///
+  /// In zh, this message translates to:
+  /// **'地点名称'**
+  String get customLocationName;
+
+  /// No description provided for @customLocationHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'例如：上海外滩、公司会议室'**
+  String get customLocationHint;
+
+  /// No description provided for @locationNameRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请填写要展示在水印中的地点名称'**
+  String get locationNameRequired;
+
+  /// No description provided for @continueToCamera.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续拍照'**
+  String get continueToCamera;
+
   /// No description provided for @locatingForWatermark.
   ///
   /// In zh, this message translates to:
