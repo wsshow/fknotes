@@ -178,9 +178,9 @@ void main() {
   ) async {
     const storageKey = 'notes/images/tall-share.png';
     await tester.runAsync(
-      () => File('assets/brand/fknotes_icon.png').copy(
-        FileStorageService.instance.absolutePath(storageKey),
-      ),
+      () => File(
+        'assets/brand/fknotes_icon.png',
+      ).copy(FileStorageService.instance.absolutePath(storageKey)),
     );
     final asset = _imageAsset(storageKey);
     final draft = _draft(
