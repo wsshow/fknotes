@@ -38,7 +38,10 @@ jobs:
           fi
 
           echo "VERSION_NAME=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
-          echo "BUILD_NUMBER=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+          # Local arm64 release builds already reached versionCode 2037.
+          # Offset the workflow counter so the first GitHub release remains
+          # upgrade-compatible with those installations.
+          echo "BUILD_NUMBER=$((2037 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
 
       - name: Set up Java
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
